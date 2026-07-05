@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { of } from 'rxjs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { LifeApi } from '../../life-api';
 import { Item } from '../../models';
@@ -80,5 +81,38 @@ describe('Items — complete list', () => {
     fixture.componentInstance.sort.set('expiry');
     // Item 1 has an expiry; item 2 (undated) sinks to the bottom.
     expect(fixture.componentInstance.visible().map((i) => i.id)).toEqual([1, 2]);
+  });
+
+  it('editItem opens the edit sheet and reloads on save', async () => {
+    let itemCalls = 0;
+    const api = {
+      items: () => {
+        itemCalls++;
+        return of(ITEMS);
+      },
+      locations: () => of([]),
+      productImageUrl: (b: string) => b,
+    };
+    const open = vi.fn((_cmp: unknown, cfg: { data: { item: Item } }) => {
+      void cfg;
+      return { afterDismissed: () => of(true) };
+    });
+    TestBed.configureTestingModule({
+      imports: [Items],
+      providers: [
+        { provide: LifeApi, useValue: api },
+        { provide: MatBottomSheet, useValue: { open } },
+      ],
+    });
+    const fixture = TestBed.createComponent(Items);
+    fixture.autoDetectChanges();
+    await fixture.whenStable();
+
+    expect(itemCalls).toBe(1); // initial load
+    fixture.componentInstance.editItem(ITEMS[0]);
+    expect(open).toHaveBeenCalledOnce();
+    // The sheet is handed the tapped item to edit.
+    expect(open.mock.calls[0][1].data.item).toBe(ITEMS[0]);
+    expect(itemCalls).toBe(2); // reloaded after a saved dismissal
   });
 });

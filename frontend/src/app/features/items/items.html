@@ -36,9 +36,9 @@
   @if (count() === 0) {
     <app-list-state [empty]="true" emptyIcon="search_off" [emptyText]="'Nothing matches “' + query() + '”.'" />
   }
-  <mat-list>
+  <mat-action-list>
     @for (it of visible(); track it.id) {
-      <mat-list-item lines="2">
+      <button mat-list-item lines="2" (click)="editItem(it)">
         <app-product-thumb matListItemAvatar [barcode]="it.barcode" [hasImage]="it.has_image" />
         <span matListItemTitle>
           {{ it.name }}@if (it.brand) {<span class="brand"> · {{ it.brand }}</span>}
@@ -49,7 +49,7 @@
             expiryOf(expiry).label
           }}</span>
         }
-      </mat-list-item>
+      </button>
     }
-  </mat-list>
+  </mat-action-list>
 }

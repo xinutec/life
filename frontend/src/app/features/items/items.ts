@@ -1,5 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -12,6 +13,7 @@ import { LifeApi } from '../../life-api';
 import { ProductThumb } from '../../product-thumb';
 import { ListState } from '../../shared/list-state';
 import { Item, Loc } from '../../models';
+import { ItemSheet, ItemSheetData } from '../inventory/item-sheet';
 
 type SortKey = 'name' | 'expiry';
 
@@ -37,6 +39,7 @@ type SortKey = 'name' | 'expiry';
 })
 export class Items {
   private api = inject(LifeApi);
+  private sheet = inject(MatBottomSheet);
 
   readonly items = signal<Item[]>([]);
   readonly locations = signal<Loc[]>([]);
@@ -51,6 +54,11 @@ export class Items {
   readonly sort = signal<SortKey>('name');
 
   private readonly byId = computed(() => new Map(this.locations().map((l) => [l.id, l] as const)));
+
+  /** Full-path labels for the edit sheet's location dropdown. */
+  private readonly locationOptions = computed(() =>
+    this.locations().map((l) => ({ id: l.id, label: this.pathOf(l.id) })),
+  );
 
   /** Items after the filter + sort — what the list renders. */
   readonly visible = computed<Item[]>(() => {
@@ -89,20 +97,37 @@ export class Items {
     });
   }
 
-  /** Last two segments of the location path, or '' when unplaced. */
-  private location(it: Item): string {
+  /** Tap a row to edit it — the same add/edit bottom sheet Inventory uses,
+   *  reused here so the search surface can fix an item in place. */
+  editItem(it: Item): void {
+    const data: ItemSheetData = { item: it, locations: this.locationOptions() };
+    this.sheet
+      .open<ItemSheet, ItemSheetData, boolean>(ItemSheet, { data })
+      .afterDismissed()
+      .subscribe((saved) => {
+        if (saved) this.reload();
+      });
+  }
+
+  /** Full location path (root → leaf), or '' when unplaced. */
+  private pathOf(id: number | null): string {
     const map = this.byId();
     const names: string[] = [];
     const seen = new Set<number>();
-    let id = it.location_id;
-    while (id != null && !seen.has(id)) {
-      seen.add(id);
-      const loc = map.get(id);
+    let cur = id;
+    while (cur != null && !seen.has(cur)) {
+      seen.add(cur);
+      const loc = map.get(cur);
       if (!loc) break;
       names.unshift(loc.name);
-      id = loc.parent_id;
+      cur = loc.parent_id;
     }
-    return names.slice(-2).join(' › ');
+    return names.join(' › ');
+  }
+
+  /** Last two segments of the location path, or '' when unplaced. */
+  private location(it: Item): string {
+    return this.pathOf(it.location_id).split(' › ').slice(-2).join(' › ');
   }
 
   /** Compact subtitle: "2 jar · food · Spice cupboard › Top shelf". */
