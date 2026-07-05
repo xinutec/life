@@ -17,6 +17,12 @@ nix develop -c bash -c '
   export NG_BUILD_MAX_WORKERS=1
   cargo fmt --all --check
   cargo clippy --all-targets -- -D warnings
+  # Frontend deps must exist before lint/build. verify.sh has to run from a clean
+  # checkout (a fresh clone, or the tree the fleetwatch collector runs in) — not
+  # just a warm dev machine — so install them when absent or the lockfile moved.
+  if [ ! -d frontend/node_modules ] || [ frontend/package-lock.json -nt frontend/node_modules ]; then
+    ( cd frontend && npm ci )
+  fi
   # ui-check (L2 phone-width layout harness) runs after the build — it serves
   # the freshly-built dist and asserts no overlap/overflow at Pixel width.
   # See @xinutec/ui-harness + dev-lint/docs/layout-quality-architecture.md.
