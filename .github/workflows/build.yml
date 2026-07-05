@@ -1,0 +1,59 @@
+---
+name: build
+
+# life (Rust backend + Angular frontend) — gate on clippy + cargo test, then
+# build and push the single image xinutec/life:latest to Docker Hub. The k8s
+# manifests + Flux live in the home monorepo (xinutec/pippijn code/kubes/life/k8s);
+# the image tag is the only contract between this repo and the deploy.
+on:
+  push:
+    branches: [main]
+    # Images build from rust:1-bookworm / node:24-alpine, never the flake, so a
+    # flake.lock-only change can't affect the image — skip the rebuild.
+    paths-ignore:
+      - "**/flake.lock"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    container: rust:1-bookworm
+    # A throwaway MariaDB so the per-entity DB round-trip tests actually run
+    # (they migrate + exercise the real sync SQL; they skip when the env var is
+    # unset, which is the local no-DB case).
+    services:
+      mariadb:
+        image: mariadb:11.8
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: life_test
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=10
+    env:
+      LIFE_TEST_DATABASE_URL: mysql://root:root@mariadb:3306/life_test
+    steps:
+      - uses: actions/checkout@v6
+      - run: rustup component add clippy
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test -- --test-threads=1
+
+  image:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: xinutec/life:latest
+          # Commit stamp for the build-version the app surfaces (Dockerfile ARG).
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+          cache-from: type=registry,ref=xinutec/life:cache
+          cache-to: type=registry,ref=xinutec/life:cache
