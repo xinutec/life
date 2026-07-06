@@ -1,4 +1,3 @@
-import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { MatBottomSheet, MatBottomSheetModule } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
@@ -6,6 +5,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 
+import { onlineHint } from '../../shared/api-error';
 import { Feedback } from '../../shared/feedback';
 import { ListState } from '../../shared/list-state';
 import { LifeApi } from '../../life-api';
@@ -32,9 +32,8 @@ export class Recipes {
 
   /** Online-only writes must not fail into silence: announce and move on. */
   private failed(what: string) {
-    return (e: HttpErrorResponse) => {
-      const hint = e.status === 0 ? ' — are you online?' : '';
-      this.feedback.error(`Could not ${what}${hint}`);
+    return (e: unknown) => {
+      this.feedback.error(`Could not ${what}${onlineHint(e)}`);
     };
   }
 

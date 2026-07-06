@@ -78,6 +78,18 @@
       </a>
     }
   </nav>
+} @else if (offline()) {
+  <div class="signin">
+    <mat-card appearance="outlined" class="signin-card">
+      <mat-card-content>
+        <div class="wordmark"><mat-icon>cloud_off</mat-icon> Life</div>
+        <p class="tagline">You’re offline. Reconnect to load your things.</p>
+        <button mat-flat-button type="button" (click)="retry()">
+          <mat-icon>refresh</mat-icon> Try again
+        </button>
+      </mat-card-content>
+    </mat-card>
+  </div>
 } @else {
   <div class="signin">
     <mat-card appearance="outlined" class="signin-card">

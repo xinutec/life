@@ -1,10 +1,10 @@
 import { Component, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
-import { HttpErrorResponse } from '@angular/common/http';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
 
+import { isNotFound } from '../../shared/api-error';
 import { Feedback } from '../../shared/feedback';
 import { ListState } from '../../shared/list-state';
 import { LifeApi } from '../../life-api';
@@ -83,14 +83,14 @@ export class Trash {
         if (entry.kind === 'wellbeing') this.wellbeingStore.reSync();
         this.feedback.notify(`Restored “${entry.name}”`);
       },
-      error: (e: HttpErrorResponse) => {
+      error: (e: unknown) => {
         this.busy.update((s) => {
           const next = new Set(s);
           next.delete(entry.ref);
           return next;
         });
         this.feedback.error(
-          e.status === 404 ? 'Already restored elsewhere.' : 'Could not restore — are you online?',
+          isNotFound(e) ? 'Already restored elsewhere.' : 'Could not restore — are you online?',
         );
         this.reload();
       },

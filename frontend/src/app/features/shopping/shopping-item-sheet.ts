@@ -1,4 +1,3 @@
-import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -12,6 +11,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 
+import { isNotFound } from '../../shared/api-error';
 import { Feedback } from '../../shared/feedback';
 import { SheetHeader } from '../../shared/sheet-header';
 import { LifeApi } from '../../life-api';
@@ -123,10 +123,10 @@ export class ShoppingItemSheet {
         if (!this.name().trim() && p.name) this.name.set(p.name);
         this.feedback.notify(p.name ? `Found: ${p.name}` : 'Product found');
       },
-      error: (e: HttpErrorResponse) => {
+      error: (e: unknown) => {
         this.lookingUp.set(false);
         this.feedback.error(
-          e.status === 404 ? `No product found for ${code}.` : 'Lookup failed — are you online?',
+          isNotFound(e) ? `No product found for ${code}.` : 'Lookup failed — are you online?',
         );
       },
     });

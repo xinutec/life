@@ -1,4 +1,3 @@
-import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
@@ -13,6 +12,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSelectModule } from '@angular/material/select';
 
+import { isNotFound, onlineHint } from '../../shared/api-error';
 import { Feedback } from '../../shared/feedback';
 import { SheetHeader } from '../../shared/sheet-header';
 import { LifeApi } from '../../life-api';
@@ -122,10 +122,9 @@ export class ItemSheet {
         if (barcode) this.api.lookupProduct(barcode).subscribe({ next: () => {}, error: () => {} });
         this.ref.dismiss(true);
       },
-      error: (e: HttpErrorResponse) => {
+      error: (e: unknown) => {
         this.saving.set(false);
-        const hint = e.status === 0 ? ' — are you online?' : '';
-        this.feedback.error(`Could not save the item${hint}`);
+        this.feedback.error(`Could not save the item${onlineHint(e)}`);
       },
     });
   }
@@ -148,9 +147,9 @@ export class ItemSheet {
             if (!this.form().name.trim() && p.name) this.patch({ name: p.name });
             this.feedback.notify(p.name ? `Found: ${p.name}` : 'Product found');
           },
-          error: (e: HttpErrorResponse) => {
+          error: (e: unknown) => {
             this.feedback.error(
-              e.status === 404
+              isNotFound(e)
                 ? `No product found for ${code}.`
                 : 'Lookup failed — are you online?',
             );

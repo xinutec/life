@@ -1,4 +1,3 @@
-import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatBottomSheetRef } from '@angular/material/bottom-sheet';
@@ -7,6 +6,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 
+import { onlineHint } from '../../shared/api-error';
 import { Feedback } from '../../shared/feedback';
 import { SheetHeader } from '../../shared/sheet-header';
 import { LifeApi } from '../../life-api';
@@ -76,10 +76,9 @@ export class RecipeSheet {
     const body = { ...form, ingredients: form.ingredients.filter((g) => g.name.trim()) };
     this.api.createRecipe(body).subscribe({
       next: () => this.ref.dismiss(true),
-      error: (e: HttpErrorResponse) => {
+      error: (e: unknown) => {
         this.saving.set(false);
-        const hint = e.status === 0 ? ' — are you online?' : '';
-        this.feedback.error(`Could not save the recipe${hint}`);
+        this.feedback.error(`Could not save the recipe${onlineHint(e)}`);
       },
     });
   }

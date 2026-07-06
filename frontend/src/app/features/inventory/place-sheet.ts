@@ -1,4 +1,3 @@
-import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
@@ -11,6 +10,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 
+import { onlineHint } from '../../shared/api-error';
 import { Feedback } from '../../shared/feedback';
 import { SheetHeader } from '../../shared/sheet-header';
 import { LifeApi } from '../../life-api';
@@ -58,10 +58,9 @@ export class PlaceSheet {
     this.saving.set(true);
     this.api.createLocation({ name, kind: this.kind(), parent_id: this.parentId() }).subscribe({
       next: () => this.ref.dismiss(true),
-      error: (e: HttpErrorResponse) => {
+      error: (e: unknown) => {
         this.saving.set(false);
-        const hint = e.status === 0 ? ' — are you online?' : '';
-        this.feedback.error(`Could not add the place${hint}`);
+        this.feedback.error(`Could not add the place${onlineHint(e)}`);
       },
     });
   }
