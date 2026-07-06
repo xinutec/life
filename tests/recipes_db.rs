@@ -49,6 +49,7 @@ async fn recipe_create_and_shopping_list_against_real_db() {
             expiry: None,
             location_id: None,
             barcode: None,
+            product_id: None,
         },
     )
     .await

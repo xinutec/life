@@ -44,6 +44,9 @@
       <ng-container [ngTemplateOutlet]="content" />
     </span>
   }
+} @else if (src(); as url) {
+  <!-- Barcodeless item linked to a shop product: show its image, read-only. -->
+  <img class="thumb" [src]="url" alt="" (error)="onError()" />
 } @else {
   <mat-icon>label</mat-icon>
 }

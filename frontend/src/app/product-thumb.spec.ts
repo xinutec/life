@@ -4,6 +4,7 @@ import { of } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ImagePickerDirective } from './image-picker';
+import { LifeApi } from './life-api';
 import { ProductImages } from './product-image';
 import { ProductThumb } from './product-thumb';
 
@@ -15,13 +16,23 @@ function fakeImages() {
   };
 }
 
-async function mount(inputs: { barcode: string | null; hasImage?: boolean }, images = fakeImages()) {
+/** Stub the API for the by-id image URL (barcodeless shop products). */
+const fakeApi = { productImageByIdUrl: (id: number) => `/api/products/id/${id}/image` };
+
+async function mount(
+  inputs: { barcode: string | null; productId?: number | null; hasImage?: boolean },
+  images = fakeImages(),
+) {
   TestBed.configureTestingModule({
     imports: [ProductThumb],
-    providers: [{ provide: ProductImages, useValue: images }],
+    providers: [
+      { provide: ProductImages, useValue: images },
+      { provide: LifeApi, useValue: fakeApi },
+    ],
   });
   const fixture = TestBed.createComponent(ProductThumb);
   fixture.componentRef.setInput('barcode', inputs.barcode);
+  fixture.componentRef.setInput('productId', inputs.productId ?? null);
   fixture.componentRef.setInput('hasImage', inputs.hasImage);
   fixture.autoDetectChanges();
   await fixture.whenStable();
@@ -29,12 +40,21 @@ async function mount(inputs: { barcode: string | null; hasImage?: boolean }, ima
 }
 
 describe('ProductThumb', () => {
-  it('renders an inert icon (no picker) when there is no barcode', async () => {
+  it('renders an inert icon (no picker) when there is no barcode or product link', async () => {
     const fixture = await mount({ barcode: null });
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[appImagePicker]')).toBeNull();
     expect(el.querySelector('img')).toBeNull();
     expect(el.textContent).toContain('label');
+  });
+
+  it('shows a barcodeless shop product image read-only (no picker) via product id', async () => {
+    const fixture = await mount({ barcode: null, productId: 42, hasImage: true });
+    const el = fixture.nativeElement as HTMLElement;
+    // Image comes from the by-id endpoint...
+    expect(el.querySelector('img')?.getAttribute('src')).toBe('/api/products/id/42/image');
+    // ...but there's no barcode to attach a replacement to, so no picker.
+    expect(el.querySelector('[appImagePicker]')).toBeNull();
   });
 
   it('shows the cached image and a keyboard-reachable picker for a barcoded item', async () => {

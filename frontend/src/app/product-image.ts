@@ -9,6 +9,9 @@ import { LifeApi } from './life-api';
  *  can't drift between them — it did once, on the `has_image` check. */
 export interface ThumbSource {
   barcode: string | null;
+  /** A linked catalog product with no EAN (a shop product): its image is
+   *  addressed by product id, not barcode. */
+  product_id?: number | null;
   /** From the catalog: a cached image exists. `undefined` (e.g. shopping rows,
    *  which don't carry it) = unknown → try anyway, the load-error fallback
    *  handles a miss. */
@@ -16,7 +19,8 @@ export interface ThumbSource {
 }
 
 export function showThumb(it: ThumbSource, failed: boolean): boolean {
-  return !failed && !!it.barcode && it.has_image !== false;
+  const linked = !!it.barcode || !!it.product_id;
+  return !failed && linked && it.has_image !== false;
 }
 
 /** Shared per-barcode cache-buster for product images. A cached image lives at a

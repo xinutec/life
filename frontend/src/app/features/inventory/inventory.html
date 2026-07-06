@@ -20,7 +20,7 @@
   <mat-list>
     @for (it of items(); track it.id) {
       <mat-list-item lines="2">
-        <app-product-thumb matListItemAvatar [barcode]="it.barcode" [hasImage]="it.has_image" />
+        <app-product-thumb matListItemAvatar [barcode]="it.barcode" [productId]="it.product_id" [hasImage]="it.has_image" />
         <span matListItemTitle>{{ it.name }}</span>
         <span matListItemLine>
           {{ qty(it) }}

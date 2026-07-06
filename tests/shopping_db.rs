@@ -87,6 +87,7 @@ async fn shopping_crud_and_buy_against_real_db() {
             expiry: None,
             location_id: None,
             barcode: got.barcode,
+            product_id: None,
         },
     )
     .await

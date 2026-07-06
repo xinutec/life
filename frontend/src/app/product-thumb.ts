@@ -5,6 +5,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatSnackBar } from '@angular/material/snack-bar';
 
 import { ImagePickerDirective } from './image-picker';
+import { LifeApi } from './life-api';
 import { ProductImages, showThumb } from './product-image';
 
 /** The native clipboard bridge the Android WebView wrapper injects (see the app's
@@ -31,8 +32,9 @@ const MAX_BYTES = 5 * 1024 * 1024;
  *  product has none, and owns the whole replace flow (pick → upload → reload) so
  *  the host list doesn't have to. Inside the Android app it also offers "Paste
  *  copied image" (from the system clipboard, e.g. an image copied in Chrome).
- *  Items without a barcode get a plain, inert icon — there's no catalog row to
- *  attach an image to. */
+ *  A barcodeless item linked to a shop product (`[productId]`) shows that
+ *  product's image read-only — there's no barcode to attach a replacement to.
+ *  An item with neither a barcode nor a linked product gets a plain, inert icon. */
 @Component({
   selector: 'app-product-thumb',
   templateUrl: './product-thumb.html',
@@ -41,10 +43,15 @@ const MAX_BYTES = 5 * 1024 * 1024;
 })
 export class ProductThumb {
   readonly barcode = input<string | null>(null);
+  /** A linked catalog product id. Used to show a barcodeless shop product's
+   *  image (addressed by id); such a product has no barcode to replace, so the
+   *  thumbnail is inert (view-only). */
+  readonly productId = input<number | null>(null);
   /** Catalog hint: does a cached image exist? `undefined` = unknown, try anyway. */
   readonly hasImage = input<boolean | undefined>(undefined);
 
   private images = inject(ProductImages);
+  private api = inject(LifeApi);
   private snack = inject(MatSnackBar);
 
   /** True in the custom Android app (the clipboard bridge is present) — there we
@@ -59,10 +66,21 @@ export class ProductThumb {
   /** The image URL to show, or null to fall back to the placeholder icon. */
   protected readonly src = computed<string | null>(() => {
     const barcode = this.barcode();
-    if (!barcode) return null;
-    if (this.uploaded()) return this.images.url(barcode);
-    if (!showThumb({ barcode, has_image: this.hasImage() }, this.failed())) return null;
-    return this.images.url(barcode);
+    if (barcode) {
+      // Barcoded product: the (replaceable) image lives at /products/{barcode}/image.
+      if (this.uploaded()) return this.images.url(barcode);
+      if (!showThumb({ barcode, has_image: this.hasImage() }, this.failed())) return null;
+      return this.images.url(barcode);
+    }
+    // No barcode, but a linked shop product may carry an image addressed by id.
+    const productId = this.productId();
+    if (
+      productId &&
+      showThumb({ barcode: null, product_id: productId, has_image: this.hasImage() }, this.failed())
+    ) {
+      return this.api.productImageByIdUrl(productId);
+    }
+    return null;
   });
 
   protected onError(): void {

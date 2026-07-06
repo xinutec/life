@@ -149,6 +149,10 @@ pub struct NewItem {
     pub location_id: Option<u64>,
     #[serde(default)]
     pub barcode: Option<String>,
+    /// Explicit catalog link. Takes precedence over barcode-based resolution and
+    /// is the only way to link a barcodeless shop product (Waitrose etc.).
+    #[serde(default)]
+    pub product_id: Option<u64>,
 }
 
 fn default_category() -> ItemCategory {

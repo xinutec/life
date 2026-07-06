@@ -86,6 +86,16 @@ macro_rules! item_select {
     };
 }
 
+/// The catalog link for a new/updated item: an explicit `product_id` wins (it's
+/// the only route to a barcodeless shop product), else fall back to matching the
+/// barcode against the cached catalog.
+async fn resolve_product_id(pool: &MySqlPool, new: &NewItem) -> Result<Option<u64>> {
+    if new.product_id.is_some() {
+        return Ok(new.product_id);
+    }
+    product_id_for_barcode(pool, new.barcode.as_deref()).await
+}
+
 /// Resolve the catalog product id for a barcode, if one is cached.
 async fn product_id_for_barcode(pool: &MySqlPool, barcode: Option<&str>) -> Result<Option<u64>> {
     let Some(bc) = barcode else { return Ok(None) };
@@ -162,8 +172,9 @@ pub async fn get_item(pool: &MySqlPool, user_id: &str, id: u64) -> Result<Option
 }
 
 pub async fn create_item(pool: &MySqlPool, user_id: &str, new: NewItem) -> Result<Item> {
-    // Link to the catalog when the barcode is already known (scanned/looked up).
-    let product_id = product_id_for_barcode(pool, new.barcode.as_deref()).await?;
+    // Prefer an explicit catalog link (the only way to reach a barcodeless shop
+    // product); otherwise link by barcode when it's already known (scanned/looked up).
+    let product_id = resolve_product_id(pool, &new).await?;
     let res = sqlx::query(
         "INSERT INTO items \
          (user_id, product_id, name, category, quantity, unit, expiry, location_id, barcode) \
@@ -220,7 +231,7 @@ pub async fn update_item(
     let Some(existing) = get_item(pool, user_id, id).await? else {
         return Ok(None);
     };
-    let product_id = product_id_for_barcode(pool, new.barcode.as_deref()).await?;
+    let product_id = resolve_product_id(pool, &new).await?;
     sqlx::query(
         "UPDATE items SET product_id = ?, name = ?, category = ?, quantity = ?, unit = ?, \
          expiry = ?, location_id = ?, barcode = ? WHERE id = ? AND user_id = ?",

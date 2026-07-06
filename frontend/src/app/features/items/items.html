@@ -39,7 +39,7 @@
   <mat-action-list>
     @for (it of visible(); track it.id) {
       <button mat-list-item lines="2" (click)="editItem(it)">
-        <app-product-thumb matListItemAvatar [barcode]="it.barcode" [hasImage]="it.has_image" />
+        <app-product-thumb matListItemAvatar [barcode]="it.barcode" [productId]="it.product_id" [hasImage]="it.has_image" />
         <span matListItemTitle>
           {{ it.name }}@if (it.brand) {<span class="brand"> · {{ it.brand }}</span>}
         </span>

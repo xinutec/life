@@ -88,6 +88,7 @@ pub async fn buy(
             expiry: None,
             location_id: None,
             barcode: s.barcode,
+            product_id: None, // shopping items link by barcode only
         },
     )
     .await?;
