@@ -16,13 +16,13 @@
 
     &.error {
       opacity: 1;
-      color: var(--mat-sys-error, #b3261e);
+      color: var(--mat-sys-error);
     }
   }
 
   img[matListItemAvatar] {
     object-fit: contain;
-    background: rgba(0, 0, 0, 0.04);
+    background: color-mix(in srgb, var(--mat-sys-on-surface) 4%, transparent);
   }
 
   .actions {
