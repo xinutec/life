@@ -307,6 +307,12 @@ class MainActivity : Activity() {
             runOnUiThread { waitroseFetchProduct(lineNumber, requestId) }
         }
 
+        // Search Waitrose by name → { ok, candidates: [{lineNumber, name, image_url}] }.
+        @JavascriptInterface
+        fun searchByName(query: String, requestId: String) {
+            runOnUiThread { waitroseSearch(query, requestId) }
+        }
+
         // Show the visible Waitrose login so a session is established (cookies
         // persist in the shared jar; the hidden fetch needs a logged-in SPA to
         // mint a token). Resolves nothing — the web app hears back via
@@ -339,6 +345,44 @@ class MainActivity : Activity() {
             return
         }
 
+        // A search page for the lineNumber reliably fires an authenticated API
+        // call, so the token is minted + captured; the search results are ignored.
+        runHiddenWaitrose(
+            "https://www.waitrose.com/ecom/shop/search?searchTerm=$lineNumber",
+            waitroseFetchJs(lineNumber),
+            requestId,
+        )
+    }
+
+    /**
+     * Search Waitrose by name. Returns lightweight candidates (lineNumber, name,
+     * image) read from the server-rendered search page — no token needed. The
+     * caller picks one and fetchProduct()s it for full detail (barcodes, price).
+     */
+    private fun waitroseSearch(query: String, requestId: String) {
+        if (web.url?.startsWith(LIFE_URL) != true) {
+            resolveWaitrose(requestId, """{"ok":false,"error":"forbidden"}""")
+            return
+        }
+        val q = query.trim()
+        if (q.isEmpty() || q.length > 80) {
+            resolveWaitrose(requestId, """{"ok":false,"error":"bad query"}""")
+            return
+        }
+        runHiddenWaitrose(
+            "https://www.waitrose.com/ecom/shop/search?searchTerm=" + Uri.encode(q),
+            WAITROSE_SEARCH_JS,
+            requestId,
+        )
+    }
+
+    /**
+     * Shared offscreen-WebView plumbing: load a waitrose.com page past Akamai,
+     * patch fetch/XHR for the token, run [pageFinishedJs] once loaded, and report
+     * its `AndroidWtr.result(json)` back to the web app. One hidden view at a time.
+     */
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun runHiddenWaitrose(loadUrl: String, pageFinishedJs: String, requestId: String) {
         waitroseWeb?.let { root.removeView(it); it.destroy() }
         val hidden =
             WebView(this).apply {
@@ -386,7 +430,7 @@ class MainActivity : Activity() {
                 }
 
                 override fun onPageFinished(view: WebView, url: String) {
-                    view.evaluateJavascript(waitroseFetchJs(lineNumber), null)
+                    view.evaluateJavascript(pageFinishedJs, null)
                 }
 
                 override fun onReceivedError(
@@ -399,9 +443,7 @@ class MainActivity : Activity() {
             }
         // Safety net: never leave the web app's promise hanging.
         hidden.postDelayed({ finish("""{"ok":false,"error":"timeout"}""") }, WAITROSE_TIMEOUT_MS)
-        // A search page for the lineNumber reliably fires an authenticated API call
-        // (so the token is minted + captured); its results are ignored.
-        hidden.loadUrl("https://www.waitrose.com/ecom/shop/search?searchTerm=$lineNumber")
+        hidden.loadUrl(loadUrl)
     }
 
     /** Resolve the web app's pending promise with a JSON result object. */
@@ -586,6 +628,42 @@ class MainActivity : Activity() {
 
         // Give up on a Waitrose lookup after this long (Akamai + SPA boot + fetch).
         private const val WAITROSE_TIMEOUT_MS = 20_000L
+
+        // Injected once the search page loads: dismiss consent, wait for the
+        // server-rendered results, and extract candidates from the embedded state
+        // ("lineNumber"/"name" pairs). No token needed — SSR results are public.
+        private const val WAITROSE_SEARCH_JS = """
+            (async () => {
+              function log(m) { try { console.log('[wtr] ' + m); } catch (e) {} }
+              function clickAccept() {
+                var b = document.querySelector('.acceptAll');
+                if (!b) b = Array.prototype.find.call(document.querySelectorAll('button'),
+                  function (x) { return /allow all|accept all/i.test(x.innerText || ''); });
+                if (b) { b.click(); return true; }
+                return false;
+              }
+              try {
+                for (var c = 0; c < 20 && !clickAccept(); c++) await new Promise(function (r) { setTimeout(r, 150); });
+                var s = '';
+                for (var i = 0; i < 30; i++) {
+                  s = Array.prototype.map.call(document.querySelectorAll('script'), function (x) { return x.textContent || ''; }).join('\n');
+                  if (/"lineNumber":"\d+"/.test(s)) break;
+                  await new Promise(function (r) { setTimeout(r, 250); });
+                }
+                // Other keys (productType, size, …) sit between lineNumber and name
+                // in the same object; [^}]*? spans them without crossing objects.
+                var re = /"lineNumber":"(\d+)"[^}]*?"name":"((?:[^"\\]|\\.)*)"/g, m, seen = {}, out = [];
+                while ((m = re.exec(s)) && out.length < 8) {
+                  var ln = m[1]; if (seen[ln]) continue; seen[ln] = 1;
+                  var name; try { name = JSON.parse('"' + m[2] + '"'); } catch (e) { name = m[2]; }
+                  out.push({ lineNumber: ln, name: name,
+                    image_url: 'https://ecom-su-static-prod.wtrecom.com/images/products/3/LN_' + ln + '_BP_3.jpg' });
+                }
+                log('search found ' + out.length);
+                AndroidWtr.result(JSON.stringify({ ok: true, candidates: out }));
+              } catch (e) { AndroidWtr.result(JSON.stringify({ ok: false, error: String(e) })); }
+            })();
+        """
 
         // Injected at document start in the hidden Waitrose view: patch fetch/XHR to
         // capture the Bearer token the SPA attaches to its own API calls. No regex
