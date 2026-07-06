@@ -48,6 +48,18 @@ $rail-w: 220px;
   font: var(--mat-sys-title-large);
 }
 
+// Non-blocking "refreshing" cue: a thin line pinned just under the top bar while
+// a slow background /api/me refresh is in flight. It sits OVER the content,
+// never replacing it, so a returning user reads their data immediately (see the
+// delayed reveal in app.ts). Tucks under the toolbar's z-index so the bar reads
+// as part of the app chrome, not a page element.
+.refresh-bar {
+  position: fixed;
+  top: calc(#{$topbar-h} + env(safe-area-inset-top));
+  inset-inline: 0;
+  z-index: 9;
+}
+
 .spacer {
   flex: 1;
 }

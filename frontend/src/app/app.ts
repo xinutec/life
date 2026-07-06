@@ -68,8 +68,18 @@ export class App {
   protected readonly alerts = inject(Alerts);
   protected readonly sync = inject(SyncStatus);
 
-  readonly me = signal<Me | null>(loadCachedMe());
-  readonly loading = signal(true);
+  private readonly cached = loadCachedMe();
+  readonly me = signal<Me | null>(this.cached);
+  /** Full-screen loader ONLY for a genuine cold start — no cached identity to
+   *  show. A returning user renders their cached shell immediately and the
+   *  /api/me refresh runs in the background (see `refreshing`), so there's no
+   *  spinner-over-content flash. */
+  readonly loading = signal(this.cached === null);
+  /** A background /api/me refresh is in flight AND slow enough to be worth
+   *  signalling — drives a thin, non-blocking progress line over the content
+   *  (never instead of it). Revealed on a delay so a fast refresh stays silent. */
+  readonly refreshing = signal(false);
+  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
   /** True when the initial /api/me call failed for a non-auth reason (offline or
    *  server) AND there was no cached identity to fall back to — drives a "you're
    *  offline" notice instead of the misleading "sign in" prompt. */
@@ -97,12 +107,14 @@ export class App {
 
   constructor() {
     this.swUpdates.start();
+    this.beginRefresh();
     this.api.me().subscribe({
       next: (m) => {
         this.me.set(m);
         cacheMe(m);
         this.offline.set(false);
         this.loading.set(false);
+        this.endRefresh();
         this.warmOfflineCache();
         this.alerts.refreshConflicts();
       },
@@ -121,14 +133,32 @@ export class App {
             // last-known `me` (already hydrated from cache) so the app opens; if
             // there's no cache, `offline` drives an "offline" notice rather than
             // telling the user to sign in when the real problem is connectivity.
+            // Being offline is surfaced ambiently by the toolbar sync indicator
+            // (SyncStatus watches navigator.onLine), so a shown-from-cache app
+            // still signals its connectivity — no need to alarm here.
             this.offline.set(true);
             break;
           default:
             assertNever(f);
         }
         this.loading.set(false);
+        this.endRefresh();
       },
     });
+  }
+
+  /** Arm the refresh cue: reveal it only if the fetch outlives the delay, so a
+   *  fast refresh (or an instant offline failure) never flashes the line on and
+   *  off. ~400ms is below where a wait starts to feel like waiting. */
+  private beginRefresh(): void {
+    this.refreshTimer = setTimeout(() => this.refreshing.set(true), 400);
+  }
+  private endRefresh(): void {
+    if (this.refreshTimer !== null) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = null;
+    }
+    this.refreshing.set(false);
   }
 
   /** Retry the identity fetch from the offline notice — a reload re-runs the

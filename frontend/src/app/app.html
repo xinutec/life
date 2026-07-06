@@ -1,6 +1,9 @@
 @if (loading()) {
   <mat-progress-bar mode="indeterminate" />
 } @else if (me(); as user) {
+  @if (refreshing()) {
+    <mat-progress-bar class="refresh-bar" mode="indeterminate" aria-label="Refreshing" />
+  }
   <a class="skip-link" href="#main">Skip to content</a>
   <mat-toolbar class="topbar">
     <button
