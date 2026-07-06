@@ -470,8 +470,11 @@ class MainActivity : Activity() {
         CookieManager.getInstance().setAcceptThirdPartyCookies(cw, true)
         connectWeb = cw
 
+        // This WebView shows a *third-party* retailer's login page (loginUrl), not
+        // life's own web app, so life can't inject a Done control into it — a native
+        // escape button is the correct design here, not web chrome.
         val done =
-            Button(this).apply {
+            Button(this).apply { // dev-lint: android-native-chrome allow — external login overlay
                 text = "Done"
                 setOnClickListener { closeShopConnect() }
                 layoutParams =
