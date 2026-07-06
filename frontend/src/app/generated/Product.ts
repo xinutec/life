@@ -6,6 +6,16 @@ export type Product = {
  */
 id: number, barcode: string | null, name: string | null, brand: string | null, quantity_label: string | null, 
 /**
- * True if we have a cached image (served from /api/products/{barcode}/image).
+ * Where the row came from: 'off', 'user', or a shop ('waitrose', …).
+ */
+source: string | null, 
+/**
+ * Source-scoped external id (e.g. a Waitrose lineNumber). Unique per source;
+ * how a shop product with no barcode is addressed and de-duped.
+ */
+external_id: string | null, 
+/**
+ * True if we have a cached image. Served from /api/products/id/{id}/image
+ * (barcodeless shop products), or /api/products/{barcode}/image when barcoded.
  */
 has_image: boolean, };

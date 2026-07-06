@@ -13,6 +13,12 @@ pub struct Product {
     pub name: Option<String>,
     pub brand: Option<String>,
     pub quantity_label: Option<String>,
-    /// True if we have a cached image (served from /api/products/{barcode}/image).
+    /// Where the row came from: 'off', 'user', or a shop ('waitrose', …).
+    pub source: Option<String>,
+    /// Source-scoped external id (e.g. a Waitrose lineNumber). Unique per source;
+    /// how a shop product with no barcode is addressed and de-duped.
+    pub external_id: Option<String>,
+    /// True if we have a cached image. Served from /api/products/id/{id}/image
+    /// (barcodeless shop products), or /api/products/{barcode}/image when barcoded.
     pub has_image: bool,
 }

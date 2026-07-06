@@ -29,6 +29,27 @@ async fn image_proxy_refuses_non_off_and_non_https_urls() {
     }
 }
 
+#[tokio::test]
+async fn generic_image_guard_enforces_per_source_allowlist() {
+    // The generic import path fetches images from a per-source host allowlist
+    // (e.g. Waitrose's CDN). Same SSRF guard as OFF: https only, host must be in
+    // the allowlist. All of these are refused before any network call.
+    let allow = ["wtrecom.com"];
+    for url in [
+        "http://ecom-su-static-prod.wtrecom.com/x.jpg", // not https
+        "https://evil.com/x.jpg",                       // foreign host
+        "https://wtrecom.com.evil.com/x.jpg",           // look-alike suffix
+        "https://ecom-su-static-prod.wtrecom.com@evil.com/x", // userinfo trick
+        "https://openfoodfacts.org/x.jpg",              // allowed for OFF, not here
+        "file:///etc/passwd",
+    ] {
+        let got = off::fetch_image_from(url, &allow)
+            .await
+            .expect("the guard returns Ok(None), never an error");
+        assert!(got.is_none(), "expected {url} to be refused");
+    }
+}
+
 #[test]
 fn upload_mime_accepts_only_raster_image_types() {
     // Accepted: the raster allowlist, with parameters and casing normalized away.

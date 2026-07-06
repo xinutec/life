@@ -76,6 +76,8 @@ pub fn router(state: AppState) -> Router {
         .route("/conflicts/{id}/resolve", post(conflicts::resolve))
         .route("/trash", get(trash::list))
         .route("/trash/{kind}/{ref}/restore", post(trash::restore))
+        .route("/products/import", post(products::import))
+        .route("/products/id/{id}/image", get(products::image_by_id))
         .route("/products/{barcode}", get(products::lookup))
         .route(
             "/products/{barcode}/image",

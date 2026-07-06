@@ -150,11 +150,13 @@ pub async fn fetch(http: &reqwest::Client, barcode: &str) -> Result<Option<OffPr
     }))
 }
 
-/// Only fetch product images that are https and on the openfoodfacts.org domain.
-/// OFF data is crowd-sourced, so a poisoned `image_url` must not be able to point
-/// us at an internal service — this is the SSRF guard. The leading-dot suffix
-/// check rejects look-alikes like `openfoodfacts.org.evil.com`.
-fn is_allowed_image_url(url: &str) -> bool {
+/// Whether `url` is https and its host equals, or is a subdomain of, one of the
+/// allowed suffixes. This is the SSRF guard: a poisoned `image_url` (crowd-sourced
+/// from OFF, or client-supplied on import) must not be able to point us at an
+/// internal service. The leading-dot subdomain check rejects look-alikes like
+/// `openfoodfacts.org.evil.com`, and `url::Url` parsing defeats the userinfo
+/// trick (`host.tld@evil.com` parses with host `evil.com`).
+fn host_allowed(url: &str, suffixes: &[&str]) -> bool {
     let Ok(parsed) = url::Url::parse(url) else {
         return false;
     };
@@ -162,18 +164,21 @@ fn is_allowed_image_url(url: &str) -> bool {
         return false;
     }
     match parsed.host_str() {
-        Some(host) => host == "openfoodfacts.org" || host.ends_with(".openfoodfacts.org"),
+        Some(host) => suffixes
+            .iter()
+            .any(|s| host == *s || host.ends_with(&format!(".{s}"))),
         None => false,
     }
 }
 
-/// Download a product image — https + openfoodfacts.org only, no redirects,
+/// Download a product image from any host on `allowed` — https only, no redirects,
 /// bounded time and size, and the response must actually be an image. `Ok(None)`
 /// if the URL is disallowed or the image can't be fetched (the caller then just
-/// caches no image and the UI falls back to an icon).
-pub async fn fetch_image(url: &str) -> Result<Option<(Vec<u8>, String)>> {
-    if !is_allowed_image_url(url) {
-        tracing::warn!(%url, "refusing product image: not an https openfoodfacts.org URL");
+/// caches no image and the UI falls back to an icon). Shared by the OFF proxy and
+/// the generic product import, so every source's images pass the same guards.
+pub async fn fetch_image_from(url: &str, allowed: &[&str]) -> Result<Option<(Vec<u8>, String)>> {
+    if !host_allowed(url, allowed) {
+        tracing::warn!(%url, ?allowed, "refusing product image: host not in the allowlist or not https");
         return Ok(None);
     }
     // A dedicated no-redirect client: even an allowlisted URL must not be able to
@@ -222,4 +227,10 @@ pub async fn fetch_image(url: &str) -> Result<Option<(Vec<u8>, String)>> {
         return Ok(None);
     };
     Ok(Some((bytes, sniffed.to_string())))
+}
+
+/// The OFF image proxy: `fetch_image_from` locked to the openfoodfacts.org
+/// domain (OFF's crowd-sourced `image_front_url`).
+pub async fn fetch_image(url: &str) -> Result<Option<(Vec<u8>, String)>> {
+    fetch_image_from(url, &["openfoodfacts.org"]).await
 }

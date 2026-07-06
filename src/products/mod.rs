@@ -3,4 +3,5 @@
 
 pub mod off;
 pub mod repo;
+pub mod source;
 pub mod types;
