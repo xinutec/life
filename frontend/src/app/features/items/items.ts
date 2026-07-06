@@ -48,6 +48,7 @@ export class Items {
   readonly locations = computed(() => this.locationsStore.value() ?? []);
   readonly loaded = this.itemsStore.loaded;
   readonly loadError = this.itemsStore.error;
+  readonly refreshing = this.itemsStore.refreshing;
 
   /** Live filter over name/brand/location, and the sort order. */
   readonly query = signal('');

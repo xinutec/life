@@ -12,6 +12,7 @@
   <app-list-state
     [loading]="!itemsLoaded()"
     [error]="itemsError()"
+    [refreshing]="itemsRefreshing()"
     (retry)="reloadItems()"
     [empty]="items().length === 0"
     emptyIcon="inventory_2"
@@ -50,6 +51,7 @@
   <app-list-state
     [loading]="!placesLoaded()"
     [error]="placesError()"
+    [refreshing]="placesRefreshing()"
     (retry)="reloadLocations()"
     [empty]="locations().length === 0"
     emptyIcon="inventory_2"

@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ListState } from './list-state';
 
@@ -42,5 +42,35 @@ describe('ListState', () => {
     const el = render({}).nativeElement as HTMLElement;
     expect(el.querySelector('mat-progress-bar')).toBeFalsy();
     expect(el.querySelector('.state')).toBeFalsy();
+  });
+
+  describe('refreshing cue (delay-gated)', () => {
+    afterEach(() => vi.useRealTimers());
+
+    it('stays silent for a fast refresh — the bar never flashes', () => {
+      vi.useFakeTimers();
+      const fixture = TestBed.createComponent(ListState);
+      fixture.componentRef.setInput('refreshing', true);
+      fixture.detectChanges();
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('mat-progress-bar')).toBeFalsy(); // within the delay
+      // Refresh finishes before the reveal delay → no bar was ever shown.
+      fixture.componentRef.setInput('refreshing', false);
+      vi.advanceTimersByTime(500);
+      fixture.detectChanges();
+      expect(el.querySelector('mat-progress-bar')).toBeFalsy();
+    });
+
+    it('reveals the bar over content once a refresh outlives the delay', () => {
+      vi.useFakeTimers();
+      const fixture = TestBed.createComponent(ListState);
+      fixture.componentRef.setInput('refreshing', true);
+      fixture.detectChanges();
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('mat-progress-bar')).toBeFalsy();
+      vi.advanceTimersByTime(400);
+      fixture.detectChanges();
+      expect(el.querySelector('mat-progress-bar.refresh')).toBeTruthy();
+    });
   });
 });

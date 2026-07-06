@@ -68,6 +68,8 @@ export class Inventory {
   readonly placesLoaded = this.placesStore.loaded;
   readonly itemsError = this.itemsStore.error;
   readonly placesError = this.placesStore.error;
+  readonly itemsRefreshing = this.itemsStore.refreshing;
+  readonly placesRefreshing = this.placesStore.refreshing;
   private byId = computed(
     () => new Map(this.locations().map((l) => [l.id, l] as const)),
   );

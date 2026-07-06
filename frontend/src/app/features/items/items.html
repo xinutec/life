@@ -3,6 +3,7 @@
 <app-list-state
   [loading]="!loaded()"
   [error]="loadError()"
+  [refreshing]="refreshing()"
   (retry)="reload()"
   [empty]="items().length === 0"
   emptyIcon="inventory_2"

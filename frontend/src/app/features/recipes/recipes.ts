@@ -44,6 +44,7 @@ export class Recipes {
   readonly recipes = computed(() => this.recipesStore.value() ?? []);
   readonly loaded = this.recipesStore.loaded;
   readonly loadError = this.recipesStore.error;
+  readonly refreshing = this.recipesStore.refreshing;
   readonly cookableIds = computed(
     () => new Set((this.cookableStore.value() ?? []).map((r) => r.id)),
   );

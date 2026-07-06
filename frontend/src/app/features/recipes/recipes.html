@@ -6,6 +6,7 @@
 <app-list-state
   [loading]="!loaded()"
   [error]="loadError()"
+  [refreshing]="refreshing()"
   (retry)="reload()"
   [empty]="recipes().length === 0"
   emptyIcon="menu_book"
