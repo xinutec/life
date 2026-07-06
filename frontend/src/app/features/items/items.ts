@@ -9,10 +9,10 @@ import { MatInputModule } from '@angular/material/input';
 import { MatListModule } from '@angular/material/list';
 
 import { ExpiryInfo, expiryInfo } from '../../expiry';
-import { LifeApi } from '../../life-api';
 import { ProductThumb } from '../../product-thumb';
 import { ListState } from '../../shared/list-state';
-import { Item, Loc } from '../../models';
+import { ItemsStore, LocationsStore } from '../../stores/catalog';
+import { Item } from '../../models';
 import { ItemSheet, ItemSheetData } from '../inventory/item-sheet';
 
 type SortKey = 'name' | 'expiry';
@@ -38,16 +38,16 @@ type SortKey = 'name' | 'expiry';
   ],
 })
 export class Items {
-  private api = inject(LifeApi);
   private sheet = inject(MatBottomSheet);
+  private itemsStore = inject(ItemsStore);
+  private locationsStore = inject(LocationsStore);
 
-  readonly items = signal<Item[]>([]);
-  readonly locations = signal<Loc[]>([]);
-  /** Pre-fetch, an empty list means "still loading", not "no items" — don't
-   *  flash the empty message. */
-  readonly loaded = signal(false);
-  /** A load failure is NOT an empty inventory — show a retry, not "no items". */
-  readonly loadError = signal(false);
+  // Views of the shared catalogs — retained across tabs and shared with
+  // Inventory / Today (see CachedResource), so returning here is instant.
+  readonly items = computed(() => this.itemsStore.value() ?? []);
+  readonly locations = computed(() => this.locationsStore.value() ?? []);
+  readonly loaded = this.itemsStore.loaded;
+  readonly loadError = this.itemsStore.error;
 
   /** Live filter over name/brand/location, and the sort order. */
   readonly query = signal('');
@@ -80,21 +80,11 @@ export class Items {
 
   constructor() {
     this.reload();
-    this.api.locations().subscribe((l) => this.locations.set(l));
+    this.locationsStore.refresh();
   }
 
   reload(): void {
-    this.loadError.set(false);
-    this.api.items().subscribe({
-      next: (i) => {
-        this.items.set(i);
-        this.loaded.set(true);
-      },
-      error: () => {
-        this.loaded.set(true);
-        this.loadError.set(true);
-      },
-    });
+    this.itemsStore.refresh();
   }
 
   /** Tap a row to edit it — the same add/edit bottom sheet Inventory uses,

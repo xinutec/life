@@ -9,7 +9,8 @@ import { onlineHint } from '../../shared/api-error';
 import { Feedback } from '../../shared/feedback';
 import { ListState } from '../../shared/list-state';
 import { LifeApi } from '../../life-api';
-import { Recipe, RecipeIngredient } from '../../models';
+import { CookableStore, RecipesStore } from '../../stores/catalog';
+import { RecipeIngredient } from '../../models';
 import { RecipeSheet } from './recipe-sheet';
 
 @Component({
@@ -29,6 +30,8 @@ export class Recipes {
   private api = inject(LifeApi);
   private sheet = inject(MatBottomSheet);
   private feedback = inject(Feedback);
+  private recipesStore = inject(RecipesStore);
+  private cookableStore = inject(CookableStore);
 
   /** Online-only writes must not fail into silence: announce and move on. */
   private failed(what: string) {
@@ -37,12 +40,13 @@ export class Recipes {
     };
   }
 
-  readonly recipes = signal<Recipe[]>([]);
-  /** Pre-fetch, an empty list means "still loading", not "no recipes". */
-  readonly loaded = signal(false);
-  /** A load failure is not "no recipes" — show a retry. */
-  readonly loadError = signal(false);
-  readonly cookableIds = signal<Set<number>>(new Set());
+  // Shared catalogs, retained across tab switches (see CachedResource).
+  readonly recipes = computed(() => this.recipesStore.value() ?? []);
+  readonly loaded = this.recipesStore.loaded;
+  readonly loadError = this.recipesStore.error;
+  readonly cookableIds = computed(
+    () => new Set((this.cookableStore.value() ?? []).map((r) => r.id)),
+  );
   readonly shopping = signal<Map<number, RecipeIngredient[]>>(new Map());
 
   readonly cookableCount = computed(() => this.cookableIds().size);
@@ -62,18 +66,8 @@ export class Recipes {
   }
 
   reload(): void {
-    this.loadError.set(false);
-    this.api.recipes().subscribe({
-      next: (r) => {
-        this.recipes.set(r);
-        this.loaded.set(true);
-      },
-      error: () => {
-        this.loaded.set(true);
-        this.loadError.set(true);
-      },
-    });
-    this.api.cookable().subscribe((r) => this.cookableIds.set(new Set(r.map((x) => x.id))));
+    this.recipesStore.refresh();
+    this.cookableStore.refresh();
   }
 
   deleteRecipe(id: number): void {

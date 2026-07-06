@@ -142,11 +142,13 @@ describe('TodoGraph — ready/blocked derivation', () => {
     expect(g.search('milk').map((t) => t.ref)).toContain('a');
   });
 
-  it('refreshCatalogs re-fetches the HTTP entity catalogs', () => {
+  it('refreshCatalogs fetches the HTTP entity catalogs', () => {
     const { g, items } = make([], []);
-    expect(items).toHaveBeenCalledTimes(1); // initial load
+    // The shared catalog stores load lazily — construction alone doesn't fetch;
+    // the to-do view / detail sheet call refreshCatalogs() on entry.
+    expect(items).toHaveBeenCalledTimes(0);
     g.refreshCatalogs();
-    expect(items).toHaveBeenCalledTimes(2);
+    expect(items).toHaveBeenCalledTimes(1);
   });
 
   it('a future start-gate makes a to-do "waiting"; a past one does not', () => {

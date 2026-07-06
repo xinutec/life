@@ -1,9 +1,10 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { BehaviorSubject, Observable, of } from 'rxjs';
+import { BehaviorSubject, of } from 'rxjs';
 import { catchError, map, switchMap } from 'rxjs/operators';
 
 import { LifeApi } from '../../life-api';
+import { ItemsStore, LocationsStore, RecipesStore } from '../../stores/catalog';
 import { LinkKind, TargetKind } from '../../models';
 import { ShoppingDoc, ShoppingStore } from '../../sync/shopping-store';
 import { TodoLinkDoc, TodoLinkStore } from '../../sync/todo-link-store';
@@ -105,32 +106,40 @@ export class TodoGraph {
     initialValue: [] as ShoppingDoc[],
   });
 
-  // The HTTP catalogs re-fetch on every refreshCatalogs() tick — a service
-  // created once would otherwise never see an item/recipe/place added later
-  // in the session, making it unlinkable until a full reload.
-  private readonly refresh$ = new BehaviorSubject<void>(undefined);
-  private refreshed<T>(fetch: () => Observable<T>, empty: T) {
-    return toSignal(this.refresh$.pipe(switchMap(() => fetch().pipe(catchError(() => of(empty))))), {
-      initialValue: empty,
-    });
-  }
+  // Items / recipes / places come from the shared root catalogs — the same cache
+  // Inventory / Recipes / All-items read, so one fetch serves them all and it's
+  // retained across tabs. Rooms are derived from the house scene, which has no
+  // list store, so they keep a local fetch. refreshCatalogs() re-pulls them all,
+  // so an entity added mid-session becomes linkable without a full reload.
+  private itemsStore = inject(ItemsStore);
+  private recipesStore = inject(RecipesStore);
+  private placesStore = inject(LocationsStore);
 
-  private readonly items = this.refreshed(() => this.api.items(), []);
-  private readonly recipes = this.refreshed(() => this.api.recipes(), []);
-  private readonly places = this.refreshed(() => this.api.locations(), []);
-  private readonly rooms = this.refreshed(
-    () =>
-      this.api
-        .house()
-        .pipe(map((h) => (h.rooms ?? []).map((r) => r.name).filter((n): n is string => !!n))),
-    [] as string[],
+  private readonly items = computed(() => this.itemsStore.value() ?? []);
+  private readonly recipes = computed(() => this.recipesStore.value() ?? []);
+  private readonly places = computed(() => this.placesStore.value() ?? []);
+
+  private readonly roomsRefresh$ = new BehaviorSubject<void>(undefined);
+  private readonly rooms = toSignal(
+    this.roomsRefresh$.pipe(
+      switchMap(() =>
+        this.api.house().pipe(
+          map((h) => (h.rooms ?? []).map((r) => r.name).filter((n): n is string => !!n)),
+          catchError(() => of([] as string[])),
+        ),
+      ),
+    ),
+    { initialValue: [] as string[] },
   );
 
-  /** Re-fetch the HTTP entity catalogs (items/recipes/places/rooms). Called on
+  /** Re-fetch the entity catalogs (items/recipes/places/rooms). Called on
    *  entering the to-do view and on opening the detail sheet, so fresh entities
    *  are linkable without reloading the app. */
   refreshCatalogs(): void {
-    this.refresh$.next(undefined);
+    this.itemsStore.refresh();
+    this.recipesStore.refresh();
+    this.placesStore.refresh();
+    this.roomsRefresh$.next(undefined);
   }
 
   /** Every linkable thing, flattened into a searchable catalog. */

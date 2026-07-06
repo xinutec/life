@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { MatBottomSheet, MatBottomSheetModule } from '@angular/material/bottom-sheet';
@@ -10,8 +10,7 @@ import { MatListModule } from '@angular/material/list';
 
 import { ExpiryInfo, expiryInfo } from '../../expiry';
 import { Feedback } from '../../shared/feedback';
-import { LifeApi } from '../../life-api';
-import { Item } from '../../models';
+import { ItemsStore } from '../../stores/catalog';
 import { WellbeingCheckin } from '../../shared/wellbeing-checkin';
 import { ShoppingDoc, ShoppingStore } from '../../sync/shopping-store';
 import { TodoDoc, TodoStore } from '../../sync/todo-store';
@@ -46,20 +45,21 @@ const URGENCY_RANK: Record<Urgency, number> = { overdue: 0, today: 1, soon: 2, n
   ],
 })
 export class Today {
-  private api = inject(LifeApi);
   private shopping = inject(ShoppingStore);
   private todos = inject(TodoStore);
   private graph = inject(TodoGraph);
   private sheet = inject(MatBottomSheet);
   private feedback = inject(Feedback);
+  private itemsStore = inject(ItemsStore);
 
-  private readonly items = signal<Item[]>([]);
+  // Shared with Inventory / All-items — already warm when you land here.
+  private readonly items = computed(() => this.itemsStore.value() ?? []);
   private readonly shoppingItems = toSignal(this.shopping.items$, {
     initialValue: [] as ShoppingDoc[],
   });
 
   constructor() {
-    this.api.items().subscribe({ next: (i) => this.items.set(i), error: () => {} });
+    this.itemsStore.refresh();
   }
 
   /** The to-dos worth surfacing: anything overdue / due / due-soon, or "ready"

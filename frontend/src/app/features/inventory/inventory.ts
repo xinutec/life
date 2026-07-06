@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from "@angular/core";
+import { Component, computed, inject } from "@angular/core";
 import { MatBottomSheet, MatBottomSheetModule } from "@angular/material/bottom-sheet";
 import { MatButtonModule } from "@angular/material/button";
 import { MatIconModule } from "@angular/material/icon";
@@ -11,7 +11,8 @@ import { ListState } from "../../shared/list-state";
 import { ExpiryInfo, expiryInfo } from "../../expiry";
 import { LifeApi } from "../../life-api";
 import { ProductThumb } from "../../product-thumb";
-import { Item, Loc } from "../../models";
+import { ItemsStore, LocationsStore } from "../../stores/catalog";
+import { Item } from "../../models";
 import { ItemSheet, ItemSheetData } from "./item-sheet";
 import { PlaceSheet, PlaceSheetData } from "./place-sheet";
 
@@ -33,6 +34,8 @@ export class Inventory {
   private api = inject(LifeApi);
   private sheet = inject(MatBottomSheet);
   private feedback = inject(Feedback);
+  private itemsStore = inject(ItemsStore);
+  private placesStore = inject(LocationsStore);
 
   /** Online-only writes must not fail into silence: announce and move on. */
   private failed(what: string) {
@@ -57,14 +60,14 @@ export class Inventory {
     });
   }
 
-  readonly items = signal<Item[]>([]);
-  readonly locations = signal<Loc[]>([]);
-  /** Pre-fetch, empty lists mean "still loading", not "nothing yet". */
-  readonly itemsLoaded = signal(false);
-  readonly placesLoaded = signal(false);
-  /** A load failure is not an empty inventory — show a retry, not "nothing yet". */
-  readonly itemsError = signal(false);
-  readonly placesError = signal(false);
+  // Views of the shared catalogs — retained across tab switches and shared with
+  // All-items / Today, so a revisit shows them instantly (see CachedResource).
+  readonly items = computed(() => this.itemsStore.value() ?? []);
+  readonly locations = computed(() => this.placesStore.value() ?? []);
+  readonly itemsLoaded = this.itemsStore.loaded;
+  readonly placesLoaded = this.placesStore.loaded;
+  readonly itemsError = this.itemsStore.error;
+  readonly placesError = this.placesStore.error;
   private byId = computed(
     () => new Map(this.locations().map((l) => [l.id, l] as const)),
   );
@@ -106,30 +109,10 @@ export class Inventory {
   }
 
   reloadItems(): void {
-    this.itemsError.set(false);
-    this.api.items().subscribe({
-      next: (i) => {
-        this.items.set(i);
-        this.itemsLoaded.set(true);
-      },
-      error: () => {
-        this.itemsLoaded.set(true);
-        this.itemsError.set(true);
-      },
-    });
+    this.itemsStore.refresh();
   }
   reloadLocations(): void {
-    this.placesError.set(false);
-    this.api.locations().subscribe({
-      next: (l) => {
-        this.locations.set(l);
-        this.placesLoaded.set(true);
-      },
-      error: () => {
-        this.placesLoaded.set(true);
-        this.placesError.set(true);
-      },
-    });
+    this.placesStore.refresh();
   }
 
   /** Root→leaf breadcrumb for a location id, resolved client-side. */
