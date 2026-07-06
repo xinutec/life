@@ -1,0 +1,33 @@
+.shop-search {
+  display: flex;
+  flex-direction: column;
+  min-width: min(90vw, 22rem);
+
+  mat-form-field {
+    width: 100%;
+  }
+
+  .state {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+    opacity: 0.8;
+
+    &.error {
+      opacity: 1;
+      color: var(--mat-sys-error, #b3261e);
+    }
+  }
+
+  img[matListItemAvatar] {
+    object-fit: contain;
+    background: rgba(0, 0, 0, 0.04);
+  }
+
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.5rem;
+  }
+}

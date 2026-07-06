@@ -76,6 +76,37 @@
     </button>
   </mat-form-field>
 
+  @if (shopProviders.length) {
+    <div class="shop-row">
+      <button mat-stroked-button [matMenuTriggerFor]="shopMenu">
+        <mat-icon>storefront</mat-icon>
+        Shops
+      </button>
+      <mat-menu #shopMenu="matMenu">
+        @for (p of shopProviders; track p.id) {
+          <button mat-menu-item (click)="findOnShop(p)">
+            <mat-icon>search</mat-icon>
+            <span>Find on {{ p.displayName }}</span>
+          </button>
+          <button mat-menu-item (click)="connectShop(p)">
+            <mat-icon>login</mat-icon>
+            <span>Connect {{ p.displayName }}</span>
+          </button>
+        }
+      </mat-menu>
+
+      @if (form().product_id) {
+        <span class="linked">
+          <mat-icon>link</mat-icon>
+          Linked
+          <button mat-icon-button (click)="patch({ product_id: null })" aria-label="Unlink product">
+            <mat-icon>close</mat-icon>
+          </button>
+        </span>
+      }
+    </div>
+  }
+
   <div class="actions">
     <button mat-flat-button (click)="save()" [disabled]="!form().name.trim() || saving()">
       {{ editing ? 'Save' : 'Add item' }}

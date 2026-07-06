@@ -159,6 +159,26 @@ h3 {
     align-items: center;
     gap: 0.5rem;
   }
+
+  // Shop-enrichment row: the "Shops" menu trigger + a "Linked" chip once an item
+  // is tied to a catalog product (Waitrose etc.). Android-app only.
+  .shop-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+
+    .linked {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding-left: 0.5rem;
+      border-radius: 1rem;
+      background: var(--mat-sys-secondary-container);
+      color: var(--mat-sys-on-secondary-container);
+      font-size: 0.85rem;
+    }
+  }
 }
 
 // Keyboard focus for the custom role="button" spans (to-do titles etc.) —
