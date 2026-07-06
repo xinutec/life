@@ -8,13 +8,16 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.util.Base64
 import android.util.Log
+import android.view.Gravity
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
+import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
@@ -22,11 +25,14 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Button
 import android.widget.FrameLayout
 import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import org.json.JSONObject
 
 /**
  * A full-screen [WebView] onto life — the personal home-OS app, an Angular SPA
@@ -51,9 +57,21 @@ class MainActivity : Activity() {
     // A pending <input type=file> result callback, held while the picker is open.
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
 
+    // The offscreen WebView doing a Waitrose lookup, if one is in flight. One at a
+    // time; a new request tears down the previous.
+    private var waitroseWeb: WebView? = null
+
+    // The visible "Connect Waitrose" login overlay + its WebView, while shown.
+    private var connectOverlay: FrameLayout? = null
+    private var connectWeb: WebView? = null
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Make both WebViews inspectable over adb (chrome://inspect / CDP). The app
+        // is a personal, sideloaded debug build; this is how in-app web + the hidden
+        // Waitrose fetch get diagnosed (the view isn't otherwise remote-debuggable).
+        WebView.setWebContentsDebuggingEnabled(true)
         val prefs = getSharedPreferences("viewer", Context.MODE_PRIVATE)
         web =
             WebView(this).apply {
@@ -73,6 +91,11 @@ class MainActivity : Activity() {
                 // readClipboardImageDataUrl) — a foreign page can't read the
                 // clipboard even if it somehow ends up in this view.
                 addJavascriptInterface(ClipboardImageBridge(), "AndroidClipboard")
+                // Waitrose enrichment: the web app asks us to fetch a product by
+                // its lineNumber; we do it in a hidden WebView on waitrose.com (a
+                // real browser passes the Akamai bot wall a server-side client
+                // can't) and hand the normalized product back. See WaitroseBridge.
+                addJavascriptInterface(WaitroseBridge(), "WaitroseBridge")
                 // Keep life (and its Nextcloud login hop) inside this WebView;
                 // hand every other origin to the real browser. A chromeless view
                 // has no URL bar, so an external link opening in-place would look
@@ -193,6 +216,9 @@ class MainActivity : Activity() {
     // `configChanges` keeps the Activity across rotation, so this only fires on a
     // real finish — release the WebView instead of leaking it.
     override fun onDestroy() {
+        waitroseWeb?.let { root.removeView(it); it.destroy() }
+        connectOverlay?.let { root.removeView(it) }
+        connectWeb?.destroy()
         root.removeView(web)
         web.destroy()
         super.onDestroy()
@@ -203,6 +229,13 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
+        // The Waitrose connect overlay swallows back first: walk its history, then
+        // close it, before the main app's back behaviour.
+        val cw = connectWeb
+        if (connectOverlay != null) {
+            if (cw != null && cw.canGoBack()) cw.goBack() else closeWaitroseConnect()
+            return
+        }
         if (web.canGoBack()) web.goBack() else super.onBackPressed()
     }
 
@@ -259,6 +292,257 @@ class MainActivity : Activity() {
         return null
     }
 
+    /**
+     * Bridge for the web app's Waitrose enrichment. `fetchProduct(lineNumber, id)`
+     * starts a lookup and resolves asynchronously by calling
+     * `window.__waitroseResolve(id, { ok, product | error })` back in the life app.
+     * `available()` lets the web app feature-detect (the object is absent in a
+     * plain browser). Origin-gated in waitroseFetchProduct.
+     */
+    inner class WaitroseBridge {
+        @JavascriptInterface fun available(): Boolean = true
+
+        @JavascriptInterface
+        fun fetchProduct(lineNumber: String, requestId: String) {
+            runOnUiThread { waitroseFetchProduct(lineNumber, requestId) }
+        }
+
+        // Show the visible Waitrose login so a session is established (cookies
+        // persist in the shared jar; the hidden fetch needs a logged-in SPA to
+        // mint a token). Resolves nothing — the web app hears back via
+        // window.__waitroseConnected() when the overlay closes.
+        @JavascriptInterface
+        fun connect() {
+            runOnUiThread { showWaitroseConnect() }
+        }
+    }
+
+    /**
+     * Fetch a Waitrose product by lineNumber in a throwaway offscreen WebView.
+     * Why a WebView, not an HTTP client: waitrose.com is behind Akamai Bot Manager,
+     * which rejects non-browser TLS/HTTP2 fingerprints outright — only a real
+     * browser engine passes. The hidden view loads a waitrose.com page (the SPA
+     * mints its session Bearer token), we capture that token by patching fetch/XHR,
+     * then call the JSON product API with it. The result returns through the
+     * per-view AndroidWtr bridge because WebView.evaluateJavascript does NOT await
+     * promises (unlike CDP).
+     */
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun waitroseFetchProduct(lineNumber: String, requestId: String) {
+        if (web.url?.startsWith(LIFE_URL) != true) {
+            resolveWaitrose(requestId, """{"ok":false,"error":"forbidden"}""")
+            return
+        }
+        // lineNumber is spliced into the URL below — allow only digits.
+        if (lineNumber.isEmpty() || lineNumber.length > 10 || !lineNumber.all(Char::isDigit)) {
+            resolveWaitrose(requestId, """{"ok":false,"error":"bad lineNumber"}""")
+            return
+        }
+
+        waitroseWeb?.let { root.removeView(it); it.destroy() }
+        val hidden =
+            WebView(this).apply {
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+                // Offscreen but attached (1×1) so JS timers/network run reliably.
+                layoutParams = FrameLayout.LayoutParams(1, 1)
+            }
+        // The Waitrose SPA's session/consent flow leans on third-party cookies,
+        // which a WebView blocks by default.
+        CookieManager.getInstance().setAcceptThirdPartyCookies(hidden, true)
+        waitroseWeb = hidden
+        root.addView(hidden)
+
+        val settled = AtomicBoolean(false)
+        val finish = { payload: String ->
+            if (settled.compareAndSet(false, true)) {
+                resolveWaitrose(requestId, payload)
+                hidden.post {
+                    root.removeView(hidden)
+                    hidden.destroy()
+                    if (waitroseWeb === hidden) waitroseWeb = null
+                }
+            }
+        }
+        hidden.addJavascriptInterface(
+            object {
+                @JavascriptInterface fun result(json: String) = runOnUiThread { finish(json) }
+            },
+            "AndroidWtr",
+        )
+        hidden.webChromeClient =
+            object : WebChromeClient() {
+                override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
+                    Log.d("life-wtr", "${msg.message()} (${msg.sourceId()}:${msg.lineNumber()})")
+                    return true
+                }
+            }
+        hidden.webViewClient =
+            object : WebViewClient() {
+                // Patch fetch/XHR early, before the SPA fires its authed calls, so
+                // we catch the Bearer token it attaches.
+                override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                    view.evaluateJavascript(WAITROSE_CAPTURE_JS, null)
+                }
+
+                override fun onPageFinished(view: WebView, url: String) {
+                    view.evaluateJavascript(waitroseFetchJs(lineNumber), null)
+                }
+
+                override fun onReceivedError(
+                    view: WebView,
+                    request: WebResourceRequest,
+                    error: android.webkit.WebResourceError,
+                ) {
+                    if (request.isForMainFrame) finish("""{"ok":false,"error":"load failed"}""")
+                }
+            }
+        // Safety net: never leave the web app's promise hanging.
+        hidden.postDelayed({ finish("""{"ok":false,"error":"timeout"}""") }, WAITROSE_TIMEOUT_MS)
+        // A search page for the lineNumber reliably fires an authenticated API call
+        // (so the token is minted + captured); its results are ignored.
+        hidden.loadUrl("https://www.waitrose.com/ecom/shop/search?searchTerm=$lineNumber")
+    }
+
+    /** Resolve the web app's pending promise with a JSON result object. */
+    private fun resolveWaitrose(requestId: String, resultJson: String) {
+        val js =
+            "window.__waitroseResolve && window.__waitroseResolve(${JSONObject.quote(requestId)}, $resultJson)"
+        web.post { web.evaluateJavascript(js, null) }
+    }
+
+    /**
+     * Show a full-screen Waitrose WebView so the user signs in once. The session
+     * cookies land in the shared CookieManager, so the hidden fetch view (and any
+     * future basket/order calls) inherit a logged-in session. A "Done" button and
+     * the back key close it; the web app is notified via window.__waitroseConnected().
+     */
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun showWaitroseConnect() {
+        if (connectOverlay != null) return // already open
+        val cw =
+            WebView(this).apply {
+                layoutParams =
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    )
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+                settings.useWideViewPort = true
+                settings.loadWithOverviewMode = true
+                webChromeClient =
+                    object : WebChromeClient() {
+                        override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
+                            Log.d("life-wtr", "connect: ${msg.message()}")
+                            return true
+                        }
+                    }
+                webViewClient =
+                    object : WebViewClient() {
+                        // Keep waitrose.com (and its subdomains) in this view; hand
+                        // anything else to the real browser.
+                        override fun shouldOverrideUrlLoading(
+                            view: WebView,
+                            request: WebResourceRequest,
+                        ): Boolean {
+                            val host = request.url.host ?: return false
+                            if (request.url.scheme == "https" &&
+                                (host == "waitrose.com" || host.endsWith(".waitrose.com"))
+                            ) {
+                                return false
+                            }
+                            try {
+                                startActivity(Intent(Intent.ACTION_VIEW, request.url))
+                            } catch (_: ActivityNotFoundException) {
+                            }
+                            return true
+                        }
+                    }
+            }
+        CookieManager.getInstance().setAcceptThirdPartyCookies(cw, true)
+        connectWeb = cw
+
+        val done =
+            Button(this).apply {
+                text = "Done"
+                setOnClickListener { closeWaitroseConnect() }
+                layoutParams =
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ).apply { gravity = Gravity.TOP or Gravity.END }
+            }
+        val overlay =
+            FrameLayout(this).apply {
+                layoutParams =
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    )
+                setBackgroundColor(Color.WHITE)
+                addView(cw)
+                addView(done)
+            }
+        connectOverlay = overlay
+        root.addView(overlay)
+        cw.loadUrl(WAITROSE_URL)
+    }
+
+    private fun closeWaitroseConnect() {
+        val overlay = connectOverlay ?: return
+        connectOverlay = null
+        root.removeView(overlay)
+        connectWeb?.destroy()
+        connectWeb = null
+        // Let the web app re-check / retry the fetch now a session may exist.
+        web.evaluateJavascript("window.__waitroseConnected && window.__waitroseConnected()", null)
+    }
+
+    // The in-page fetch: poll for the captured Bearer token, then call the product
+    // API and report a normalized product (or an error) back through AndroidWtr.
+    // lineNumber is digits-only (validated by the caller), safe to interpolate.
+    private fun waitroseFetchJs(lineNumber: String): String =
+        """
+        (async () => {
+          function log(m) { try { console.log('[wtr] ' + m); } catch (e) {} }
+          // Dismiss the cookie-consent banner a fresh WebView shows ("Allow all");
+          // once accepted the consent cookie persists in the shared jar, so later
+          // fetches skip this. The SPA gates its authed API calls on consent, so
+          // without this no token is ever minted.
+          function clickAccept() {
+            var b = document.querySelector('.acceptAll');
+            if (!b) b = Array.prototype.find.call(document.querySelectorAll('button'),
+              function (x) { return /allow all|accept all/i.test(x.innerText || ''); });
+            if (b) { b.click(); return true; }
+            return false;
+          }
+          try {
+            for (var c = 0; c < 20 && !clickAccept(); c++) await new Promise(function (r) { setTimeout(r, 150); });
+            log('consent handled');
+            for (var i = 0; i < 40 && !window.__wtrCap; i++) await new Promise(function (r) { setTimeout(r, 250); });
+            var tok = window.__wtrCap;
+            if (!tok) { log('no token'); AndroidWtr.result(JSON.stringify({ ok: false, error: "no token" })); return; }
+            log('got token');
+            var r = await fetch("https://www.waitrose.com/api/products-prod/v1/products/$lineNumber?view=SUMMARY",
+              { headers: { accept: "application/json", authorization: tok }, credentials: "include" });
+            if (r.status !== 200) { AndroidWtr.result(JSON.stringify({ ok: false, error: "status " + r.status })); return; }
+            var j = await r.json();
+            var p = (j.products && j.products[0]) || null;
+            if (!p) { AndroidWtr.result(JSON.stringify({ ok: false, error: "not found" })); return; }
+            var im = p.images || {};
+            var pr = p.pricing || {};
+            var out = { ok: true, product: {
+              source: "waitrose", external_id: p.lineNumber, name: p.name || null, brand: p.brand || null,
+              barcodes: p.barCodes || [], image_url: im.large || im.medium || im.extraLarge || im.small || null,
+              display_price: (pr.currentSaleUnitRetailPrice && pr.currentSaleUnitRetailPrice.price) || null,
+              categories: (p.categories || []).map(function (c) { return c.name; })
+            } };
+            AndroidWtr.result(JSON.stringify(out));
+          } catch (e) { AndroidWtr.result(JSON.stringify({ ok: false, error: String(e) })); }
+        })();
+        """.trimIndent()
+
     // Resolve the held web camera request once the user answers the OS dialog.
     override fun onRequestPermissionsResult(
         requestCode: Int,
@@ -296,5 +580,30 @@ class MainActivity : Activity() {
         // Nextcloud login hop. Everything else goes to the real browser.
         private val ALLOWED_HOSTS = setOf("life.xinutec.org", "dash.xinutec.org")
         private const val KEY_LAST_URL = "last_url"
+
+        // The Waitrose site (for the visible "Connect Waitrose" sign-in overlay).
+        private const val WAITROSE_URL = "https://www.waitrose.com/"
+
+        // Give up on a Waitrose lookup after this long (Akamai + SPA boot + fetch).
+        private const val WAITROSE_TIMEOUT_MS = 20_000L
+
+        // Injected at document start in the hidden Waitrose view: patch fetch/XHR to
+        // capture the Bearer token the SPA attaches to its own API calls. No regex
+        // (its '$' can't live in a Kotlin const raw string) — case-insensitive
+        // string compare instead.
+        private const val WAITROSE_CAPTURE_JS = """
+            (function () {
+              if (window.__wtrCapInit) return; window.__wtrCapInit = 1; window.__wtrCap = null;
+              function isAuth(k) { return String(k).toLowerCase() === 'authorization'; }
+              function ra(h) { if (!h) return null;
+                if (typeof h.get === 'function') return h.get('authorization') || h.get('Authorization');
+                if (Array.isArray(h)) { for (var i = 0; i < h.length; i++) { if (isAuth(h[i][0])) return h[i][1]; } return null; }
+                for (var k in h) { if (isAuth(k)) return h[k]; } return null; }
+              var of = window.fetch;
+              window.fetch = function (u, o) { try { var a = ra(o && o.headers); if (a) window.__wtrCap = a; } catch (e) {} return of.apply(this, arguments); };
+              var os = XMLHttpRequest.prototype.setRequestHeader;
+              XMLHttpRequest.prototype.setRequestHeader = function (k, v) { try { if (isAuth(k)) window.__wtrCap = v; } catch (e) {} return os.apply(this, arguments); };
+            })();
+        """
     }
 }
