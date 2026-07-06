@@ -9,9 +9,23 @@ Nextcloud is used only for **identity** (login) and **calendar** (CalDAV) — se
 CI (`.github/workflows/build.yml`) gates on clippy + `cargo test`, then builds
 and pushes the single image **`xinutec/life:latest`** to Docker Hub (backend
 binary + built Angular bundle + scenes, all served from one process). The
-Kubernetes manifests and Flux wiring live in the **home monorepo**
-(`xinutec/pippijn` → `code/kubes/life/k8s/`), which reconciles that image tag —
-the tag is the only contract between this repo and the running deployment.
+Kubernetes manifests live in the **home monorepo** (`xinutec/pippijn` →
+`code/kubes/life/k8s/`); the image tag is the only contract between this repo
+and the running deployment.
+
+There is **no image automation** (no Flux/Argo image controller): the Deployment
+pins `xinutec/life:latest`, a fixed string, so pushing a new `:latest` changes
+nothing on the cluster by itself. Once CI is green, roll it out by hand on isis —
+the restart is what pulls the fresh image (`:latest` ⇒ `imagePullPolicy: Always`):
+
+```sh
+ssh root@isis.xinutec.org \
+  "kubectl -n life rollout restart deploy/life-app && \
+   kubectl -n life rollout status deploy/life-app --timeout=180s"
+```
+
+Manifest changes (yaml edits) additionally need a `kubectl apply` of
+`code/kubes/life/k8s/` from a monorepo checkout on the host.
 
 ## Android app
 

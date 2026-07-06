@@ -3,8 +3,15 @@ name: build
 
 # life (Rust backend + Angular frontend) — gate on clippy + cargo test, then
 # build and push the single image xinutec/life:latest to Docker Hub. The k8s
-# manifests + Flux live in the home monorepo (xinutec/pippijn code/kubes/life/k8s);
-# the image tag is the only contract between this repo and the deploy.
+# manifests live in the home monorepo (xinutec/pippijn code/kubes/life/k8s); the
+# image tag is the only contract between this repo and the deploy.
+#
+# There is NO image automation (no Flux/Argo image controller). The Deployment
+# pins :latest — a fixed string — so a new push changes nothing on the cluster by
+# itself. After this workflow goes green, roll it out by hand; the restart pulls
+# the fresh image (:latest ⇒ imagePullPolicy: Always):
+#   ssh root@isis.xinutec.org "kubectl -n life rollout restart deploy/life-app \
+#     && kubectl -n life rollout status deploy/life-app --timeout=180s"
 on:
   push:
     branches: [main]
