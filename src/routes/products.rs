@@ -144,7 +144,8 @@ pub async fn import(
         .as_deref()
         .map(str::trim)
         .filter(|v| !v.is_empty());
-    let product = repo::upsert_external(&app.pool, &body.source, ext, Some(name), brand, None).await?;
+    let product =
+        repo::upsert_external(&app.pool, &body.source, ext, Some(name), brand, None).await?;
     tracing::info!(source = %body.source, external_id = %ext, name, "product imported");
 
     // Optional image: SSRF-gated against the source's host allowlist, fetched

@@ -128,7 +128,10 @@ async fn external_import_against_real_db() {
             .id,
         p.id
     );
-    assert_eq!(repo::get_by_id(&pool, p.id).await.unwrap().unwrap().id, p.id);
+    assert_eq!(
+        repo::get_by_id(&pool, p.id).await.unwrap().unwrap().id,
+        p.id
+    );
 
     // Image is stored/served by id (there's no barcode to key it on).
     assert!(repo::get_image_by_id(&pool, p.id).await.unwrap().is_none());
@@ -138,12 +141,25 @@ async fn external_import_against_real_db() {
     let (bytes, mime) = repo::get_image_by_id(&pool, p.id).await.unwrap().unwrap();
     assert_eq!(bytes, vec![7, 7, 7]);
     assert_eq!(mime, "image/jpeg");
-    assert!(repo::get_by_id(&pool, p.id).await.unwrap().unwrap().has_image);
+    assert!(
+        repo::get_by_id(&pool, p.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .has_image
+    );
 
     // Re-import is idempotent on the key and refreshes metadata.
-    let p2 = repo::upsert_external(&pool, source, ext, Some("Cravendale Whole Milk"), None, None)
-        .await
-        .unwrap();
+    let p2 = repo::upsert_external(
+        &pool,
+        source,
+        ext,
+        Some("Cravendale Whole Milk"),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
     assert_eq!(p2.id, p.id, "same (source, external_id) → same row");
     assert_eq!(p2.name.as_deref(), Some("Cravendale Whole Milk"));
     assert!(p2.has_image, "re-import preserves the stored image");

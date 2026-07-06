@@ -129,7 +129,11 @@ async fn item_links_to_barcodeless_shop_product_by_id() {
     let mut req = new_item("my scribble", None);
     req.product_id = Some(product.id);
     let linked = inv::create_item(&pool, user, req).await.unwrap();
-    assert_eq!(linked.product_id, Some(product.id), "explicit link honoured");
+    assert_eq!(
+        linked.product_id,
+        Some(product.id),
+        "explicit link honoured"
+    );
     assert_eq!(
         linked.name, "Waitrose Cheddar",
         "display name resolves from the shop product"
