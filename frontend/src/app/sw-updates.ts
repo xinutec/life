@@ -68,8 +68,17 @@ export class SwUpdates {
    *  - `'unsupported'`: no service worker (dev build). */
   async checkNow(): Promise<'updating' | 'current' | 'unsupported'> {
     if (!this.sw.isEnabled) return 'unsupported';
-    // checkForUpdate() resolves true when a new version was discovered; the
-    // VERSION_READY subscription then drives activate + reload.
+    // A newer build may already be downloaded and DEFERRED — VERSION_READY fired
+    // mid-session and we held the reload so it wouldn't interrupt. In that case
+    // checkForUpdate() reports "nothing newer" (false), and we'd wrongly say
+    // "you're on the latest" while a staged update sits waiting. The user just
+    // asked, so activate that pending update now.
+    if (this.pendingReload) {
+      this.applyUpdate();
+      return 'updating';
+    }
+    // Otherwise ask the SW to look: checkForUpdate() resolves true when a new
+    // version was discovered; the VERSION_READY subscription then activates it.
     this.userAsked = true;
     const found = await this.sw.checkForUpdate();
     if (!found) this.userAsked = false;

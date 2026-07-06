@@ -98,4 +98,18 @@ describe('SwUpdates', () => {
     svc.start();
     await expect(svc.checkNow()).resolves.toBe('current');
   });
+
+  it('checkNow activates an ALREADY-staged update instead of reporting current', async () => {
+    // The stale-phone bug: an update downloaded mid-session was deferred, then a
+    // later checkForUpdate() sees nothing newer and returns false — so the manual
+    // check must apply the pending build rather than say "you're on the latest".
+    const { svc, versionUpdates, checkForUpdate, apply } = setup(true);
+    svc.start();
+    vi.advanceTimersByTime(60_000); // mid-session, visible → the update defers
+    versionUpdates.next(ready);
+    expect(apply).not.toHaveBeenCalled(); // held, not applied
+    checkForUpdate.mockResolvedValue(false); // nothing newer than the staged build
+    await expect(svc.checkNow()).resolves.toBe('updating');
+    expect(apply).toHaveBeenCalledOnce();
+  });
 });
