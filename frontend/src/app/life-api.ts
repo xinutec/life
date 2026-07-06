@@ -92,6 +92,23 @@ export class LifeApi {
       headers: { 'Content-Type': blob.type },
     });
   }
+  /** Import a product from an external source (a shop) into the catalog, keyed on
+   *  (source, external_id). The backend fetches + stores the image server-side. */
+  importProduct(body: {
+    source: string;
+    external_id: string;
+    name: string;
+    brand?: string | null;
+    image_url?: string | null;
+  }): Observable<Product> {
+    return this.http.post<Product>('/api/products/import', body);
+  }
+  /** URL of a catalog image addressed by product id — for barcodeless shop
+   *  products, which have no /products/{barcode}/image URL. */
+  productImageByIdUrl(id: number, version?: number): string {
+    const base = `/api/products/id/${id}/image`;
+    return version ? `${base}?v=${version}` : base;
+  }
 
   /** Unresolved same-field sync conflicts, newest first. */
   conflicts(): Observable<ConflictEntry[]> {
