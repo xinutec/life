@@ -573,8 +573,10 @@ pub async fn push_wellbeing(
         let new = entry.new_document_state;
         let assumed_rev = entry.assumed_master_state.map(|d| d.rev);
         let recorded = new.recorded_at.naive_utc();
+        // A Vec<String> always serialises; .expect documents the invariant and
+        // fails loudly rather than silently dropping the user's emotions.
         let emotions_json =
-            serde_json::to_string(&new.emotions).unwrap_or_else(|_| "[]".to_string());
+            serde_json::to_string(&new.emotions).expect("Vec<String> serialises to JSON");
 
         let mut tx = pool.begin().await?;
         let current: Option<WellbeingDocRow> = sqlx::query_as(
