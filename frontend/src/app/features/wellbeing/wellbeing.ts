@@ -16,11 +16,12 @@ interface Day {
   entries: WellbeingDoc[];
 }
 
-/** A dot in the 14-day trend chart (SVG user units). */
+/** A dot in a 14-day trend chart (SVG user units). `level` is the 1..5 value
+ *  (mood score or fatigue level) and drives the colour class. */
 interface Dot {
   cx: number;
   cy: number;
-  score: number;
+  level: number;
 }
 
 const CHART = { w: 300, h: 96, padX: 6, padTop: 8, padBottom: 8, days: 14 };
@@ -61,8 +62,19 @@ export class Wellbeing {
     return [...groups.values()];
   });
 
-  /** The 14-day trend: a dot per entry, x = day column + time-of-day, y = score. */
-  readonly chart = computed(() => {
+  /** The 14-day mood trend: a dot per entry, x = day column + time-of-day, y = score. */
+  readonly chart = computed(() => this.buildChart((e) => e.score));
+  readonly hasChart = computed(() => this.chart().dots.length > 0);
+
+  /** The same 14-day trend for the optional fatigue reading — only entries that
+   *  recorded one contribute, so it's absent until there's fatigue data. Severe
+   *  sits at the top (y = 5), so a rising line reads as worsening. */
+  readonly fatigueChart = computed(() => this.buildChart((e) => e.fatigue));
+  readonly hasFatigueChart = computed(() => this.fatigueChart().dots.length > 0);
+
+  /** Build a trend from a 1..5 accessor; entries returning null/undefined (e.g. an
+   *  unrecorded fatigue) or falling outside the 14-day window are skipped. */
+  private buildChart(value: (e: WellbeingDoc) => number | null | undefined) {
     const { w, h, padX, padTop, padBottom, days } = CHART;
     const plotH = h - padTop - padBottom;
     const colW = (w - 2 * padX) / days;
@@ -72,18 +84,18 @@ export class Wellbeing {
     start.setDate(start.getDate() - (days - 1));
     const dots: Dot[] = [];
     for (const e of this.items()) {
+      const level = value(e);
+      if (level == null) continue; // no reading of this kind on this entry
       const d = new Date(e.recordedAt);
       const dayIdx = Math.floor((d.getTime() - start.getTime()) / 86_400_000);
       if (dayIdx < 0 || dayIdx >= days) continue; // outside the window
       const timeFrac = (d.getHours() * 60 + d.getMinutes()) / 1440;
       const cx = padX + colW * (dayIdx + 0.2 + 0.6 * timeFrac);
-      const cy = padTop + ((5 - e.score) / 4) * plotH;
-      dots.push({ cx: Math.round(cx * 10) / 10, cy: Math.round(cy * 10) / 10, score: e.score });
+      const cy = padTop + ((5 - level) / 4) * plotH;
+      dots.push({ cx: Math.round(cx * 10) / 10, cy: Math.round(cy * 10) / 10, level });
     }
     return { w, h, dots };
-  });
-
-  readonly hasChart = computed(() => this.chart().dots.length > 0);
+  }
 
   meta(score: number) {
     return scoreMeta(score);

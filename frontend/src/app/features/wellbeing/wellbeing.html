@@ -17,11 +17,39 @@
       >
         <line class="mid" [attr.x1]="0" [attr.x2]="chart().w" [attr.y1]="chart().h / 2" [attr.y2]="chart().h / 2" />
         @for (dot of chart().dots; track $index) {
-          <circle class="dot score-{{ dot.score }}" [attr.cx]="dot.cx" [attr.cy]="dot.cy" r="3.5" />
+          <circle class="dot score-{{ dot.level }}" [attr.cx]="dot.cx" [attr.cy]="dot.cy" r="3.5" />
         }
       </svg>
     </div>
-    <p class="caption">Last 14 days</p>
+    <p class="caption">Mood · last 14 days</p>
+  </div>
+}
+
+@if (hasFatigueChart()) {
+  <div class="trend fatigue">
+    <div class="plot">
+      <div class="axis" aria-hidden="true">
+        <span>severe</span><span>moderate</span><span>none</span>
+      </div>
+      <svg
+        class="chart"
+        [attr.viewBox]="'0 0 ' + fatigueChart().w + ' ' + fatigueChart().h"
+        role="img"
+        aria-label="Your fatigue over the last 14 days"
+      >
+        <line
+          class="mid"
+          [attr.x1]="0"
+          [attr.x2]="fatigueChart().w"
+          [attr.y1]="fatigueChart().h / 2"
+          [attr.y2]="fatigueChart().h / 2"
+        />
+        @for (dot of fatigueChart().dots; track $index) {
+          <circle class="dot fatigue-{{ dot.level }}" [attr.cx]="dot.cx" [attr.cy]="dot.cy" r="3.5" />
+        }
+      </svg>
+    </div>
+    <p class="caption">Fatigue · last 14 days</p>
   </div>
 }
 

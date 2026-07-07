@@ -63,6 +63,22 @@ describe('Wellbeing history', () => {
     expect(c.hasChart()).toBe(true);
   });
 
+  it('plots the fatigue chart only from entries that recorded a fatigue level', () => {
+    const c = setup([
+      entry({ ulid: 'a', recordedAt: at(0, 12), score: 4, fatigue: 5 }),
+      entry({ ulid: 'b', recordedAt: at(1, 12), score: 3, fatigue: null }),
+      entry({ ulid: 'c', recordedAt: at(2, 12), score: 2, fatigue: 2 }),
+    ]).fixture.componentInstance;
+    expect(c.hasFatigueChart()).toBe(true);
+    expect(c.fatigueChart().dots.map((d) => d.level)).toEqual([5, 2]); // b (null) excluded
+  });
+
+  it('has no fatigue chart when nothing recorded a fatigue level', () => {
+    const c = setup([entry({ fatigue: null })]).fixture.componentInstance;
+    expect(c.hasChart()).toBe(true); // mood still charts
+    expect(c.hasFatigueChart()).toBe(false);
+  });
+
   it('opens the edit sheet for an entry', () => {
     const { fixture, sheet } = setup([entry({ ulid: 'a' })]);
     fixture.componentInstance.edit(entry({ ulid: 'a' }));
