@@ -17,6 +17,10 @@ nix develop -c bash -c '
   export NG_BUILD_MAX_WORKERS=1
   cargo fmt --all --check
   cargo clippy --all-targets -- -D warnings
+  # Generated-types drift (formerly the separate pre-push gate): regenerate the
+  # ts-rs bindings and fail if the committed frontend/src/app/generated output
+  # moved. Needs cargo — this shell has it.
+  scripts/check-types.sh
   # Frontend deps must exist before lint/build. verify.sh has to run from a clean
   # checkout (a fresh clone, or the tree the fleetwatch collector runs in) — not
   # just a warm dev machine — so install them when absent or the lockfile moved.

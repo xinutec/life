@@ -41,6 +41,18 @@ cp .env.example .env # then fill values; DATABASE_URL points at the dev DB
 cargo run            # boots, migrates, serves on $BIND_ADDR
 ```
 
+### Git hooks — one gate, at commit
+
+A commit must be healthy: `scripts/verify.sh` is the single gate (backend fmt +
+clippy + generated-types drift; frontend lint + build + unit tests + ui-check;
+shared dev-lint rules). It runs as a **pre-commit** hook — there is no separate
+pre-push step. Slow by design; we optimise for healthy commits, not speed.
+
+```sh
+git config core.hooksPath githooks   # activate, once per clone
+git commit --no-verify               # bypass for a genuine WIP commit
+```
+
 `cargo test` runs offline. The DB integration test (`tests/db.rs`) runs only
 when `LIFE_TEST_DATABASE_URL` is set, e.g.:
 
