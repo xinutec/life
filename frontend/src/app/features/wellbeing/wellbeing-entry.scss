@@ -68,6 +68,25 @@
   width: 100%;
 }
 
+.emotions-field {
+  .field-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .emo-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.25rem;
+  }
+  .none {
+    margin: 0.25rem 0 0;
+    font: var(--mat-sys-body-small);
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
 .delete {
   align-self: flex-start;
 }

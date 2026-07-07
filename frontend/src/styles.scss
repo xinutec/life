@@ -134,6 +134,84 @@ h3 {
   }
 }
 
+// Emotion chips — the feelings-wheel grammar, shared by the picker dialog, the
+// wellbeing entry sheet and the timeline. Family hues approximate the printed
+// wheel; chips tint them over the surface via color-mix so both themes stay
+// legible. `--c` is set per family below.
+// The seven family hues are a fixed categorical palette (the printed feelings
+// wheel's colours) — a semantic identity that must stay stable across light/dark,
+// not a theme surface. Chips tint them over the themed surface via color-mix, so
+// they still adapt; only the base hue is intentionally constant.
+:root {
+  // dev-lint: allow-hardcoded-color feelings-wheel family palette — fixed categorical identity
+  --emo-happy: #e1b300;
+  // dev-lint: allow-hardcoded-color feelings-wheel family palette — fixed categorical identity
+  --emo-sad: #4e86c6;
+  // dev-lint: allow-hardcoded-color feelings-wheel family palette — fixed categorical identity
+  --emo-disgusted: #8b9097;
+  // dev-lint: allow-hardcoded-color feelings-wheel family palette — fixed categorical identity
+  --emo-angry: #e15a4e;
+  // dev-lint: allow-hardcoded-color feelings-wheel family palette — fixed categorical identity
+  --emo-fearful: #d79a3c;
+  // dev-lint: allow-hardcoded-color feelings-wheel family palette — fixed categorical identity
+  --emo-bad: #4fa07e;
+  // dev-lint: allow-hardcoded-color feelings-wheel family palette — fixed categorical identity
+  --emo-surprised: #9c74ce;
+  --emo-unknown: var(--mat-sys-outline);
+}
+.emo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.35rem 0.7rem;
+  min-height: 40px;
+  border: 1px solid color-mix(in srgb, var(--c) 45%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c) 12%, transparent);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-label-large);
+  cursor: pointer;
+
+  &.on {
+    border-color: var(--c);
+    background: color-mix(in srgb, var(--c) 30%, transparent);
+    font-weight: 600;
+  }
+  mat-icon {
+    width: 18px;
+    height: 18px;
+    font-size: 18px;
+  }
+  .path {
+    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-label-small);
+  }
+}
+.emo-happy {
+  --c: var(--emo-happy);
+}
+.emo-sad {
+  --c: var(--emo-sad);
+}
+.emo-disgusted {
+  --c: var(--emo-disgusted);
+}
+.emo-angry {
+  --c: var(--emo-angry);
+}
+.emo-fearful {
+  --c: var(--emo-fearful);
+}
+.emo-bad {
+  --c: var(--emo-bad);
+}
+.emo-surprised {
+  --c: var(--emo-surprised);
+}
+.emo-unknown {
+  --c: var(--emo-unknown);
+}
+
 // The add/edit bottom-sheet grammar: one column of outline fields, a
 // field-pair row helper, and a right-aligned action row. Global so every
 // sheet (shopping, inventory, recipes, to-do…) shares one definition.
@@ -203,6 +281,15 @@ button.danger {
   padding: 0;
   border-radius: 8px;
   overflow: hidden;
+}
+
+// The emotion picker fills the screen and owns its own padding, so strip the
+// dialog surface's default inset and rounding. The surface is the picker's ONE
+// scroll region (its header/footer pin with position:sticky).
+.emotion-pane .mat-mdc-dialog-surface {
+  padding: 0;
+  border-radius: 0;
+  overflow-y: auto;
 }
 
 // Sync-problem banner (Buy / To-do): a stale session or offline push surfaces

@@ -21,6 +21,7 @@ const entry = (over: Partial<WellbeingDoc>): WellbeingDoc => ({
   recordedAt: at(0, 12),
   score: 3,
   fatigue: null,
+  emotions: [],
   note: null,
   rev: 1,
   ...over,

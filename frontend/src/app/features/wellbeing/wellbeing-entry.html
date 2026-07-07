@@ -51,6 +51,32 @@
       ></textarea>
     </mat-form-field>
 
+    <div class="emotions-field">
+      <div class="field-head">
+        <p class="field-label">Emotions <span class="optional">(optional)</span></p>
+        <button mat-button class="add-emotions" (click)="editEmotions()">
+          <mat-icon>add</mat-icon> Add
+        </button>
+      </div>
+      @if (e.emotions.length) {
+        <div class="emo-chips">
+          @for (leaf of e.emotions; track leaf) {
+            <button
+              type="button"
+              class="emo emo-{{ emotionColor(leaf) }} on"
+              [attr.aria-label]="'Remove ' + leaf"
+              (click)="removeEmotion(leaf)"
+            >
+              {{ leaf }}
+              <mat-icon>close</mat-icon>
+            </button>
+          }
+        </div>
+      } @else {
+        <p class="none">None yet — tap Add to pick from the feelings wheel.</p>
+      }
+    </div>
+
     <button mat-button class="delete danger" (click)="remove()">
       <mat-icon>delete</mat-icon> Delete check-in
     </button>

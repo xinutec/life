@@ -1,0 +1,93 @@
+// Emotion chips + family hues (.emo, --emo-*) are global — see styles.scss.
+// This file owns only the picker's own layout. There is ONE scroll region: the
+// dialog surface (.emotion-pane, styles.scss). The header+search pin to the top
+// and the selected set pins to the bottom via position:sticky, so they can't
+// nest a second scroller inside the surface.
+.picker {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+// Pinned top: title bar + search stay in view while the vocabulary scrolls.
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding-top: 0.25rem;
+  background: var(--mat-sys-surface);
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 0.25rem;
+
+  h2 {
+    flex: 1;
+    margin: 0;
+    font: var(--mat-sys-title-large);
+    text-align: center;
+  }
+  .done {
+    font-weight: 600;
+  }
+}
+
+.search {
+  width: 100%;
+  padding: 0.25rem 0.75rem 0;
+}
+
+.body {
+  flex: 1;
+  padding: 0.5rem 0.75rem 1rem;
+}
+
+.group {
+  margin: 0.75rem 0 0.35rem;
+  font: var(--mat-sys-label-medium);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+// Accordion panel header: a family swatch + a count badge of what's chosen.
+.swatch {
+  width: 14px;
+  height: 14px;
+  margin-right: 0.5rem;
+  border-radius: 50%;
+  background: var(--c);
+}
+.badge {
+  margin-left: 0.5rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--mat-sys-primary);
+  color: var(--mat-sys-on-primary);
+  font: var(--mat-sys-label-small);
+}
+
+.empty {
+  padding: 1.5rem 0;
+  text-align: center;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+// Selected feelings pin to the bottom so the running set stays in view while
+// browsing; each chip removes on tap. No own scroller — it wraps and, if it
+// grows tall, the whole surface scrolls (keeping a single scroll region).
+.selected {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding: 0.6rem 0.75rem;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  background: var(--mat-sys-surface-container-low);
+}

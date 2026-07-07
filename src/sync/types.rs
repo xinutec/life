@@ -70,6 +70,9 @@ pub struct WellbeingDoc {
     /// Optional fatigue reading (1..5, none..severe); `None` = mood-only check-in.
     #[serde(default)]
     pub fatigue: Option<u8>,
+    /// Fine-grained feelings-wheel leaf words; independent of mood/fatigue.
+    #[serde(default)]
+    pub emotions: Vec<String>,
     pub note: Option<String>,
     #[serde(rename = "_deleted", default)]
     pub deleted: bool,

@@ -3,6 +3,7 @@ import {
   MAT_BOTTOM_SHEET_DATA,
   MatBottomSheetRef,
 } from '@angular/material/bottom-sheet';
+import { MatDialog } from '@angular/material/dialog';
 import { BehaviorSubject } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -16,6 +17,7 @@ const doc = (over: Partial<WellbeingDoc>): WellbeingDoc => ({
   recordedAt: '2026-07-01T12:00:00.000Z',
   score: 3,
   fatigue: null,
+  emotions: [],
   note: null,
   rev: 1,
   ...over,
@@ -34,6 +36,7 @@ describe('WellbeingEntry (edit sheet)', () => {
     const feedback = {
       undo: vi.fn<(message: string, onUndo: () => void, onCommit?: () => void) => void>(),
     };
+    const dialog = { open: vi.fn() };
     TestBed.configureTestingModule({
       imports: [WellbeingEntry],
       providers: [
@@ -41,6 +44,7 @@ describe('WellbeingEntry (edit sheet)', () => {
         { provide: MatBottomSheetRef, useValue: ref },
         { provide: MAT_BOTTOM_SHEET_DATA, useValue: { ulid: initial.ulid } },
         { provide: Feedback, useValue: feedback },
+        { provide: MatDialog, useValue: dialog },
       ],
     });
     const fixture = TestBed.createComponent(WellbeingEntry);
@@ -63,6 +67,12 @@ describe('WellbeingEntry (edit sheet)', () => {
     const { c, store } = setup(doc({ fatigue: 4 }));
     c.setFatigue(4);
     expect(store.patch).toHaveBeenCalledWith('u1', { fatigue: null });
+  });
+
+  it('removes one emotion, leaving the rest', () => {
+    const { c, store } = setup(doc({ emotions: ['Withdrawn', 'Anxious', 'Numb'] }));
+    c.removeEmotion('Anxious');
+    expect(store.patch).toHaveBeenCalledWith('u1', { emotions: ['Withdrawn', 'Numb'] });
   });
 
   it('round-trips the datetime-local value back to a UTC instant', () => {

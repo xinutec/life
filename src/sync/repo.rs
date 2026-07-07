@@ -511,6 +511,8 @@ struct WellbeingDocRow {
     recorded_at: NaiveDateTime,
     score: u8,
     fatigue: Option<u8>,
+    /// JSON array of leaf words, as stored; parsed in `From` (invalid → empty).
+    emotions: Option<String>,
     note: Option<String>,
     deleted: i64,
     rev: u64,
@@ -524,6 +526,11 @@ impl From<WellbeingDocRow> for WellbeingDoc {
             recorded_at: DateTime::from_naive_utc_and_offset(r.recorded_at, Utc),
             score: r.score,
             fatigue: r.fatigue,
+            emotions: r
+                .emotions
+                .as_deref()
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or_default(),
             note: r.note,
             deleted: r.deleted != 0,
             rev: r.rev,
@@ -538,7 +545,7 @@ pub async fn pull_wellbeing(
     limit: u64,
 ) -> Result<PullResponse<WellbeingDoc>> {
     let rows: Vec<WellbeingDocRow> = sqlx::query_as(
-        "SELECT id, ulid, recorded_at, score, fatigue, note, \
+        "SELECT id, ulid, recorded_at, score, fatigue, emotions, note, \
          CAST(deleted_at IS NOT NULL AS SIGNED) AS deleted, rev \
          FROM wellbeing WHERE user_id = ? AND rev > ? ORDER BY rev ASC LIMIT ?",
     )
@@ -566,10 +573,12 @@ pub async fn push_wellbeing(
         let new = entry.new_document_state;
         let assumed_rev = entry.assumed_master_state.map(|d| d.rev);
         let recorded = new.recorded_at.naive_utc();
+        let emotions_json =
+            serde_json::to_string(&new.emotions).unwrap_or_else(|_| "[]".to_string());
 
         let mut tx = pool.begin().await?;
         let current: Option<WellbeingDocRow> = sqlx::query_as(
-            "SELECT id, ulid, recorded_at, score, fatigue, note, \
+            "SELECT id, ulid, recorded_at, score, fatigue, emotions, note, \
              CAST(deleted_at IS NOT NULL AS SIGNED) AS deleted, rev \
              FROM wellbeing WHERE ulid = ? AND user_id = ? FOR UPDATE",
         )
@@ -586,13 +595,14 @@ pub async fn push_wellbeing(
             let rev = next_rev(&mut tx).await?;
             // Set-only tombstone — a push can never clear a delete.
             sqlx::query(
-                "UPDATE wellbeing SET recorded_at = ?, score = ?, fatigue = ?, note = ?, \
+                "UPDATE wellbeing SET recorded_at = ?, score = ?, fatigue = ?, emotions = ?, note = ?, \
                  deleted_at = COALESCE(deleted_at, IF(?, NOW(), NULL)), \
                  rev = ?, updated_at = NOW() WHERE ulid = ? AND user_id = ?",
             )
             .bind(recorded)
             .bind(new.score)
             .bind(new.fatigue)
+            .bind(&emotions_json)
             .bind(&new.note)
             .bind(new.deleted)
             .bind(rev)
@@ -604,14 +614,15 @@ pub async fn push_wellbeing(
             let rev = next_rev(&mut tx).await?;
             sqlx::query(
                 "INSERT INTO wellbeing \
-                 (user_id, ulid, recorded_at, score, fatigue, note, deleted_at, rev, created_at, updated_at) \
-                 VALUES (?, ?, ?, ?, ?, ?, IF(?, NOW(), NULL), ?, NOW(), NOW())",
+                 (user_id, ulid, recorded_at, score, fatigue, emotions, note, deleted_at, rev, created_at, updated_at) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, IF(?, NOW(), NULL), ?, NOW(), NOW())",
             )
             .bind(user_id)
             .bind(&new.ulid)
             .bind(recorded)
             .bind(new.score)
             .bind(new.fatigue)
+            .bind(&emotions_json)
             .bind(&new.note)
             .bind(new.deleted)
             .bind(rev)

@@ -6,14 +6,17 @@ import {
   MatBottomSheetRef,
 } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 
+import { emotionColor } from '../../shared/emotion-wheel';
 import { Feedback } from '../../shared/feedback';
 import { SheetHeader } from '../../shared/sheet-header';
 import { FATIGUE_LEVELS, WELLBEING_SCORES } from '../../shared/wellbeing-checkin';
 import { WellbeingDoc, WellbeingStore } from '../../sync/wellbeing-store';
+import { EmotionPicker } from './emotion-picker';
 
 /** ISO instant → the value a <input type="datetime-local"> expects (local). */
 function toLocalInput(iso: string): string {
@@ -35,6 +38,7 @@ export class WellbeingEntry implements OnDestroy {
   private data = inject<{ ulid: string }>(MAT_BOTTOM_SHEET_DATA);
   private store = inject(WellbeingStore);
   private feedback = inject(Feedback);
+  private dialog = inject(MatDialog);
 
   private deleting = false;
   private items = toSignal(this.store.items$, { initialValue: [] as WellbeingDoc[] });
@@ -66,6 +70,32 @@ export class WellbeingEntry implements OnDestroy {
   setFatigue(fatigue: number): void {
     const next = this.entry()?.fatigue === fatigue ? null : fatigue;
     void this.store.patch(this.ulid, { fatigue: next });
+  }
+
+  emotionColor(leaf: string): string {
+    return emotionColor(leaf);
+  }
+
+  /** Open the feelings-wheel picker seeded with the current set; on Done, store
+   *  the new selection (Cancel returns undefined and leaves it untouched). */
+  editEmotions(): void {
+    const ref = this.dialog.open(EmotionPicker, {
+      data: { selected: [...(this.entry()?.emotions ?? [])] },
+      panelClass: 'emotion-pane',
+      width: '100%',
+      maxWidth: '100vw',
+      height: '100%',
+      maxHeight: '100%',
+      autoFocus: false,
+    });
+    ref.afterClosed().subscribe((next: string[] | undefined) => {
+      if (next) void this.store.patch(this.ulid, { emotions: next });
+    });
+  }
+
+  removeEmotion(leaf: string): void {
+    const next = (this.entry()?.emotions ?? []).filter((e) => e !== leaf);
+    void this.store.patch(this.ulid, { emotions: next });
   }
 
   saveNote(): void {
