@@ -49,8 +49,8 @@ shared dev-lint rules). It runs as a **pre-commit** hook — there is no separat
 pre-push step. Slow by design; we optimise for healthy commits, not speed.
 
 ```sh
-git config core.hooksPath githooks   # activate, once per clone
-git commit --no-verify               # bypass for a genuine WIP commit
+scripts/setup-hooks.sh   # activate, once per clone (sets core.hooksPath)
+git commit --no-verify   # bypass for a genuine WIP commit
 ```
 
 `cargo test` runs offline. The DB integration test (`tests/db.rs`) runs only
