@@ -61,9 +61,10 @@ export class Conflicts {
     try {
       const v: unknown = JSON.parse(encoded);
       if (v === null || v === '') return '(empty)';
+      if (Array.isArray(v)) return v.length ? v.join(', ') : '(none)';
       if (typeof v === 'boolean') return v ? 'yes' : 'no';
       if (typeof v === 'string' || typeof v === 'number') return `${v}`;
-      return encoded; // conflict values are scalars; anything else shows raw
+      return encoded; // scalars + lists handled; anything else shows raw
     } catch {
       return encoded;
     }

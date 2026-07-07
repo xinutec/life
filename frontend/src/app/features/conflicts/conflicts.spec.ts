@@ -54,6 +54,14 @@ describe('Conflicts', () => {
     expect(text).toContain('ask about bloods');
   });
 
+  it('formats list values (emotions) as text, not raw JSON', () => {
+    const c = mount().fixture.componentInstance;
+    expect(c.fmt('[]')).toBe('(none)');
+    expect(c.fmt('["Withdrawn","Anxious"]')).toBe('Withdrawn, Anxious');
+    expect(c.fmt('null')).toBe('(empty)');
+    expect(c.fmt('"plain"')).toBe('plain');
+  });
+
   it('keep-mine only clears the log entry', async () => {
     const { fixture, api, todo } = mount();
     await fixture.whenStable();

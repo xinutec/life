@@ -134,6 +134,51 @@ describe('field-level 3-way merge', () => {
     expect(trace.mock.calls[0][0]).toMatchObject({ ulid: 'a', noBase: true, mine: [], theirs: [] });
   });
 
+  it('array-valued fields (emotions) compare by value, not reference', async () => {
+    // Regression: emotions is the first array field. Object.is([],[]) is false,
+    // so a plain identity compare made every check-in look forever-changed and
+    // flagged a spurious conflict on any rev race.
+    interface ArrDoc {
+      ulid: string;
+      rev: number;
+      tags: string[];
+    }
+    type ArrMaster = ArrDoc & { _deleted: boolean };
+    const abase: ArrMaster = { ulid: 'x', rev: 5, tags: ['Withdrawn', 'Anxious'], _deleted: false };
+    const onConflicts = vi.fn<(kept: ArrMaster, conflicts: FieldConflict[]) => void>();
+    const handler = makeConflictHandler<ArrDoc>({ fields: ['tags'], onConflicts });
+
+    // Equal-by-value arrays (fresh reference) must read as equal / not conflict.
+    expect(handler.isEqual(abase, { ...abase, tags: ['Withdrawn', 'Anxious'] }, 'test')).toBe(true);
+    expect(handler.isEqual(abase, { ...abase, tags: ['Withdrawn'] }, 'test')).toBe(false);
+    expect(handler.isEqual(abase, { ...abase, tags: ['Anxious', 'Withdrawn'] }, 'test')).toBe(false);
+
+    const same = await handler.resolve(
+      {
+        realMasterState: { ...abase, tags: ['Withdrawn', 'Anxious'], rev: 6 },
+        newDocumentState: { ...abase, tags: ['Withdrawn', 'Anxious'] },
+        assumedMasterState: abase,
+      },
+      'test',
+    );
+    expect(onConflicts).not.toHaveBeenCalled();
+    expect(same.tags).toEqual(['Withdrawn', 'Anxious']);
+
+    // A genuine divergence still conflicts (local wins, other logged).
+    await handler.resolve(
+      {
+        realMasterState: { ...abase, tags: ['Numb'], rev: 6 },
+        newDocumentState: { ...abase, tags: ['Hostile'] },
+        assumedMasterState: abase,
+      },
+      'test',
+    );
+    expect(onConflicts).toHaveBeenCalledOnce();
+    expect(onConflicts.mock.calls[0][1]).toEqual([
+      { field: 'tags', mine: ['Hostile'], theirs: ['Numb'] },
+    ]);
+  });
+
   it('isEqual compares revision, deleted flag AND content fields', () => {
     const { handler } = setup();
     expect(handler.isEqual(base, { ...base }, 'test')).toBe(true);

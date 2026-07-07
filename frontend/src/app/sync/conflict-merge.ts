@@ -34,6 +34,20 @@ export interface MergeTrace {
   noBase: boolean;
 }
 
+/** Value-equality for a merge field. Primitives compare by identity (undefined
+ *  folded to null, so an absent optional equals the wire's explicit null). Array
+ *  fields (e.g. wellbeing `emotions`) compare element-wise: a fresh pull yields a
+ *  new array reference that `Object.is` would call unequal, which would make the
+ *  doc look perpetually changed and flag a spurious conflict on every sync. */
+function fieldEqual(a: unknown, b: unknown): boolean {
+  const x = a ?? null;
+  const y = b ?? null;
+  if (Array.isArray(x) && Array.isArray(y)) {
+    return x.length === y.length && x.every((v, i) => Object.is(v, y[i]));
+  }
+  return Object.is(x, y);
+}
+
 /** Default merge observer: DevTools "Verbose"-level only, so it's silent in
  *  normal use but readable over CDP when diagnosing a sync. */
 function logMergeTrace(t: MergeTrace): void {
@@ -79,12 +93,12 @@ export function makeConflictHandler<T extends { rev: number }>(opts: {
      *  a local edit changes content but NOT `rev`; comparing rev alone judged
      *  every field edit "already replicated" and silently dropped it (the
      *  2026-07-03 push-loss bug — see replication-push.spec.ts). The content
-     *  fields must be compared too. `?? null` folds undefined into null so an
-     *  absent optional equals the wire's explicit null. */
+     *  fields must be compared too — by value, so array fields (emotions) don't
+     *  read as forever-changed (see [[fieldEqual]]). */
     isEqual: (a, b) =>
       !!a._deleted === !!b._deleted &&
       (!!a._deleted ||
-        (a.rev === b.rev && opts.fields.every((f) => Object.is(a[f] ?? null, b[f] ?? null)))),
+        (a.rev === b.rev && opts.fields.every((f) => fieldEqual(a[f], b[f])))),
     resolve: ({ realMasterState: real, newDocumentState: mine, assumedMasterState: assumed }) => {
       const id = (mine as { ulid?: string }).ulid ?? '?';
       if (real._deleted) {
@@ -101,13 +115,13 @@ export function makeConflictHandler<T extends { rev: number }>(opts: {
       const tookMine: string[] = [];
       const tookTheirs: string[] = [];
       for (const f of opts.fields) {
-        if (Object.is(mine[f], assumed[f])) {
+        if (fieldEqual(mine[f], assumed[f])) {
           // I didn't touch it → keep the master's value; note when that pulls
           // in a genuine remote change (real ≠ base), not just an unchanged field.
-          if (!Object.is(real[f], assumed[f])) tookTheirs.push(f);
+          if (!fieldEqual(real[f], assumed[f])) tookTheirs.push(f);
           continue;
         }
-        if (!Object.is(real[f], assumed[f]) && !Object.is(mine[f], real[f])) {
+        if (!fieldEqual(real[f], assumed[f]) && !fieldEqual(mine[f], real[f])) {
           conflicts.push({ field: f, mine: mine[f], theirs: real[f] });
         }
         merged[f] = mine[f];
