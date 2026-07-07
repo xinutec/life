@@ -29,7 +29,7 @@
   <div class="trend fatigue">
     <div class="plot">
       <div class="axis" aria-hidden="true">
-        <span>severe</span><span>moderate</span><span>none</span>
+        <span>none</span><span>moderate</span><span>severe</span>
       </div>
       <svg
         class="chart"
@@ -45,7 +45,7 @@
           [attr.y2]="fatigueChart().h / 2"
         />
         @for (dot of fatigueChart().dots; track $index) {
-          <circle class="dot fatigue-{{ dot.level }}" [attr.cx]="dot.cx" [attr.cy]="dot.cy" r="3.5" />
+          <circle class="dot score-{{ dot.level }}" [attr.cx]="dot.cx" [attr.cy]="dot.cy" r="3.5" />
         }
       </svg>
     </div>
@@ -73,11 +73,11 @@
         >
           <mat-icon>{{ meta(e.score).icon }}</mat-icon>
           <span class="t">{{ time(e.recordedAt) }}</span>
-          @if (e.fatigue) {
+          @if (e.energy) {
             <mat-icon
               class="has-fatigue"
-              [attr.aria-label]="'fatigue: ' + fatigueMeta(e.fatigue).label"
-            >{{ fatigueMeta(e.fatigue).icon }}</mat-icon>
+              [attr.aria-label]="'fatigue: ' + fatigueMeta(e.energy).label"
+            >{{ fatigueMeta(e.energy).icon }}</mat-icon>
           }
           @if (e.emotions.length) {
             <mat-icon

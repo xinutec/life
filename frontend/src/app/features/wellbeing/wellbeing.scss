@@ -74,25 +74,10 @@
 .dot.score-5 {
   fill: var(--wb-score-5);
 }
-
-// Fatigue dots ride a separate error-tinted ramp (none = faint → severe = full
-// error) so the chart can't be mistaken for the mood one despite the shared
-// shape: on this chart, redder + higher means worse.
-.dot.fatigue-1 {
-  fill: color-mix(in srgb, var(--mat-sys-error) 25%, var(--mat-sys-outline-variant));
-}
-.dot.fatigue-2 {
-  fill: color-mix(in srgb, var(--mat-sys-error) 45%, var(--mat-sys-outline-variant));
-}
-.dot.fatigue-3 {
-  fill: color-mix(in srgb, var(--mat-sys-error) 62%, var(--mat-sys-outline-variant));
-}
-.dot.fatigue-4 {
-  fill: color-mix(in srgb, var(--mat-sys-error) 80%, var(--mat-sys-outline-variant));
-}
-.dot.fatigue-5 {
-  fill: var(--mat-sys-error);
-}
+// The fatigue chart plots the stored `energy` value, so it shares the mood ramp:
+// green (5, energetic / no fatigue) rides high = good, red (1, drained / severe)
+// sinks low = bad. Same visual grammar on both charts — the caption + axis words
+// ("none…severe" vs "great…awful") tell them apart.
 
 .day {
   margin-top: 1rem;

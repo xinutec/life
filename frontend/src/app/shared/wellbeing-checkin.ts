@@ -19,19 +19,21 @@ export function scoreMeta(score: number) {
   return WELLBEING_SCORES.find((s) => s.score === score) ?? WELLBEING_SCORES[2];
 }
 
-/** The five fatigue levels: score, label + a draining-battery icon. An optional
- *  second reading on a check-in — "emotionally ok but exhausted" — so higher is
- *  *worse* here (opposite polarity to mood), which the battery metaphor carries. */
-export const FATIGUE_LEVELS: readonly { score: number; label: string; icon: string }[] = [
-  { score: 1, label: 'none', icon: 'battery_full' },
-  { score: 2, label: 'mild', icon: 'battery_5_bar' },
-  { score: 3, label: 'moderate', icon: 'battery_3_bar' },
-  { score: 4, label: 'high', icon: 'battery_2_bar' },
-  { score: 5, label: 'severe', icon: 'battery_alert' },
+/** The five fatigue levels the UI shows — the label the user picks — each mapped
+ *  to the `energy` value actually STORED. Storage is energy (higher = better, so
+ *  no fatigue = energy 5); "fatigue" is display only. Ordered least → most
+ *  fatigue, so the battery drains as fatigue rises (full = energetic). */
+export const FATIGUE_LEVELS: readonly { energy: number; label: string; icon: string }[] = [
+  { energy: 5, label: 'none', icon: 'battery_full' },
+  { energy: 4, label: 'mild', icon: 'battery_5_bar' },
+  { energy: 3, label: 'moderate', icon: 'battery_3_bar' },
+  { energy: 2, label: 'high', icon: 'battery_2_bar' },
+  { energy: 1, label: 'severe', icon: 'battery_alert' },
 ];
 
-export function fatigueMeta(score: number) {
-  return FATIGUE_LEVELS.find((f) => f.score === score) ?? FATIGUE_LEVELS[0];
+/** The fatigue level (label + battery icon) for a stored `energy` value. */
+export function fatigueMeta(energy: number) {
+  return FATIGUE_LEVELS.find((f) => f.energy === energy) ?? FATIGUE_LEVELS[0];
 }
 
 /** The one-tap mood check-in: five face buttons that log an entry at "now".

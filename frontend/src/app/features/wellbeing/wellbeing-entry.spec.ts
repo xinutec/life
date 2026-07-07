@@ -16,7 +16,7 @@ const doc = (over: Partial<WellbeingDoc>): WellbeingDoc => ({
   id: 1,
   recordedAt: '2026-07-01T12:00:00.000Z',
   score: 3,
-  fatigue: null,
+  energy: null,
   emotions: [],
   note: null,
   rev: 1,
@@ -57,16 +57,16 @@ describe('WellbeingEntry (edit sheet)', () => {
     expect(store.patch).toHaveBeenCalledWith('u1', { score: 5 });
   });
 
-  it('sets fatigue on tap', () => {
-    const { c, store } = setup(doc({ fatigue: null }));
-    c.setFatigue(4);
-    expect(store.patch).toHaveBeenCalledWith('u1', { fatigue: 4 });
+  it('sets fatigue on tap, stored as its energy complement', () => {
+    const { c, store } = setup(doc({ energy: null }));
+    c.setFatigue(4); // the level button passes its energy value
+    expect(store.patch).toHaveBeenCalledWith('u1', { energy: 4 });
   });
 
   it('toggles fatigue back to null when the active level is tapped again', () => {
-    const { c, store } = setup(doc({ fatigue: 4 }));
+    const { c, store } = setup(doc({ energy: 4 }));
     c.setFatigue(4);
-    expect(store.patch).toHaveBeenCalledWith('u1', { fatigue: null });
+    expect(store.patch).toHaveBeenCalledWith('u1', { energy: null });
   });
 
   it('removes one emotion, leaving the rest', () => {

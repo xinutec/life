@@ -65,11 +65,11 @@ export class WellbeingEntry implements OnDestroy {
     void this.store.patch(this.ulid, { score });
   }
 
-  /** Toggle the fatigue reading — tapping the active level clears it back to null
-   *  (a mood-only check-in), so recording fatigue stays fully optional. */
-  setFatigue(fatigue: number): void {
-    const next = this.entry()?.fatigue === fatigue ? null : fatigue;
-    void this.store.patch(this.ulid, { fatigue: next });
+  /** Toggle the fatigue reading — stored as its `energy` complement (higher =
+   *  better). Tapping the active level clears it to null, keeping it optional. */
+  setFatigue(energy: number): void {
+    const next = this.entry()?.energy === energy ? null : energy;
+    void this.store.patch(this.ulid, { energy: next });
   }
 
   emotionColor(leaf: string): string {

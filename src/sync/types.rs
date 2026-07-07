@@ -67,9 +67,11 @@ pub struct WellbeingDoc {
     #[serde(rename = "recordedAt")]
     pub recorded_at: DateTime<Utc>,
     pub score: u8,
-    /// Optional fatigue reading (1..5, none..severe); `None` = mood-only check-in.
+    /// Optional energy reading (1..5, drained..energetic; higher = better, like
+    /// `score`); `None` = mood-only check-in. The UI presents its complement as
+    /// "fatigue" (none..severe) — the inversion is display-only.
     #[serde(default)]
-    pub fatigue: Option<u8>,
+    pub energy: Option<u8>,
     /// Fine-grained feelings-wheel leaf words; independent of mood/fatigue.
     #[serde(default)]
     pub emotions: Vec<String>,

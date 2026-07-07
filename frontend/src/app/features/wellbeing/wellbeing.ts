@@ -66,10 +66,11 @@ export class Wellbeing {
   readonly chart = computed(() => this.buildChart((e) => e.score));
   readonly hasChart = computed(() => this.chart().dots.length > 0);
 
-  /** The same 14-day trend for the optional fatigue reading — only entries that
-   *  recorded one contribute, so it's absent until there's fatigue data. Severe
-   *  sits at the top (y = 5), so a rising line reads as worsening. */
-  readonly fatigueChart = computed(() => this.buildChart((e) => e.fatigue));
+  /** The same 14-day trend for the optional fatigue reading, plotted on its
+   *  stored `energy` value — so like mood, higher (energetic / no fatigue) sits at
+   *  the top and a rising line reads as improving. Only entries that recorded one
+   *  contribute, so it's absent until there's data. */
+  readonly fatigueChart = computed(() => this.buildChart((e) => e.energy));
   readonly hasFatigueChart = computed(() => this.fatigueChart().dots.length > 0);
 
   /** Build a trend from a 1..5 accessor; entries returning null/undefined (e.g. an

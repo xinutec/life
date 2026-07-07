@@ -17,8 +17,9 @@ export interface WellbeingDoc {
   id: number | null;
   recordedAt: string;
   score: number;
-  /** Optional fatigue reading (1..5, none..severe); null = mood-only check-in. */
-  fatigue: number | null;
+  /** Optional energy reading (1..5, drained..energetic; higher = better, like
+   *  `score`); null = mood-only. The UI presents its complement as "fatigue". */
+  energy: number | null;
   /** Fine-grained emotions from the feelings wheel (leaf words); independent of
    *  mood/fatigue, any number, order preserved as added. */
   emotions: string[];
@@ -30,8 +31,9 @@ type WellbeingCollection = RxCollection<WellbeingDoc>;
 
 const schema: RxJsonSchema<WellbeingDoc> = {
   // Bump the version + migrate on ANY schema change, else existing local DBs hit
-  // a hash mismatch. v1: optional `fatigue`. v2: `emotions` array.
-  version: 2,
+  // a hash mismatch. v1: optional `fatigue`. v2: `emotions` array. v3: `fatigue`
+  // → `energy` (unified polarity, higher = better).
+  version: 3,
   primaryKey: 'ulid',
   type: 'object',
   properties: {
@@ -39,7 +41,7 @@ const schema: RxJsonSchema<WellbeingDoc> = {
     id: { type: ['integer', 'null'] },
     recordedAt: { type: 'string', maxLength: 32 },
     score: { type: 'number', minimum: 1, maximum: 5 },
-    fatigue: { type: ['number', 'null'], minimum: 1, maximum: 5 },
+    energy: { type: ['number', 'null'], minimum: 1, maximum: 5 },
     emotions: { type: 'array', items: { type: 'string' } },
     note: { type: ['string', 'null'] },
     rev: { type: 'number' },
@@ -47,15 +49,28 @@ const schema: RxJsonSchema<WellbeingDoc> = {
   required: ['ulid', 'recordedAt', 'score', 'rev'],
 };
 
-/** Default each new field on older local docs (mood-only / pre-emotions). */
+/** A prior-version doc handed to a migration strategy — loosely typed, since the
+ *  fields differ across versions (RxDB passes the old shape). */
+type PriorDoc = Record<string, unknown> & {
+  fatigue?: number | null;
+  energy?: number | null;
+  emotions?: string[];
+};
+
 const migrationStrategies = {
-  1: (doc: WellbeingDoc) => ({ ...doc, fatigue: doc.fatigue ?? null }),
-  2: (doc: WellbeingDoc) => ({ ...doc, emotions: doc.emotions ?? [] }),
+  1: (doc: PriorDoc): PriorDoc => ({ ...doc, fatigue: doc.fatigue ?? null }),
+  2: (doc: PriorDoc): PriorDoc => ({ ...doc, emotions: doc.emotions ?? [] }),
+  // v3: fatigue (1=none..5=severe, higher=worse) → energy (its complement,
+  // higher=better) so nothing runs inverse in the data. `6 - fatigue`.
+  3: ({ fatigue, ...rest }: PriorDoc): PriorDoc => ({
+    ...rest,
+    energy: fatigue == null ? null : 6 - fatigue,
+  }),
 };
 
 /** The content fields the 3-way merge diffs — also the allowlist the Conflicts
  *  screen may patch on "use other". */
-export const WELLBEING_MERGE_FIELDS = ['recordedAt', 'score', 'fatigue', 'emotions', 'note'] as const;
+export const WELLBEING_MERGE_FIELDS = ['recordedAt', 'score', 'energy', 'emotions', 'note'] as const;
 
 /** Local-first store for wellbeing check-ins: the on-device RxDB collection is
  *  the source of truth; replication reconciles with /api/sync/wellbeing in the
@@ -87,7 +102,7 @@ export class WellbeingStore {
       id: null,
       recordedAt: input.recordedAt,
       score: input.score,
-      fatigue: null,
+      energy: null,
       emotions: [],
       note: input.note,
       rev: 0,
@@ -97,7 +112,7 @@ export class WellbeingStore {
 
   async patch(
     key: string,
-    fields: Partial<Pick<WellbeingDoc, 'recordedAt' | 'score' | 'fatigue' | 'emotions' | 'note'>>,
+    fields: Partial<Pick<WellbeingDoc, 'recordedAt' | 'score' | 'energy' | 'emotions' | 'note'>>,
   ): Promise<void> {
     const doc = await this.find(key);
     await doc?.incrementalPatch(fields);
