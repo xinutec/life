@@ -18,10 +18,10 @@ export interface WellbeingDoc {
   recordedAt: string;
   score: number;
   /** Optional energy reading (1..5, drained..energetic; higher = better, like
-   *  `score`); null = mood-only. The UI presents its complement as "fatigue". */
+   *  `score`); null = mood-only. */
   energy: number | null;
   /** Fine-grained emotions from the feelings wheel (leaf words); independent of
-   *  mood/fatigue, any number, order preserved as added. */
+   *  mood/energy, any number, order preserved as added. */
   emotions: string[];
   note: string | null;
   rev: number;
@@ -57,7 +57,9 @@ type PriorDoc = Record<string, unknown> & {
   emotions?: string[];
 };
 
-const migrationStrategies = {
+// Exported for wellbeing-store.spec.ts — a stale local DB (an old browser
+// profile, the Android WebView) runs these once on next open, so pin them.
+export const migrationStrategies = {
   1: (doc: PriorDoc): PriorDoc => ({ ...doc, fatigue: doc.fatigue ?? null }),
   2: (doc: PriorDoc): PriorDoc => ({ ...doc, emotions: doc.emotions ?? [] }),
   // v3: fatigue (1=none..5=severe, higher=worse) → energy (its complement,
