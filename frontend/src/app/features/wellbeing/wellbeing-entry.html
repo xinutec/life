@@ -45,7 +45,7 @@
         matInput
         rows="2"
         [ngModel]="note()"
-        (ngModelChange)="note.set($event)"
+        (ngModelChange)="onNoteInput($event)"
         (blur)="saveNote()"
         placeholder="what was going on?"
       ></textarea>

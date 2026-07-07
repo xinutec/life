@@ -94,31 +94,41 @@ describe('WellbeingEntry (edit sheet)', () => {
 
   it('saves a trimmed note, empty → null', () => {
     const { c, store } = setup(doc({ note: 'old' }));
-    c.note.set('  new note ');
+    c.onNoteInput('  new note ');
     c.saveNote();
     expect(store.patch).toHaveBeenCalledWith('u1', { note: 'new note' });
-    c.note.set('   ');
+    c.onNoteInput('   ');
     c.saveNote();
     expect(store.patch).toHaveBeenCalledWith('u1', { note: null });
   });
 
   it('flushes an unsaved note edit when the sheet is dismissed', () => {
     const { c, fixture, store } = setup(doc({ note: null }));
-    c.note.set('typed but never blurred');
+    c.onNoteInput('typed but never blurred');
     fixture.destroy();
     expect(store.patch).toHaveBeenCalledWith('u1', { note: 'typed but never blurred' });
   });
 
   it('does not flush an unchanged note on dismiss', () => {
     const { c, fixture, store } = setup(doc({ note: 'same' }));
-    c.note.set('same');
+    c.onNoteInput('same');
+    fixture.destroy();
+    expect(store.patch).not.toHaveBeenCalled();
+  });
+
+  it('does not flush the seeded note when a remote edit arrives (no typing)', () => {
+    // The sheet opened on a note; another device changed it while open and the
+    // user never touched the field. Dismissing must NOT write the stale original
+    // back over the remote edit.
+    const { fixture, store, items$ } = setup(doc({ note: 'original' }));
+    items$.next([doc({ note: 'edited elsewhere' })]);
     fixture.destroy();
     expect(store.patch).not.toHaveBeenCalled();
   });
 
   it('delete removes, dismisses, offers Undo — and skips the note flush', () => {
     const { c, fixture, store, ref, feedback } = setup(doc({ note: null }));
-    c.note.set('half-typed'); // would otherwise be flushed by ngOnDestroy
+    c.onNoteInput('half-typed'); // dirty — would otherwise be flushed by ngOnDestroy
     c.remove();
     fixture.destroy();
     expect(store.remove).toHaveBeenCalledWith('u1');

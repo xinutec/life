@@ -41,6 +41,11 @@ export class WellbeingEntry implements OnDestroy {
   private dialog = inject(MatDialog);
 
   private deleting = false;
+  // True once the user has actually typed in the note field. Guards the
+  // dismiss-time flush so it never writes back the value the sheet opened with —
+  // otherwise an edit that landed remotely while the sheet was open would be
+  // clobbered by the stale original on close.
+  private noteDirty = false;
   private items = toSignal(this.store.items$, { initialValue: [] as WellbeingDoc[] });
 
   readonly scores = WELLBEING_SCORES;
@@ -54,11 +59,19 @@ export class WellbeingEntry implements OnDestroy {
     return e ? toLocalInput(e.recordedAt) : '';
   });
 
-  // Flush an in-progress note edit if the sheet is dismissed without a blur.
+  // Flush an in-progress note edit if the sheet is dismissed without a blur —
+  // but only one the user actually typed (noteDirty), never the seeded original.
   ngOnDestroy(): void {
-    if (this.deleting) return;
+    if (this.deleting || !this.noteDirty) return;
     const e = this.entry();
     if (e && this.note().trim() !== (e.note ?? '')) this.saveNote();
+  }
+
+  /** The note textarea's input handler: record the edit and mark it dirty so a
+   *  dismiss will flush it (a bare `note.set` would not). */
+  onNoteInput(value: string): void {
+    this.noteDirty = true;
+    this.note.set(value);
   }
 
   setScore(score: number): void {
@@ -99,6 +112,7 @@ export class WellbeingEntry implements OnDestroy {
   }
 
   saveNote(): void {
+    this.noteDirty = false;
     void this.store.patch(this.ulid, { note: this.note().trim() || null });
   }
 
