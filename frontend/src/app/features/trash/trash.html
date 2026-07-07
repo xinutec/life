@@ -2,8 +2,12 @@
 
 <app-list-state
   [loading]="!loaded()"
+  [error]="error()"
+  [refreshing]="refreshing()"
+  (retry)="reload()"
   [empty]="entries().length === 0"
   emptyIcon="restore_from_trash"
+  errorText="Couldn’t load the trash — are you online?"
   emptyText="Nothing here. Deleted things land in this list and can be restored any time."
 />
 

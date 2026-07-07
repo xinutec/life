@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 
 import { CachedResource } from '../shared/cached-resource';
 import { LifeApi } from '../life-api';
-import { Item, Loc, Recipe } from '../models';
+import { ConflictEntry, Item, Loc, Recipe, TrashEntry } from '../models';
 
 /** Root-scoped caches for the server read-catalogs that more than one view shows.
  *  Being singletons, they retain their data across a tab switch (the component is
@@ -40,5 +40,21 @@ export class CookableStore extends CachedResource<Recipe[]> {
   constructor() {
     const api = inject(LifeApi);
     super(() => api.cookable());
+  }
+}
+
+@Injectable({ providedIn: 'root' })
+export class TrashStore extends CachedResource<TrashEntry[]> {
+  constructor() {
+    const api = inject(LifeApi);
+    super(() => api.trash());
+  }
+}
+
+@Injectable({ providedIn: 'root' })
+export class ConflictsStore extends CachedResource<ConflictEntry[]> {
+  constructor() {
+    const api = inject(LifeApi);
+    super(() => api.conflicts());
   }
 }

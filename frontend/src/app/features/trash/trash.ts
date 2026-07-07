@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -8,6 +8,7 @@ import { isNotFound } from '../../shared/api-error';
 import { Feedback } from '../../shared/feedback';
 import { ListState } from '../../shared/list-state';
 import { LifeApi } from '../../life-api';
+import { TrashStore } from '../../stores/catalog';
 import { TrashEntry, TrashKind } from '../../models';
 import { ShoppingStore } from '../../sync/shopping-store';
 import { TodoStore } from '../../sync/todo-store';
@@ -38,10 +39,13 @@ export class Trash {
   private shoppingStore = inject(ShoppingStore);
   private todoStore = inject(TodoStore);
   private wellbeingStore = inject(WellbeingStore);
+  private trashStore = inject(TrashStore);
 
-  readonly entries = signal<TrashEntry[]>([]);
-  /** Distinguish "still loading" from "trash is empty" — no false empty flash. */
-  readonly loaded = signal(false);
+  // Retained across tab switches, refreshed in the background (see CachedResource).
+  readonly entries = computed(() => this.trashStore.value() ?? []);
+  readonly loaded = this.trashStore.loaded;
+  readonly error = this.trashStore.error;
+  readonly refreshing = this.trashStore.refreshing;
   /** Refs with a restore in flight (disables their button). */
   readonly busy = signal<ReadonlySet<string>>(new Set());
 
@@ -53,17 +57,8 @@ export class Trash {
     return KIND_META[kind];
   }
 
-  private reload(): void {
-    this.api.trash().subscribe({
-      next: (entries) => {
-        this.entries.set(entries);
-        this.loaded.set(true);
-      },
-      error: () => {
-        this.loaded.set(true);
-        this.feedback.error('Could not load the trash — are you online?');
-      },
-    });
+  reload(): void {
+    this.trashStore.refresh();
   }
 
   restore(entry: TrashEntry): void {
@@ -75,7 +70,9 @@ export class Trash {
           next.delete(entry.ref);
           return next;
         });
-        this.entries.update((list) => list.filter((e) => !(e.kind === entry.kind && e.ref === entry.ref)));
+        this.trashStore.patch((list) =>
+          (list ?? []).filter((e) => !(e.kind === entry.kind && e.ref === entry.ref)),
+        );
         // Synced kinds come back through replication — pull right away so the
         // restored row is on screen when the user switches tabs.
         if (entry.kind === 'shopping') this.shoppingStore.reSync();

@@ -2,8 +2,12 @@
 
 <app-list-state
   [loading]="!loaded()"
+  [error]="error()"
+  [refreshing]="refreshing()"
+  (retry)="reload()"
   [empty]="entries().length === 0"
   emptyIcon="published_with_changes"
+  errorText="Couldn’t load conflicts — are you online?"
   emptyText="No conflicts. When the same field is edited on two devices while one is offline, the losing value lands here for review."
 />
 

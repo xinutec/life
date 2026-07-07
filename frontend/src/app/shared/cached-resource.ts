@@ -77,4 +77,11 @@ export class CachedResource<T> {
   refresh(): void {
     this.trigger$.next();
   }
+
+  /** Optimistically patch the cached value after a local mutation (e.g. removing
+   *  a restored/resolved row), so the UI updates instantly without waiting for a
+   *  refetch. A background `refresh()` still reconciles with the server. */
+  patch(update: (current: T | null) => T): void {
+    this._value.set(update(this._value()));
+  }
 }

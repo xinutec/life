@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -7,6 +7,7 @@ import { Alerts } from '../../shared/alerts';
 import { Feedback } from '../../shared/feedback';
 import { ListState } from '../../shared/list-state';
 import { LifeApi } from '../../life-api';
+import { ConflictsStore } from '../../stores/catalog';
 import { ConflictEntry } from '../../models';
 import { SHOPPING_MERGE_FIELDS, ShoppingStore } from '../../sync/shopping-store';
 import { TODO_MERGE_FIELDS, TodoStore } from '../../sync/todo-store';
@@ -33,24 +34,26 @@ export class Conflicts {
   private todo = inject(TodoStore);
   private wellbeing = inject(WellbeingStore);
   private alerts = inject(Alerts);
+  private conflictsStore = inject(ConflictsStore);
 
-  readonly entries = signal<ConflictEntry[]>([]);
-  /** Distinguish "still loading" from "no conflicts" — no false empty flash. */
-  readonly loaded = signal(false);
+  // Retained across tab switches, refreshed in the background (see CachedResource).
+  readonly entries = computed(() => this.conflictsStore.value() ?? []);
+  readonly loaded = this.conflictsStore.loaded;
+  readonly error = this.conflictsStore.error;
+  readonly refreshing = this.conflictsStore.refreshing;
   readonly busy = signal<ReadonlySet<number>>(new Set());
 
   constructor() {
-    this.api.conflicts().subscribe({
-      next: (entries) => {
-        this.entries.set(entries);
-        this.alerts.setConflicts(entries.length); // reconcile the menu badge
-        this.loaded.set(true);
-      },
-      error: () => {
-        this.loaded.set(true);
-        this.feedback.error('Could not load conflicts — are you online?');
-      },
+    this.conflictsStore.refresh();
+    // Keep the menu badge in step with what this screen shows — fires on load and
+    // after each optimistic resolve, once there's a real count to reconcile.
+    effect(() => {
+      if (this.loaded()) this.alerts.setConflicts(this.entries().length);
     });
+  }
+
+  reload(): void {
+    this.conflictsStore.refresh();
   }
 
   /** JSON-encoded value → short human text. */
@@ -101,8 +104,7 @@ export class Conflicts {
             next.delete(e.id);
             return next;
           });
-          this.entries.update((list) => list.filter((x) => x.id !== e.id));
-          this.alerts.setConflicts(this.entries().length);
+          this.conflictsStore.patch((list) => (list ?? []).filter((x) => x.id !== e.id));
         },
         error: () => {
           this.busy.update((s) => {
