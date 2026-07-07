@@ -12,7 +12,7 @@ import { MatInputModule } from '@angular/material/input';
 
 import { Feedback } from '../../shared/feedback';
 import { SheetHeader } from '../../shared/sheet-header';
-import { WELLBEING_SCORES } from '../../shared/wellbeing-checkin';
+import { FATIGUE_LEVELS, WELLBEING_SCORES } from '../../shared/wellbeing-checkin';
 import { WellbeingDoc, WellbeingStore } from '../../sync/wellbeing-store';
 
 /** ISO instant → the value a <input type="datetime-local"> expects (local). */
@@ -40,6 +40,7 @@ export class WellbeingEntry implements OnDestroy {
   private items = toSignal(this.store.items$, { initialValue: [] as WellbeingDoc[] });
 
   readonly scores = WELLBEING_SCORES;
+  readonly fatigues = FATIGUE_LEVELS;
   readonly ulid = this.data.ulid;
   readonly entry = computed(() => this.items().find((e) => e.ulid === this.ulid));
 
@@ -58,6 +59,13 @@ export class WellbeingEntry implements OnDestroy {
 
   setScore(score: number): void {
     void this.store.patch(this.ulid, { score });
+  }
+
+  /** Toggle the fatigue reading — tapping the active level clears it back to null
+   *  (a mood-only check-in), so recording fatigue stays fully optional. */
+  setFatigue(fatigue: number): void {
+    const next = this.entry()?.fatigue === fatigue ? null : fatigue;
+    void this.store.patch(this.ulid, { fatigue: next });
   }
 
   saveNote(): void {

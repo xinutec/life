@@ -43,6 +43,27 @@
   }
 }
 
+// Fatigue is a secondary reading — battery shape carries the level, so the icons
+// stay muted (not the emotional colour ramp) and only the selection is accented.
+.faces.fatigue .face {
+  mat-icon {
+    color: var(--mat-sys-on-surface-variant);
+  }
+  &.on mat-icon {
+    color: var(--mat-sys-primary);
+  }
+}
+
+.field-label {
+  margin: 0.25rem 0 -0.25rem;
+  font: var(--mat-sys-label-large);
+  color: var(--mat-sys-on-surface-variant);
+
+  .optional {
+    color: var(--mat-sys-outline);
+  }
+}
+
 .full {
   width: 100%;
 }

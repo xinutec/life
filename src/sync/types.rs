@@ -67,6 +67,9 @@ pub struct WellbeingDoc {
     #[serde(rename = "recordedAt")]
     pub recorded_at: DateTime<Utc>,
     pub score: u8,
+    /// Optional fatigue reading (1..5, none..severe); `None` = mood-only check-in.
+    #[serde(default)]
+    pub fatigue: Option<u8>,
     pub note: Option<String>,
     #[serde(rename = "_deleted", default)]
     pub deleted: bool,

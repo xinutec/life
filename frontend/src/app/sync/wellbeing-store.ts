@@ -17,6 +17,8 @@ export interface WellbeingDoc {
   id: number | null;
   recordedAt: string;
   score: number;
+  /** Optional fatigue reading (1..5, none..severe); null = mood-only check-in. */
+  fatigue: number | null;
   note: string | null;
   rev: number;
 }
@@ -24,7 +26,9 @@ export interface WellbeingDoc {
 type WellbeingCollection = RxCollection<WellbeingDoc>;
 
 const schema: RxJsonSchema<WellbeingDoc> = {
-  version: 0,
+  // v1: optional `fatigue` reading added. Bump the version + migrate on ANY
+  // schema change, else existing local DBs hit a hash mismatch.
+  version: 1,
   primaryKey: 'ulid',
   type: 'object',
   properties: {
@@ -32,15 +36,21 @@ const schema: RxJsonSchema<WellbeingDoc> = {
     id: { type: ['integer', 'null'] },
     recordedAt: { type: 'string', maxLength: 32 },
     score: { type: 'number', minimum: 1, maximum: 5 },
+    fatigue: { type: ['number', 'null'], minimum: 1, maximum: 5 },
     note: { type: ['string', 'null'] },
     rev: { type: 'number' },
   },
   required: ['ulid', 'recordedAt', 'score', 'rev'],
 };
 
+/** Default the new field to null on pre-fatigue docs (mood-only check-ins). */
+const migrationStrategies = {
+  1: (doc: WellbeingDoc) => ({ ...doc, fatigue: doc.fatigue ?? null }),
+};
+
 /** The content fields the 3-way merge diffs — also the allowlist the Conflicts
  *  screen may patch on "use other". */
-export const WELLBEING_MERGE_FIELDS = ['recordedAt', 'score', 'note'] as const;
+export const WELLBEING_MERGE_FIELDS = ['recordedAt', 'score', 'fatigue', 'note'] as const;
 
 /** Local-first store for wellbeing check-ins: the on-device RxDB collection is
  *  the source of truth; replication reconciles with /api/sync/wellbeing in the
@@ -72,6 +82,7 @@ export class WellbeingStore {
       id: null,
       recordedAt: input.recordedAt,
       score: input.score,
+      fatigue: null,
       note: input.note,
       rev: 0,
     });
@@ -80,7 +91,7 @@ export class WellbeingStore {
 
   async patch(
     key: string,
-    fields: Partial<Pick<WellbeingDoc, 'recordedAt' | 'score' | 'note'>>,
+    fields: Partial<Pick<WellbeingDoc, 'recordedAt' | 'score' | 'fatigue' | 'note'>>,
   ): Promise<void> {
     const doc = await this.find(key);
     await doc?.incrementalPatch(fields);
@@ -114,7 +125,7 @@ export class WellbeingStore {
       onConflicts: (kept, conflicts) =>
         this.reporter.report('wellbeing', kept.ulid, `Check-in (${kept.score}/5)`, conflicts),
     });
-    const col = await this.lifeDb.collection('wellbeing', schema, handler);
+    const col = await this.lifeDb.collection('wellbeing', schema, handler, migrationStrategies);
     this.startReplication(col);
     return col;
   }

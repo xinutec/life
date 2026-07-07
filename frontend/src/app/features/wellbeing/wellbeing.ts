@@ -6,7 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { map } from 'rxjs';
 
 import { ListState } from '../../shared/list-state';
-import { WellbeingCheckin, scoreMeta } from '../../shared/wellbeing-checkin';
+import { WellbeingCheckin, fatigueMeta, scoreMeta } from '../../shared/wellbeing-checkin';
 import { WellbeingDoc, WellbeingStore } from '../../sync/wellbeing-store';
 import { WellbeingEntry } from './wellbeing-entry';
 
@@ -87,6 +87,10 @@ export class Wellbeing {
 
   meta(score: number) {
     return scoreMeta(score);
+  }
+
+  fatigueMeta(score: number) {
+    return fatigueMeta(score);
   }
 
   /** "14:05" — the entry's local clock time. */

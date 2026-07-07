@@ -20,6 +20,7 @@ const entry = (over: Partial<WellbeingDoc>): WellbeingDoc => ({
   id: 1,
   recordedAt: at(0, 12),
   score: 3,
+  fatigue: null,
   note: null,
   rev: 1,
   ...over,
@@ -65,5 +66,17 @@ describe('Wellbeing history', () => {
     const { fixture, sheet } = setup([entry({ ulid: 'a' })]);
     fixture.componentInstance.edit(entry({ ulid: 'a' }));
     expect(sheet.open).toHaveBeenCalled();
+  });
+
+  it('shows a fatigue icon only on entries that recorded one', () => {
+    const { fixture } = setup([
+      entry({ ulid: 'a', recordedAt: at(0, 15), fatigue: 4 }),
+      entry({ ulid: 'b', recordedAt: at(0, 9), fatigue: null }),
+    ]);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const icons = host.querySelectorAll('.has-fatigue');
+    expect(icons.length).toBe(1);
+    expect(icons[0].textContent?.trim()).toBe('battery_2_bar'); // level 4 → high
   });
 });

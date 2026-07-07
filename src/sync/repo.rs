@@ -510,6 +510,7 @@ struct WellbeingDocRow {
     ulid: String,
     recorded_at: NaiveDateTime,
     score: u8,
+    fatigue: Option<u8>,
     note: Option<String>,
     deleted: i64,
     rev: u64,
@@ -522,6 +523,7 @@ impl From<WellbeingDocRow> for WellbeingDoc {
             id: Some(r.id),
             recorded_at: DateTime::from_naive_utc_and_offset(r.recorded_at, Utc),
             score: r.score,
+            fatigue: r.fatigue,
             note: r.note,
             deleted: r.deleted != 0,
             rev: r.rev,
@@ -536,7 +538,7 @@ pub async fn pull_wellbeing(
     limit: u64,
 ) -> Result<PullResponse<WellbeingDoc>> {
     let rows: Vec<WellbeingDocRow> = sqlx::query_as(
-        "SELECT id, ulid, recorded_at, score, note, \
+        "SELECT id, ulid, recorded_at, score, fatigue, note, \
          CAST(deleted_at IS NOT NULL AS SIGNED) AS deleted, rev \
          FROM wellbeing WHERE user_id = ? AND rev > ? ORDER BY rev ASC LIMIT ?",
     )
@@ -567,7 +569,7 @@ pub async fn push_wellbeing(
 
         let mut tx = pool.begin().await?;
         let current: Option<WellbeingDocRow> = sqlx::query_as(
-            "SELECT id, ulid, recorded_at, score, note, \
+            "SELECT id, ulid, recorded_at, score, fatigue, note, \
              CAST(deleted_at IS NOT NULL AS SIGNED) AS deleted, rev \
              FROM wellbeing WHERE ulid = ? AND user_id = ? FOR UPDATE",
         )
@@ -584,12 +586,13 @@ pub async fn push_wellbeing(
             let rev = next_rev(&mut tx).await?;
             // Set-only tombstone — a push can never clear a delete.
             sqlx::query(
-                "UPDATE wellbeing SET recorded_at = ?, score = ?, note = ?, \
+                "UPDATE wellbeing SET recorded_at = ?, score = ?, fatigue = ?, note = ?, \
                  deleted_at = COALESCE(deleted_at, IF(?, NOW(), NULL)), \
                  rev = ?, updated_at = NOW() WHERE ulid = ? AND user_id = ?",
             )
             .bind(recorded)
             .bind(new.score)
+            .bind(new.fatigue)
             .bind(&new.note)
             .bind(new.deleted)
             .bind(rev)
@@ -601,13 +604,14 @@ pub async fn push_wellbeing(
             let rev = next_rev(&mut tx).await?;
             sqlx::query(
                 "INSERT INTO wellbeing \
-                 (user_id, ulid, recorded_at, score, note, deleted_at, rev, created_at, updated_at) \
-                 VALUES (?, ?, ?, ?, ?, IF(?, NOW(), NULL), ?, NOW(), NOW())",
+                 (user_id, ulid, recorded_at, score, fatigue, note, deleted_at, rev, created_at, updated_at) \
+                 VALUES (?, ?, ?, ?, ?, ?, IF(?, NOW(), NULL), ?, NOW(), NOW())",
             )
             .bind(user_id)
             .bind(&new.ulid)
             .bind(recorded)
             .bind(new.score)
+            .bind(new.fatigue)
             .bind(&new.note)
             .bind(new.deleted)
             .bind(rev)

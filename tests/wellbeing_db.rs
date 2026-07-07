@@ -15,6 +15,7 @@ fn doc(ulid: &str, score: u8, rev: u64, deleted: bool) -> WellbeingDoc {
         id: None,
         recorded_at: Utc.with_ymd_and_hms(2026, 7, 3, 9, 30, 0).unwrap(),
         score,
+        fatigue: Some(4),
         note: Some("felt low".into()),
         deleted,
         rev,
@@ -62,6 +63,7 @@ async fn wellbeing_sync_and_restore_against_real_db() {
         .find(|d| d.ulid == ulid)
         .expect("present");
     assert_eq!(got.score, 2);
+    assert_eq!(got.fatigue, Some(4));
     assert_eq!(
         got.recorded_at,
         Utc.with_ymd_and_hms(2026, 7, 3, 9, 30, 0).unwrap()

@@ -45,6 +45,12 @@
         >
           <mat-icon>{{ meta(e.score).icon }}</mat-icon>
           <span class="t">{{ time(e.recordedAt) }}</span>
+          @if (e.fatigue) {
+            <mat-icon
+              class="has-fatigue"
+              [attr.aria-label]="'fatigue: ' + fatigueMeta(e.fatigue).label"
+            >{{ fatigueMeta(e.fatigue).icon }}</mat-icon>
+          }
           @if (e.note) {
             <mat-icon class="has-note" aria-label="has a note">sticky_note_2</mat-icon>
           }

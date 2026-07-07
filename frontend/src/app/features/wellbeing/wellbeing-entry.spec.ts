@@ -15,6 +15,7 @@ const doc = (over: Partial<WellbeingDoc>): WellbeingDoc => ({
   id: 1,
   recordedAt: '2026-07-01T12:00:00.000Z',
   score: 3,
+  fatigue: null,
   note: null,
   rev: 1,
   ...over,
@@ -50,6 +51,18 @@ describe('WellbeingEntry (edit sheet)', () => {
     const { c, store } = setup(doc({ score: 3 }));
     c.setScore(5);
     expect(store.patch).toHaveBeenCalledWith('u1', { score: 5 });
+  });
+
+  it('sets fatigue on tap', () => {
+    const { c, store } = setup(doc({ fatigue: null }));
+    c.setFatigue(4);
+    expect(store.patch).toHaveBeenCalledWith('u1', { fatigue: 4 });
+  });
+
+  it('toggles fatigue back to null when the active level is tapped again', () => {
+    const { c, store } = setup(doc({ fatigue: 4 }));
+    c.setFatigue(4);
+    expect(store.patch).toHaveBeenCalledWith('u1', { fatigue: null });
   });
 
   it('round-trips the datetime-local value back to a UTC instant', () => {

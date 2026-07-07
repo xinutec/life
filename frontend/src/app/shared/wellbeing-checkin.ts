@@ -19,6 +19,21 @@ export function scoreMeta(score: number) {
   return WELLBEING_SCORES.find((s) => s.score === score) ?? WELLBEING_SCORES[2];
 }
 
+/** The five fatigue levels: score, label + a draining-battery icon. An optional
+ *  second reading on a check-in — "emotionally ok but exhausted" — so higher is
+ *  *worse* here (opposite polarity to mood), which the battery metaphor carries. */
+export const FATIGUE_LEVELS: readonly { score: number; label: string; icon: string }[] = [
+  { score: 1, label: 'none', icon: 'battery_full' },
+  { score: 2, label: 'mild', icon: 'battery_5_bar' },
+  { score: 3, label: 'moderate', icon: 'battery_3_bar' },
+  { score: 4, label: 'high', icon: 'battery_2_bar' },
+  { score: 5, label: 'severe', icon: 'battery_alert' },
+];
+
+export function fatigueMeta(score: number) {
+  return FATIGUE_LEVELS.find((f) => f.score === score) ?? FATIGUE_LEVELS[0];
+}
+
 /** The one-tap mood check-in: five face buttons that log an entry at "now".
  *  Logging is instant and offline; an Undo snackbar covers a mis-tap. Note and
  *  time adjustments are follow-ups on the history screen, never prerequisites. */

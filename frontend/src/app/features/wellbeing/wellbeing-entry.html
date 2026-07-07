@@ -17,6 +17,23 @@
       }
     </div>
 
+    <p class="field-label">Fatigue <span class="optional">(optional)</span></p>
+    <div class="faces fatigue" role="group" aria-label="Fatigue">
+      @for (f of fatigues; track f.score) {
+        <button
+          type="button"
+          class="face"
+          [class.on]="e.fatigue === f.score"
+          [attr.aria-label]="f.label"
+          [attr.aria-pressed]="e.fatigue === f.score"
+          [title]="f.label"
+          (click)="setFatigue(f.score)"
+        >
+          <mat-icon>{{ f.icon }}</mat-icon>
+        </button>
+      }
+    </div>
+
     <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
       <mat-label>When</mat-label>
       <input matInput type="datetime-local" [ngModel]="localTime()" (ngModelChange)="setTime($event)" />
