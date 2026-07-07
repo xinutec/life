@@ -4,7 +4,7 @@ import { map, shareReplay, switchMap } from 'rxjs/operators';
 import { ulid } from 'ulid';
 import { type RxCollection, type RxJsonSchema } from 'rxdb';
 
-import { ConflictReporter, makeConflictHandler } from './conflict-merge';
+import { ConflictReporter, FieldSpec, makeConflictHandler } from './conflict-merge';
 import { startHttpReplication } from './replication';
 import { LifeDb } from './life-db';
 import { SyncStatus } from './sync-status';
@@ -43,9 +43,22 @@ const schema: RxJsonSchema<ShoppingDoc> = {
   required: ['ulid', 'name', 'done', 'rev'],
 };
 
-/** The content fields the 3-way merge diffs (see [[makeConflictHandler]]) —
- *  also the allowlist the Conflicts screen may patch on "use other". */
-export const SHOPPING_MERGE_FIELDS = ['name', 'quantity', 'unit', 'barcode', 'done'] as const;
+/** The synced content fields (everything but the identity/server fields). */
+type ShoppingContent = Omit<ShoppingDoc, 'ulid' | 'id' | 'rev'>;
+
+/** Type-directed 3-way-merge spec: every content field with a strategy valid for
+ *  its type (see [[makeConflictHandler]]). Exhaustive by construction. */
+const SHOPPING_FIELDS: FieldSpec<ShoppingContent> = {
+  name: 'value',
+  quantity: 'value',
+  unit: 'value',
+  barcode: 'value',
+  done: 'value',
+};
+
+/** The field-name allowlist the Conflicts screen may patch on "use other",
+ *  derived from the spec so the two can never drift apart. */
+export const SHOPPING_MERGE_FIELDS = Object.keys(SHOPPING_FIELDS) as (keyof ShoppingContent)[];
 
 /** Local-first store for the shopping list: the on-device RxDB collection is the
  *  source of truth; replication reconciles with /api/sync/shopping in the
@@ -91,10 +104,7 @@ export class ShoppingStore {
     await this.patch(key, { done });
   }
 
-  async patch(
-    key: string,
-    fields: Partial<Pick<ShoppingDoc, (typeof SHOPPING_MERGE_FIELDS)[number]>>,
-  ): Promise<void> {
+  async patch(key: string, fields: Partial<ShoppingContent>): Promise<void> {
     const doc = await this.find(key);
     await doc?.incrementalPatch(fields);
   }
@@ -134,7 +144,7 @@ export class ShoppingStore {
     // survive; same-field collisions keep this device's value and land in the
     // server-side conflict log for review.
     const handler = makeConflictHandler<ShoppingDoc>({
-      fields: SHOPPING_MERGE_FIELDS,
+      fields: SHOPPING_FIELDS,
       onConflicts: (kept, conflicts) =>
         this.reporter.report('shopping', kept.ulid, kept.name, conflicts),
     });

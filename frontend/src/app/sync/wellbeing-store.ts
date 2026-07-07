@@ -4,7 +4,7 @@ import { map, shareReplay, switchMap } from 'rxjs/operators';
 import { ulid } from 'ulid';
 import { type RxCollection, type RxJsonSchema } from 'rxdb';
 
-import { ConflictReporter, makeConflictHandler } from './conflict-merge';
+import { ConflictReporter, FieldSpec, makeConflictHandler } from './conflict-merge';
 import { LifeDb } from './life-db';
 import { startHttpReplication } from './replication';
 import { SyncStatus } from './sync-status';
@@ -70,9 +70,24 @@ export const migrationStrategies = {
   }),
 };
 
-/** The content fields the 3-way merge diffs — also the allowlist the Conflicts
- *  screen may patch on "use other". */
-export const WELLBEING_MERGE_FIELDS = ['recordedAt', 'score', 'energy', 'emotions', 'note'] as const;
+/** The synced content fields (everything but the identity/server fields). */
+type WellbeingContent = Omit<WellbeingDoc, 'ulid' | 'id' | 'rev'>;
+
+/** Type-directed 3-way-merge spec: every content field with a strategy valid for
+ *  its type (see [[makeConflictHandler]]). Exhaustive by construction — a field
+ *  added to WellbeingDoc won't compile until it's classified here, and `emotions`
+ *  (an array) can only be `'array'`, never identity-compared. */
+const WELLBEING_FIELDS: FieldSpec<WellbeingContent> = {
+  recordedAt: 'value',
+  score: 'value',
+  energy: 'value',
+  emotions: 'array',
+  note: 'value',
+};
+
+/** The field-name allowlist the Conflicts screen may patch on "use other",
+ *  derived from the spec so the two can never drift apart. */
+export const WELLBEING_MERGE_FIELDS = Object.keys(WELLBEING_FIELDS) as (keyof WellbeingContent)[];
 
 /** Local-first store for wellbeing check-ins: the on-device RxDB collection is
  *  the source of truth; replication reconciles with /api/sync/wellbeing in the
@@ -112,10 +127,7 @@ export class WellbeingStore {
     return key;
   }
 
-  async patch(
-    key: string,
-    fields: Partial<Pick<WellbeingDoc, 'recordedAt' | 'score' | 'energy' | 'emotions' | 'note'>>,
-  ): Promise<void> {
+  async patch(key: string, fields: Partial<WellbeingContent>): Promise<void> {
     const doc = await this.find(key);
     await doc?.incrementalPatch(fields);
   }
@@ -144,7 +156,7 @@ export class WellbeingStore {
 
   private async init(): Promise<WellbeingCollection> {
     const handler = makeConflictHandler<WellbeingDoc>({
-      fields: WELLBEING_MERGE_FIELDS,
+      fields: WELLBEING_FIELDS,
       onConflicts: (kept, conflicts) =>
         this.reporter.report('wellbeing', kept.ulid, `Check-in (${kept.score}/5)`, conflicts),
     });

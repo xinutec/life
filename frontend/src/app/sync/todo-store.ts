@@ -5,7 +5,7 @@ import { ulid } from 'ulid';
 import { type RxCollection, type RxJsonSchema } from 'rxdb';
 
 import { TodoPriority, TodoStatus, TodoType } from '../models';
-import { ConflictReporter, makeConflictHandler } from './conflict-merge';
+import { ConflictReporter, FieldSpec, makeConflictHandler } from './conflict-merge';
 import { LifeDb } from './life-db';
 import { startHttpReplication } from './replication';
 import { SyncStatus } from './sync-status';
@@ -57,17 +57,25 @@ const schema: RxJsonSchema<TodoDoc> = {
   required: ['ulid', 'title', 'type', 'status', 'rev'],
 };
 
-/** The content fields the 3-way merge diffs (see [[makeConflictHandler]]) —
- *  also the allowlist the Conflicts screen may patch on "use other". */
-export const TODO_MERGE_FIELDS = [
-  'title',
-  'type',
-  'status',
-  'priority',
-  'notes',
-  'notBefore',
-  'due',
-] as const;
+/** The synced content fields (everything but the identity/server fields). */
+type TodoContent = Omit<TodoDoc, 'ulid' | 'id' | 'rev'>;
+
+/** Type-directed 3-way-merge spec: every content field with a strategy valid for
+ *  its type (see [[makeConflictHandler]]). Exhaustive by construction — a field
+ *  added to TodoDoc won't compile until it's classified here. */
+const TODO_FIELDS: FieldSpec<TodoContent> = {
+  title: 'value',
+  type: 'value',
+  status: 'value',
+  priority: 'value',
+  notes: 'value',
+  notBefore: 'value',
+  due: 'value',
+};
+
+/** The field-name allowlist the Conflicts screen may patch on "use other",
+ *  derived from the spec so the two can never drift apart. */
+export const TODO_MERGE_FIELDS = Object.keys(TODO_FIELDS) as (keyof TodoContent)[];
 
 /** Local-first store for the to-do list: the on-device RxDB collection is the
  *  source of truth; replication reconciles with /api/sync/todo in the background.
@@ -113,12 +121,7 @@ export class TodoStore {
     });
   }
 
-  async patch(
-    key: string,
-    fields: Partial<
-      Pick<TodoDoc, 'title' | 'type' | 'status' | 'priority' | 'notes' | 'notBefore' | 'due'>
-    >,
-  ): Promise<void> {
+  async patch(key: string, fields: Partial<TodoContent>): Promise<void> {
     const doc = await this.find(key);
     await doc?.incrementalPatch(fields);
   }
@@ -156,7 +159,7 @@ export class TodoStore {
     // survive; same-field collisions keep this device's value and land in the
     // server-side conflict log for review.
     const handler = makeConflictHandler<TodoDoc>({
-      fields: TODO_MERGE_FIELDS,
+      fields: TODO_FIELDS,
       onConflicts: (kept, conflicts) =>
         this.reporter.report('todo', kept.ulid, kept.title, conflicts),
     });

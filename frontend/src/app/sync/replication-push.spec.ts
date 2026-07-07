@@ -65,7 +65,12 @@ async function setup(opts?: { pull?: PullHandler; push?: PushHandler }) {
     multiInstance: false,
   });
   const added = await db.addCollections({
-    entries: { schema, conflictHandler: makeConflictHandler<Doc>({ fields: ['recordedAt', 'score', 'note'] }) },
+    entries: {
+      schema,
+      conflictHandler: makeConflictHandler<Doc>({
+        fields: { recordedAt: 'value', score: 'value', note: 'value' },
+      }),
+    },
   });
   const collection = added.entries as RxCollection<Doc>;
   const pushed: Doc[] = [];

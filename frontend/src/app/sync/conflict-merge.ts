@@ -34,15 +34,36 @@ export interface MergeTrace {
   noBase: boolean;
 }
 
-/** Value-equality for a merge field. Primitives compare by identity (undefined
- *  folded to null, so an absent optional equals the wire's explicit null). Array
- *  fields (e.g. wellbeing `emotions`) compare element-wise: a fresh pull yields a
- *  new array reference that `Object.is` would call unequal, which would make the
- *  doc look perpetually changed and flag a spurious conflict on every sync. */
-function fieldEqual(a: unknown, b: unknown): boolean {
+/** How a field's two values are judged equal. The set of strategies a field may
+ *  declare is TYPE-DIRECTED (see [[FieldSpec]] / [[EqFor]]), so a spec cannot
+ *  misclassify a field — an array can never be compared by identity by accident. */
+export type FieldEq = 'value' | 'array';
+
+/** The equality strategies valid for a field of type `V`:
+ *  - an array field → `'array'` (element-wise; identity reads a fresh-but-equal
+ *    copy as changed — the emotions sync bug);
+ *  - a primitive / nullable-primitive → `'value'` (identity, undefined ≡ null).
+ *  A non-array OBJECT field resolves to `never` on purpose: there's no safe
+ *  strategy for one yet, so introducing such a field is a COMPILE error until
+ *  `FieldEq` gains a deep comparer — it can never silently fall back to identity
+ *  (the very trap that made array identity a bug). */
+type EqFor<V> =
+  NonNullable<V> extends readonly unknown[] ? 'array' : NonNullable<V> extends object ? never : 'value';
+
+/** An exhaustive, type-directed 3-way-merge spec: every content field of `C`,
+ *  each tagged with a strategy valid for its type. `-?` makes every key required,
+ *  so a field added to the document won't compile until it's classified here — it
+ *  can never be silently dropped from the merge (the push-loss bug) nor wrongly
+ *  identity-compared (the emotions bug). */
+export type FieldSpec<C> = { [K in keyof C]-?: EqFor<C[K]> };
+
+/** Compare one field's two values under its declared strategy. `undefined` folds
+ *  to `null`, so an absent optional equals the wire's explicit null. */
+function eqBy(strategy: FieldEq, a: unknown, b: unknown): boolean {
   const x = a ?? null;
   const y = b ?? null;
-  if (Array.isArray(x) && Array.isArray(y)) {
+  if (strategy === 'array') {
+    if (!Array.isArray(x) || !Array.isArray(y)) return Object.is(x, y);
     return x.length === y.length && x.every((v, i) => Object.is(v, y[i]));
   }
   return Object.is(x, y);
@@ -77,14 +98,27 @@ function logMergeTrace(t: MergeTrace): void {
  *  clear it; the trash restore is the one undelete), and a local delete stands
  *  over remote edits. Identity/server fields (ulid, id, rev) always come from
  *  the real master. */
-export function makeConflictHandler<T extends { rev: number }>(opts: {
-  fields: readonly (keyof T & string)[];
+export function makeConflictHandler<
+  T extends { rev: number },
+  C = Omit<T, 'ulid' | 'id' | 'rev'>,
+>(opts: {
+  /** Type-directed, exhaustive: every content field of `C` with a strategy valid
+   *  for its type. Its keys ARE the field set the merge diffs (see [[FieldSpec]]). */
+  fields: FieldSpec<C>;
   onConflicts?: (kept: T & { _deleted: boolean }, conflicts: FieldConflict[]) => void;
   /** Observe every resolve() decision. Defaults to a `console.debug` trace;
    *  a test injects a spy to assert the merge disturbed no local edit. */
   trace?: (t: MergeTrace) => void;
 }): RxConflictHandler<T> {
   const trace = opts.trace ?? logMergeTrace;
+  // The spec's keys are the merge field set; each maps to its equality strategy.
+  const spec = opts.fields as Record<string, FieldEq>;
+  const keys = Object.keys(spec);
+  const get = (o: unknown, f: string): unknown => (o as Record<string, unknown>)[f];
+  const set = (o: unknown, f: string, v: unknown): void => {
+    (o as Record<string, unknown>)[f] = v;
+  };
+  const eq = (f: string, a: unknown, b: unknown): boolean => eqBy(spec[f], a, b);
   return {
     /** Replication equality. RxDB asks this in BOTH directions, and the
      *  upstream one is load-bearing: `isEqual(assumedMaster, current,
@@ -93,12 +127,11 @@ export function makeConflictHandler<T extends { rev: number }>(opts: {
      *  a local edit changes content but NOT `rev`; comparing rev alone judged
      *  every field edit "already replicated" and silently dropped it (the
      *  2026-07-03 push-loss bug — see replication-push.spec.ts). The content
-     *  fields must be compared too — by value, so array fields (emotions) don't
-     *  read as forever-changed (see [[fieldEqual]]). */
+     *  fields must be compared too — under each field's declared strategy, so
+     *  array fields (emotions) don't read as forever-changed (see [[eqBy]]). */
     isEqual: (a, b) =>
       !!a._deleted === !!b._deleted &&
-      (!!a._deleted ||
-        (a.rev === b.rev && opts.fields.every((f) => fieldEqual(a[f], b[f])))),
+      (!!a._deleted || (a.rev === b.rev && keys.every((f) => eq(f, get(a, f), get(b, f))))),
     resolve: ({ realMasterState: real, newDocumentState: mine, assumedMasterState: assumed }) => {
       const id = (mine as { ulid?: string }).ulid ?? '?';
       if (real._deleted) {
@@ -114,17 +147,17 @@ export function makeConflictHandler<T extends { rev: number }>(opts: {
       const conflicts: FieldConflict[] = [];
       const tookMine: string[] = [];
       const tookTheirs: string[] = [];
-      for (const f of opts.fields) {
-        if (fieldEqual(mine[f], assumed[f])) {
+      for (const f of keys) {
+        if (eq(f, get(mine, f), get(assumed, f))) {
           // I didn't touch it → keep the master's value; note when that pulls
           // in a genuine remote change (real ≠ base), not just an unchanged field.
-          if (!fieldEqual(real[f], assumed[f])) tookTheirs.push(f);
+          if (!eq(f, get(real, f), get(assumed, f))) tookTheirs.push(f);
           continue;
         }
-        if (!fieldEqual(real[f], assumed[f]) && !fieldEqual(mine[f], real[f])) {
-          conflicts.push({ field: f, mine: mine[f], theirs: real[f] });
+        if (!eq(f, get(real, f), get(assumed, f)) && !eq(f, get(mine, f), get(real, f))) {
+          conflicts.push({ field: f, mine: get(mine, f), theirs: get(real, f) });
         }
-        merged[f] = mine[f];
+        set(merged, f, get(mine, f));
         tookMine.push(f);
       }
       if (mine._deleted) merged._deleted = true;

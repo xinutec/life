@@ -1,11 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { FieldConflict, MergeTrace, makeConflictHandler } from './conflict-merge';
+import { FieldConflict, FieldSpec, MergeTrace, makeConflictHandler } from './conflict-merge';
 import { ShoppingDoc } from './shopping-store';
 
 type MasterDoc = ShoppingDoc & { _deleted: boolean };
 
-const FIELDS = ['name', 'quantity', 'unit', 'barcode', 'done'] as const;
+const FIELDS: FieldSpec<Omit<ShoppingDoc, 'ulid' | 'id' | 'rev'>> = {
+  name: 'value',
+  quantity: 'value',
+  unit: 'value',
+  barcode: 'value',
+  done: 'value',
+};
 
 const base: MasterDoc = {
   ulid: 'a',
@@ -146,7 +152,7 @@ describe('field-level 3-way merge', () => {
     type ArrMaster = ArrDoc & { _deleted: boolean };
     const abase: ArrMaster = { ulid: 'x', rev: 5, tags: ['Withdrawn', 'Anxious'], _deleted: false };
     const onConflicts = vi.fn<(kept: ArrMaster, conflicts: FieldConflict[]) => void>();
-    const handler = makeConflictHandler<ArrDoc>({ fields: ['tags'], onConflicts });
+    const handler = makeConflictHandler<ArrDoc>({ fields: { tags: 'array' }, onConflicts });
 
     // Equal-by-value arrays (fresh reference) must read as equal / not conflict.
     expect(handler.isEqual(abase, { ...abase, tags: ['Withdrawn', 'Anxious'] }, 'test')).toBe(true);
@@ -195,5 +201,23 @@ describe('field-level 3-way merge', () => {
     expect(
       handler.isEqual({ ...base, _deleted: true }, { ...base, name: 'Old', _deleted: true }, 'test'),
     ).toBe(true);
+  });
+
+  it('the spec is exhaustive and type-directed (compile-time guarantees)', () => {
+    // These assertions are enforced by tsc at build time — @ts-expect-error
+    // FAILS the build if the error it guards ever stops occurring. This is what
+    // makes the two sync-bug classes unrepresentable rather than merely tested.
+    interface Content {
+      title: string;
+      tags: string[];
+    }
+    // @ts-expect-error — missing 'tags': a spec must list EVERY content field
+    // (this is what prevents the push-loss bug — a dropped field won't compile).
+    const missingField: FieldSpec<Content> = { title: 'value' };
+    // @ts-expect-error — 'value' identity-compares an array; only 'array' is
+    // allowed for tags (this is what prevents the emotions spurious-conflict bug).
+    const misclassifiedArray: FieldSpec<Content> = { title: 'value', tags: 'value' };
+    const ok: FieldSpec<Content> = { title: 'value', tags: 'array' };
+    expect([missingField, misclassifiedArray, ok]).toBeDefined();
   });
 });
