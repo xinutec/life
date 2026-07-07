@@ -87,13 +87,13 @@ describe('Wellbeing history', () => {
 
   it('shows an energy icon only on entries that recorded one', () => {
     const { fixture } = setup([
-      entry({ ulid: 'a', recordedAt: at(0, 15), energy: 2 }), // energy 2 → "high" fatigue
+      entry({ ulid: 'a', recordedAt: at(0, 15), energy: 2 }), // energy 2 → "low"
       entry({ ulid: 'b', recordedAt: at(0, 9), energy: null }),
     ]);
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
     const icons = host.querySelectorAll('.has-energy');
     expect(icons.length).toBe(1);
-    expect(icons[0].textContent?.trim()).toBe('battery_2_bar'); // energy 2 → high
+    expect(icons[0].textContent?.trim()).toBe('battery_2_bar'); // energy 2 → low
   });
 });

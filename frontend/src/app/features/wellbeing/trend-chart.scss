@@ -1,0 +1,58 @@
+.trend {
+  margin: 1rem 0 0.5rem;
+
+  // Axis labels beside the plot; the axis column stretches to the svg's
+  // rendered height, so the two always line up.
+  .plot {
+    display: flex;
+    gap: 0.4rem;
+  }
+  .chart {
+    flex: 1;
+    min-width: 0;
+    display: block;
+    height: auto;
+    // Match the viewBox ratio (CHART.w / CHART.h in wellbeing.ts) so the svg
+    // scales uniformly — preserveAspectRatio="none" squashed the dots into
+    // ellipses at any other rendered ratio.
+    aspect-ratio: 300 / 96;
+  }
+  .mid {
+    stroke: var(--mat-sys-outline-variant);
+    stroke-width: 0.5;
+    stroke-dasharray: 3 3;
+  }
+  .axis {
+    display: flex;
+    justify-content: space-between;
+    flex-direction: column;
+    font: var(--mat-sys-label-small);
+    color: var(--mat-sys-on-surface-variant);
+  }
+  .caption {
+    margin: 0.15rem 0 0;
+    font: var(--mat-sys-label-small);
+    text-align: right;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+// Dots on the shared wellbeing ramp (--wb-score-* in styles.scss): green (5)
+// rides high = good, red (1) sinks low = bad. Mood plots the score, energy plots
+// the stored `energy` value — same grammar, told apart by the caption + axis
+// words the host supplies.
+.dot.score-1 {
+  fill: var(--wb-score-1);
+}
+.dot.score-2 {
+  fill: var(--wb-score-2);
+}
+.dot.score-3 {
+  fill: var(--wb-score-3);
+}
+.dot.score-4 {
+  fill: var(--wb-score-4);
+}
+.dot.score-5 {
+  fill: var(--wb-score-5);
+}

@@ -4,53 +4,21 @@
 <app-wellbeing-checkin />
 
 @if (hasChart()) {
-  <div class="trend">
-    <div class="plot">
-      <div class="axis" aria-hidden="true">
-        <span>great</span><span>okay</span><span>awful</span>
-      </div>
-      <svg
-        class="chart"
-        [attr.viewBox]="'0 0 ' + chart().w + ' ' + chart().h"
-        role="img"
-        aria-label="Your mood over the last 14 days"
-      >
-        <line class="mid" [attr.x1]="0" [attr.x2]="chart().w" [attr.y1]="chart().h / 2" [attr.y2]="chart().h / 2" />
-        @for (dot of chart().dots; track $index) {
-          <circle class="dot score-{{ dot.level }}" [attr.cx]="dot.cx" [attr.cy]="dot.cy" r="3.5" />
-        }
-      </svg>
-    </div>
-    <p class="caption">Mood · last 14 days</p>
-  </div>
+  <app-trend-chart
+    [chart]="chart()"
+    [axis]="['great', 'okay', 'awful']"
+    caption="Mood · last 14 days"
+    label="Your mood over the last 14 days"
+  />
 }
 
 @if (hasEnergyChart()) {
-  <div class="trend energy">
-    <div class="plot">
-      <div class="axis" aria-hidden="true">
-        <span>energetic</span><span>okay</span><span>drained</span>
-      </div>
-      <svg
-        class="chart"
-        [attr.viewBox]="'0 0 ' + energyChart().w + ' ' + energyChart().h"
-        role="img"
-        aria-label="Your energy over the last 14 days"
-      >
-        <line
-          class="mid"
-          [attr.x1]="0"
-          [attr.x2]="energyChart().w"
-          [attr.y1]="energyChart().h / 2"
-          [attr.y2]="energyChart().h / 2"
-        />
-        @for (dot of energyChart().dots; track $index) {
-          <circle class="dot score-{{ dot.level }}" [attr.cx]="dot.cx" [attr.cy]="dot.cy" r="3.5" />
-        }
-      </svg>
-    </div>
-    <p class="caption">Energy · last 14 days</p>
-  </div>
+  <app-trend-chart
+    [chart]="energyChart()"
+    [axis]="['energetic', 'okay', 'drained']"
+    caption="Energy · last 14 days"
+    label="Your energy over the last 14 days"
+  />
 }
 
 <app-list-state
@@ -73,7 +41,7 @@
         >
           <mat-icon>{{ meta(e.score).icon }}</mat-icon>
           <span class="t">{{ time(e.recordedAt) }}</span>
-          @if (e.energy) {
+          @if (e.energy !== null) {
             <mat-icon
               class="has-energy"
               [attr.aria-label]="'energy: ' + energyMeta(e.energy).label"

@@ -8,20 +8,13 @@ import { map } from 'rxjs';
 import { ListState } from '../../shared/list-state';
 import { WellbeingCheckin, energyMeta, scoreMeta } from '../../shared/wellbeing-checkin';
 import { WellbeingDoc, WellbeingStore } from '../../sync/wellbeing-store';
+import { TrendChart, TrendDot } from './trend-chart';
 import { WellbeingEntry } from './wellbeing-entry';
 
 interface Day {
   key: string;
   label: string;
   entries: WellbeingDoc[];
-}
-
-/** A dot in a 14-day trend chart (SVG user units). `level` is the 1..5 value
- *  (mood score or fatigue level) and drives the colour class. */
-interface Dot {
-  cx: number;
-  cy: number;
-  level: number;
 }
 
 const CHART = { w: 300, h: 96, padX: 6, padTop: 8, padBottom: 8, days: 14 };
@@ -37,7 +30,14 @@ function dayKey(d: Date): string {
   selector: 'app-wellbeing',
   templateUrl: './wellbeing.html',
   styleUrl: './wellbeing.scss',
-  imports: [MatButtonModule, MatIconModule, MatBottomSheetModule, ListState, WellbeingCheckin],
+  imports: [
+    MatButtonModule,
+    MatIconModule,
+    MatBottomSheetModule,
+    ListState,
+    WellbeingCheckin,
+    TrendChart,
+  ],
 })
 export class Wellbeing {
   private store = inject(WellbeingStore);
@@ -73,7 +73,7 @@ export class Wellbeing {
   readonly hasEnergyChart = computed(() => this.energyChart().dots.length > 0);
 
   /** Build a trend from a 1..5 accessor; entries returning null/undefined (e.g. an
-   *  unrecorded fatigue) or falling outside the 14-day window are skipped. */
+   *  unrecorded energy) or falling outside the 14-day window are skipped. */
   private buildChart(value: (e: WellbeingDoc) => number | null | undefined) {
     const { w, h, padX, padTop, padBottom, days } = CHART;
     const plotH = h - padTop - padBottom;
@@ -82,7 +82,7 @@ export class Wellbeing {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
     start.setDate(start.getDate() - (days - 1));
-    const dots: Dot[] = [];
+    const dots: TrendDot[] = [];
     for (const e of this.items()) {
       const level = value(e);
       if (level == null) continue; // no reading of this kind on this entry
