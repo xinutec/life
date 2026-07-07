@@ -43,9 +43,9 @@
   }
 }
 
-// Fatigue is a secondary reading — battery shape carries the level, so the icons
-// stay muted (not the emotional colour ramp) and only the selection is accented.
-.faces.fatigue .face {
+// Energy is a secondary reading — the battery shape carries the level, so the
+// icons stay muted (not the mood colour ramp) and only the selection is accented.
+.faces.energy .face {
   mat-icon {
     color: var(--mat-sys-on-surface-variant);
   }

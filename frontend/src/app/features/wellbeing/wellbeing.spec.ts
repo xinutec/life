@@ -63,20 +63,20 @@ describe('Wellbeing history', () => {
     expect(c.hasChart()).toBe(true);
   });
 
-  it('plots the fatigue chart (on stored energy) only from entries that recorded one', () => {
+  it('plots the energy chart only from entries that recorded one', () => {
     const c = setup([
       entry({ ulid: 'a', recordedAt: at(0, 12), score: 4, energy: 5 }),
       entry({ ulid: 'b', recordedAt: at(1, 12), score: 3, energy: null }),
       entry({ ulid: 'c', recordedAt: at(2, 12), score: 2, energy: 2 }),
     ]).fixture.componentInstance;
-    expect(c.hasFatigueChart()).toBe(true);
-    expect(c.fatigueChart().dots.map((d) => d.level)).toEqual([5, 2]); // b (null) excluded
+    expect(c.hasEnergyChart()).toBe(true);
+    expect(c.energyChart().dots.map((d) => d.level)).toEqual([5, 2]); // b (null) excluded
   });
 
-  it('has no fatigue chart when nothing recorded an energy level', () => {
+  it('has no energy chart when nothing recorded one', () => {
     const c = setup([entry({ energy: null })]).fixture.componentInstance;
     expect(c.hasChart()).toBe(true); // mood still charts
-    expect(c.hasFatigueChart()).toBe(false);
+    expect(c.hasEnergyChart()).toBe(false);
   });
 
   it('opens the edit sheet for an entry', () => {
@@ -85,14 +85,14 @@ describe('Wellbeing history', () => {
     expect(sheet.open).toHaveBeenCalled();
   });
 
-  it('shows a fatigue icon only on entries that recorded one', () => {
+  it('shows an energy icon only on entries that recorded one', () => {
     const { fixture } = setup([
       entry({ ulid: 'a', recordedAt: at(0, 15), energy: 2 }), // energy 2 → "high" fatigue
       entry({ ulid: 'b', recordedAt: at(0, 9), energy: null }),
     ]);
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
-    const icons = host.querySelectorAll('.has-fatigue');
+    const icons = host.querySelectorAll('.has-energy');
     expect(icons.length).toBe(1);
     expect(icons[0].textContent?.trim()).toBe('battery_2_bar'); // energy 2 → high
   });

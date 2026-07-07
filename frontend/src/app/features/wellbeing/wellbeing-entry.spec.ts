@@ -57,15 +57,15 @@ describe('WellbeingEntry (edit sheet)', () => {
     expect(store.patch).toHaveBeenCalledWith('u1', { score: 5 });
   });
 
-  it('sets fatigue on tap, stored as its energy complement', () => {
+  it('sets energy on tap', () => {
     const { c, store } = setup(doc({ energy: null }));
-    c.setFatigue(4); // the level button passes its energy value
+    c.setEnergy(4); // the level button passes its energy value
     expect(store.patch).toHaveBeenCalledWith('u1', { energy: 4 });
   });
 
-  it('toggles fatigue back to null when the active level is tapped again', () => {
+  it('toggles energy back to null when the active level is tapped again', () => {
     const { c, store } = setup(doc({ energy: 4 }));
-    c.setFatigue(4);
+    c.setEnergy(4);
     expect(store.patch).toHaveBeenCalledWith('u1', { energy: null });
   });
 

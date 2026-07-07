@@ -17,19 +17,19 @@
       }
     </div>
 
-    <p class="field-label">Fatigue <span class="optional">(optional)</span></p>
-    <div class="faces fatigue" role="group" aria-label="Fatigue">
-      @for (f of fatigues; track f.energy) {
+    <p class="field-label">Energy <span class="optional">(optional)</span></p>
+    <div class="faces energy" role="group" aria-label="Energy">
+      @for (en of energies; track en.energy) {
         <button
           type="button"
           class="face"
-          [class.on]="e.energy === f.energy"
-          [attr.aria-label]="f.label"
-          [attr.aria-pressed]="e.energy === f.energy"
-          [title]="f.label"
-          (click)="setFatigue(f.energy)"
+          [class.on]="e.energy === en.energy"
+          [attr.aria-label]="en.label"
+          [attr.aria-pressed]="e.energy === en.energy"
+          [title]="en.label"
+          (click)="setEnergy(en.energy)"
         >
-          <mat-icon>{{ f.icon }}</mat-icon>
+          <mat-icon>{{ en.icon }}</mat-icon>
         </button>
       }
     </div>

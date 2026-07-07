@@ -6,7 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { map } from 'rxjs';
 
 import { ListState } from '../../shared/list-state';
-import { WellbeingCheckin, fatigueMeta, scoreMeta } from '../../shared/wellbeing-checkin';
+import { WellbeingCheckin, energyMeta, scoreMeta } from '../../shared/wellbeing-checkin';
 import { WellbeingDoc, WellbeingStore } from '../../sync/wellbeing-store';
 import { WellbeingEntry } from './wellbeing-entry';
 
@@ -66,12 +66,11 @@ export class Wellbeing {
   readonly chart = computed(() => this.buildChart((e) => e.score));
   readonly hasChart = computed(() => this.chart().dots.length > 0);
 
-  /** The same 14-day trend for the optional fatigue reading, plotted on its
-   *  stored `energy` value — so like mood, higher (energetic / no fatigue) sits at
-   *  the top and a rising line reads as improving. Only entries that recorded one
-   *  contribute, so it's absent until there's data. */
-  readonly fatigueChart = computed(() => this.buildChart((e) => e.energy));
-  readonly hasFatigueChart = computed(() => this.fatigueChart().dots.length > 0);
+  /** The same 14-day trend for the optional energy reading — like mood, higher
+   *  (energetic) sits at the top and a rising line reads as improving. Only
+   *  entries that recorded one contribute, so it's absent until there's data. */
+  readonly energyChart = computed(() => this.buildChart((e) => e.energy));
+  readonly hasEnergyChart = computed(() => this.energyChart().dots.length > 0);
 
   /** Build a trend from a 1..5 accessor; entries returning null/undefined (e.g. an
    *  unrecorded fatigue) or falling outside the 14-day window are skipped. */
@@ -102,8 +101,8 @@ export class Wellbeing {
     return scoreMeta(score);
   }
 
-  fatigueMeta(score: number) {
-    return fatigueMeta(score);
+  energyMeta(energy: number) {
+    return energyMeta(energy);
   }
 
   /** "14:05" — the entry's local clock time. */

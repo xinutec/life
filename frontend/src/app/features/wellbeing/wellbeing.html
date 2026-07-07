@@ -25,31 +25,31 @@
   </div>
 }
 
-@if (hasFatigueChart()) {
-  <div class="trend fatigue">
+@if (hasEnergyChart()) {
+  <div class="trend energy">
     <div class="plot">
       <div class="axis" aria-hidden="true">
-        <span>none</span><span>moderate</span><span>severe</span>
+        <span>energetic</span><span>okay</span><span>drained</span>
       </div>
       <svg
         class="chart"
-        [attr.viewBox]="'0 0 ' + fatigueChart().w + ' ' + fatigueChart().h"
+        [attr.viewBox]="'0 0 ' + energyChart().w + ' ' + energyChart().h"
         role="img"
-        aria-label="Your fatigue over the last 14 days"
+        aria-label="Your energy over the last 14 days"
       >
         <line
           class="mid"
           [attr.x1]="0"
-          [attr.x2]="fatigueChart().w"
-          [attr.y1]="fatigueChart().h / 2"
-          [attr.y2]="fatigueChart().h / 2"
+          [attr.x2]="energyChart().w"
+          [attr.y1]="energyChart().h / 2"
+          [attr.y2]="energyChart().h / 2"
         />
-        @for (dot of fatigueChart().dots; track $index) {
+        @for (dot of energyChart().dots; track $index) {
           <circle class="dot score-{{ dot.level }}" [attr.cx]="dot.cx" [attr.cy]="dot.cy" r="3.5" />
         }
       </svg>
     </div>
-    <p class="caption">Fatigue · last 14 days</p>
+    <p class="caption">Energy · last 14 days</p>
   </div>
 }
 
@@ -75,9 +75,9 @@
           <span class="t">{{ time(e.recordedAt) }}</span>
           @if (e.energy) {
             <mat-icon
-              class="has-fatigue"
-              [attr.aria-label]="'fatigue: ' + fatigueMeta(e.energy).label"
-            >{{ fatigueMeta(e.energy).icon }}</mat-icon>
+              class="has-energy"
+              [attr.aria-label]="'energy: ' + energyMeta(e.energy).label"
+            >{{ energyMeta(e.energy).icon }}</mat-icon>
           }
           @if (e.emotions.length) {
             <mat-icon

@@ -14,7 +14,7 @@ import { MatInputModule } from '@angular/material/input';
 import { emotionColor } from '../../shared/emotion-wheel';
 import { Feedback } from '../../shared/feedback';
 import { SheetHeader } from '../../shared/sheet-header';
-import { FATIGUE_LEVELS, WELLBEING_SCORES } from '../../shared/wellbeing-checkin';
+import { ENERGY_LEVELS, WELLBEING_SCORES } from '../../shared/wellbeing-checkin';
 import { WellbeingDoc, WellbeingStore } from '../../sync/wellbeing-store';
 import { EmotionPicker } from './emotion-picker';
 
@@ -44,7 +44,7 @@ export class WellbeingEntry implements OnDestroy {
   private items = toSignal(this.store.items$, { initialValue: [] as WellbeingDoc[] });
 
   readonly scores = WELLBEING_SCORES;
-  readonly fatigues = FATIGUE_LEVELS;
+  readonly energies = ENERGY_LEVELS;
   readonly ulid = this.data.ulid;
   readonly entry = computed(() => this.items().find((e) => e.ulid === this.ulid));
 
@@ -65,9 +65,9 @@ export class WellbeingEntry implements OnDestroy {
     void this.store.patch(this.ulid, { score });
   }
 
-  /** Toggle the fatigue reading — stored as its `energy` complement (higher =
-   *  better). Tapping the active level clears it to null, keeping it optional. */
-  setFatigue(energy: number): void {
+  /** Toggle the energy reading — tapping the active level clears it to null,
+   *  keeping it optional (a mood-only check-in). */
+  setEnergy(energy: number): void {
     const next = this.entry()?.energy === energy ? null : energy;
     void this.store.patch(this.ulid, { energy: next });
   }
