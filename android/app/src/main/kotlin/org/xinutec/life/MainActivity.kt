@@ -27,12 +27,12 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.FrameLayout
-import java.util.concurrent.FutureTask
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import org.json.JSONObject
+import java.util.concurrent.FutureTask
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * A full-screen [WebView] onto life — the personal home-OS app, an Angular SPA
@@ -152,7 +152,10 @@ class MainActivity : Activity() {
                         // in-WebView flow — e.g. the scanner's "[scan]" traces — is
                         // visible via `adb logcat -s life-web`.
                         override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
-                            Log.d("life-web", "${msg.message()} (${msg.sourceId()}:${msg.lineNumber()})")
+                            Log.d(
+                                "life-web",
+                                "${msg.message()} (${msg.sourceId()}:${msg.lineNumber()})",
+                            )
                             return true
                         }
 
@@ -224,7 +227,10 @@ class MainActivity : Activity() {
     // `configChanges` keeps the Activity across rotation, so this only fires on a
     // real finish — release the WebView instead of leaking it.
     override fun onDestroy() {
-        shopWeb?.let { root.removeView(it); it.destroy() }
+        shopWeb?.let {
+            root.removeView(it)
+            it.destroy()
+        }
         connectOverlay?.let { root.removeView(it) }
         connectWeb?.destroy()
         root.removeView(web)
@@ -346,7 +352,10 @@ class MainActivity : Activity() {
             resolveShop(requestId, """{"ok":false,"error":"host not allowed"}""")
             return
         }
-        shopWeb?.let { root.removeView(it); it.destroy() }
+        shopWeb?.let {
+            root.removeView(it)
+            it.destroy()
+        }
         val hidden =
             WebView(this).apply {
                 settings.javaScriptEnabled = true
@@ -411,7 +420,12 @@ class MainActivity : Activity() {
 
     /** Whether `raw` is an https URL on an allowlisted shop host. */
     private fun isShopUrl(raw: String): Boolean {
-        val u = try { Uri.parse(raw) } catch (_: Exception) { return false }
+        val u =
+            try {
+                Uri.parse(raw)
+            } catch (_: Exception) {
+                return false
+            }
         if (u.scheme != "https") return false
         val host = u.host ?: return false
         return SHOP_HOSTS.any { host == it || host.endsWith(".$it") }
@@ -420,7 +434,9 @@ class MainActivity : Activity() {
     /** Resolve the web app's pending promise with a JSON result object. */
     private fun resolveShop(requestId: String, resultJson: String) {
         val js =
-            "window.__shopResolve && window.__shopResolve(${JSONObject.quote(requestId)}, $resultJson)"
+            "window.__shopResolve && window.__shopResolve(${JSONObject.quote(
+                requestId,
+            )}, $resultJson)"
         web.post { web.evaluateJavascript(js, null) }
     }
 
@@ -480,14 +496,16 @@ class MainActivity : Activity() {
         // life's own web app, so life can't inject a Done control into it — a native
         // escape button is the correct design here, not web chrome.
         val done =
-            Button(this).apply { // dev-lint: android-native-chrome allow — external login overlay
+            Button(this).apply {
+                // dev-lint: android-native-chrome allow — external login overlay
                 text = "Done"
                 setOnClickListener { closeShopConnect() }
                 layoutParams =
-                    FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ).apply { gravity = Gravity.TOP or Gravity.END }
+                    FrameLayout
+                        .LayoutParams(
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ).apply { gravity = Gravity.TOP or Gravity.END }
             }
         val overlay =
             FrameLayout(this).apply {
@@ -552,10 +570,13 @@ class MainActivity : Activity() {
     companion object {
         private const val CAMERA_REQ = 1
         private const val FILE_REQ = 2
+
         // Skip pasting anything larger than the backend's 5 MiB image cap.
         private const val MAX_PASTE_BYTES = 5 * 1024 * 1024
+
         // The life app (HTTPS, behind a Nextcloud-identity login).
         private const val LIFE_URL = "https://life.xinutec.org/"
+
         // Hosts allowed to load inside this WebView: the app itself plus the
         // Nextcloud login hop. Everything else goes to the real browser.
         private val ALLOWED_HOSTS = setOf("life.xinutec.org", "dash.xinutec.org")
