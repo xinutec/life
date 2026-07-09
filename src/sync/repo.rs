@@ -2,7 +2,7 @@
 //! shared by every syncable table; the pull/push handlers are per collection
 //! (shopping + to-do — see `docs/proposals/offline-first.md`).
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use sqlx::{MySqlConnection, MySqlPool};
 use ulid::Ulid;
@@ -511,30 +511,37 @@ struct WellbeingDocRow {
     recorded_at: NaiveDateTime,
     score: u8,
     energy: Option<u8>,
-    /// JSON array of leaf words, as stored; parsed in `From` (invalid → empty).
+    /// JSON array of leaf words, as stored; parsed in `TryFrom` (invalid →
+    /// error — a corrupt row must fail the read, not pull as "no emotions").
     emotions: Option<String>,
     note: Option<String>,
     deleted: i64,
     rev: u64,
 }
 
-impl From<WellbeingDocRow> for WellbeingDoc {
-    fn from(r: WellbeingDocRow) -> Self {
-        WellbeingDoc {
+impl TryFrom<WellbeingDocRow> for WellbeingDoc {
+    type Error = anyhow::Error;
+
+    fn try_from(r: WellbeingDocRow) -> Result<Self> {
+        // The write path fails loudly on unserialisable emotions; the read must
+        // match — serving a corrupt row as "no emotions" would propagate the
+        // loss to every device invisibly.
+        let emotions = match r.emotions.as_deref() {
+            Some(s) => serde_json::from_str(s)
+                .with_context(|| format!("wellbeing {}: corrupt emotions column", r.ulid))?,
+            None => Vec::new(),
+        };
+        Ok(WellbeingDoc {
             ulid: r.ulid,
             id: Some(r.id),
             recorded_at: DateTime::from_naive_utc_and_offset(r.recorded_at, Utc),
             score: r.score,
             energy: r.energy,
-            emotions: r
-                .emotions
-                .as_deref()
-                .and_then(|s| serde_json::from_str(s).ok())
-                .unwrap_or_default(),
+            emotions,
             note: r.note,
             deleted: r.deleted != 0,
             rev: r.rev,
-        }
+        })
     }
 }
 
@@ -558,7 +565,10 @@ pub async fn pull_wellbeing(
         rev: rows.last().map_or(since, |r| r.rev),
     };
     Ok(PullResponse {
-        documents: rows.into_iter().map(Into::into).collect(),
+        documents: rows
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<_>>()?,
         checkpoint,
     })
 }
@@ -591,7 +601,7 @@ pub async fn push_wellbeing(
 
         if let Some(cur) = current {
             if assumed_rev != Some(cur.rev) {
-                conflicts.push(cur.into());
+                conflicts.push(cur.try_into()?);
                 continue;
             }
             let rev = next_rev(&mut tx).await?;

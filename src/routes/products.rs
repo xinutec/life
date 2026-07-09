@@ -27,8 +27,13 @@ pub async fn lookup(
         return Err(AppError::NotFound);
     };
     tracing::debug!(%barcode, name = ?found.name, has_image = found.image_url.is_some(), "product fetched from Open Food Facts");
+    // Image fetch failure is non-fatal (the product still caches) but must be
+    // visible — guard rejections inside fetch_image already log; so does this.
     let image = match &found.image_url {
-        Some(url) => off::fetch_image(url).await.ok().flatten(),
+        Some(url) => off::fetch_image(url).await.unwrap_or_else(|e| {
+            tracing::warn!(%barcode, %url, error = %e, "product image fetch failed");
+            None
+        }),
         None => None,
     };
     repo::upsert(

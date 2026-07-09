@@ -146,3 +146,46 @@ async fn wellbeing_sync_and_restore_against_real_db() {
             .deleted
     );
 }
+
+#[tokio::test]
+async fn corrupt_emotions_fails_the_pull_loudly() {
+    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
+        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping wellbeing DB test");
+        return;
+    };
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    let user = "test-user-wellbeing-corrupt";
+    sqlx::query("DELETE FROM wellbeing WHERE user_id = ?")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // A row whose emotions column is not valid JSON (hand-edited, or a write
+    // bug). The read must fail loudly — silently pulling it as "no emotions"
+    // would replicate the data loss to every device.
+    sqlx::query(
+        "INSERT INTO wellbeing \
+         (user_id, ulid, recorded_at, score, energy, emotions, note, deleted_at, rev, created_at, updated_at) \
+         VALUES (?, ?, NOW(), 3, NULL, 'not-json', NULL, NULL, 1, NOW(), NOW())",
+    )
+    .bind(user)
+    .bind("0123456789ABCDEFGHJKMNPQRC")
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let res = sync_repo::pull_wellbeing(&pool, user, 0, 100).await;
+    assert!(
+        res.is_err(),
+        "corrupt emotions must error the pull, not read as empty"
+    );
+
+    sqlx::query("DELETE FROM wellbeing WHERE user_id = ?")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .unwrap();
+}
