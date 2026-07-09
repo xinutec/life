@@ -29,7 +29,7 @@
           <mat-icon>{{ m.icon }}</mat-icon>
           <span>{{ m.label }}</span>
           @if (m.path === '/conflicts' && alerts.conflictCount() > 0) {
-            <span class="menu-badge">{{ alerts.conflictCount() }}</span>
+            <span class="count-badge alert menu-badge">{{ alerts.conflictCount() }}</span>
           }
         </a>
       }

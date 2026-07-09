@@ -58,3 +58,21 @@ export class ConflictsStore extends CachedResource<ConflictEntry[]> {
     super(() => api.conflicts());
   }
 }
+
+/** Root→leaf breadcrumb ("Kitchen › Fridge") for a location id, resolved
+ *  client-side off the locations list ({@link LocationsStore}). '' when
+ *  unplaced or unknown; cycle-guarded because `parent_id` is client-editable. */
+export function locationPath(byId: Map<number, Loc>, id: number | null): string {
+  if (id == null) return '';
+  const names: string[] = [];
+  const seen = new Set<number>();
+  let cur: number | null = id;
+  while (cur != null && !seen.has(cur)) {
+    seen.add(cur);
+    const loc = byId.get(cur);
+    if (!loc) break;
+    names.unshift(loc.name);
+    cur = loc.parent_id;
+  }
+  return names.join(' › ');
+}

@@ -27,6 +27,7 @@
         tabindex="0"
         (click)="edit(it)"
         (keydown.enter)="edit(it)"
+        (keydown.space)="edit(it); $event.preventDefault()"
       >
         @if (it.barcode) {
           <app-product-thumb class="inline-thumb" [barcode]="it.barcode" />
@@ -53,11 +54,10 @@
   </div>
 }
 
-<!-- Hidden while the "bought → inventory" bar owns the bottom. -->
-@if (doneCount() === 0) {
-  <div class="fab-anchor">
-    <button mat-fab class="add-fab" (click)="openAdd()" aria-label="Add to the list">
-      <mat-icon>add</mat-icon>
-    </button>
-  </div>
-}
+<!-- Always present: mid-shop ("add the thing I just remembered") is exactly when
+     adding matters most. The bought bar keeps left of it (see .bought-actions). -->
+<div class="fab-anchor">
+  <button mat-fab class="add-fab" (click)="openAdd()" aria-label="Add to the list">
+    <mat-icon>add</mat-icon>
+  </button>
+</div>

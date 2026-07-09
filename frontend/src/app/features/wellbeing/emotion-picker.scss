@@ -65,13 +65,9 @@ header {
   border-radius: 50%;
   background: var(--c);
 }
+// Shape/tint from the global .count-badge; only the placement lives here.
 .badge {
   margin-left: 0.5rem;
-  padding: 0 0.4rem;
-  border-radius: 999px;
-  background: var(--mat-sys-primary);
-  color: var(--mat-sys-on-primary);
-  font: var(--mat-sys-label-small);
 }
 
 .empty {

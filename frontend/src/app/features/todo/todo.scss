@@ -19,12 +19,6 @@
   }
 }
 
-.tappable {
-  cursor: pointer;
-  &:hover {
-    text-decoration: underline;
-  }
-}
 
 .blocked-row {
   opacity: 0.72;

@@ -1,7 +1,3 @@
-.empty {
-  opacity: 0.7;
-}
-
 .row-title {
   display: inline-flex;
   align-items: center;
@@ -9,16 +5,17 @@
 }
 
 // Sticks just ABOVE the fixed bottom nav (not behind it) so "Got N → inventory"
-// stays reachable while scrolling. The FAB is hidden while this bar is shown
-// (see the template) so they don't fight for the corner.
+// stays reachable while scrolling. The add-FAB stays visible mid-shop, so the
+// bar stops short of the bottom-right corner and leaves it to the FAB.
 .bought-actions {
   position: sticky;
   bottom: calc(60px + env(safe-area-inset-bottom));
-  z-index: 6; // above the FAB (5), below the nav (10)
+  z-index: 6; // above the nav's shadow, below the nav (10)
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   padding: 0.75rem 0.5rem;
+  margin-right: calc(56px + 1.5rem); // FAB width + its right padding + a gap
   border-radius: 12px;
   background: var(--mat-sys-surface-container);
 }

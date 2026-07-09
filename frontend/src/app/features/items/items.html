@@ -37,20 +37,31 @@
   @if (count() === 0) {
     <app-list-state [empty]="true" emptyIcon="search_off" [emptyText]="'Nothing matches “' + query() + '”.'" />
   }
-  <mat-action-list>
+  <mat-list>
     @for (it of visible(); track it.id) {
-      <button mat-list-item lines="2" (click)="editItem(it)">
+      <mat-list-item lines="2">
         <app-product-thumb matListItemAvatar [barcode]="it.barcode" [productId]="it.product_id" [hasImage]="it.has_image" />
-        <span matListItemTitle>
+        <span
+          matListItemTitle
+          class="tappable"
+          role="button"
+          tabindex="0"
+          (click)="editItem(it)"
+          (keydown.enter)="editItem(it)"
+          (keydown.space)="editItem(it); $event.preventDefault()"
+        >
           {{ it.name }}@if (it.brand) {<span class="brand"> · {{ it.brand }}</span>}
         </span>
-        <span matListItemLine>{{ meta(it) }}</span>
-        @if (it.expiry; as expiry) {
-          <span matListItemMeta class="expiry" [class]="expiryOf(expiry).cls">{{
-            expiryOf(expiry).label
-          }}</span>
-        }
-      </button>
+        <span matListItemLine>
+          {{ meta(it) }}
+          @if (it.expiry; as expiry) {
+            · <span class="expiry" [class]="expiryOf(expiry).cls">{{ expiryOf(expiry).label }}</span>
+          }
+        </span>
+        <button matListItemMeta mat-icon-button (click)="deleteItem(it.id)" aria-label="Delete">
+          <mat-icon>delete</mat-icon>
+        </button>
+      </mat-list-item>
     }
-  </mat-action-list>
+  </mat-list>
 }

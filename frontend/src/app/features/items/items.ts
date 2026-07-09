@@ -9,9 +9,12 @@ import { MatInputModule } from '@angular/material/input';
 import { MatListModule } from '@angular/material/list';
 
 import { ExpiryInfo, expiryInfo } from '../../expiry';
+import { LifeApi } from '../../life-api';
 import { ProductThumb } from '../../product-thumb';
+import { onlineHint } from '../../shared/api-error';
+import { Feedback } from '../../shared/feedback';
 import { ListState } from '../../shared/list-state';
-import { ItemsStore, LocationsStore } from '../../stores/catalog';
+import { ItemsStore, LocationsStore, locationPath } from '../../stores/catalog';
 import { Item } from '../../models';
 import { ItemSheet, ItemSheetData } from '../inventory/item-sheet';
 
@@ -39,6 +42,8 @@ type SortKey = 'name' | 'expiry';
 })
 export class Items {
   private sheet = inject(MatBottomSheet);
+  private api = inject(LifeApi);
+  private feedback = inject(Feedback);
   private itemsStore = inject(ItemsStore);
   private locationsStore = inject(LocationsStore);
 
@@ -102,18 +107,23 @@ export class Items {
 
   /** Full location path (root → leaf), or '' when unplaced. */
   private pathOf(id: number | null): string {
-    const map = this.byId();
-    const names: string[] = [];
-    const seen = new Set<number>();
-    let cur = id;
-    while (cur != null && !seen.has(cur)) {
-      seen.add(cur);
-      const loc = map.get(cur);
-      if (!loc) break;
-      names.unshift(loc.name);
-      cur = loc.parent_id;
-    }
-    return names.join(' › ');
+    return locationPath(this.byId(), id);
+  }
+
+  /** Delete from the search surface too — same tombstone + Undo as Inventory. */
+  deleteItem(id: number): void {
+    this.api.deleteItem(id).subscribe({
+      next: () => {
+        this.reload();
+        this.feedback.undo('Item deleted', () => {
+          this.api.restoreTrash('item', String(id)).subscribe({
+            next: () => this.reload(),
+            error: () => this.feedback.error('Could not undo the delete'),
+          });
+        });
+      },
+      error: (e: unknown) => this.feedback.error(`Could not delete the item${onlineHint(e)}`),
+    });
   }
 
   /** Last two segments of the location path, or '' when unplaced. */

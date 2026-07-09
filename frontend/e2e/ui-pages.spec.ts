@@ -139,6 +139,9 @@ test('buy — list + bought bar: lays out cleanly @ phone width', async ({ page 
   await page.goto('/shopping');
   await page.getByText('Greek yoghurt', { exact: false }).waitFor();
   await page.getByText('add to inventory', { exact: false }).waitFor();
+  // Mid-shop (an item is checked, so the bought bar is up) the add-FAB must
+  // still be there — capture can't go missing for most of a real shop.
+  await expect(page.getByRole('button', { name: 'Add to the list' })).toBeVisible();
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
 });

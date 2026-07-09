@@ -22,7 +22,16 @@
     @for (it of items(); track it.id) {
       <mat-list-item lines="2">
         <app-product-thumb matListItemAvatar [barcode]="it.barcode" [productId]="it.product_id" [hasImage]="it.has_image" />
-        <span matListItemTitle>{{ it.name }}</span>
+        <span
+          matListItemTitle
+          class="tappable"
+          role="button"
+          tabindex="0"
+          (click)="editItem(it)"
+          (keydown.enter)="editItem(it)"
+          (keydown.space)="editItem(it); $event.preventDefault()"
+          >{{ it.name }}</span
+        >
         <span matListItemLine>
           {{ qty(it) }}
           @if (it.location_id) { · {{ shortLoc(it.location_id) }} }
@@ -30,17 +39,9 @@
             · <span class="expiry" [class]="expiryOf(expiry).cls">{{ expiryOf(expiry).label }}</span>
           }
         </span>
-        <button matListItemMeta mat-icon-button [matMenuTriggerFor]="itemMenu" aria-label="Actions">
-          <mat-icon>more_vert</mat-icon>
+        <button matListItemMeta mat-icon-button (click)="deleteItem(it.id)" aria-label="Delete">
+          <mat-icon>delete</mat-icon>
         </button>
-        <mat-menu #itemMenu="matMenu">
-          <button mat-menu-item (click)="editItem(it)">
-            <mat-icon>edit</mat-icon><span>Edit</span>
-          </button>
-            <button mat-menu-item (click)="deleteItem(it.id)">
-            <mat-icon>delete</mat-icon><span>Delete</span>
-          </button>
-        </mat-menu>
       </mat-list-item>
     }
   </mat-list>

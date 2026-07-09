@@ -3,7 +3,6 @@ import { MatBottomSheet, MatBottomSheetModule } from "@angular/material/bottom-s
 import { MatButtonModule } from "@angular/material/button";
 import { MatIconModule } from "@angular/material/icon";
 import { MatListModule } from "@angular/material/list";
-import { MatMenuModule } from "@angular/material/menu";
 
 import { onlineHint } from "../../shared/api-error";
 import { Feedback } from "../../shared/feedback";
@@ -11,7 +10,7 @@ import { ListState } from "../../shared/list-state";
 import { ExpiryInfo, expiryInfo } from "../../expiry";
 import { LifeApi } from "../../life-api";
 import { ProductThumb } from "../../product-thumb";
-import { ItemsStore, LocationsStore } from "../../stores/catalog";
+import { ItemsStore, LocationsStore, locationPath } from "../../stores/catalog";
 import { Item } from "../../models";
 import { ItemSheet, ItemSheetData } from "./item-sheet";
 import { PlaceSheet, PlaceSheetData } from "./place-sheet";
@@ -25,7 +24,6 @@ import { PlaceSheet, PlaceSheetData } from "./place-sheet";
     MatListModule,
     MatIconModule,
     MatButtonModule,
-    MatMenuModule,
     ProductThumb,
     ListState,
   ],
@@ -117,21 +115,9 @@ export class Inventory {
     this.placesStore.refresh();
   }
 
-  /** Root→leaf breadcrumb for a location id, resolved client-side. */
+  /** Root→leaf breadcrumb for a location id — the shared catalog walk. */
   pathOf(id: number | null): string {
-    if (id == null) return "";
-    const map = this.byId();
-    const names: string[] = [];
-    const seen = new Set<number>();
-    let cur: number | null = id;
-    while (cur != null && !seen.has(cur)) {
-      seen.add(cur);
-      const loc = map.get(cur);
-      if (!loc) break;
-      names.unshift(loc.name);
-      cur = loc.parent_id;
-    }
-    return names.join(" › ");
+    return locationPath(this.byId(), id);
   }
 
   qty(item: Item): string {

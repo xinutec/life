@@ -32,6 +32,7 @@
             tabindex="0"
             (click)="open(a.todo)"
             (keydown.enter)="open(a.todo)"
+            (keydown.space)="open(a.todo); $event.preventDefault()"
           >
             {{ a.todo.title }}
           </span>
@@ -68,7 +69,7 @@
 <div class="shortcuts">
   <a mat-stroked-button routerLink="/shopping">
     <mat-icon>shopping_cart</mat-icon>
-    Buy@if (buyCount() > 0) { <span class="count">{{ buyCount() }}</span> }
+    Buy@if (buyCount() > 0) { <span class="count-badge count">{{ buyCount() }}</span> }
   </a>
   <a mat-stroked-button routerLink="/inventory">
     <mat-icon>kitchen</mat-icon> Inventory

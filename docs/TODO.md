@@ -231,7 +231,7 @@ Below the bar (B), planned as batches K/L/M/N per the proposal:
 6. - [x] **B6: dedupe `src/sync/repo.rs`** — pull/push hand-copied 4× (637
       lines; set-only tombstone rule tested on 1 of 4 copies); factor over a
       per-collection spec, then test the tombstone rule per collection.
-7. - [ ] **B7: row-grammar drift + Buy FAB** — inventory's `more_vert` menu vs
+7. - [x] **B7: row-grammar drift + Buy FAB** — inventory's `more_vert` menu vs
       tap-to-edit+trailing-delete elsewhere; All-items has no delete; recipe
       delete misses `.danger`; the add-FAB disappears mid-shop once one item
       is checked. Unify rows; FAB and bought-bar share the bottom edge.
@@ -240,11 +240,15 @@ At the bar, do alongside (D, detail in the proposal): undo/restore helper
 (D1), `SyncedStore` base for the 3 near-identical stores (D2), specs for
 `todo-detail`/`buyDone`/geometry (D3), harness coverage for the ~half of
 pages uncovered + one dark-scheme golden (D4), Today's hydration false-empty
-(D5 — done with batch K), mechanical consistency nits (D6: Space-key on `role="button"`,
-muted-text token vs opacity, one badge class, shared `pathOf`).
+(D5 — done with batch K), mechanical consistency nits (D6 — done with batch M:
+Space-key on `role="button"`, muted-text token vs opacity, one badge class,
+shared `pathOf`; `.tappable` itself had drifted into three copies and was
+consolidated global too).
 
 Open decision for Pippijn: recipes edit path — add one, or deliberately
-create+delete-only? (B7 proceeds either way.)
+create+delete-only? B7 shipped with recipes create+delete-only (the delete
+got `.danger`); an edit path needs a backend update route + sheet edit mode
+once decided.
 
 ## Open decisions
 

@@ -259,12 +259,41 @@ h3 {
   }
 }
 
-// Keyboard focus for the custom role="button" spans (to-do titles etc.) —
-// Material components bring their own focus treatment; these don't.
-.tappable:focus-visible {
-  outline: 2px solid var(--mat-sys-primary);
-  outline-offset: 2px;
-  border-radius: 4px;
+// The one count-badge grammar: a tiny numeric pill (nav conflict count,
+// emotion-family counts, the Buy shortcut count). Primary tint by default;
+// `.alert` flips to the error tint. Placement margins stay with the host.
+.count-badge {
+  display: inline-block;
+  min-width: 1.25rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--mat-sys-primary);
+  color: var(--mat-sys-on-primary);
+  font: var(--mat-sys-label-small);
+  line-height: 1.25rem;
+  text-align: center;
+
+  &.alert {
+    background: var(--mat-sys-error);
+    color: var(--mat-sys-on-error);
+  }
+}
+
+// The custom role="button" spans (list-row titles etc.): pointer + underline
+// hover as the tap affordance, plus explicit keyboard focus — Material
+// components bring their own treatments; these don't.
+.tappable {
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
 }
 
 // A destructive text button (the Delete actions in edit sheets). M3 themes
