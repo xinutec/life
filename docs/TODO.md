@@ -222,13 +222,13 @@ Below the bar (B), planned as batches K/L/M/N per the proposal:
 3. - [x] **B3: TodoDetail dismiss-flush lacks the dirty guard** — remote edit
       arriving while the sheet is open is clobbered by the stale seed on
       dismiss; `wellbeing-entry`'s `noteDirty` fix applied to its sibling.
-4. - [ ] **B4: user-isolation tests** — core invariant, currently tested only
+4. - [x] **B4: user-isolation tests** — core invariant, currently tested only
       in `conflicts_db.rs`; add two-user tests across sync pull/push, trash
       restore, REST lists.
-5. - [ ] **B5: sync push trusts the client** — `status='banana'` / `score=255`
+5. - [x] **B5: sync push trusts the client** — `status='banana'` / `score=255`
       are stored, then 500 the whole list on read; validate at the push
       boundary, reject with 400 (reject, not clamp).
-6. - [ ] **B6: dedupe `src/sync/repo.rs`** — pull/push hand-copied 4× (637
+6. - [x] **B6: dedupe `src/sync/repo.rs`** — pull/push hand-copied 4× (637
       lines; set-only tombstone rule tested on 1 of 4 copies); factor over a
       per-collection spec, then test the tombstone rule per collection.
 7. - [ ] **B7: row-grammar drift + Buy FAB** — inventory's `more_vert` menu vs
