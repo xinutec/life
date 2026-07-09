@@ -63,18 +63,29 @@ interface Group {
 })
 export class TodoDetail implements OnDestroy {
   private deleting = false;
+  // True once the user has actually typed in the field. Guards the dismiss-time
+  // flush so it never writes back the value the sheet opened with — otherwise
+  // an edit that landed remotely while the sheet was open would be clobbered by
+  // the stale original on close (same guard as wellbeing-entry's noteDirty).
+  private titleDirty = false;
+  private notesDirty = false;
 
   // Dismissing the sheet (backdrop tap / swipe) may not fire the title/notes
   // blur handlers, which is where edits are saved — flush on teardown so an
-  // in-progress edit isn't lost. Skipped when the to-do is being deleted.
+  // in-progress edit isn't lost. Only fields the user actually typed in are
+  // flushed; skipped entirely when the to-do is being deleted.
   ngOnDestroy(): void {
     if (this.deleting) return;
     const t = this.todo();
     if (!t) return;
-    const title = this.title().trim();
-    if (title && title !== t.title) void this.store.patch(this.ulid(), { title });
-    const notes = this.notes().trim() || null;
-    if (notes !== (t.notes ?? null)) void this.store.patch(this.ulid(), { notes });
+    if (this.titleDirty) {
+      const title = this.title().trim();
+      if (title && title !== t.title) void this.store.patch(this.ulid(), { title });
+    }
+    if (this.notesDirty) {
+      const notes = this.notes().trim() || null;
+      if (notes !== (t.notes ?? null)) void this.store.patch(this.ulid(), { notes });
+    }
   }
 
   private ref = inject(MatBottomSheetRef<TodoDetail>);
@@ -157,12 +168,26 @@ export class TodoDetail implements OnDestroy {
     return TODO_TYPES.find((t) => t.value === type) ?? { label: type, icon: 'task_alt' };
   }
 
+  /** Input handlers: record the edit and mark the field dirty so a dismiss
+   *  will flush it (a bare `.set` would not). */
+  onTitleInput(value: string): void {
+    this.titleDirty = true;
+    this.title.set(value);
+  }
+
+  onNotesInput(value: string): void {
+    this.notesDirty = true;
+    this.notes.set(value);
+  }
+
   saveTitle(): void {
+    this.titleDirty = false;
     const t = this.title().trim();
     if (t) void this.store.patch(this.ulid(), { title: t });
   }
 
   saveNotes(): void {
+    this.notesDirty = false;
     void this.store.patch(this.ulid(), { notes: this.notes().trim() || null });
   }
 

@@ -208,18 +208,18 @@ From the three-part whole-codebase quality review (backend, frontend, UI
 design) at commit `2815d45`. Full detail — failure scenarios, file refs, fix +
 test per finding, batching — in `proposals/quality-review-2026-07-08.md`.
 Verdict: A− across all three; the below-bar items are places where the right
-pattern exists in the codebase and one spot didn't get it. **Fixes not
-started — awaiting go.**
+pattern exists in the codebase and one spot didn't get it. Go given
+2026-07-09; batches land in K → L → M → N order.
 
 Below the bar (B), planned as batches K/L/M/N per the proposal:
 
-1. - [ ] **B1: wellbeing `emotions` masking fallback** — corrupt stored JSON
+1. - [x] **B1: wellbeing `emotions` masking fallback** — corrupt stored JSON
       silently pulls as "no emotions" fleet-wide (`src/sync/repo.rs:531`);
       read path must fail loudly like the write path.
-2. - [ ] **B2: House load failure rendered as empty** — `/api/house` error
+2. - [x] **B2: House load failure rendered as empty** — `/api/house` error
       shows "No house layout yet." (`house.ts:48`); route through the shared
       error state.
-3. - [ ] **B3: TodoDetail dismiss-flush lacks the dirty guard** — remote edit
+3. - [x] **B3: TodoDetail dismiss-flush lacks the dirty guard** — remote edit
       arriving while the sheet is open is clobbered by the stale seed on
       dismiss; `wellbeing-entry`'s `noteDirty` fix applied to its sibling.
 4. - [ ] **B4: user-isolation tests** — core invariant, currently tested only
@@ -240,7 +240,7 @@ At the bar, do alongside (D, detail in the proposal): undo/restore helper
 (D1), `SyncedStore` base for the 3 near-identical stores (D2), specs for
 `todo-detail`/`buyDone`/geometry (D3), harness coverage for the ~half of
 pages uncovered + one dark-scheme golden (D4), Today's hydration false-empty
-(D5), mechanical consistency nits (D6: Space-key on `role="button"`,
+(D5 — done with batch K), mechanical consistency nits (D6: Space-key on `role="button"`,
 muted-text token vs opacity, one badge class, shared `pathOf`).
 
 Open decision for Pippijn: recipes edit path — add one, or deliberately

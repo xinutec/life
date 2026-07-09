@@ -8,9 +8,12 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
 
+import { map } from 'rxjs';
+
 import { ExpiryInfo, expiryInfo } from '../../expiry';
 import { Feedback } from '../../shared/feedback';
 import { ItemsStore } from '../../stores/catalog';
+import { ListState } from '../../shared/list-state';
 import { WellbeingCheckin } from '../../shared/wellbeing-checkin';
 import { ShoppingDoc, ShoppingStore } from '../../sync/shopping-store';
 import { TodoDoc, TodoStore } from '../../sync/todo-store';
@@ -41,6 +44,7 @@ const URGENCY_RANK: Record<Urgency, number> = { overdue: 0, today: 1, soon: 2, n
     MatCheckboxModule,
     MatIconModule,
     MatListModule,
+    ListState,
     WellbeingCheckin,
   ],
 })
@@ -57,6 +61,10 @@ export class Today {
   private readonly shoppingItems = toSignal(this.shopping.items$, {
     initialValue: [] as ShoppingDoc[],
   });
+
+  /** RxDB hydration gate: until the to-dos' first emission, "Needs you" shows
+   *  the shared loading state — not a false "Nothing pressing right now." */
+  readonly loaded = toSignal(this.todos.items$.pipe(map(() => true)), { initialValue: false });
 
   constructor() {
     this.itemsStore.refresh();

@@ -1,6 +1,7 @@
 # Proposal: 2026-07-08 quality review — findings & fix plan
 
-Status: findings adjudicated (2026-07-08); **fixes not started — awaiting go.**
+Status: findings adjudicated (2026-07-08); go given 2026-07-09 — batches land
+in K → L → M → N order (progress ticked in `../TODO.md`).
 Checklist tracker: `../TODO.md` §"2026-07-08 review findings". This doc holds
 the detail: what each finding is, why it is below (or at) the bar, the intended
 fix, and the test that keeps it fixed.

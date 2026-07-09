@@ -14,6 +14,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 import { LifeApi } from '../../life-api';
 import { HouseScene, WallOpening } from '../../models';
+import { isNotFound } from '../../shared/api-error';
+import { ListState } from '../../shared/list-state';
 import { bounds, roomPerimeter, segments } from './scene-geometry';
 import type { Pt, WallSeg } from './scene-geometry';
 
@@ -26,9 +28,12 @@ const DEFAULT_FURNITURE = '#9e9e9e';
   selector: 'app-house',
   templateUrl: './house.html',
   styleUrl: './house.scss',
+  imports: [ListState],
 })
 export class House implements AfterViewInit, OnDestroy {
   readonly empty = signal(false);
+  readonly error = signal(false);
+  readonly loading = signal(false);
 
   private api = inject(LifeApi);
   private zone = inject(NgZone);
@@ -43,9 +48,26 @@ export class House implements AfterViewInit, OnDestroy {
 
   ngAfterViewInit(): void {
     this.initThree();
+    this.load();
+  }
+
+  /** Fetch and build the scene. A failed load renders as the shared error+retry
+   *  state — never as "no house layout yet": offline or a 500 must stay
+   *  distinguishable from a genuinely absent scene (which is the 404 case). */
+  load(): void {
+    this.loading.set(true);
+    this.error.set(false);
+    this.empty.set(false);
     this.api.house().subscribe({
-      next: (scene) => this.buildHouse(scene),
-      error: () => this.empty.set(true),
+      next: (scene) => {
+        this.loading.set(false);
+        this.buildHouse(scene);
+      },
+      error: (e) => {
+        this.loading.set(false);
+        if (isNotFound(e)) this.empty.set(true);
+        else this.error.set(true);
+      },
     });
   }
 

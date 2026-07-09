@@ -10,9 +10,12 @@
     <h3><mat-icon>bolt</mat-icon> Needs you</h3>
     <a mat-button routerLink="/todo">All to-dos</a>
   </div>
-  @if (attention().length === 0) {
-    <p class="none">Nothing pressing right now.</p>
-  } @else {
+  <app-list-state
+    [loading]="!loaded()"
+    [empty]="attention().length === 0"
+    emptyText="Nothing pressing right now."
+  />
+  @if (attention().length > 0) {
     <mat-list>
       @for (a of attention(); track a.todo.ulid) {
         <mat-list-item>

@@ -29,12 +29,8 @@
   }
 }
 
-.none {
-  margin: 0.25rem 0;
-  color: var(--mat-sys-on-surface-variant);
-}
-
-// Pills + expiry colours come from the global grammar (styles.scss).
+// Pills + expiry colours come from the global grammar (styles.scss); the
+// loading/empty line is the shared <app-list-state>.
 
 .shortcuts {
   display: flex;

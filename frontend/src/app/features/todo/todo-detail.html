@@ -7,7 +7,7 @@
         <input
           matInput
           [ngModel]="title()"
-          (ngModelChange)="title.set($event)"
+          (ngModelChange)="onTitleInput($event)"
           (blur)="saveTitle()"
           (keyup.enter)="saveTitle()"
         />
@@ -59,7 +59,7 @@
         matInput
         rows="2"
         [ngModel]="notes()"
-        (ngModelChange)="notes.set($event)"
+        (ngModelChange)="onNotesInput($event)"
         (blur)="saveNotes()"
       ></textarea>
     </mat-form-field>

@@ -35,7 +35,7 @@ describe('Today', () => {
     const todos = opts.todos ?? [];
     const api = { items: vi.fn(() => of(opts.items ?? [])) };
     const shopping = { items$: of(opts.shopping ?? []) };
-    const todoStore = { setStatus: vi.fn().mockResolvedValue(undefined) };
+    const todoStore = { items$: of(todos), setStatus: vi.fn().mockResolvedValue(undefined) };
     const graph = {
       todoItems: () => todos,
       statusOf: vi.fn((t: { ulid: string }) => opts.state?.[t.ulid] ?? 'open'),

@@ -1,7 +1,14 @@
 <div class="wrap">
   <div #canvas class="canvas"></div>
 
-  @if (empty()) {
-    <div class="hint">No house layout yet.</div>
-  }
+  <div class="status">
+    <app-list-state
+      [loading]="loading()"
+      [error]="error()"
+      [empty]="empty()"
+      emptyText="No house layout yet."
+      emptyIcon="home"
+      (retry)="load()"
+    />
+  </div>
 </div>

@@ -21,13 +21,10 @@
   }
 }
 
-.hint {
+// The shared loading/error/empty triad, floated over the canvas (which is
+// absolutely positioned and would otherwise paint above in-flow content).
+.status {
   position: absolute;
-  top: 0.75rem;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 0.4rem 0.8rem;
-  border-radius: 8px;
-  background: var(--mat-sys-surface-container-high);
-  opacity: 0.9;
+  inset: 0 0 auto 0;
+  z-index: 1;
 }
