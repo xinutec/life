@@ -238,8 +238,10 @@ Below the bar (B), planned as batches K/L/M/N per the proposal:
 
 At the bar, do alongside (D, detail in the proposal): undo/restore helper
 (D1), `SyncedStore` base for the 3 near-identical stores (D2), specs for
-`todo-detail`/`buyDone`/geometry (D3), harness coverage for the ~half of
-pages uncovered + one dark-scheme golden (D4), Today's hydration false-empty
+`todo-detail`/`buyDone`/geometry (D3 — done with batch N), harness coverage
+for the ~half of pages uncovered + one dark-scheme golden (D4 — done with
+batch N; it caught nothing real except the picker's sticky-footer occlusion,
+scoped like the to-do sheet), Today's hydration false-empty
 (D5 — done with batch K), mechanical consistency nits (D6 — done with batch M:
 Space-key on `role="button"`, muted-text token vs opacity, one badge class,
 shared `pathOf`; `.tappable` itself had drifted into three copies and was

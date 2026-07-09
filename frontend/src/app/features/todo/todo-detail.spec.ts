@@ -29,17 +29,23 @@ function makeDoc(overrides: Partial<TodoDoc> = {}): TodoDoc {
   };
 }
 
-function setup(doc = makeDoc()) {
+interface SetupOpts {
+  state?: 'open' | 'ready' | 'blocked' | 'waiting' | 'done';
+  outgoing?: unknown[];
+  incoming?: unknown[];
+}
+
+function setup(doc = makeDoc(), opts: SetupOpts = {}) {
   // A writable signal standing in for the live RxDB-backed list, so tests can
   // simulate a remote edit landing while the sheet is open.
   const items = signal<TodoDoc[]>([doc]);
   const graph = {
     todoItems: items,
     refreshCatalogs: vi.fn(),
-    statusOf: () => 'open' as const,
+    statusOf: () => opts.state ?? ('open' as const),
     blockers: () => [],
-    outgoing: () => [],
-    incoming: () => [],
+    outgoing: () => opts.outgoing ?? [],
+    incoming: () => opts.incoming ?? [],
     search: () => [],
     add: vi.fn(),
     removeLink: vi.fn(),
@@ -52,13 +58,14 @@ function setup(doc = makeDoc()) {
     revive: vi.fn(() => Promise.resolve()),
     reSync: vi.fn(),
   };
+  const feedback = { undo: vi.fn() };
   TestBed.configureTestingModule({
     imports: [TodoDetail],
     providers: [
       { provide: TodoGraph, useValue: graph },
       { provide: TodoStore, useValue: store },
       { provide: LifeApi, useValue: { restoreTrash: vi.fn() } },
-      { provide: Feedback, useValue: { undo: vi.fn() } },
+      { provide: Feedback, useValue: feedback },
       { provide: MatBottomSheetRef, useValue: { dismiss: vi.fn() } },
       { provide: MatBottomSheet, useValue: { open: vi.fn() } },
       { provide: MAT_BOTTOM_SHEET_DATA, useValue: { ulid: doc.ulid } },
@@ -66,7 +73,7 @@ function setup(doc = makeDoc()) {
   });
   const fixture = TestBed.createComponent(TodoDetail);
   fixture.detectChanges();
-  return { fixture, cmp: fixture.componentInstance, store, items };
+  return { fixture, cmp: fixture.componentInstance, store, items, graph, feedback };
 }
 
 describe('TodoDetail dismiss-flush', () => {
@@ -101,5 +108,55 @@ describe('TodoDetail dismiss-flush', () => {
     store.patch.mockClear();
     fixture.destroy();
     expect(store.patch).not.toHaveBeenCalled();
+  });
+});
+
+describe('TodoDetail groups', () => {
+  const edge = (linkKind: string, ref: string, label: string) => ({
+    ulid: `01EDGE${ref.padEnd(20, '0')}`,
+    linkKind,
+    target: { kind: 'todo', ref, label },
+    source: { kind: 'todo', ref, label },
+  });
+
+  it('resolves connections into headed groups, hiding empty ones', () => {
+    const { cmp } = setup(makeDoc(), {
+      outgoing: [edge('depends_on', 'DEP1', 'Buy paint'), edge('subtask', 'SUB1', 'Sand the door')],
+      incoming: [edge('related', 'REL1', 'Decorate hallway')],
+    });
+    expect(cmp.groups().map((g) => g.heading)).toEqual(['Depends on', 'Subtasks', 'Related']);
+    const related = cmp.groups().find((g) => g.heading === 'Related')!;
+    expect(related.rows[0].target.label).toBe('Decorate hallway');
+  });
+
+  it('shows nothing when unconnected', () => {
+    expect(setup().cmp.groups()).toEqual([]);
+  });
+});
+
+describe('TodoDetail guards', () => {
+  it('refuses to complete a blocked to-do', () => {
+    const { cmp, store } = setup(makeDoc(), { state: 'blocked' });
+    cmp.toggleDone();
+    expect(store.setStatus).not.toHaveBeenCalled();
+  });
+
+  it('always allows un-completing a done one', () => {
+    const { cmp, store } = setup(makeDoc({ status: 'done' }), { state: 'blocked' });
+    cmp.toggleDone();
+    expect(store.setStatus).toHaveBeenCalledWith(makeDoc().ulid, 'open');
+  });
+});
+
+describe('TodoDetail delete undo', () => {
+  it('defers link removal to the Undo window close, so undo keeps connections', () => {
+    const { cmp, graph, feedback } = setup();
+    cmp.remove();
+    // Links are still intact while the Undo window is open…
+    expect(graph.removeLinksForTodo).not.toHaveBeenCalled();
+    // …and are removed only when the window closes un-undone.
+    const onClose = feedback.undo.mock.calls[0][2] as () => void;
+    onClose();
+    expect(graph.removeLinksForTodo).toHaveBeenCalledExactlyOnceWith(makeDoc().ulid);
   });
 });

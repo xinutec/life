@@ -83,6 +83,26 @@ test('to-do edit sheet — golden @ phone width', async ({ page }) => {
   await expect(sheet).toHaveScreenshot('todo-edit-sheet.png');
 });
 
+// The same sheet under forced-dark: every color-mix tint over theme tokens has
+// a dark-side rendering nothing else verifies. One representative baseline —
+// not a full dark suite — catches a token drifting illegible in dark mode.
+test.describe('dark scheme', () => {
+  test.use({ colorScheme: 'dark' });
+
+  test('to-do edit sheet — dark golden @ phone width', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/todo');
+    await page.getByText('Call the GP', { exact: false }).click();
+
+    const sheet = page.locator('.mat-bottom-sheet-container');
+    await sheet.waitFor();
+    await page.getByRole('button', { name: 'Delete to-do' }).waitFor();
+    await page.evaluate(() => document.fonts.ready);
+
+    await expect(sheet).toHaveScreenshot('todo-edit-sheet-dark.png');
+  });
+});
+
 /**
  * A real finger swipe up the open sheet. The sheet is capped at 80vh and its
  * form is taller than that, so "Delete to-do" sits below the fold at rest;

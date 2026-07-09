@@ -61,17 +61,51 @@ const at = (daysAgo: number, h: number): string => {
   return d.toISOString();
 };
 const WELLBEING = [
-  { ulid: '01WELLA0000000000000000001', id: 1, recordedAt: at(0, 9), score: 2,
-    note: 'rough morning', rev: 1, _deleted: false },
-  { ulid: '01WELLB0000000000000000002', id: 2, recordedAt: at(0, 14), score: 4, note: null, rev: 2, _deleted: false },
-  { ulid: '01WELLC0000000000000000003', id: 3, recordedAt: at(1, 20), score: 3, note: null, rev: 3, _deleted: false },
+  { ulid: '01WELLA0000000000000000001', id: 1, recordedAt: at(0, 9), score: 2, energy: 2,
+    emotions: ['Anxious', 'Withdrawn'], note: 'rough morning', rev: 1, _deleted: false },
+  { ulid: '01WELLB0000000000000000002', id: 2, recordedAt: at(0, 14), score: 4, energy: null,
+    emotions: [], note: null, rev: 2, _deleted: false },
+  { ulid: '01WELLC0000000000000000003', id: 3, recordedAt: at(1, 20), score: 3, energy: null,
+    emotions: [], note: null, rev: 3, _deleted: false },
 ];
 
 const ITEMS = [
-  { id: 1, product_id: null, name: 'Milk (semi-skimmed)', brand: null, category: 'food',
-    quantity: 1, unit: 'bottle', expiry: iso(-1), location_id: null, barcode: null, has_image: false },
+  { id: 1, product_id: null, name: 'Milk (semi-skimmed)', brand: 'Waitrose Essential', category: 'food',
+    quantity: 1, unit: 'bottle', expiry: iso(-1), location_id: 2, barcode: null, has_image: false },
   { id: 2, product_id: null, name: 'Chicken thighs', brand: null, category: 'food',
-    quantity: 500, unit: 'g', expiry: iso(1), location_id: null, barcode: null, has_image: false },
+    quantity: 500, unit: 'g', expiry: iso(1), location_id: 2, barcode: null, has_image: false },
+];
+
+const LOCATIONS = [
+  { id: 1, kind: 'room', name: 'Kitchen', parent_id: null, sort_order: 0, position: null },
+  { id: 2, kind: 'fridge', name: 'Fridge', parent_id: 1, sort_order: 0, position: null },
+  { id: 3, kind: 'cupboard', name: 'Spice cupboard', parent_id: 1, sort_order: 1, position: null },
+];
+
+const RECIPES = [
+  { id: 1, name: 'Chicken curry', instructions: null, servings: 4, ingredients: [
+    { name: 'Chicken thighs', quantity: 500, unit: 'g' },
+    { name: 'Coconut milk', quantity: 1, unit: 'tin' },
+    { name: 'Curry paste', quantity: 2, unit: 'tbsp' },
+  ] },
+  { id: 2, name: 'Beans on toast', instructions: null, servings: 1, ingredients: [
+    { name: 'Kidney beans', quantity: 1, unit: 'tin' },
+    { name: 'Bread', quantity: 2, unit: 'slices' },
+  ] },
+];
+
+const TRASH = [
+  { kind: 'shopping', ref: '01TRASHSHOP000000000000001', name: 'Oat milk (the barista one)',
+    deleted_at: now.getTime() - 3_600_000 },
+  { kind: 'recipe', ref: '3', name: 'Lentil soup', deleted_at: now.getTime() - 86_400_000 },
+];
+
+const CONFLICTS = [
+  { id: 1, kind: 'todo', ulid: '01TODOOVERDUE0000000000001', field: 'title',
+    label: 'Call the GP about the referral letter',
+    mine: JSON.stringify('Call the GP about the referral letter'),
+    theirs: JSON.stringify('Phone the GP re: the referral'),
+    created_at: now.getTime() - 60_000 },
 ];
 
 /** Mock every backend call: pulls return the seed docs, pushes accept all.
@@ -82,6 +116,11 @@ async function mockApi(page: Page): Promise<void> {
   );
   await page.route('**/api/me', (r) => r.fulfill({ json: ME }));
   await page.route('**/api/items*', (r) => r.fulfill({ json: ITEMS }));
+  await page.route('**/api/locations*', (r) => r.fulfill({ json: LOCATIONS }));
+  await page.route('**/api/recipes', (r) => r.fulfill({ json: RECIPES }));
+  await page.route('**/api/cookable*', (r) => r.fulfill({ json: [RECIPES[1]] }));
+  await page.route('**/api/trash*', (r) => r.fulfill({ json: TRASH }));
+  await page.route('**/api/conflicts*', (r) => r.fulfill({ json: CONFLICTS }));
   const sync = (docs: unknown[]) => (r: Parameters<Parameters<Page['route']>[1]>[0]) => {
     if (r.request().method() === 'POST') return r.fulfill({ json: [] });
     const since = Number(new URL(r.request().url()).searchParams.get('since') ?? '0');
@@ -129,7 +168,8 @@ test('wellbeing — chart + timeline: lays out cleanly @ phone width', async ({ 
   await mockApi(page);
   await page.goto('/wellbeing');
   await page.getByText('How do you feel right now?').waitFor();
-  await page.getByText('Last 14 days').waitFor();
+  await page.getByText('Mood · last 14 days').waitFor();
+  await page.getByText('Energy · last 14 days').waitFor();
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
 });
@@ -151,6 +191,75 @@ test('settings — about card: lays out cleanly @ phone width', async ({ page },
   await page.goto('/settings');
   await page.getByRole('button', { name: 'Check for updates' }).waitFor();
   await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo);
+});
+
+test('inventory — items + places: lays out cleanly @ phone width', async ({ page }, testInfo) => {
+  await mockApi(page);
+  await page.goto('/inventory');
+  await page.getByText('Milk (semi-skimmed)').waitFor();
+  await page.getByText('Kitchen › Fridge', { exact: true }).waitFor();
+  await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo);
+});
+
+test('all items — filter + brand + expiry rows: lays out cleanly @ phone width', async ({ page }, testInfo) => {
+  await mockApi(page);
+  await page.goto('/items');
+  await page.getByText('Chicken thighs').waitFor();
+  await page.getByText('Waitrose Essential', { exact: false }).waitFor();
+  await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo);
+});
+
+test('recipes — ingredient-chip cards: lays out cleanly @ phone width', async ({ page }, testInfo) => {
+  await mockApi(page);
+  await page.goto('/recipes');
+  await page.getByText('Chicken curry').waitFor();
+  await page.getByText('cookable with what', { exact: false }).waitFor();
+  await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo);
+});
+
+test('trash — restorable rows: lays out cleanly @ phone width', async ({ page }, testInfo) => {
+  await mockApi(page);
+  await page.goto('/trash');
+  await page.getByText('Oat milk', { exact: false }).waitFor();
+  await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo);
+});
+
+test('conflicts — kept/theirs cards: lays out cleanly @ phone width', async ({ page }, testInfo) => {
+  await mockApi(page);
+  await page.goto('/conflicts');
+  await page.getByText('Kept (this device)').waitFor();
+  await page.getByRole('button', { name: 'Use theirs' }).waitFor();
+  await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo);
+});
+
+// The emotion picker is the layout class that breaks silently: a full-screen
+// dialog with a sticky header (search + Done) over an accordion of chip grids.
+test('emotion picker — accordion + sticky header: lays out cleanly @ phone width', async ({ page }, testInfo) => {
+  await mockApi(page);
+  await page.goto('/wellbeing');
+  // Open the seeded morning check-in (the score-2 entry — it has emotions),
+  // then the picker via the sheet's Add-emotions button.
+  await page.locator('.entry.score-2').click();
+  await page.locator('button.add-emotions').click();
+  const picker = page.locator('.picker');
+  await picker.waitFor();
+  await page.getByRole('button', { name: 'Done' }).waitFor();
+  // Open one accordion family so the chip grid renders.
+  await page.getByText('Happy', { exact: true }).click();
+  await page.getByText('Curious', { exact: true }).waitFor();
+  // The selected-set footer is opaque and sticky; vocabulary text scrolling
+  // behind it is occluded, not colliding — the same false-positive the to-do
+  // sheet test scopes around. Measure each pinned region and the body apart.
+  await expectNoTextOverlaps(page, testInfo, '.picker .top');
+  await expectNoTextOverlaps(page, testInfo, '.picker .body');
+  await expectNoTextOverlaps(page, testInfo, '.picker .selected');
+  await expectNoHorizontalOverflow(page, testInfo, '.picker');
   await expectNoHorizontalOverflow(page, testInfo);
 });
 
