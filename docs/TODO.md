@@ -115,10 +115,11 @@ add new ones under the right section. Architecture/rationale lives in
       string ("cumin" vs "ground cumin" vs "cumin seeds" don't match today). This
       is the weakest joint in the data model; it unlocks reliable have-it? /
       missing-ingredient logic and the one-tap "add missing to Buy" above.
-- [ ] **Frontend: shared list-state component** — the loading / empty / error
-      triad is copy-pasted across items/inventory/recipes; extract one
-      `<app-list-state>` (or a structural directive) and de-dup the templates.
-      (Now increment A of `docs/proposals/wellbeing-timing-ux.md`.)
+- [x] **Frontend: shared list-state component** — SHIPPED as increment A of
+      `docs/proposals/wellbeing-timing-ux.md` (`<app-list-state>` used on all
+      list screens). Remaining stragglers that bypass it (House error-as-empty,
+      Today's hydration false-empty) are tracked as B2/D5 in the 2026-07-08
+      review findings below.
 - [ ] **Parsed net weight/volume → "how much is left at home"** — today the
       product's pack size is stored only as OFF's free-text `quantity_label`
       (e.g. `"950g"`), which is the right call *for now* (no parsing, no calc).
@@ -185,7 +186,8 @@ deletion/trash (B), field-level sync merge + conflict log (C).
       near-identical ~50-line blocks in the sync stores; auth-guard branches
       and RxDB migration strategies untested.
 15. - [x] **Row-action consistency + tap targets** — three delete affordances
-      across screens; dense to-do rows with sub-48px targets.
+      across screens; dense to-do rows with sub-48px targets. *(2026-07-08
+      review found the grammar drifted again — re-filed as B7 below.)*
 16. - [~] **DB resource limits + NetworkPolicy** — limits + DB-ingress
       NetworkPolicy + securityContext SHIPPED 2026-07-02; the app-ingress
       policy is HELD (needs a kubelet-probe exemption on k3s first).
@@ -199,6 +201,50 @@ deletion/trash (B), field-level sync merge + conflict log (C).
       "scenes/house.json" string in end-user copy; items sort/filter;
       `allowBackup=false` (needs the dev-lint canonical manifest updated too);
       `setWebContentsDebuggingEnabled` for adb debugging of the wrapper.
+
+## 2026-07-08 review findings (priority-ordered)
+
+From the three-part whole-codebase quality review (backend, frontend, UI
+design) at commit `2815d45`. Full detail — failure scenarios, file refs, fix +
+test per finding, batching — in `proposals/quality-review-2026-07-08.md`.
+Verdict: A− across all three; the below-bar items are places where the right
+pattern exists in the codebase and one spot didn't get it. **Fixes not
+started — awaiting go.**
+
+Below the bar (B), planned as batches K/L/M/N per the proposal:
+
+1. - [ ] **B1: wellbeing `emotions` masking fallback** — corrupt stored JSON
+      silently pulls as "no emotions" fleet-wide (`src/sync/repo.rs:531`);
+      read path must fail loudly like the write path.
+2. - [ ] **B2: House load failure rendered as empty** — `/api/house` error
+      shows "No house layout yet." (`house.ts:48`); route through the shared
+      error state.
+3. - [ ] **B3: TodoDetail dismiss-flush lacks the dirty guard** — remote edit
+      arriving while the sheet is open is clobbered by the stale seed on
+      dismiss; `wellbeing-entry`'s `noteDirty` fix applied to its sibling.
+4. - [ ] **B4: user-isolation tests** — core invariant, currently tested only
+      in `conflicts_db.rs`; add two-user tests across sync pull/push, trash
+      restore, REST lists.
+5. - [ ] **B5: sync push trusts the client** — `status='banana'` / `score=255`
+      are stored, then 500 the whole list on read; validate at the push
+      boundary, reject with 400 (reject, not clamp).
+6. - [ ] **B6: dedupe `src/sync/repo.rs`** — pull/push hand-copied 4× (637
+      lines; set-only tombstone rule tested on 1 of 4 copies); factor over a
+      per-collection spec, then test the tombstone rule per collection.
+7. - [ ] **B7: row-grammar drift + Buy FAB** — inventory's `more_vert` menu vs
+      tap-to-edit+trailing-delete elsewhere; All-items has no delete; recipe
+      delete misses `.danger`; the add-FAB disappears mid-shop once one item
+      is checked. Unify rows; FAB and bought-bar share the bottom edge.
+
+At the bar, do alongside (D, detail in the proposal): undo/restore helper
+(D1), `SyncedStore` base for the 3 near-identical stores (D2), specs for
+`todo-detail`/`buyDone`/geometry (D3), harness coverage for the ~half of
+pages uncovered + one dark-scheme golden (D4), Today's hydration false-empty
+(D5), mechanical consistency nits (D6: Space-key on `role="button"`,
+muted-text token vs opacity, one badge class, shared `pathOf`).
+
+Open decision for Pippijn: recipes edit path — add one, or deliberately
+create+delete-only? (B7 proceeds either way.)
 
 ## Open decisions
 
