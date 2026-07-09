@@ -30,6 +30,18 @@ pub async fn create(
     ))
 }
 
+pub async fn update(
+    State(app): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<u64>,
+    Json(body): Json<NewRecipe>,
+) -> Result<Json<Recipe>, AppError> {
+    repo::update_recipe(&app.pool, &user.user_id, id, body)
+        .await?
+        .map(Json)
+        .ok_or(AppError::NotFound)
+}
+
 pub async fn delete(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,

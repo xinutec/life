@@ -54,6 +54,10 @@
         <mat-icon>shopping_cart</mat-icon>
         Shopping list
       </button>
+      <button mat-button (click)="editRecipe(recipe)">
+        <mat-icon>edit</mat-icon>
+        Edit
+      </button>
       <button mat-button class="danger" (click)="deleteRecipe(recipe.id)">
         <mat-icon>delete</mat-icon>
         Delete

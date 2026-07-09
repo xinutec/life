@@ -1,5 +1,5 @@
 <div class="sheet-form">
-  <app-sheet-header title="New recipe" (closed)="close()" />
+  <app-sheet-header [title]="editing ? 'Edit recipe' : 'New recipe'" (closed)="close()" />
 
   <div class="pair">
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
@@ -71,7 +71,7 @@
   <div class="actions">
     <button mat-button (click)="addIngredientRow()"><mat-icon>add</mat-icon> Ingredient</button>
     <button mat-flat-button (click)="save()" [disabled]="!form().name.trim() || saving()">
-      Create recipe
+      {{ editing ? 'Save changes' : 'Create recipe' }}
     </button>
   </div>
 </div>

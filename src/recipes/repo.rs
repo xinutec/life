@@ -143,6 +143,67 @@ pub async fn create_recipe(pool: &MySqlPool, user_id: &str, new: NewRecipe) -> R
     })
 }
 
+/// Replace a recipe's fields and its whole ingredient list atomically. Returns
+/// the updated recipe, or None if no live recipe with that id belongs to the
+/// user (unknown / deleted / someone else's). Ingredients are delete-all +
+/// re-insert (the same shape `create_recipe` writes), so the list the client
+/// sends is exactly what's stored — no stale rows survive an edit.
+pub async fn update_recipe(
+    pool: &MySqlPool,
+    user_id: &str,
+    id: u64,
+    new: NewRecipe,
+) -> Result<Option<Recipe>> {
+    let mut tx = pool.begin().await?;
+    // Lock + confirm the row exists for this user (an UPDATE's rows_affected is
+    // 0 for an unchanged row too, so it can't stand in for existence).
+    let exists: Option<(u64,)> = sqlx::query_as(
+        "SELECT id FROM recipes WHERE id = ? AND user_id = ? AND deleted_at IS NULL FOR UPDATE",
+    )
+    .bind(id)
+    .bind(user_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if exists.is_none() {
+        return Ok(None);
+    }
+
+    sqlx::query("UPDATE recipes SET name = ?, instructions = ?, servings = ? WHERE id = ?")
+        .bind(&new.name)
+        .bind(&new.instructions)
+        .bind(new.servings)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM recipe_ingredients WHERE recipe_id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    for (i, ing) in new.ingredients.iter().enumerate() {
+        sqlx::query(
+            "INSERT INTO recipe_ingredients (recipe_id, name, quantity, unit, sort_order) \
+             VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(id)
+        .bind(&ing.name)
+        .bind(ing.quantity)
+        .bind(&ing.unit)
+        .bind(i as i32)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+
+    Ok(Some(Recipe {
+        id,
+        name: new.name,
+        instructions: new.instructions,
+        servings: new.servings,
+        ingredients: new.ingredients,
+    }))
+}
+
 /// Delete a recipe — a tombstone, restorable from the trash; its ingredient
 /// rows stay attached. Returns whether a row was tombstoned.
 pub async fn delete_recipe(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {

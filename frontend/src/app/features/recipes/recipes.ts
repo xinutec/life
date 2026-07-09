@@ -10,8 +10,8 @@ import { Feedback } from '../../shared/feedback';
 import { ListState } from '../../shared/list-state';
 import { LifeApi } from '../../life-api';
 import { CookableStore, RecipesStore } from '../../stores/catalog';
-import { RecipeIngredient } from '../../models';
-import { RecipeSheet } from './recipe-sheet';
+import { Recipe, RecipeIngredient } from '../../models';
+import { RecipeSheet, RecipeSheetData } from './recipe-sheet';
 
 @Component({
   selector: 'app-recipes',
@@ -54,8 +54,17 @@ export class Recipes {
 
   /** The FAB's action: the new-recipe sheet; reload after a save. */
   addRecipe(): void {
+    this.openSheet();
+  }
+
+  /** Edit an existing recipe in the same sheet, seeded from it. */
+  editRecipe(recipe: Recipe): void {
+    this.openSheet({ recipe });
+  }
+
+  private openSheet(data?: RecipeSheetData): void {
     this.sheet
-      .open<RecipeSheet, undefined, boolean>(RecipeSheet)
+      .open<RecipeSheet, RecipeSheetData | undefined, boolean>(RecipeSheet, { data })
       .afterDismissed()
       .subscribe((saved) => {
         if (saved) this.reload();

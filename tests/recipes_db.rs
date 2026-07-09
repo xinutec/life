@@ -81,6 +81,54 @@ async fn recipe_create_and_shopping_list_against_real_db() {
     assert_eq!(list.len(), 1);
     assert_eq!(list[0].name, "salt");
 
+    // Edit: rename, drop cumin, add rice — the stored list is exactly the new
+    // one (delete-all + re-insert, no stale rows survive).
+    let updated = repo::update_recipe(
+        &pool,
+        user,
+        recipe.id,
+        NewRecipe {
+            name: "Kitchari".into(),
+            instructions: Some("Simmer longer.".into()),
+            servings: Some(3),
+            ingredients: vec![ing("rice", Some(1.0), Some("cup")), ing("salt", None, None)],
+        },
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(updated.name, "Kitchari");
+    let refetched = repo::get_recipe(&pool, user, recipe.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(refetched.name, "Kitchari");
+    assert_eq!(refetched.servings, Some(3));
+    let names: Vec<&str> = refetched
+        .ingredients
+        .iter()
+        .map(|i| i.name.as_str())
+        .collect();
+    assert_eq!(names, vec!["rice", "salt"]); // cumin gone, order preserved
+
+    // Editing an unknown / not-owned recipe is a no-op None, not a phantom write.
+    assert!(
+        repo::update_recipe(
+            &pool,
+            "someone-else",
+            recipe.id,
+            NewRecipe {
+                name: "Hijack".into(),
+                instructions: None,
+                servings: None,
+                ingredients: vec![],
+            }
+        )
+        .await
+        .unwrap()
+        .is_none()
+    );
+
     // Delete the recipe (ingredients cascade).
     assert!(repo::delete_recipe(&pool, user, recipe.id).await.unwrap());
     assert!(
@@ -90,4 +138,22 @@ async fn recipe_create_and_shopping_list_against_real_db() {
             .is_none()
     );
     assert!(!repo::delete_recipe(&pool, user, recipe.id).await.unwrap());
+
+    // ...and editing a deleted recipe is likewise None.
+    assert!(
+        repo::update_recipe(
+            &pool,
+            user,
+            recipe.id,
+            NewRecipe {
+                name: "Zombie".into(),
+                instructions: None,
+                servings: None,
+                ingredients: vec![],
+            }
+        )
+        .await
+        .unwrap()
+        .is_none()
+    );
 }

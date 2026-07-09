@@ -150,6 +150,9 @@ export class LifeApi {
   createRecipe(body: Partial<Recipe>): Observable<Recipe> {
     return this.http.post<Recipe>('/api/recipes', body);
   }
+  updateRecipe(id: number, body: Partial<Recipe>): Observable<Recipe> {
+    return this.http.put<Recipe>(`/api/recipes/${id}`, body);
+  }
   deleteRecipe(id: number): Observable<unknown> {
     return this.http.delete(`/api/recipes/${id}`);
   }
