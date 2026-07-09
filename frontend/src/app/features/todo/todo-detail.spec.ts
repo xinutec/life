@@ -55,8 +55,7 @@ function setup(doc = makeDoc(), opts: SetupOpts = {}) {
     patch: vi.fn(() => Promise.resolve()),
     setStatus: vi.fn(() => Promise.resolve()),
     remove: vi.fn(() => Promise.resolve()),
-    revive: vi.fn(() => Promise.resolve()),
-    reSync: vi.fn(),
+    undoDelete: vi.fn(() => Promise.resolve()),
   };
   const feedback = { undo: vi.fn() };
   TestBed.configureTestingModule({

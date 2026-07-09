@@ -30,7 +30,7 @@ describe('WellbeingEntry (edit sheet)', () => {
       items$,
       patch: vi.fn().mockResolvedValue(undefined),
       remove: vi.fn().mockResolvedValue(undefined),
-      revive: vi.fn().mockResolvedValue(undefined),
+      undoDelete: vi.fn().mockResolvedValue(undefined),
     };
     const ref = { dismiss: vi.fn() };
     const feedback = {
@@ -137,12 +137,12 @@ describe('WellbeingEntry (edit sheet)', () => {
     expect(store.patch).not.toHaveBeenCalled(); // the deleting guard held
   });
 
-  it('Undo revives the deleted doc', () => {
+  it('Undo restores the deleted doc (local revive + server trash restore)', () => {
     const d = doc({ score: 2, note: 'rough' });
     const { c, store, feedback } = setup(d);
     c.remove();
     const [, undoFn] = feedback.undo.mock.calls[0];
     undoFn();
-    expect(store.revive).toHaveBeenCalledWith(d);
+    expect(store.undoDelete).toHaveBeenCalledWith(d);
   });
 });

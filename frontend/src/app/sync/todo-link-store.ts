@@ -1,13 +1,9 @@
-import { Injectable, inject, signal } from '@angular/core';
-import { Observable, from } from 'rxjs';
-import { map, shareReplay, switchMap } from 'rxjs/operators';
+import { Injectable } from '@angular/core';
 import { ulid } from 'ulid';
-import { type RxCollection, type RxConflictHandler, type RxJsonSchema } from 'rxdb';
+import { type RxConflictHandler, type RxJsonSchema } from 'rxdb';
 
 import { LinkKind, TargetKind } from '../models';
-import { LifeDb } from './life-db';
-import { startHttpReplication } from './replication';
-import { SyncStatus } from './sync-status';
+import { SyncedCollectionConfig, SyncedStore } from './synced-store';
 
 /** A to-do connection stored locally. `from` is the source to-do's ulid; the
  *  target is a soft ref (`targetRef` interpreted per `targetKind`). Mirrors the
@@ -21,8 +17,6 @@ export interface TodoLinkDoc {
   targetRef: string;
   rev: number;
 }
-
-type LinkCollection = RxCollection<TodoLinkDoc>;
 
 const schema: RxJsonSchema<TodoLinkDoc> = {
   version: 0,
@@ -54,22 +48,25 @@ const conflictHandler: RxConflictHandler<TodoLinkDoc> = {
     Promise.resolve(realMasterState._deleted ? realMasterState : newDocumentState),
 };
 
-/** Local-first store for the to-do connection edges, synced with
- *  /api/sync/todo-link. Reads are reactive + offline; writes are local. */
+/** Local-first store for the to-do connection edges — the machinery lives in
+ *  {@link SyncedStore}. Insert/delete-only (no content edits, no trash-restore
+ *  undo), so it declares only its collection, custom conflict handler, and the
+ *  add-with-dedup / bulk-remove operations. */
 @Injectable({ providedIn: 'root' })
-export class TodoLinkStore {
-  readonly syncError = signal<string | null>(null);
+export class TodoLinkStore extends SyncedStore<TodoLinkDoc> {
+  /** Live, non-deleted connection edges (natural order). */
+  readonly links$ = this.liveQuery();
 
-  private lifeDb = inject(LifeDb);
-  private syncStatus = inject(SyncStatus);
-  private readonly collection = this.init();
-
-  /** Live, non-deleted connection edges. */
-  readonly links$: Observable<TodoLinkDoc[]> = from(this.collection).pipe(
-    switchMap((col) => col.find().$),
-    map((docs) => docs.map((d) => d.toJSON() as TodoLinkDoc)),
-    shareReplay({ bufferSize: 1, refCount: false }),
-  );
+  protected config(): SyncedCollectionConfig<TodoLinkDoc> {
+    return {
+      name: 'todo_link',
+      schema,
+      conflictHandler,
+      identifier: 'todo-link-http-sync',
+      path: '/api/sync/todo-link',
+      label: 'todo-link sync',
+    };
+  }
 
   async add(input: {
     from: string;
@@ -92,12 +89,6 @@ export class TodoLinkStore {
     await col.insert({ ulid: ulid(), id: null, rev: 0, ...input });
   }
 
-  async remove(key: string): Promise<void> {
-    const col = await this.collection;
-    const doc = await col.findOne(key).exec();
-    await doc?.remove();
-  }
-
   /** Remove every edge touching a to-do (from OR target) — used when a to-do is
    *  deleted so it leaves no dangling connections. */
   async removeForTodo(todoUlid: string): Promise<void> {
@@ -109,22 +100,5 @@ export class TodoLinkStore {
         },
       })
       .remove();
-  }
-
-  private async init(): Promise<LinkCollection> {
-    const col = await this.lifeDb.collection('todo_link', schema, conflictHandler);
-    this.startReplication(col);
-    return col;
-  }
-
-  private startReplication(collection: LinkCollection): void {
-    startHttpReplication<TodoLinkDoc>({
-      collection,
-      identifier: 'todo-link-http-sync',
-      path: '/api/sync/todo-link',
-      syncError: this.syncError,
-      syncStatus: this.syncStatus,
-      label: 'todo-link sync',
-    });
   }
 }

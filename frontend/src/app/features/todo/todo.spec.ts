@@ -34,8 +34,7 @@ describe('Todo', () => {
       patch: vi.fn(),
       setStatus: vi.fn(),
       remove: vi.fn(),
-      revive: vi.fn(),
-      reSync: vi.fn(),
+      undoDelete: vi.fn(),
     };
     const graph = {
       statusOf: vi.fn(() => 'open'),
@@ -107,7 +106,7 @@ describe('Todo', () => {
     const { fixture, store, graph, action$, dismissed$ } = setup();
     fixture.componentInstance.remove(doc({ ulid: 'a', id: 5 }));
     action$.next(); // user hit Undo
-    expect(store.revive).toHaveBeenCalled();
+    expect(store.undoDelete).toHaveBeenCalled();
     dismissed$.next(); // snackbar then closes — links must STILL not be removed
     expect(graph.removeLinksForTodo).not.toHaveBeenCalled();
   });

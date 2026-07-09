@@ -11,7 +11,6 @@ import { map } from 'rxjs';
 
 import { Feedback } from '../../shared/feedback';
 import { ListState } from '../../shared/list-state';
-import { LifeApi } from '../../life-api';
 import { TodoPriority, TodoType } from '../../models';
 import { TodoDoc, TodoStore } from '../../sync/todo-store';
 import { TodoAddSheet } from './todo-add-sheet';
@@ -37,7 +36,6 @@ import { PRIORITIES, TODO_TYPES, prioRank } from './todo-meta';
 export class Todo {
   private store = inject(TodoStore);
   private sheet = inject(MatBottomSheet);
-  private api = inject(LifeApi);
   private feedback = inject(Feedback);
   readonly graph = inject(TodoGraph);
 
@@ -161,21 +159,12 @@ export class Todo {
   remove(it: TodoDoc): void {
     // Remove the to-do now (optimistic), but DEFER removing its connections
     // until the Undo window closes — so an undo brings the to-do back with its
-    // links intact. Undo: revive locally (works offline) + server-side restore
-    // for synced rows (a re-push can't clear a tombstone; a 404 just means the
-    // delete push hadn't arrived, and revive covers it).
+    // links intact. The store's two-layer undo (local revive + server-side
+    // trash restore for synced rows) handles the resurrection.
     void this.store.remove(it.ulid);
     this.feedback.undo(
       `Deleted “${it.title}”`,
-      () => {
-        void this.store.revive(it);
-        if (it.id != null) {
-          this.api.restoreTrash('todo', it.ulid).subscribe({
-            next: () => this.store.reSync(),
-            error: () => {},
-          });
-        }
-      },
+      () => void this.store.undoDelete(it),
       () => this.graph.removeLinksForTodo(it.ulid),
     );
   }

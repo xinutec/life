@@ -1,14 +1,10 @@
-import { Injectable, inject, signal } from '@angular/core';
-import { Observable, from } from 'rxjs';
-import { map, shareReplay, switchMap } from 'rxjs/operators';
+import { Injectable, inject } from '@angular/core';
 import { ulid } from 'ulid';
-import { type RxCollection, type RxJsonSchema } from 'rxdb';
+import { type RxJsonSchema } from 'rxdb';
 
 import { TodoPriority, TodoStatus, TodoType } from '../models';
 import { ConflictReporter, FieldSpec, makeConflictHandler } from './conflict-merge';
-import { LifeDb } from './life-db';
-import { startHttpReplication } from './replication';
-import { SyncStatus } from './sync-status';
+import { SyncedCollectionConfig, SyncedStore } from './synced-store';
 
 /** A to-do row as stored locally. `ulid` is the stable identity; `rev` is the
  *  last server revision seen (set by sync, not local edits); `id` is the server
@@ -28,8 +24,6 @@ export interface TodoDoc {
   due: string | null;
   rev: number;
 }
-
-type TodoCollection = RxCollection<TodoDoc>;
 
 const schema: RxJsonSchema<TodoDoc> = {
   // Bump the version + add a migration on ANY schema change, else existing local
@@ -77,26 +71,41 @@ const TODO_FIELDS: FieldSpec<TodoContent> = {
  *  derived from the spec so the two can never drift apart. */
 export const TODO_MERGE_FIELDS = Object.keys(TODO_FIELDS) as (keyof TodoContent)[];
 
-/** Local-first store for the to-do list: the on-device RxDB collection is the
- *  source of truth; replication reconciles with /api/sync/todo in the background.
- *  Reads are reactive and offline; writes are local + optimistic. */
+/** Local-first store for the to-do list — the machinery lives in
+ *  {@link SyncedStore}; this declares only the collection and its content. */
 @Injectable({ providedIn: 'root' })
-export class TodoStore {
-  /** null = ok; a string = a sync problem to surface (e.g. login required). */
-  readonly syncError = signal<string | null>(null);
-
-  private lifeDb = inject(LifeDb);
+export class TodoStore extends SyncedStore<TodoDoc> {
   private reporter = inject(ConflictReporter);
-  private syncStatus = inject(SyncStatus);
-  private readonly collection = this.init();
-  private replication?: ReturnType<typeof startHttpReplication<TodoDoc>>;
 
   /** Live, sorted, non-deleted to-dos: open before done, then by title. */
-  readonly items$: Observable<TodoDoc[]> = from(this.collection).pipe(
-    switchMap((col) => col.find({ sort: [{ status: 'desc' }, { title: 'asc' }] }).$),
-    map((docs) => docs.map((d) => d.toJSON() as TodoDoc)),
-    shareReplay({ bufferSize: 1, refCount: false }),
-  );
+  readonly items$ = this.liveQuery([{ status: 'desc' }, { title: 'asc' }]);
+
+  protected config(): SyncedCollectionConfig<TodoDoc> {
+    return {
+      name: 'todo',
+      schema,
+      conflictHandler: makeConflictHandler<TodoDoc>({
+        fields: TODO_FIELDS,
+        onConflicts: (kept, conflicts) =>
+          this.reporter.report('todo', kept.ulid, kept.title, conflicts),
+      }),
+      // '-v2': replication-state reset after the isEqual push-loss bug — see the
+      // comment in wellbeing-store.ts.
+      identifier: 'todo-http-sync-v2',
+      path: '/api/sync/todo',
+      label: 'todo sync',
+      trashKind: 'todo',
+      migrationStrategies: {
+        1: (doc: Record<string, unknown>) => doc, // enum widened; existing docs already valid
+        2: (doc: Record<string, unknown>) => ({ ...doc, priority: doc['priority'] ?? null }), // add priority field
+        3: (doc: Record<string, unknown>) => ({
+          ...doc,
+          notBefore: doc['notBefore'] ?? null,
+          due: doc['due'] ?? null,
+        }), // add timing fields
+      },
+    };
+  }
 
   async add(input: {
     title: string;
@@ -121,71 +130,7 @@ export class TodoStore {
     });
   }
 
-  async patch(key: string, fields: Partial<TodoContent>): Promise<void> {
-    const doc = await this.find(key);
-    await doc?.incrementalPatch(fields);
-  }
-
   async setStatus(key: string, status: TodoStatus): Promise<void> {
     await this.patch(key, { status });
-  }
-
-  async remove(key: string): Promise<void> {
-    const doc = await this.find(key);
-    await doc?.remove();
-  }
-
-  /** Bring a just-removed doc back locally under the same ulid (insert after
-   *  remove revives the RxDB tombstone). Works offline — the Undo snackbar's
-   *  first layer; the server-side trash restore is the authoritative second. */
-  async revive(doc: TodoDoc): Promise<void> {
-    const col = await this.collection;
-    await col.insert({ ...doc });
-  }
-
-  /** Ask replication to pull now — e.g. right after a server-side trash restore,
-   *  so the resurrected row appears without waiting for the next natural sync. */
-  reSync(): void {
-    this.replication?.reSync();
-  }
-
-  private async find(key: string) {
-    const col = await this.collection;
-    return col.findOne(key).exec();
-  }
-
-  private async init(): Promise<TodoCollection> {
-    // Field-level 3-way merge: concurrent edits to different fields both
-    // survive; same-field collisions keep this device's value and land in the
-    // server-side conflict log for review.
-    const handler = makeConflictHandler<TodoDoc>({
-      fields: TODO_FIELDS,
-      onConflicts: (kept, conflicts) =>
-        this.reporter.report('todo', kept.ulid, kept.title, conflicts),
-    });
-    const col = await this.lifeDb.collection('todo', schema, handler, {
-      1: (doc: Record<string, unknown>) => doc, // enum widened; existing docs already valid
-      2: (doc: Record<string, unknown>) => ({ ...doc, priority: doc['priority'] ?? null }), // add priority field
-      3: (doc: Record<string, unknown>) => ({
-        ...doc,
-        notBefore: doc['notBefore'] ?? null,
-        due: doc['due'] ?? null,
-      }), // add timing fields
-    });
-    this.startReplication(col);
-    return col;
-  }
-
-  private startReplication(collection: TodoCollection): void {
-    this.replication = startHttpReplication<TodoDoc>({
-      collection,
-      // '-v2': replication-state reset after the isEqual push-loss bug — see
-      // the comment in wellbeing-store.ts.
-      identifier: 'todo-http-sync-v2',
-      path: '/api/sync/todo',
-      syncError: this.syncError,
-      syncStatus: this.syncStatus,
-      label: 'todo sync',
-    });
   }
 }

@@ -67,26 +67,15 @@ export class Shopping {
     this.undoableRemove([it]);
   }
 
-  /** Offer Undo for removed rows. Two layers: revive locally right away (works
-   *  offline), and — for rows the server has seen — also restore server-side,
-   *  the authoritative undelete (a plain re-push can never clear a server
-   *  tombstone). A restore 404 just means our delete push hadn't arrived yet;
-   *  the revived local doc then pushes cleanly, so it's safe to ignore. */
+  /** Offer Undo for removed rows. The store's two-layer undo (revive locally +
+   *  server-side trash restore for synced rows) does the work per doc. */
   private undoableRemove(docs: ShoppingDoc[]): void {
     const what =
       docs.length === 1
         ? `Removed “${docs[0].name}”`
         : `Removed ${docs.length} items`;
     this.feedback.undo(what, () => {
-      for (const doc of docs) {
-        void this.store.revive(doc);
-        if (doc.id != null) {
-          this.api.restoreTrash("shopping", doc.ulid).subscribe({
-            next: () => this.store.reSync(),
-            error: () => {}, // 404 = delete push never arrived; the revive covers it
-          });
-        }
-      }
+      for (const doc of docs) void this.store.undoDelete(doc);
     });
   }
 

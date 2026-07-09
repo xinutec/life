@@ -1,13 +1,9 @@
-import { Injectable, inject, signal } from '@angular/core';
-import { Observable, from } from 'rxjs';
-import { map, shareReplay, switchMap } from 'rxjs/operators';
+import { Injectable, inject } from '@angular/core';
 import { ulid } from 'ulid';
-import { type RxCollection, type RxJsonSchema } from 'rxdb';
+import { type RxJsonSchema } from 'rxdb';
 
 import { ConflictReporter, FieldSpec, makeConflictHandler } from './conflict-merge';
-import { LifeDb } from './life-db';
-import { startHttpReplication } from './replication';
-import { SyncStatus } from './sync-status';
+import { SyncedCollectionConfig, SyncedStore } from './synced-store';
 
 /** A wellbeing check-in as stored locally. `recordedAt` is an ISO-8601 UTC
  *  instant (the moment the feeling was — may be backdated); `score` is 1..5.
@@ -26,8 +22,6 @@ export interface WellbeingDoc {
   note: string | null;
   rev: number;
 }
-
-type WellbeingCollection = RxCollection<WellbeingDoc>;
 
 const schema: RxJsonSchema<WellbeingDoc> = {
   // Bump the version + migrate on ANY schema change, else existing local DBs hit
@@ -89,26 +83,36 @@ const WELLBEING_FIELDS: FieldSpec<WellbeingContent> = {
  *  derived from the spec so the two can never drift apart. */
 export const WELLBEING_MERGE_FIELDS = Object.keys(WELLBEING_FIELDS) as (keyof WellbeingContent)[];
 
-/** Local-first store for wellbeing check-ins: the on-device RxDB collection is
- *  the source of truth; replication reconciles with /api/sync/wellbeing in the
- *  background. Reads are reactive and offline; writes are local + optimistic. */
+/** Local-first store for wellbeing check-ins — the machinery lives in
+ *  {@link SyncedStore}; this declares only the collection and its content. */
 @Injectable({ providedIn: 'root' })
-export class WellbeingStore {
-  /** null = ok; a string = a sync problem to surface. */
-  readonly syncError = signal<string | null>(null);
-
-  private lifeDb = inject(LifeDb);
+export class WellbeingStore extends SyncedStore<WellbeingDoc> {
   private reporter = inject(ConflictReporter);
-  private syncStatus = inject(SyncStatus);
-  private readonly collection = this.init();
-  private replication?: ReturnType<typeof startHttpReplication<WellbeingDoc>>;
 
   /** Live, non-deleted check-ins, newest first. */
-  readonly items$: Observable<WellbeingDoc[]> = from(this.collection).pipe(
-    switchMap((col) => col.find({ sort: [{ recordedAt: 'desc' }] }).$),
-    map((docs) => docs.map((d) => d.toJSON() as WellbeingDoc)),
-    shareReplay({ bufferSize: 1, refCount: false }),
-  );
+  readonly items$ = this.liveQuery([{ recordedAt: 'desc' }]);
+
+  protected config(): SyncedCollectionConfig<WellbeingDoc> {
+    return {
+      name: 'wellbeing',
+      schema,
+      conflictHandler: makeConflictHandler<WellbeingDoc>({
+        fields: WELLBEING_FIELDS,
+        onConflicts: (kept, conflicts) =>
+          this.reporter.report('wellbeing', kept.ulid, `Check-in (${kept.score}/5)`, conflicts),
+      }),
+      // '-v2': replication-state reset (2026-07-03). The isEqual push-loss bug
+      // (conflict-merge.ts) advanced the push checkpoint past field edits
+      // without sending them; a fresh identifier makes RxDB re-examine every
+      // doc on next start so stranded edits finally push. Local state wins —
+      // downstream defers to upstream for forks without meta (rxdb#7804).
+      identifier: 'wellbeing-http-sync-v2',
+      path: '/api/sync/wellbeing',
+      label: 'wellbeing sync',
+      trashKind: 'wellbeing',
+      migrationStrategies,
+    };
+  }
 
   /** Insert a check-in; returns its minted ulid (so a caller can offer Undo). */
   async add(input: { recordedAt: string; score: number; note: string | null }): Promise<string> {
@@ -125,59 +129,5 @@ export class WellbeingStore {
       rev: 0,
     });
     return key;
-  }
-
-  async patch(key: string, fields: Partial<WellbeingContent>): Promise<void> {
-    const doc = await this.find(key);
-    await doc?.incrementalPatch(fields);
-  }
-
-  async remove(key: string): Promise<void> {
-    const doc = await this.find(key);
-    await doc?.remove();
-  }
-
-  /** Bring a just-removed doc back locally under the same ulid (the Undo
-   *  snackbar's first layer; server-side trash restore is the second). */
-  async revive(doc: WellbeingDoc): Promise<void> {
-    const col = await this.collection;
-    await col.insert({ ...doc });
-  }
-
-  /** Pull now — e.g. right after a server-side trash restore. */
-  reSync(): void {
-    this.replication?.reSync();
-  }
-
-  private async find(key: string) {
-    const col = await this.collection;
-    return col.findOne(key).exec();
-  }
-
-  private async init(): Promise<WellbeingCollection> {
-    const handler = makeConflictHandler<WellbeingDoc>({
-      fields: WELLBEING_FIELDS,
-      onConflicts: (kept, conflicts) =>
-        this.reporter.report('wellbeing', kept.ulid, `Check-in (${kept.score}/5)`, conflicts),
-    });
-    const col = await this.lifeDb.collection('wellbeing', schema, handler, migrationStrategies);
-    this.startReplication(col);
-    return col;
-  }
-
-  private startReplication(collection: WellbeingCollection): void {
-    this.replication = startHttpReplication<WellbeingDoc>({
-      collection,
-      // '-v2': replication-state reset (2026-07-03). The isEqual push-loss bug
-      // (conflict-merge.ts) advanced the push checkpoint past field edits
-      // without sending them; a fresh identifier makes RxDB re-examine every
-      // doc on next start so stranded edits finally push. Local state wins —
-      // downstream defers to upstream for forks without meta (rxdb#7804).
-      identifier: 'wellbeing-http-sync-v2',
-      path: '/api/sync/wellbeing',
-      syncError: this.syncError,
-      syncStatus: this.syncStatus,
-      label: 'wellbeing sync',
-    });
   }
 }

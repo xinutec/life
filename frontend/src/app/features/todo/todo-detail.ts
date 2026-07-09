@@ -14,7 +14,6 @@ import { MatInputModule } from '@angular/material/input';
 import { MatListModule } from '@angular/material/list';
 
 import { Feedback } from '../../shared/feedback';
-import { LifeApi } from '../../life-api';
 import { LinkKind, TodoPriority, TodoType } from '../../models';
 import { TodoStore } from '../../sync/todo-store';
 import { LinkTarget, TodoGraph } from './todo-graph';
@@ -92,7 +91,6 @@ export class TodoDetail implements OnDestroy {
   private data = inject<{ ulid: string }>(MAT_BOTTOM_SHEET_DATA);
   private store = inject(TodoStore);
   private sheet = inject(MatBottomSheet);
-  private api = inject(LifeApi);
   private feedback = inject(Feedback);
   readonly graph = inject(TodoGraph);
 
@@ -271,20 +269,13 @@ export class TodoDetail implements OnDestroy {
     void this.store.remove(key);
     this.ref.dismiss();
     if (!doc) return;
-    // Undo mirrors the list view: revive locally + authoritative server restore
-    // for synced rows. Link removal is deferred to the Undo window's close so an
-    // undo brings the to-do back with its connections intact.
+    // Undo mirrors the list view: the store's two-layer undo (local revive +
+    // server-side trash restore for synced rows). Link removal is deferred to
+    // the Undo window's close so an undo brings the to-do back with its
+    // connections intact.
     this.feedback.undo(
       `Deleted “${doc.title}”`,
-      () => {
-        void this.store.revive(doc);
-        if (doc.id != null) {
-          this.api.restoreTrash('todo', doc.ulid).subscribe({
-            next: () => this.store.reSync(),
-            error: () => {},
-          });
-        }
-      },
+      () => void this.store.undoDelete(doc),
       () => this.graph.removeLinksForTodo(key),
     );
   }

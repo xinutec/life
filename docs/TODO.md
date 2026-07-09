@@ -237,8 +237,12 @@ Below the bar (B), planned as batches K/L/M/N per the proposal:
       is checked. Unify rows; FAB and bought-bar share the bottom edge.
 
 At the bar, do alongside (D, detail in the proposal): undo/restore helper
-(D1), `SyncedStore` base for the 3 near-identical stores (D2), specs for
-`todo-detail`/`buyDone`/geometry (D3 — done with batch N), harness coverage
+(D1 — done: the two-layer undo is now `SyncedStore.undoDelete`, and folding
+wellbeing in fixed a latent bug where undoing a *synced* check-in delete
+couldn't survive the server's set-only tombstone), `SyncedStore` base for the
+near-identical stores (D2 — done: all four collections, incl. todo-link, now
+extend it; the protocol/patch/remove/undo/replication spine is single-sourced),
+specs for `todo-detail`/`buyDone`/geometry (D3 — done with batch N), harness coverage
 for the ~half of pages uncovered + one dark-scheme golden (D4 — done with
 batch N; it caught nothing real except the picker's sticky-footer occlusion,
 scoped like the to-do sheet), Today's hydration false-empty

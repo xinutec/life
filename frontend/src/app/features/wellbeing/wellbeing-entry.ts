@@ -126,7 +126,9 @@ export class WellbeingEntry implements OnDestroy {
     this.deleting = true;
     void this.store.remove(this.ulid);
     this.ref.dismiss();
-    if (e) this.feedback.undo('Check-in deleted', () => void this.store.revive(e));
+    // Two-layer undo: local revive + server-side trash restore for synced rows.
+    // A plain local revive can't survive the server's set-only tombstone.
+    if (e) this.feedback.undo('Check-in deleted', () => void this.store.undoDelete(e));
   }
 
   close(): void {
