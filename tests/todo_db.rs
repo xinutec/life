@@ -40,6 +40,7 @@ async fn todo_crud_and_sync_against_real_db() {
             notes: None,
             not_before: None,
             due: None,
+            shared: false,
         },
     )
     .await
@@ -54,6 +55,7 @@ async fn todo_crud_and_sync_against_real_db() {
             notes: Some("re-book cleaning".into()),
             not_before: None,
             due: Some(date(2026, 7, 10)),
+            shared: true,
         },
     )
     .await
@@ -68,6 +70,9 @@ async fn todo_crud_and_sync_against_real_db() {
     let dentist = all.iter().find(|t| t.title == "Call dentist").unwrap();
     assert_eq!(dentist.priority, Some(TodoPriority::High));
     assert_eq!(dentist.due, Some(date(2026, 7, 10)));
+    // `shared` round-trips: private by default (milk), opt-in (dentist).
+    assert!(!milk.shared);
+    assert!(dentist.shared);
 
     // Update: mark done, set a priority, change notes, add timing.
     let done = repo::update(
@@ -82,6 +87,7 @@ async fn todo_crud_and_sync_against_real_db() {
             notes: Some("got oat milk".into()),
             not_before: Some(date(2026, 7, 5)),
             due: Some(date(2026, 7, 20)),
+            shared: true,
         },
     )
     .await
@@ -92,6 +98,7 @@ async fn todo_crud_and_sync_against_real_db() {
     assert_eq!(done.notes.as_deref(), Some("got oat milk"));
     assert_eq!(done.not_before, Some(date(2026, 7, 5)));
     assert_eq!(done.due, Some(date(2026, 7, 20)));
+    assert!(done.shared, "update flips shared on");
 
     // Soft delete hides it from reads.
     assert!(repo::delete(&pool, user, milk.id).await.unwrap());
@@ -126,6 +133,7 @@ async fn todo_crud_and_sync_against_real_db() {
             notes: None,
             not_before: None,
             due: Some(date(2026, 8, 1)),
+            shared: false,
             deleted: false,
             rev: 0,
         },

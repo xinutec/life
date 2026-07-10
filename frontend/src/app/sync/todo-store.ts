@@ -22,14 +22,17 @@ export interface TodoDoc {
   notBefore: string | null;
   /** Deadline (YYYY-MM-DD): drives urgency ordering. */
   due: string | null;
+  /** On the case-file site (mirrors a case-file checkbox) vs private/app-only.
+   *  Default private — publishing to the case file is a deliberate act. */
+  shared: boolean;
   rev: number;
 }
 
 const schema: RxJsonSchema<TodoDoc> = {
   // Bump the version + add a migration on ANY schema change, else existing local
   // DBs hit a hash mismatch. v1: `type` enum widened. v2: `priority` added.
-  // v3: `notBefore` + `due` timing added.
-  version: 3,
+  // v3: `notBefore` + `due` timing added. v4: `shared` (case-file flag) added.
+  version: 4,
   primaryKey: 'ulid',
   type: 'object',
   properties: {
@@ -46,6 +49,7 @@ const schema: RxJsonSchema<TodoDoc> = {
     notes: { type: ['string', 'null'] },
     notBefore: { type: ['string', 'null'], maxLength: 10 },
     due: { type: ['string', 'null'], maxLength: 10 },
+    shared: { type: 'boolean' },
     rev: { type: 'number' },
   },
   required: ['ulid', 'title', 'type', 'status', 'rev'],
@@ -65,6 +69,7 @@ const TODO_FIELDS: FieldSpec<TodoContent> = {
   notes: 'value',
   notBefore: 'value',
   due: 'value',
+  shared: 'value',
 };
 
 /** The field-name allowlist the Conflicts screen may patch on "use other",
@@ -103,6 +108,7 @@ export class TodoStore extends SyncedStore<TodoDoc> {
           notBefore: doc['notBefore'] ?? null,
           due: doc['due'] ?? null,
         }), // add timing fields
+        4: (doc: Record<string, unknown>) => ({ ...doc, shared: doc['shared'] ?? false }), // add case-file flag (private default)
       },
     };
   }
@@ -126,6 +132,7 @@ export class TodoStore extends SyncedStore<TodoDoc> {
       notes: input.notes,
       notBefore: input.notBefore ?? null,
       due: input.due ?? null,
+      shared: false, // private by default — publishing to the case file is explicit
       rev: 0,
     });
   }

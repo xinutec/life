@@ -12,6 +12,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatListModule } from '@angular/material/list';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 
 import { Feedback } from '../../shared/feedback';
 import { LinkKind, TodoPriority, TodoType } from '../../models';
@@ -58,6 +59,7 @@ interface Group {
     MatIconModule,
     MatInputModule,
     MatListModule,
+    MatSlideToggleModule,
   ],
 })
 export class TodoDetail implements OnDestroy {
@@ -195,6 +197,11 @@ export class TodoDetail implements OnDestroy {
   setType(type: TodoType | undefined): void {
     if (type == null) return;
     void this.store.patch(this.ulid(), { type });
+  }
+
+  /** Publish this to-do to the case-file site, or keep it private (default). */
+  setShared(shared: boolean): void {
+    void this.store.patch(this.ulid(), { shared });
   }
 
   setPriority(priority: TodoPriority | null | undefined): void {

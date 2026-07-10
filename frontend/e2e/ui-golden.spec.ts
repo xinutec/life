@@ -40,6 +40,7 @@ const TODO = {
   notes: 'ask for the clinic line — they only pick up mornings',
   notBefore: null,
   due: '2026-06-30',
+  shared: false,
   rev: 1,
   _deleted: false,
 };

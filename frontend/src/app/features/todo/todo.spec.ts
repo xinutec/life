@@ -20,6 +20,7 @@ const doc = (over: Partial<TodoDoc>): TodoDoc => ({
   notes: null,
   notBefore: null,
   due: null,
+  shared: false,
   rev: 0,
   ...over,
 });

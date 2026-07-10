@@ -354,6 +354,7 @@ struct TodoDocRow {
     notes: Option<String>,
     not_before: Option<NaiveDate>,
     due: Option<NaiveDate>,
+    shared: bool,
     deleted: i64,
     rev: u64,
 }
@@ -373,6 +374,7 @@ impl SyncSpec for Todo {
         "notes",
         "not_before",
         "due",
+        "shared",
     ];
 
     fn row_rev(row: &TodoDocRow) -> u64 {
@@ -390,6 +392,7 @@ impl SyncSpec for Todo {
             notes: r.notes,
             not_before: r.not_before,
             due: r.due,
+            shared: r.shared,
             deleted: r.deleted != 0,
             rev: r.rev,
         })
@@ -427,6 +430,7 @@ impl SyncSpec for Todo {
             .bind(&doc.notes)
             .bind(doc.not_before)
             .bind(doc.due)
+            .bind(doc.shared)
     }
 }
 

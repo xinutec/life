@@ -129,6 +129,9 @@ pub struct Todo {
     pub not_before: Option<NaiveDate>,
     /// Deadline (drives urgency ordering). `None` = no deadline.
     pub due: Option<NaiveDate>,
+    /// Belongs on the case-file site (mirrors a case-file checkbox), vs private
+    /// and app-only. Default private; publishing is an explicit act.
+    pub shared: bool,
 }
 
 /// Request body for creating a to-do. New to-dos start `open`.
@@ -145,6 +148,9 @@ pub struct NewTodo {
     pub not_before: Option<NaiveDate>,
     #[serde(default)]
     pub due: Option<NaiveDate>,
+    /// Private unless the caller opts in — the safe default for a case file.
+    #[serde(default)]
+    pub shared: bool,
 }
 
 /// Full update (edits, the type, the priority, the timing, and open/done).
@@ -162,6 +168,8 @@ pub struct UpdateTodo {
     pub not_before: Option<NaiveDate>,
     #[serde(default)]
     pub due: Option<NaiveDate>,
+    #[serde(default)]
+    pub shared: bool,
 }
 
 /// How a to-do connects to its target. Directional: the edge runs *from* the

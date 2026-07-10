@@ -51,6 +51,9 @@ pub struct TodoDoc {
     pub not_before: Option<NaiveDate>,
     #[serde(default)]
     pub due: Option<NaiveDate>,
+    /// On the case-file site vs private/app-only. Default private.
+    #[serde(default)]
+    pub shared: bool,
     #[serde(rename = "_deleted", default)]
     pub deleted: bool,
     #[serde(default)]

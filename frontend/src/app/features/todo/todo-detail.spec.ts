@@ -24,6 +24,7 @@ function makeDoc(overrides: Partial<TodoDoc> = {}): TodoDoc {
     notes: 'original notes',
     notBefore: null,
     due: null,
+    shared: false,
     rev: 1,
     ...overrides,
   };

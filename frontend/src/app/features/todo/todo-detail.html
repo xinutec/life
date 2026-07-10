@@ -64,6 +64,13 @@
       ></textarea>
     </mat-form-field>
 
+    <div class="share-row">
+      <mat-slide-toggle [ngModel]="td.shared" (ngModelChange)="setShared($event)">
+        Share to case-file site
+      </mat-slide-toggle>
+      <span class="share-hint">{{ td.shared ? 'On the case file' : 'Private to this app' }}</span>
+    </div>
+
     <div class="timing">
       <h4>Timing</h4>
       <div class="timing-row">

@@ -23,6 +23,7 @@ struct Row {
     notes: Option<String>,
     not_before: Option<NaiveDate>,
     due: Option<NaiveDate>,
+    shared: bool,
 }
 
 impl TryFrom<Row> for Todo {
@@ -44,6 +45,7 @@ impl TryFrom<Row> for Todo {
             notes: r.notes,
             not_before: r.not_before,
             due: r.due,
+            shared: r.shared,
         })
     }
 }
@@ -51,7 +53,7 @@ impl TryFrom<Row> for Todo {
 /// To-dos: open first, then by title. Tombstoned rows are hidden.
 pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<Todo>> {
     let rows: Vec<Row> = sqlx::query_as(
-        "SELECT id, title, todo_type, status, priority, notes, not_before, due FROM todos \
+        "SELECT id, title, todo_type, status, priority, notes, not_before, due, shared FROM todos \
          WHERE user_id = ? AND deleted_at IS NULL ORDER BY status DESC, title",
     )
     .bind(user_id)
@@ -62,7 +64,7 @@ pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<Todo>> {
 
 pub async fn get(pool: &MySqlPool, user_id: &str, id: u64) -> Result<Option<Todo>> {
     let row: Option<Row> = sqlx::query_as(
-        "SELECT id, title, todo_type, status, priority, notes, not_before, due FROM todos \
+        "SELECT id, title, todo_type, status, priority, notes, not_before, due, shared FROM todos \
          WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
     )
     .bind(id)
@@ -78,8 +80,8 @@ pub async fn create(pool: &MySqlPool, user_id: &str, new: NewTodo) -> Result<Tod
     let rev = next_rev(&mut tx).await?;
     let res = sqlx::query(
         "INSERT INTO todos (user_id, ulid, title, todo_type, status, priority, notes, \
-         not_before, due, rev, created_at, updated_at) \
-         VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, NOW(), NOW())",
+         not_before, due, shared, rev, created_at, updated_at) \
+         VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, NOW(), NOW())",
     )
     .bind(user_id)
     .bind(&ulid)
@@ -89,6 +91,7 @@ pub async fn create(pool: &MySqlPool, user_id: &str, new: NewTodo) -> Result<Tod
     .bind(&new.notes)
     .bind(new.not_before)
     .bind(new.due)
+    .bind(new.shared)
     .bind(rev)
     .execute(&mut *tx)
     .await?;
@@ -103,6 +106,7 @@ pub async fn create(pool: &MySqlPool, user_id: &str, new: NewTodo) -> Result<Tod
         notes: new.notes,
         not_before: new.not_before,
         due: new.due,
+        shared: new.shared,
     })
 }
 
@@ -116,7 +120,7 @@ pub async fn update(
     let rev = next_rev(&mut tx).await?;
     let res = sqlx::query(
         "UPDATE todos SET title = ?, todo_type = ?, status = ?, priority = ?, notes = ?, \
-         not_before = ?, due = ?, rev = ?, updated_at = NOW() \
+         not_before = ?, due = ?, shared = ?, rev = ?, updated_at = NOW() \
          WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
     )
     .bind(&upd.title)
@@ -126,6 +130,7 @@ pub async fn update(
     .bind(&upd.notes)
     .bind(upd.not_before)
     .bind(upd.due)
+    .bind(upd.shared)
     .bind(rev)
     .bind(id)
     .bind(user_id)

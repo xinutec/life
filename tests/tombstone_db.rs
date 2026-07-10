@@ -24,6 +24,7 @@ fn todo_doc(ulid: &str, rev: u64, deleted: bool) -> TodoDoc {
         notes: None,
         not_before: None,
         due: None,
+        shared: false,
         deleted,
         rev,
     }

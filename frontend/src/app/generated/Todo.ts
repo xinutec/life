@@ -15,4 +15,9 @@ notBefore: string | null,
 /**
  * Deadline (drives urgency ordering). `None` = no deadline.
  */
-due: string | null, };
+due: string | null, 
+/**
+ * Belongs on the case-file site (mirrors a case-file checkbox), vs private
+ * and app-only. Default private; publishing is an explicit act.
+ */
+shared: boolean, };

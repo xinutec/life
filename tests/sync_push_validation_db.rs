@@ -19,6 +19,7 @@ fn todo(ulid: &str, status: &str, todo_type: &str, priority: Option<&str>) -> To
         notes: None,
         not_before: None,
         due: None,
+        shared: false,
         deleted: false,
         rev: 0,
     }

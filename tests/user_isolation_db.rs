@@ -42,6 +42,7 @@ fn todo_doc(ulid: &str, title: &str) -> TodoDoc {
         notes: None,
         not_before: None,
         due: None,
+        shared: false,
         deleted: false,
         rev: 0,
     }

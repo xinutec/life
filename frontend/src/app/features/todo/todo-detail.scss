@@ -136,3 +136,18 @@
   text-align: center;
   color: var(--mat-sys-on-surface-variant);
 }
+
+// The "share to case-file site" toggle: a row of its own between notes and
+// timing, with a quiet hint of what the current state means.
+.share-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0.25rem 0;
+
+  .share-hint {
+    font: var(--mat-sys-label-small);
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
