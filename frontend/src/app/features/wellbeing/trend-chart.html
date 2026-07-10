@@ -16,6 +16,9 @@
         [attr.y1]="chart().h / 2"
         [attr.y2]="chart().h / 2"
       />
+      @if (chart().dots.length > 1) {
+        <path class="line" [attr.d]="linePath()" />
+      }
       @for (dot of chart().dots; track $index) {
         <circle class="dot score-{{ dot.level }}" [attr.cx]="dot.cx" [attr.cy]="dot.cy" r="3.5" />
       }

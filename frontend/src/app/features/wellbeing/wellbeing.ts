@@ -1,7 +1,8 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatBottomSheet, MatBottomSheetModule } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
 import { map } from 'rxjs';
 
@@ -17,7 +18,10 @@ interface Day {
   entries: WellbeingDoc[];
 }
 
-const CHART = { w: 300, h: 96, padX: 6, padTop: 8, padBottom: 8, days: 14 };
+const CHART = { w: 300, h: 96, padX: 6, padTop: 8, padBottom: 8 };
+
+/** The selectable trend windows, in days. */
+export type TrendWindow = 1 | 7 | 14;
 
 /** Local calendar day key (YYYY-MM-DD) for grouping. */
 function dayKey(d: Date): string {
@@ -32,6 +36,7 @@ function dayKey(d: Date): string {
   styleUrl: './wellbeing.scss',
   imports: [
     MatButtonModule,
+    MatButtonToggleModule,
     MatIconModule,
     MatBottomSheetModule,
     ListState,
@@ -45,6 +50,25 @@ export class Wellbeing {
 
   readonly items = toSignal(this.store.items$, { initialValue: [] as WellbeingDoc[] });
   readonly loaded = toSignal(this.store.items$.pipe(map(() => true)), { initialValue: false });
+
+  /** Trend window (days). The charts recompute when this changes. */
+  readonly window = signal<TrendWindow>(14);
+  readonly windows: readonly { value: TrendWindow; label: string }[] = [
+    { value: 1, label: '24h' },
+    { value: 7, label: '7d' },
+    { value: 14, label: '14d' },
+  ];
+
+  /** Any check-ins at all — gates the window toggle so it never vanishes just
+   *  because the *selected* window happens to be empty (which would strand the
+   *  user with no way back to a wider one). */
+  readonly hasAny = computed(() => this.items().length > 0);
+
+  /** Human phrase for the current window, for captions/labels. */
+  readonly windowLabel = computed(() => {
+    const d = this.window();
+    return d === 1 ? 'last 24 hours' : `last ${d} days`;
+  });
 
   /** Entries grouped by local day, newest day first (items$ is already desc). */
   readonly days = computed<Day[]>(() => {
@@ -62,38 +86,41 @@ export class Wellbeing {
     return [...groups.values()];
   });
 
-  /** The 14-day mood trend: a dot per entry, x = day column + time-of-day, y = score. */
+  /** The mood trend over the selected window: a dot per entry, x = its position in
+   *  time across the window, y = score, joined by a smooth line. */
   readonly chart = computed(() => this.buildChart((e) => e.score));
   readonly hasChart = computed(() => this.chart().dots.length > 0);
 
-  /** The same 14-day trend for the optional energy reading — like mood, higher
+  /** The same trend for the optional energy reading — like mood, higher
    *  (energetic) sits at the top and a rising line reads as improving. Only
    *  entries that recorded one contribute, so it's absent until there's data. */
   readonly energyChart = computed(() => this.buildChart((e) => e.energy));
   readonly hasEnergyChart = computed(() => this.energyChart().dots.length > 0);
 
-  /** Build a trend from a 1..5 accessor; entries returning null/undefined (e.g. an
-   *  unrecorded energy) or falling outside the 14-day window are skipped. */
+  /** Build a trend from a 1..5 accessor over the current window. x is the entry's
+   *  true position in time across the window (so the line reads chronologically);
+   *  entries with no reading of this kind, or outside the window, are skipped.
+   *  Dots come out x-ascending so the connecting line joins them in time order. */
   private buildChart(value: (e: WellbeingDoc) => number | null | undefined) {
-    const { w, h, padX, padTop, padBottom, days } = CHART;
+    const { w, h, padX, padTop, padBottom } = CHART;
+    const days = this.window();
     const plotH = h - padTop - padBottom;
-    const colW = (w - 2 * padX) / days;
-    // Oldest of the window = today - 13 (local midnight).
+    // Window = [local midnight (today - (days-1)), end of today).
     const start = new Date();
     start.setHours(0, 0, 0, 0);
     start.setDate(start.getDate() - (days - 1));
+    const spanMs = days * 86_400_000;
     const dots: TrendDot[] = [];
     for (const e of this.items()) {
       const level = value(e);
       if (level == null) continue; // no reading of this kind on this entry
-      const d = new Date(e.recordedAt);
-      const dayIdx = Math.floor((d.getTime() - start.getTime()) / 86_400_000);
-      if (dayIdx < 0 || dayIdx >= days) continue; // outside the window
-      const timeFrac = (d.getHours() * 60 + d.getMinutes()) / 1440;
-      const cx = padX + colW * (dayIdx + 0.2 + 0.6 * timeFrac);
+      const frac = (new Date(e.recordedAt).getTime() - start.getTime()) / spanMs;
+      if (frac < 0 || frac >= 1) continue; // outside the window
+      const cx = padX + frac * (w - 2 * padX);
       const cy = padTop + ((5 - level) / 4) * plotH;
       dots.push({ cx: Math.round(cx * 10) / 10, cy: Math.round(cy * 10) / 10, level });
     }
+    dots.sort((a, b) => a.cx - b.cx);
     return { w, h, dots };
   }
 

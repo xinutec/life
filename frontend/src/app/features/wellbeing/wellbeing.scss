@@ -3,6 +3,21 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
+// Trend-window selector, right-aligned above the charts. width:fit-content +
+// margin-left:auto shrinks the group to its buttons and pushes it to the edge.
+.windows {
+  display: flex;
+  width: fit-content;
+  margin: 1rem 0 0.25rem auto;
+}
+
+.empty-window {
+  margin: 0.5rem 0;
+  font: var(--mat-sys-label-medium);
+  text-align: center;
+  color: var(--mat-sys-on-surface-variant);
+}
+
 // Timeline faces, driven by the shared wellbeing ramp (--wb-score-* in
 // styles.scss): the face icon takes the ramp colour for its score. (The trend
 // dots reuse the same ramp inside app-trend-chart.)

@@ -22,6 +22,15 @@
     stroke-width: 0.5;
     stroke-dasharray: 3 3;
   }
+  // The trend line stays a soft neutral so the ramp-coloured dots carry the
+  // meaning; the line only shows the shape of the change.
+  .line {
+    fill: none;
+    stroke: var(--mat-sys-outline);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
   .axis {
     display: flex;
     justify-content: space-between;

@@ -3,12 +3,26 @@
 <p class="prompt">How do you feel right now?</p>
 <app-wellbeing-checkin />
 
+@if (hasAny()) {
+  <mat-button-toggle-group
+    class="windows"
+    hideSingleSelectionIndicator
+    aria-label="Trend window"
+    [value]="window()"
+    (change)="window.set($event.value)"
+  >
+    @for (win of windows; track win.value) {
+      <mat-button-toggle [value]="win.value">{{ win.label }}</mat-button-toggle>
+    }
+  </mat-button-toggle-group>
+}
+
 @if (hasChart()) {
   <app-trend-chart
     [chart]="chart()"
     [axis]="['great', 'okay', 'awful']"
-    caption="Mood · last 14 days"
-    label="Your mood over the last 14 days"
+    [caption]="'Mood · ' + windowLabel()"
+    [label]="'Your mood over the ' + windowLabel()"
   />
 }
 
@@ -16,9 +30,13 @@
   <app-trend-chart
     [chart]="energyChart()"
     [axis]="['energetic', 'okay', 'drained']"
-    caption="Energy · last 14 days"
-    label="Your energy over the last 14 days"
+    [caption]="'Energy · ' + windowLabel()"
+    [label]="'Your energy over the ' + windowLabel()"
   />
+}
+
+@if (hasAny() && !hasChart()) {
+  <p class="empty-window">No check-ins in the {{ windowLabel() }}.</p>
 }
 
 <app-list-state

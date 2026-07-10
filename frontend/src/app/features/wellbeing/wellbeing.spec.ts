@@ -70,7 +70,10 @@ describe('Wellbeing history', () => {
       entry({ ulid: 'c', recordedAt: at(2, 12), score: 2, energy: 2 }),
     ]).fixture.componentInstance;
     expect(c.hasEnergyChart()).toBe(true);
-    expect(c.energyChart().dots.map((d) => d.level)).toEqual([5, 2]); // b (null) excluded
+    // Dots come out chronological (oldest→newest, left→right) so the line joins
+    // them in time order: c (2 days ago, energy 2) then a (today, energy 5);
+    // b recorded no energy and is excluded.
+    expect(c.energyChart().dots.map((d) => d.level)).toEqual([2, 5]);
   });
 
   it('has no energy chart when nothing recorded one', () => {
