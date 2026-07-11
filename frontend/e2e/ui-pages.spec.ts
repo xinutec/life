@@ -267,6 +267,70 @@ test('emotion picker — accordion + sticky header: lays out cleanly @ phone wid
   await expectNoHorizontalOverflow(page, testInfo);
 });
 
+// The ⓘ gloss popover is an overlay, so it escapes the overflow/collision checks
+// above entirely — it can hang off the screen edge and nothing else would catch
+// it. It also has to dismiss itself, and its CDK scroll strategy CANNOT see the
+// picker's scroll (the dialog surface isn't a registered CdkScrollable), so the
+// dismissal is hand-wired and needs a test that actually scrolls and taps.
+test('emotion picker ⓘ — gloss popover stays on-screen and dismisses @ phone width', async ({
+  page,
+}) => {
+  await mockApi(page);
+  await page.goto('/wellbeing');
+  await page.locator('.entry.score-2').click();
+  await page.locator('button.add-emotions').click();
+  await page.locator('.picker').waitFor();
+  await page.getByText('Happy', { exact: true }).click();
+  await page.getByText('Curious', { exact: true }).waitFor();
+
+  const view = page.viewportSize();
+  if (!view) throw new Error('no viewport');
+  const pop = page.locator('.peek-pop');
+  // Only the expanded family's chips: a collapsed mat-expansion-panel still
+  // renders its content, so an unscoped query would match all 82 leaves.
+  const infos = page.locator('mat-expansion-panel.mat-expanded .chip-info');
+  const count = await infos.count();
+  expect(count).toBeGreaterThan(0);
+
+  // The seeded check-in already carries emotions, so the selected footer is
+  // present from the start; what matters is that peeking never changes it.
+  const chosen = page.locator('.picker .selected .emo');
+  const chosenBefore = await chosen.count();
+
+  // Every ⓘ in the family: its popover must sit wholly inside the viewport.
+  for (let i = 0; i < count; i++) {
+    await infos.nth(i).click();
+    await pop.waitFor();
+    const box = await pop.boundingBox();
+    if (!box) throw new Error(`no popover box for chip ${i}`);
+    expect(box.x, `chip ${i} popover off the left edge`).toBeGreaterThanOrEqual(0);
+    expect(box.y, `chip ${i} popover off the top edge`).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width, `chip ${i} popover off the right edge`).toBeLessThanOrEqual(
+      view.width,
+    );
+    expect(box.y + box.height, `chip ${i} popover off the bottom edge`).toBeLessThanOrEqual(
+      view.height,
+    );
+    await infos.nth(i).click(); // the same ⓘ toggles it shut
+    await expect(pop).toBeHidden();
+  }
+
+  // Scrolling the picker dismisses it (the anchor has moved).
+  await infos.first().click();
+  await expect(pop).toBeVisible();
+  await page.mouse.wheel(0, 250);
+  await expect(pop).toBeHidden();
+
+  // Tapping outside dismisses it.
+  await infos.first().click();
+  await expect(pop).toBeVisible();
+  await page.locator('.picker .top h2').click();
+  await expect(pop).toBeHidden();
+
+  // Reading a gloss must never select the feeling.
+  await expect(chosen).toHaveCount(chosenBefore);
+});
+
 // The one the user asked for by name: tapping a to-do opens the edit sheet — a
 // dense form (two mat-button-toggle-groups, notes, two date rows with presets,
 // connections, a search box, delete). Everything the overlap check can't catch
