@@ -65,6 +65,7 @@
               type="button"
               class="emo emo-{{ emotionColor(token) }} on"
               [attr.aria-label]="'Remove ' + emotionLabel(token)"
+              [title]="emotionDesc(token)"
               (click)="removeEmotion(token)"
             >
               {{ emotionLabel(token) }}

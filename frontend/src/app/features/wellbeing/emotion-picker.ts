@@ -11,6 +11,7 @@ import {
   EMOTION_WHEEL,
   EmotionCore,
   emotionColor,
+  emotionDesc,
   emotionLabel,
   emotionToken,
   searchEmotions,
@@ -73,11 +74,17 @@ export class EmotionPicker {
     return emotionLabel(token);
   }
 
+  /** The brief gloss for a token (tooltip on the selected chip). */
+  desc(token: string): string {
+    return emotionDesc(token);
+  }
+
   /** How many selected tokens fall under a given core (for the panel badge). */
   coreCount(core: EmotionCore): number {
     const sel = this.selected();
     let n = 0;
-    for (const g of core.groups) for (const leaf of g.leaves) if (sel.has(this.tokenOf(core, leaf))) n++;
+    for (const g of core.groups)
+      for (const leaf of g.leaves) if (sel.has(this.tokenOf(core, leaf.name))) n++;
     return n;
   }
 

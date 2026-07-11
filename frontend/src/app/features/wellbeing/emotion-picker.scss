@@ -45,9 +45,23 @@ header {
   padding: 0.5rem 0.75rem 1rem;
 }
 
+// A core's gloss: a one-line intro under the family header when expanded.
+.core-desc {
+  margin: 0.25rem 0 0.5rem;
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+
 .group {
-  margin: 0.75rem 0 0.35rem;
+  margin: 0.75rem 0 0.1rem;
   font: var(--mat-sys-label-medium);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+// A group's gloss, tucked under its name and above its chips.
+.group-desc {
+  margin: 0 0 0.4rem;
+  font: var(--mat-sys-body-small);
   color: var(--mat-sys-on-surface-variant);
 }
 
@@ -55,6 +69,54 @@ header {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
+}
+
+// Search results are a vertical list, not chips: each row shows the word, its
+// path, and a gloss, so you can tell near-synonyms apart while choosing.
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--c) 45%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--c) 10%, transparent);
+  color: var(--mat-sys-on-surface);
+  text-align: left;
+  cursor: pointer;
+
+  &.on {
+    border-color: var(--c);
+    background: color-mix(in srgb, var(--c) 26%, transparent);
+  }
+  .head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+  }
+  mat-icon {
+    width: 18px;
+    height: 18px;
+    font-size: 18px;
+    align-self: center;
+  }
+  .name {
+    font: var(--mat-sys-label-large);
+    font-weight: 600;
+  }
+  .path {
+    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-label-small);
+  }
+  .desc {
+    font: var(--mat-sys-body-small);
+    color: var(--mat-sys-on-surface-variant);
+  }
 }
 
 // Accordion panel header: a family swatch + a count badge of what's chosen.

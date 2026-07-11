@@ -4,6 +4,7 @@ import {
   EMOTION_LEAVES,
   EMOTION_WHEEL,
   emotionColor,
+  emotionDesc,
   emotionLabel,
   emotionLeaf,
   emotionToken,
@@ -18,6 +19,25 @@ describe('emotion-wheel', () => {
     expect(EMOTION_LEAVES.length).toBe(82); // 41 secondary × 2
   });
 
+  it('every node — core, group, leaf — carries a non-empty gloss', () => {
+    for (const core of EMOTION_WHEEL) {
+      expect(core.desc.trim(), `core ${core.name}`).not.toBe('');
+      for (const group of core.groups) {
+        expect(group.desc.trim(), `group ${group.name}`).not.toBe('');
+        for (const leaf of group.leaves) {
+          expect(leaf.desc.trim(), `leaf ${leaf.name}`).not.toBe('');
+        }
+      }
+    }
+  });
+
+  it('gives the two same-named leaves distinct glosses', () => {
+    // "Overwhelmed" under Fearful vs Bad means subtly different things, and the
+    // wheel spells that out rather than reusing one line.
+    expect(emotionDesc('Fearful/Overwhelmed')).not.toBe(emotionDesc('Bad/Overwhelmed'));
+    expect(emotionDesc('Fearful/Overwhelmed')).not.toBe('');
+  });
+
   it('every leaf carries a unique qualified token', () => {
     const tokens = EMOTION_LEAVES.map((l) => l.token);
     expect(new Set(tokens).size).toBe(tokens.length); // no collisions
@@ -28,12 +48,14 @@ describe('emotion-wheel', () => {
     expect(emotionLeaf('Angry/Withdrawn')).toEqual({
       token: 'Angry/Withdrawn',
       leaf: 'Withdrawn',
+      desc: 'Pulled back and closed off from others.',
       secondary: 'Distant',
       core: 'Angry',
       color: 'angry',
     });
     expect(emotionColor('Angry/Withdrawn')).toBe('angry');
     expect(emotionLabel('Angry/Withdrawn')).toBe('Withdrawn');
+    expect(emotionDesc('Angry/Withdrawn')).toBe('Pulled back and closed off from others.');
   });
 
   it('keeps a same-named leaf under two cores distinct', () => {
@@ -63,6 +85,7 @@ describe('emotion-wheel', () => {
     expect(emotionLeaf('Flabbergasted')).toBeNull();
     expect(emotionColor('Flabbergasted')).toBe('unknown');
     expect(emotionLabel('Flabbergasted')).toBe('Flabbergasted');
+    expect(emotionDesc('Flabbergasted')).toBe('');
   });
 
   it('searches across leaf, secondary and core names', () => {

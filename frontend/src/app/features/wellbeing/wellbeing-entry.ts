@@ -11,7 +11,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 
-import { emotionColor, emotionLabel } from '../../shared/emotion-wheel';
+import { emotionColor, emotionDesc, emotionLabel } from '../../shared/emotion-wheel';
 import { Feedback } from '../../shared/feedback';
 import { SheetHeader } from '../../shared/sheet-header';
 import { ENERGY_LEVELS, WELLBEING_SCORES } from '../../shared/wellbeing-checkin';
@@ -92,6 +92,11 @@ export class WellbeingEntry implements OnDestroy {
   /** The bare leaf word to show for a stored token (or legacy bare word). */
   emotionLabel(token: string): string {
     return emotionLabel(token);
+  }
+
+  /** The brief gloss for a stored token (tooltip on the chip). */
+  emotionDesc(token: string): string {
+    return emotionDesc(token);
   }
 
   /** Open the feelings-wheel picker seeded with the current set; on Done, store

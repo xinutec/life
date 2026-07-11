@@ -29,20 +29,23 @@
   <div class="body">
     @if (query()) {
       @if (results().length) {
-        <div class="chips">
+        <div class="results">
           @for (r of results(); track r.token) {
             <button
               type="button"
-              class="emo emo-{{ r.color }}"
+              class="result emo-{{ r.color }}"
               [class.on]="isSelected(r.token)"
               [attr.aria-pressed]="isSelected(r.token)"
               (click)="toggle(r.token)"
             >
-              @if (isSelected(r.token)) {
-                <mat-icon>check</mat-icon>
-              }
-              {{ r.leaf }}
-              <span class="path">{{ r.core }}</span>
+              <span class="head">
+                @if (isSelected(r.token)) {
+                  <mat-icon>check</mat-icon>
+                }
+                <span class="name">{{ r.leaf }}</span>
+                <span class="path">{{ r.core }} › {{ r.secondary }}</span>
+              </span>
+              <span class="desc">{{ r.desc }}</span>
             </button>
           }
         </div>
@@ -62,21 +65,24 @@
                 }
               </mat-panel-title>
             </mat-expansion-panel-header>
+            <p class="core-desc">{{ core.desc }}</p>
             @for (g of core.groups; track g.name) {
               <p class="group">{{ g.name }}</p>
+              <p class="group-desc">{{ g.desc }}</p>
               <div class="chips">
-                @for (leaf of g.leaves; track leaf) {
+                @for (leaf of g.leaves; track leaf.name) {
                   <button
                     type="button"
                     class="emo emo-{{ core.color }}"
-                    [class.on]="isSelected(tokenOf(core, leaf))"
-                    [attr.aria-pressed]="isSelected(tokenOf(core, leaf))"
-                    (click)="toggle(tokenOf(core, leaf))"
+                    [class.on]="isSelected(tokenOf(core, leaf.name))"
+                    [attr.aria-pressed]="isSelected(tokenOf(core, leaf.name))"
+                    [title]="leaf.desc"
+                    (click)="toggle(tokenOf(core, leaf.name))"
                   >
-                    @if (isSelected(tokenOf(core, leaf))) {
+                    @if (isSelected(tokenOf(core, leaf.name))) {
                       <mat-icon>check</mat-icon>
                     }
-                    {{ leaf }}
+                    {{ leaf.name }}
                   </button>
                 }
               </div>
@@ -95,6 +101,7 @@
             type="button"
             class="emo emo-{{ color(token) }} on"
             [attr.aria-label]="'Remove ' + label(token)"
+            [title]="desc(token)"
             (click)="toggle(token)"
           >
             {{ label(token) }}
