@@ -1,9 +1,13 @@
-/** The Geoffrey Roberts "Feelings Wheel": a fixed, three-tier emotional
- *  vocabulary — 7 core emotions, each with a ring of secondary feelings, each
- *  with two fine-grained tertiary leaves. Held as static data (no backend): a
- *  check-in records a set of emotions, and their path back up to the core is
- *  derived here for display and colour. Every node carries a brief plain-English
- *  gloss of what it means, so the picker can explain each feeling.
+/** A three-tier emotional vocabulary — 7 core emotions, each with a ring of
+ *  secondary feelings, each with fine-grained tertiary leaves. Held as static
+ *  data (no backend): a check-in records a set of emotions, and their path back
+ *  up to the core is derived here for display and colour. Every node carries a
+ *  brief plain-English gloss of what it means, so the picker can explain each
+ *  feeling.
+ *
+ *  It started as the Geoffrey Roberts "Feelings Wheel" (a strict two leaves per
+ *  group) and is being extended where that wheel leaves a real feeling with no
+ *  word at all — so groups may now hold more than two leaves.
  *
  *  Identity is the *qualified* token `Core/Leaf` (see [[emotionToken]]), not the
  *  bare leaf word — because a few leaves ("Embarrassed", "Inferior",
@@ -103,6 +107,10 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Loving', desc: 'Warm and tender affection toward others.' },
           { name: 'Thankful', desc: 'Grateful and appreciative for what you have.' },
+          {
+            name: 'Relieved',
+            desc: "The tension drops away — the thing you dreaded didn't happen.",
+          },
         ],
       },
       {

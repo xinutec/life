@@ -12,11 +12,22 @@ import {
 } from './emotion-wheel';
 
 describe('emotion-wheel', () => {
-  it('has the full outer ring: every group holds two leaves', () => {
+  it('has the full outer ring: every group holds at least the wheel’s two leaves', () => {
+    // Roberts' wheel is exactly two per group; we extend it where a feeling has
+    // no word at all, so a group may hold more — but never fewer.
     const groups = EMOTION_WHEEL.flatMap((c) => c.groups);
-    expect(groups.every((g) => g.leaves.length === 2)).toBe(true);
-    expect(EMOTION_LEAVES.length).toBe(groups.length * 2);
-    expect(EMOTION_LEAVES.length).toBe(82); // 41 secondary × 2
+    expect(groups.length).toBe(41);
+    expect(groups.every((g) => g.leaves.length >= 2)).toBe(true);
+    expect(EMOTION_LEAVES.length).toBe(groups.reduce((n, g) => n + g.leaves.length, 0));
+  });
+
+  it('keeps leaf names unique within a core', () => {
+    // Tokens are `Core/Leaf`, so a word repeated inside one core would collide;
+    // across cores it is fine (and deliberate).
+    for (const core of EMOTION_WHEEL) {
+      const leaves = core.groups.flatMap((g) => g.leaves.map((l) => l.name));
+      expect(new Set(leaves).size, `duplicate leaf in ${core.name}`).toBe(leaves.length);
+    }
   });
 
   it('every node — core, group, leaf — carries a non-empty gloss', () => {
