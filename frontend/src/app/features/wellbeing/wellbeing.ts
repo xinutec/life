@@ -105,17 +105,17 @@ export class Wellbeing {
     const { w, h, padX, padTop, padBottom } = CHART;
     const days = this.window();
     const plotH = h - padTop - padBottom;
-    // Window = [local midnight (today - (days-1)), end of today).
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    start.setDate(start.getDate() - (days - 1));
+    // A true rolling window ending now: [now - days·24h, now]. So "24h" is
+    // literally the last 24 hours (last night's slump and this morning both
+    // show), not calendar-today — and the newest entry sits at the right edge.
     const spanMs = days * 86_400_000;
+    const startMs = Date.now() - spanMs;
     const dots: TrendDot[] = [];
     for (const e of this.items()) {
       const level = value(e);
       if (level == null) continue; // no reading of this kind on this entry
-      const frac = (new Date(e.recordedAt).getTime() - start.getTime()) / spanMs;
-      if (frac < 0 || frac >= 1) continue; // outside the window
+      const frac = (new Date(e.recordedAt).getTime() - startMs) / spanMs;
+      if (frac < 0 || frac > 1) continue; // outside the window
       const cx = padX + frac * (w - 2 * padX);
       const cy = padTop + ((5 - level) / 4) * plotH;
       dots.push({ cx: Math.round(cx * 10) / 10, cy: Math.round(cy * 10) / 10, level });

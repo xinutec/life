@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { WellbeingStore, WellbeingDoc } from '../../sync/wellbeing-store';
 import { Wellbeing } from './wellbeing';
 
-/** ISO instant `daysAgo` days back at a given local time. */
+/** ISO instant `daysAgo` days back at a given local time (for day-grouping). */
 const at = (daysAgo: number, h: number, m = 0): string => {
   const d = new Date();
   d.setDate(d.getDate() - daysAgo);
@@ -15,10 +15,14 @@ const at = (daysAgo: number, h: number, m = 0): string => {
   return d.toISOString();
 };
 
+/** ISO instant `n` hours back — unambiguously in the past, so the rolling chart
+ *  window (which ends at "now") always includes it whatever time the suite runs. */
+const hoursAgo = (n: number): string => new Date(Date.now() - n * 3_600_000).toISOString();
+
 const entry = (over: Partial<WellbeingDoc>): WellbeingDoc => ({
   ulid: 'u',
   id: 1,
-  recordedAt: at(0, 12),
+  recordedAt: hoursAgo(2),
   score: 3,
   energy: null,
   emotions: [],
@@ -55,7 +59,7 @@ describe('Wellbeing history', () => {
 
   it('plots a chart dot per recent entry and none for old ones', () => {
     const items = [
-      entry({ ulid: 'a', recordedAt: at(0, 12), score: 5 }),
+      entry({ ulid: 'a', recordedAt: hoursAgo(2), score: 5 }),
       entry({ ulid: 'z', recordedAt: at(40, 12), score: 1 }), // outside the 14-day window
     ];
     const c = setup(items).fixture.componentInstance;
@@ -65,13 +69,13 @@ describe('Wellbeing history', () => {
 
   it('plots the energy chart only from entries that recorded one', () => {
     const c = setup([
-      entry({ ulid: 'a', recordedAt: at(0, 12), score: 4, energy: 5 }),
+      entry({ ulid: 'a', recordedAt: hoursAgo(2), score: 4, energy: 5 }),
       entry({ ulid: 'b', recordedAt: at(1, 12), score: 3, energy: null }),
       entry({ ulid: 'c', recordedAt: at(2, 12), score: 2, energy: 2 }),
     ]).fixture.componentInstance;
     expect(c.hasEnergyChart()).toBe(true);
     // Dots come out chronological (oldest→newest, left→right) so the line joins
-    // them in time order: c (2 days ago, energy 2) then a (today, energy 5);
+    // them in time order: c (2 days ago, energy 2) then a (2h ago, energy 5);
     // b recorded no energy and is excluded.
     expect(c.energyChart().dots.map((d) => d.level)).toEqual([2, 5]);
   });

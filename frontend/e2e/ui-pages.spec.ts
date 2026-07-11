@@ -60,10 +60,14 @@ const at = (daysAgo: number, h: number): string => {
   d.setHours(h, 24, 0, 0);
   return d.toISOString();
 };
+// The trend chart's window rolls back from "now", so today's entries must be
+// unambiguously in the past — a fixed clock hour would sit in the future when
+// the suite runs earlier in the day and drop out of the window.
+const hoursAgo = (n: number): string => new Date(now.getTime() - n * 3_600_000).toISOString();
 const WELLBEING = [
-  { ulid: '01WELLA0000000000000000001', id: 1, recordedAt: at(0, 9), score: 2, energy: 2,
+  { ulid: '01WELLA0000000000000000001', id: 1, recordedAt: hoursAgo(5), score: 2, energy: 2,
     emotions: ['Anxious', 'Withdrawn'], note: 'rough morning', rev: 1, _deleted: false },
-  { ulid: '01WELLB0000000000000000002', id: 2, recordedAt: at(0, 14), score: 4, energy: null,
+  { ulid: '01WELLB0000000000000000002', id: 2, recordedAt: hoursAgo(1), score: 4, energy: null,
     emotions: [], note: null, rev: 2, _deleted: false },
   { ulid: '01WELLC0000000000000000003', id: 3, recordedAt: at(1, 20), score: 3, energy: null,
     emotions: [], note: null, rev: 3, _deleted: false },
