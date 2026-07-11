@@ -66,10 +66,8 @@
                 }
               </mat-panel-title>
             </mat-expansion-panel-header>
-            <p class="core-desc">{{ core.desc }}</p>
             @for (g of core.groups; track g.name) {
               <p class="group">{{ g.name }}</p>
-              <p class="group-desc">{{ g.desc }}</p>
               <div class="chips">
                 @for (leaf of g.leaves; track leaf.name) {
                   <button
@@ -78,8 +76,8 @@
                     [class.on]="isSelected(tokenOf(core, leaf.name))"
                     [attr.aria-pressed]="isSelected(tokenOf(core, leaf.name))"
                     [title]="leaf.desc"
-                    (pointerdown)="pressStart(core, leaf)"
-                    (pointermove)="pressMove()"
+                    (pointerdown)="pressStart(core, leaf, $event)"
+                    (pointermove)="pressMove($event)"
                     (pointerup)="pressEnd()"
                     (pointercancel)="pressEnd()"
                     (pointerleave)="pressEnd()"

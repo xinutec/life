@@ -27,6 +27,11 @@ export interface EmotionPickerData {
  *  rather than a tap (select). */
 const HOLD_MS = 350;
 
+/** How far the finger may drift (px) during a hold before it's treated as a
+ *  scroll and the peek is abandoned. A held finger always jitters a little, so
+ *  cancelling on *any* movement (the naive approach) means the hold never fires. */
+const MOVE_TOL = 12;
+
 /** The feeling being peeked at (held) — its word, gloss, and family colour. */
 interface Peek {
   name: string;
@@ -113,10 +118,14 @@ export class EmotionPicker {
   // search — so a leaf's meaning is never gesture-only.
   private holdTimer: ReturnType<typeof setTimeout> | null = null;
   private longPressed = false;
+  private startX = 0;
+  private startY = 0;
   readonly peeked = signal<Peek | null>(null);
 
-  pressStart(core: EmotionCore, leaf: EmotionLeafDef): void {
+  pressStart(core: EmotionCore, leaf: EmotionLeafDef, event: PointerEvent): void {
     this.longPressed = false;
+    this.startX = event.clientX;
+    this.startY = event.clientY;
     this.clearHold();
     this.holdTimer = setTimeout(() => {
       this.longPressed = true;
@@ -124,9 +133,13 @@ export class EmotionPicker {
     }, HOLD_MS);
   }
 
-  /** Movement before the hold fires means the finger is scrolling, not peeking. */
-  pressMove(): void {
-    if (!this.longPressed) this.clearHold();
+  /** Drift past the tolerance before the hold fires means the finger is
+   *  scrolling, not peeking — abandon it. Jitter within tolerance is ignored. */
+  pressMove(event: PointerEvent): void {
+    if (this.longPressed) return;
+    const dx = event.clientX - this.startX;
+    const dy = event.clientY - this.startY;
+    if (dx * dx + dy * dy > MOVE_TOL * MOVE_TOL) this.clearHold();
   }
 
   pressEnd(): void {
