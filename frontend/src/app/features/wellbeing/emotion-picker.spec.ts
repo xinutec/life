@@ -58,59 +58,31 @@ describe('EmotionPicker', () => {
     expect(c.coreCount(angry)).toBe(2);
   });
 
-  it('press-and-hold peeks the gloss and suppresses the select that follows', () => {
-    vi.useFakeTimers();
+  it('the ⓘ peeks a gloss without selecting, and its ⓘ toggles it off', () => {
     const happy = EMOTION_WHEEL.find((core) => core.name === 'Happy')!;
     const leaf = happy.groups[0].leaves[0]; // Playful › Aroused
     const token = `Happy/${leaf.name}`;
     const { c } = setup([]);
 
-    c.pressStart(happy, leaf, { clientX: 0, clientY: 0 } as PointerEvent);
-    vi.advanceTimersByTime(400); // past the hold threshold
-    expect(c.peeked()).toEqual({ name: leaf.name, desc: leaf.desc, color: 'happy' });
+    c.peek(happy, leaf);
+    expect(c.peeked()).toEqual({ token, name: leaf.name, desc: leaf.desc, color: 'happy' });
+    expect(c.isSelected(token)).toBe(false); // reading never selects
 
-    c.pressEnd();
+    c.peek(happy, leaf); // same ⓘ again dismisses
     expect(c.peeked()).toBeNull();
-    c.choose(token); // the click after a hold must NOT select
-    expect(c.isSelected(token)).toBe(false);
-    vi.useRealTimers();
   });
 
-  it('a quick tap selects — the hold never fires', () => {
-    vi.useFakeTimers();
+  it('peeking a different feeling replaces the shown one; dismiss clears it', () => {
     const happy = EMOTION_WHEEL.find((core) => core.name === 'Happy')!;
-    const leaf = happy.groups[0].leaves[0];
-    const token = `Happy/${leaf.name}`;
+    const [a, b] = happy.groups[0].leaves; // Aroused, Cheeky
     const { c } = setup([]);
 
-    c.pressStart(happy, leaf, { clientX: 0, clientY: 0 } as PointerEvent);
-    c.pressEnd(); // released before the threshold
-    c.choose(token);
-    expect(c.isSelected(token)).toBe(true);
+    c.peek(happy, a);
+    expect(c.peeked()?.name).toBe(a.name);
+    c.peek(happy, b);
+    expect(c.peeked()?.name).toBe(b.name);
+    c.dismissPeek();
     expect(c.peeked()).toBeNull();
-    vi.useRealTimers();
-  });
-
-  it('tolerates finger jitter but abandons the peek on a real scroll', () => {
-    vi.useFakeTimers();
-    const happy = EMOTION_WHEEL.find((core) => core.name === 'Happy')!;
-    const leaf = happy.groups[0].leaves[0];
-    const { c } = setup([]);
-
-    // Small jitter (< tolerance) must NOT cancel the pending hold — the bug that
-    // made every hold register as a tap was cancelling on any movement at all.
-    c.pressStart(happy, leaf, { clientX: 100, clientY: 100 } as PointerEvent);
-    c.pressMove({ clientX: 104, clientY: 103 } as PointerEvent); // ~5px drift
-    vi.advanceTimersByTime(400);
-    expect(c.peeked()).not.toBeNull();
-    c.pressEnd();
-
-    // A real drag (> tolerance) before the hold fires cancels it (it's a scroll).
-    c.pressStart(happy, leaf, { clientX: 100, clientY: 100 } as PointerEvent);
-    c.pressMove({ clientX: 100, clientY: 140 } as PointerEvent); // 40px drift
-    vi.advanceTimersByTime(400);
-    expect(c.peeked()).toBeNull();
-    vi.useRealTimers();
   });
 
   it('Done closes with the new token set; Cancel closes with undefined', () => {

@@ -53,7 +53,7 @@
         <p class="empty">No feelings match “{{ query() }}”.</p>
       }
     } @else {
-      <p class="hint">Tap to add · press and hold a feeling to read what it means.</p>
+      <p class="hint">Tap a feeling to add it · tap the ⓘ to see what it means.</p>
       <mat-accordion>
         @for (core of wheel; track core.name) {
           <mat-expansion-panel>
@@ -70,24 +70,29 @@
               <p class="group">{{ g.name }}</p>
               <div class="chips">
                 @for (leaf of g.leaves; track leaf.name) {
-                  <button
-                    type="button"
-                    class="emo emo-{{ core.color }}"
-                    [class.on]="isSelected(tokenOf(core, leaf.name))"
-                    [attr.aria-pressed]="isSelected(tokenOf(core, leaf.name))"
-                    [title]="leaf.desc"
-                    (pointerdown)="pressStart(core, leaf, $event)"
-                    (pointermove)="pressMove($event)"
-                    (pointerup)="pressEnd()"
-                    (pointercancel)="pressEnd()"
-                    (pointerleave)="pressEnd()"
-                    (click)="choose(tokenOf(core, leaf.name))"
-                  >
-                    @if (isSelected(tokenOf(core, leaf.name))) {
-                      <mat-icon>check</mat-icon>
-                    }
-                    {{ leaf.name }}
-                  </button>
+                  <div class="chip emo-{{ core.color }}" [class.on]="isSelected(tokenOf(core, leaf.name))">
+                    <button
+                      type="button"
+                      class="chip-pick"
+                      [attr.aria-pressed]="isSelected(tokenOf(core, leaf.name))"
+                      [attr.aria-label]="(isSelected(tokenOf(core, leaf.name)) ? 'Remove ' : 'Add ') + leaf.name"
+                      (click)="toggle(tokenOf(core, leaf.name))"
+                    >
+                      @if (isSelected(tokenOf(core, leaf.name))) {
+                        <mat-icon>check</mat-icon>
+                      }
+                      {{ leaf.name }}
+                    </button>
+                    <button
+                      type="button"
+                      class="chip-info"
+                      [class.on]="peeked()?.token === tokenOf(core, leaf.name)"
+                      [attr.aria-label]="'What ' + leaf.name + ' means'"
+                      (click)="peek(core, leaf)"
+                    >
+                      <mat-icon>info</mat-icon>
+                    </button>
+                  </div>
                 }
               </div>
             }
@@ -99,7 +104,12 @@
 
   @if (peeked(); as p) {
     <div class="peek emo-{{ p.color }}" role="status" aria-live="polite">
-      <span class="peek-name">{{ p.name }}</span>
+      <div class="peek-head">
+        <span class="peek-name">{{ p.name }}</span>
+        <button type="button" class="peek-close" aria-label="Dismiss" (click)="dismissPeek()">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
       <span class="peek-desc">{{ p.desc }}</span>
     </div>
   }

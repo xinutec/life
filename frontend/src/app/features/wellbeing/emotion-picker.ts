@@ -23,17 +23,9 @@ export interface EmotionPickerData {
   selected: string[];
 }
 
-/** How long a press must be held before it counts as a "peek" (show the gloss)
- *  rather than a tap (select). */
-const HOLD_MS = 350;
-
-/** How far the finger may drift (px) during a hold before it's treated as a
- *  scroll and the peek is abandoned. A held finger always jitters a little, so
- *  cancelling on *any* movement (the naive approach) means the hold never fires. */
-const MOVE_TOL = 12;
-
-/** The feeling being peeked at (held) — its word, gloss, and family colour. */
+/** The feeling being explained — its identity, word, gloss, and family colour. */
 interface Peek {
+  token: string;
   name: string;
   desc: string;
   color: string;
@@ -111,57 +103,23 @@ export class EmotionPicker {
     this.selected.set(next);
   }
 
-  // Press-and-hold to peek a leaf's gloss without selecting it. A quick tap
-  // selects (the common case, kept light); holding shows the description while
-  // the finger is down and suppresses the select that would otherwise follow.
-  // Browse stays compact — the gloss is one hold away, and always inline in
-  // search — so a leaf's meaning is never gesture-only.
-  private holdTimer: ReturnType<typeof setTimeout> | null = null;
-  private longPressed = false;
-  private startX = 0;
-  private startY = 0;
+  // Tapping a chip's ⓘ shows that feeling's gloss in a dismissible card, without
+  // selecting it — an explicit, visible, accessible affordance (no gesture).
+  // Browse stays compact; meaning is one tap away, and also inline in search.
   readonly peeked = signal<Peek | null>(null);
 
-  pressStart(core: EmotionCore, leaf: EmotionLeafDef, event: PointerEvent): void {
-    this.longPressed = false;
-    this.startX = event.clientX;
-    this.startY = event.clientY;
-    this.clearHold();
-    this.holdTimer = setTimeout(() => {
-      this.longPressed = true;
-      this.peeked.set({ name: leaf.name, desc: leaf.desc, color: core.color });
-    }, HOLD_MS);
+  /** Tap the ⓘ: explain this feeling — or dismiss if it's already the one shown. */
+  peek(core: EmotionCore, leaf: EmotionLeafDef): void {
+    const token = this.tokenOf(core, leaf.name);
+    this.peeked.set(
+      this.peeked()?.token === token
+        ? null
+        : { token, name: leaf.name, desc: leaf.desc, color: core.color },
+    );
   }
 
-  /** Drift past the tolerance before the hold fires means the finger is
-   *  scrolling, not peeking — abandon it. Jitter within tolerance is ignored. */
-  pressMove(event: PointerEvent): void {
-    if (this.longPressed) return;
-    const dx = event.clientX - this.startX;
-    const dy = event.clientY - this.startY;
-    if (dx * dx + dy * dy > MOVE_TOL * MOVE_TOL) this.clearHold();
-  }
-
-  pressEnd(): void {
-    this.clearHold();
+  dismissPeek(): void {
     this.peeked.set(null);
-  }
-
-  private clearHold(): void {
-    if (this.holdTimer !== null) {
-      clearTimeout(this.holdTimer);
-      this.holdTimer = null;
-    }
-  }
-
-  /** Chip tap: select — unless it was the release of a peek hold, which selects
-   *  nothing (the whole point of the hold). */
-  choose(token: string): void {
-    if (this.longPressed) {
-      this.longPressed = false;
-      return;
-    }
-    this.toggle(token);
   }
 
   done(): void {

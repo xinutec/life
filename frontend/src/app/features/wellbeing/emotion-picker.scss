@@ -53,27 +53,93 @@ header {
   text-align: center;
 }
 
-// The press-and-hold peek: a non-interactive card pinned to the bottom, shown
-// while a chip is held, giving that feeling's gloss without selecting it.
+// A browse chip is a compound pill: the label (tap = add) and an ⓘ (tap =
+// explain), two real buttons so neither nests inside the other, split by a faint
+// divider so the ⓘ reads as its own target.
+.chip {
+  display: inline-flex;
+  align-items: stretch;
+  min-height: 40px;
+  border: 1px solid color-mix(in srgb, var(--c) 45%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c) 12%, transparent);
+  overflow: hidden;
+
+  &.on {
+    border-color: var(--c);
+    background: color-mix(in srgb, var(--c) 30%, transparent);
+  }
+
+  .chip-pick,
+  .chip-info {
+    display: inline-flex;
+    align-items: center;
+    border: none;
+    background: none;
+    cursor: pointer;
+    mat-icon {
+      width: 18px;
+      height: 18px;
+      font-size: 18px;
+    }
+  }
+  .chip-pick {
+    gap: 0.2rem;
+    padding: 0.35rem 0.4rem 0.35rem 0.7rem;
+    color: var(--mat-sys-on-surface);
+    font: var(--mat-sys-label-large);
+  }
+  &.on .chip-pick {
+    font-weight: 600;
+  }
+  .chip-info {
+    padding: 0.35rem 0.55rem;
+    border-left: 1px solid color-mix(in srgb, var(--c) 30%, transparent);
+    color: var(--mat-sys-on-surface-variant);
+    &.on {
+      color: var(--c);
+      background: color-mix(in srgb, var(--c) 18%, transparent);
+    }
+  }
+}
+
+// The ⓘ peek: a dismissible card pinned to the bottom, giving one feeling's
+// gloss without selecting it. Stays until you dismiss it or tap another ⓘ.
 .peek {
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
   z-index: 5;
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  padding: 0.6rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
   border-top: 2px solid var(--c);
   background: var(--mat-sys-surface-container-high);
-  pointer-events: none; // a peek, not a target
 
+  .peek-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
   .peek-name {
+    flex: 1;
     font: var(--mat-sys-title-small);
     font-weight: 600;
   }
+  .peek-close {
+    display: inline-flex;
+    padding: 0.25rem;
+    border: none;
+    background: none;
+    color: var(--mat-sys-on-surface-variant);
+    cursor: pointer;
+    mat-icon {
+      width: 20px;
+      height: 20px;
+      font-size: 20px;
+    }
+  }
   .peek-desc {
+    display: block;
     font: var(--mat-sys-body-medium);
     color: var(--mat-sys-on-surface-variant);
   }
