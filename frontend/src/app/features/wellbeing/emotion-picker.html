@@ -69,20 +69,22 @@
             @for (g of core.groups; track g.name) {
               <p class="group">{{ g.name }}</p>
               <p class="group-desc">{{ g.desc }}</p>
-              <div class="chips">
+              <div class="results">
                 @for (leaf of g.leaves; track leaf.name) {
                   <button
                     type="button"
-                    class="emo emo-{{ core.color }}"
+                    class="result emo-{{ core.color }}"
                     [class.on]="isSelected(tokenOf(core, leaf.name))"
                     [attr.aria-pressed]="isSelected(tokenOf(core, leaf.name))"
-                    [title]="leaf.desc"
                     (click)="toggle(tokenOf(core, leaf.name))"
                   >
-                    @if (isSelected(tokenOf(core, leaf.name))) {
-                      <mat-icon>check</mat-icon>
-                    }
-                    {{ leaf.name }}
+                    <span class="head">
+                      @if (isSelected(tokenOf(core, leaf.name))) {
+                        <mat-icon>check</mat-icon>
+                      }
+                      <span class="name">{{ leaf.name }}</span>
+                    </span>
+                    <span class="desc">{{ leaf.desc }}</span>
                   </button>
                 }
               </div>
