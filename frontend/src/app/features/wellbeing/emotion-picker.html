@@ -53,6 +53,7 @@
         <p class="empty">No feelings match “{{ query() }}”.</p>
       }
     } @else {
+      <p class="hint">Tap to add · press and hold a feeling to read what it means.</p>
       <mat-accordion>
         @for (core of wheel; track core.name) {
           <mat-expansion-panel>
@@ -69,22 +70,25 @@
             @for (g of core.groups; track g.name) {
               <p class="group">{{ g.name }}</p>
               <p class="group-desc">{{ g.desc }}</p>
-              <div class="results">
+              <div class="chips">
                 @for (leaf of g.leaves; track leaf.name) {
                   <button
                     type="button"
-                    class="result emo-{{ core.color }}"
+                    class="emo emo-{{ core.color }}"
                     [class.on]="isSelected(tokenOf(core, leaf.name))"
                     [attr.aria-pressed]="isSelected(tokenOf(core, leaf.name))"
-                    (click)="toggle(tokenOf(core, leaf.name))"
+                    [title]="leaf.desc"
+                    (pointerdown)="pressStart(core, leaf)"
+                    (pointermove)="pressMove()"
+                    (pointerup)="pressEnd()"
+                    (pointercancel)="pressEnd()"
+                    (pointerleave)="pressEnd()"
+                    (click)="choose(tokenOf(core, leaf.name))"
                   >
-                    <span class="head">
-                      @if (isSelected(tokenOf(core, leaf.name))) {
-                        <mat-icon>check</mat-icon>
-                      }
-                      <span class="name">{{ leaf.name }}</span>
-                    </span>
-                    <span class="desc">{{ leaf.desc }}</span>
+                    @if (isSelected(tokenOf(core, leaf.name))) {
+                      <mat-icon>check</mat-icon>
+                    }
+                    {{ leaf.name }}
                   </button>
                 }
               </div>
@@ -94,6 +98,13 @@
       </mat-accordion>
     }
   </div>
+
+  @if (peeked(); as p) {
+    <div class="peek emo-{{ p.color }}" role="status" aria-live="polite">
+      <span class="peek-name">{{ p.name }}</span>
+      <span class="peek-desc">{{ p.desc }}</span>
+    </div>
+  }
 
   @if (count() > 0) {
     <footer class="selected">

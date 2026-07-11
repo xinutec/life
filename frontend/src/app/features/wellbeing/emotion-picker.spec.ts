@@ -58,6 +58,39 @@ describe('EmotionPicker', () => {
     expect(c.coreCount(angry)).toBe(2);
   });
 
+  it('press-and-hold peeks the gloss and suppresses the select that follows', () => {
+    vi.useFakeTimers();
+    const happy = EMOTION_WHEEL.find((core) => core.name === 'Happy')!;
+    const leaf = happy.groups[0].leaves[0]; // Playful › Aroused
+    const token = `Happy/${leaf.name}`;
+    const { c } = setup([]);
+
+    c.pressStart(happy, leaf);
+    vi.advanceTimersByTime(400); // past the hold threshold
+    expect(c.peeked()).toEqual({ name: leaf.name, desc: leaf.desc, color: 'happy' });
+
+    c.pressEnd();
+    expect(c.peeked()).toBeNull();
+    c.choose(token); // the click after a hold must NOT select
+    expect(c.isSelected(token)).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it('a quick tap selects — the hold never fires', () => {
+    vi.useFakeTimers();
+    const happy = EMOTION_WHEEL.find((core) => core.name === 'Happy')!;
+    const leaf = happy.groups[0].leaves[0];
+    const token = `Happy/${leaf.name}`;
+    const { c } = setup([]);
+
+    c.pressStart(happy, leaf);
+    c.pressEnd(); // released before the threshold
+    c.choose(token);
+    expect(c.isSelected(token)).toBe(true);
+    expect(c.peeked()).toBeNull();
+    vi.useRealTimers();
+  });
+
   it('Done closes with the new token set; Cancel closes with undefined', () => {
     const { c, ref } = setup(['Angry/Withdrawn']);
     c.toggle('Angry/Numb');

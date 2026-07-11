@@ -10,6 +10,7 @@ import { MatInputModule } from '@angular/material/input';
 import {
   EMOTION_WHEEL,
   EmotionCore,
+  EmotionLeafDef,
   emotionColor,
   emotionDesc,
   emotionLabel,
@@ -20,6 +21,17 @@ import {
 export interface EmotionPickerData {
   /** The emotions already on the entry (qualified tokens, or legacy bare words). */
   selected: string[];
+}
+
+/** How long a press must be held before it counts as a "peek" (show the gloss)
+ *  rather than a tap (select). */
+const HOLD_MS = 350;
+
+/** The feeling being peeked at (held) — its word, gloss, and family colour. */
+interface Peek {
+  name: string;
+  desc: string;
+  color: string;
 }
 
 /** Browse and search the feelings wheel to add/remove emotions on a check-in.
@@ -92,6 +104,51 @@ export class EmotionPicker {
     const next = new Set(this.selected());
     if (!next.delete(token)) next.add(token);
     this.selected.set(next);
+  }
+
+  // Press-and-hold to peek a leaf's gloss without selecting it. A quick tap
+  // selects (the common case, kept light); holding shows the description while
+  // the finger is down and suppresses the select that would otherwise follow.
+  // Browse stays compact — the gloss is one hold away, and always inline in
+  // search — so a leaf's meaning is never gesture-only.
+  private holdTimer: ReturnType<typeof setTimeout> | null = null;
+  private longPressed = false;
+  readonly peeked = signal<Peek | null>(null);
+
+  pressStart(core: EmotionCore, leaf: EmotionLeafDef): void {
+    this.longPressed = false;
+    this.clearHold();
+    this.holdTimer = setTimeout(() => {
+      this.longPressed = true;
+      this.peeked.set({ name: leaf.name, desc: leaf.desc, color: core.color });
+    }, HOLD_MS);
+  }
+
+  /** Movement before the hold fires means the finger is scrolling, not peeking. */
+  pressMove(): void {
+    if (!this.longPressed) this.clearHold();
+  }
+
+  pressEnd(): void {
+    this.clearHold();
+    this.peeked.set(null);
+  }
+
+  private clearHold(): void {
+    if (this.holdTimer !== null) {
+      clearTimeout(this.holdTimer);
+      this.holdTimer = null;
+    }
+  }
+
+  /** Chip tap: select — unless it was the release of a peek hold, which selects
+   *  nothing (the whole point of the hold). */
+  choose(token: string): void {
+    if (this.longPressed) {
+      this.longPressed = false;
+      return;
+    }
+    this.toggle(token);
   }
 
   done(): void {
