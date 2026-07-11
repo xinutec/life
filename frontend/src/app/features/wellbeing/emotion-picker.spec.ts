@@ -16,7 +16,8 @@ describe('EmotionPicker', () => {
         { provide: MAT_DIALOG_DATA, useValue: { selected } },
       ],
     });
-    return { c: TestBed.createComponent(EmotionPicker).componentInstance, ref };
+    const fixture = TestBed.createComponent(EmotionPicker);
+    return { c: fixture.componentInstance, fixture, ref };
   }
 
   it('seeds from a token selection', () => {
@@ -73,6 +74,25 @@ describe('EmotionPicker', () => {
     expect(c.isSelected(token)).toBe(false); // reading never selects
 
     c.peek(happy, leaf, origin); // same ⓘ again dismisses
+    expect(c.peeked()).toBeNull();
+  });
+
+  it('dismisses an open peek on scroll and on an outside tap', () => {
+    const happy = EMOTION_WHEEL.find((core) => core.name === 'Happy')!;
+    const leaf = happy.groups[0].leaves[0];
+    const { c, fixture } = setup([]);
+    fixture.detectChanges(); // flush the constructor effect
+
+    c.peek(happy, leaf, origin);
+    fixture.detectChanges(); // effect now arms the document listeners
+    expect(c.peeked()).not.toBeNull();
+    document.dispatchEvent(new Event('scroll'));
+    expect(c.peeked()).toBeNull(); // scrolling anywhere closes it
+
+    c.peek(happy, leaf, origin);
+    fixture.detectChanges();
+    expect(c.peeked()).not.toBeNull();
+    document.dispatchEvent(new Event('pointerdown')); // target = document (outside)
     expect(c.peeked()).toBeNull();
   });
 

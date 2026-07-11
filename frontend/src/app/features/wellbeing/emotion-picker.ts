@@ -1,10 +1,6 @@
-import {
-  CdkOverlayOrigin,
-  ConnectedPosition,
-  OverlayModule,
-  ScrollStrategyOptions,
-} from '@angular/cdk/overlay';
-import { Component, computed, inject, signal } from '@angular/core';
+import { CdkOverlayOrigin, ConnectedPosition, OverlayModule } from '@angular/cdk/overlay';
+import { DOCUMENT } from '@angular/common';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
@@ -61,6 +57,31 @@ interface Peek {
 export class EmotionPicker {
   private ref = inject<MatDialogRef<EmotionPicker, string[] | undefined>>(MatDialogRef);
   private data = inject<EmotionPickerData>(MAT_DIALOG_DATA);
+  private doc = inject(DOCUMENT);
+
+  constructor() {
+    // While a peek is open, dismiss it on any scroll or any tap outside it. Done
+    // at the document in the capture phase because the picker scrolls inside the
+    // dialog surface — a container CDK's ScrollDispatcher doesn't track, so its
+    // scroll strategy never fires — and capture-phase scroll events surface from
+    // any container. Taps on the popover or an ⓘ are ignored (the ⓘ toggles
+    // itself; a different ⓘ switches). No backdrop, so scrolling stays native.
+    effect((onCleanup) => {
+      if (!this.peeked()) return;
+      const dismiss = (): void => this.dismissPeek();
+      const onDown = (e: Event): void => {
+        const t = e.target;
+        if (t instanceof Element && (t.closest('.peek-pop') || t.closest('.chip-info'))) return;
+        this.dismissPeek();
+      };
+      this.doc.addEventListener('scroll', dismiss, true);
+      this.doc.addEventListener('pointerdown', onDown, true);
+      onCleanup(() => {
+        this.doc.removeEventListener('scroll', dismiss, true);
+        this.doc.removeEventListener('pointerdown', onDown, true);
+      });
+    });
+  }
 
   readonly wheel = EMOTION_WHEEL;
   readonly query = signal('');
@@ -124,10 +145,6 @@ export class EmotionPicker {
     { originX: 'center', originY: 'top', overlayX: 'center', overlayY: 'bottom', offsetY: -8 },
     { originX: 'center', originY: 'bottom', overlayX: 'center', overlayY: 'top', offsetY: 8 },
   ];
-
-  /** Close the popover on scroll — its anchor has moved, and it keeps scrolling
-   *  of the surface behind clean (a backdrop would double-scroll it). */
-  readonly peekScroll = inject(ScrollStrategyOptions).close();
 
   /** Tap the ⓘ: explain this feeling — or dismiss if it's already the one shown. */
   peek(core: EmotionCore, leaf: EmotionLeafDef, origin: CdkOverlayOrigin): void {
