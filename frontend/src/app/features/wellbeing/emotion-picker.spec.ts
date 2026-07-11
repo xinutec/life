@@ -1,3 +1,4 @@
+import { CdkOverlayOrigin } from '@angular/cdk/overlay';
 import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { describe, expect, it, vi } from 'vitest';
@@ -58,17 +59,20 @@ describe('EmotionPicker', () => {
     expect(c.coreCount(angry)).toBe(2);
   });
 
+  const origin = {} as CdkOverlayOrigin; // stub anchor; peek only stores it
+
   it('the ⓘ peeks a gloss without selecting, and its ⓘ toggles it off', () => {
     const happy = EMOTION_WHEEL.find((core) => core.name === 'Happy')!;
     const leaf = happy.groups[0].leaves[0]; // Playful › Aroused
     const token = `Happy/${leaf.name}`;
     const { c } = setup([]);
 
-    c.peek(happy, leaf);
+    c.peek(happy, leaf, origin);
     expect(c.peeked()).toEqual({ token, name: leaf.name, desc: leaf.desc, color: 'happy' });
+    expect(c.peekOrigin()).toBe(origin); // popover anchors to the tapped ⓘ
     expect(c.isSelected(token)).toBe(false); // reading never selects
 
-    c.peek(happy, leaf); // same ⓘ again dismisses
+    c.peek(happy, leaf, origin); // same ⓘ again dismisses
     expect(c.peeked()).toBeNull();
   });
 
@@ -77,9 +81,9 @@ describe('EmotionPicker', () => {
     const [a, b] = happy.groups[0].leaves; // Aroused, Cheeky
     const { c } = setup([]);
 
-    c.peek(happy, a);
+    c.peek(happy, a, origin);
     expect(c.peeked()?.name).toBe(a.name);
-    c.peek(happy, b);
+    c.peek(happy, b, origin);
     expect(c.peeked()?.name).toBe(b.name);
     c.dismissPeek();
     expect(c.peeked()).toBeNull();

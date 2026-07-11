@@ -86,9 +86,11 @@
                     <button
                       type="button"
                       class="chip-info"
+                      cdkOverlayOrigin
+                      #info="cdkOverlayOrigin"
                       [class.on]="peeked()?.token === tokenOf(core, leaf.name)"
                       [attr.aria-label]="'What ' + leaf.name + ' means'"
-                      (click)="peek(core, leaf)"
+                      (click)="peek(core, leaf, info)"
                     >
                       <mat-icon>info</mat-icon>
                     </button>
@@ -102,16 +104,24 @@
     }
   </div>
 
-  @if (peeked(); as p) {
-    <div class="peek emo-{{ p.color }}" role="status" aria-live="polite">
-      <div class="peek-head">
-        <span class="peek-name">{{ p.name }}</span>
-        <button type="button" class="peek-close" aria-label="Dismiss" (click)="dismissPeek()">
-          <mat-icon>close</mat-icon>
-        </button>
-      </div>
-      <span class="peek-desc">{{ p.desc }}</span>
-    </div>
+  @if (peekOrigin(); as origin) {
+    <ng-template
+      cdkConnectedOverlay
+      [cdkConnectedOverlayOrigin]="origin"
+      [cdkConnectedOverlayOpen]="!!peeked()"
+      [cdkConnectedOverlayPositions]="peekPositions"
+      [cdkConnectedOverlayHasBackdrop]="true"
+      cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop"
+      (backdropClick)="dismissPeek()"
+      (detach)="dismissPeek()"
+    >
+      @if (peeked(); as p) {
+        <div class="peek-pop emo-{{ p.color }}" role="status" aria-live="polite">
+          <span class="peek-name">{{ p.name }}</span>
+          <span class="peek-desc">{{ p.desc }}</span>
+        </div>
+      }
+    </ng-template>
   }
 
   @if (count() > 0) {

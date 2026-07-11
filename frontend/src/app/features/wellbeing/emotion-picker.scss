@@ -103,43 +103,26 @@ header {
   }
 }
 
-// The ⓘ peek: a dismissible card pinned to the bottom, giving one feeling's
-// gloss without selecting it. Stays until you dismiss it or tap another ⓘ.
-.peek {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 5;
-  padding: 0.6rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
-  border-top: 2px solid var(--c);
+// The ⓘ peek: a small popover anchored to the tapped ⓘ (CDK overlay), giving
+// one feeling's gloss. Tap outside (the transparent backdrop) or the same ⓘ to
+// dismiss. Rendered in the overlay container but keeps this component's styles.
+.peek-pop {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  max-width: min(18rem, 80vw);
+  margin: 0 0.5rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--c) 55%, transparent);
+  border-radius: 12px;
   background: var(--mat-sys-surface-container-high);
+  box-shadow: var(--mat-sys-level2);
 
-  .peek-head {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
   .peek-name {
-    flex: 1;
     font: var(--mat-sys-title-small);
     font-weight: 600;
   }
-  .peek-close {
-    display: inline-flex;
-    padding: 0.25rem;
-    border: none;
-    background: none;
-    color: var(--mat-sys-on-surface-variant);
-    cursor: pointer;
-    mat-icon {
-      width: 20px;
-      height: 20px;
-      font-size: 20px;
-    }
-  }
   .peek-desc {
-    display: block;
     font: var(--mat-sys-body-medium);
     color: var(--mat-sys-on-surface-variant);
   }

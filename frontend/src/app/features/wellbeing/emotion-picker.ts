@@ -1,3 +1,4 @@
+import { CdkOverlayOrigin, ConnectedPosition, OverlayModule } from '@angular/cdk/overlay';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -44,6 +45,7 @@ interface Peek {
   styleUrl: './emotion-picker.scss',
   imports: [
     FormsModule,
+    OverlayModule,
     MatButtonModule,
     MatExpansionModule,
     MatFormFieldModule,
@@ -103,19 +105,30 @@ export class EmotionPicker {
     this.selected.set(next);
   }
 
-  // Tapping a chip's ⓘ shows that feeling's gloss in a dismissible card, without
-  // selecting it — an explicit, visible, accessible affordance (no gesture).
-  // Browse stays compact; meaning is one tap away, and also inline in search.
+  // Tapping a chip's ⓘ opens a small popover anchored to it, giving that
+  // feeling's gloss without selecting it — an explicit, visible, accessible
+  // affordance (no gesture). Browse stays compact; meaning is one tap away and
+  // also inline in search.
   readonly peeked = signal<Peek | null>(null);
+  /** The ⓘ the open popover is anchored to (kept once set so the overlay
+   *  template always has an origin; visibility is driven by `peeked`). */
+  readonly peekOrigin = signal<CdkOverlayOrigin | null>(null);
+
+  /** Prefer above the ⓘ, fall back below; CDK flips/pushes to stay on-screen. */
+  readonly peekPositions: ConnectedPosition[] = [
+    { originX: 'center', originY: 'top', overlayX: 'center', overlayY: 'bottom', offsetY: -8 },
+    { originX: 'center', originY: 'bottom', overlayX: 'center', overlayY: 'top', offsetY: 8 },
+  ];
 
   /** Tap the ⓘ: explain this feeling — or dismiss if it's already the one shown. */
-  peek(core: EmotionCore, leaf: EmotionLeafDef): void {
+  peek(core: EmotionCore, leaf: EmotionLeafDef, origin: CdkOverlayOrigin): void {
     const token = this.tokenOf(core, leaf.name);
-    this.peeked.set(
-      this.peeked()?.token === token
-        ? null
-        : { token, name: leaf.name, desc: leaf.desc, color: core.color },
-    );
+    if (this.peeked()?.token === token) {
+      this.peeked.set(null);
+      return;
+    }
+    this.peekOrigin.set(origin);
+    this.peeked.set({ token, name: leaf.name, desc: leaf.desc, color: core.color });
   }
 
   dismissPeek(): void {
