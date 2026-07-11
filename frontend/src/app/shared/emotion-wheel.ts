@@ -143,6 +143,7 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Isolated', desc: 'Cut off from others, with no one near.' },
           { name: 'Abandoned', desc: 'Left alone by those you counted on.' },
+          { name: 'Longing', desc: "Aching for someone or something that isn't here." },
         ],
       },
       {
