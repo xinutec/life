@@ -1,3 +1,33 @@
+<!-- One word in the mosaic: plain text you tap to choose, plus a small ⓘ that
+     drops its meaning in place. Shared by both rings — a group renders the same
+     way as a leaf, only bolder, because it is just as much a choice. -->
+<ng-template #word let-node let-core="core" let-grp="grp">
+  <span class="w" [class.grp]="grp" [class.on]="isSelected(tokenOf(core, node.name))">
+    <button
+      type="button"
+      class="pick"
+      [attr.aria-pressed]="isSelected(tokenOf(core, node.name))"
+      [attr.aria-label]="(isSelected(tokenOf(core, node.name)) ? 'Remove ' : 'Add ') + node.name"
+      (click)="toggle(tokenOf(core, node.name))"
+    >
+      {{ node.name }}
+    </button>
+    <button
+      type="button"
+      class="info"
+      [class.open]="opened() === tokenOf(core, node.name)"
+      [attr.aria-expanded]="opened() === tokenOf(core, node.name)"
+      [attr.aria-label]="'What ' + node.name + ' means'"
+      (click)="toggleGloss(tokenOf(core, node.name))"
+    >
+      <mat-icon>info</mat-icon>
+    </button>
+  </span>
+  @if (opened() === tokenOf(core, node.name)) {
+    <p class="gloss">{{ node.desc }}</p>
+  }
+</ng-template>
+
 <div class="picker">
   <div class="top">
     <header>
@@ -53,104 +83,40 @@
         <p class="empty">No feelings match “{{ query() }}”.</p>
       }
     } @else {
-      <p class="hint">
-        Tap a feeling to add it · tap the ⓘ to see what it means. The wider chips are feelings too —
-        pick one when the finer words would overstate it.
-      </p>
-      <mat-accordion>
-        @for (core of wheel; track core.name) {
-          <mat-expansion-panel>
-            <mat-expansion-panel-header>
-              <mat-panel-title>
-                <span class="swatch emo-{{ core.color }}"></span>
-                {{ core.name }}
-                @if (coreCount(core) > 0) {
-                  <span class="count-badge badge">{{ coreCount(core) }}</span>
-                }
-              </mat-panel-title>
-            </mat-expansion-panel-header>
-            @for (g of core.groups; track g.name) {
-              <!-- The group heading is itself a choice: "frustrated" is often the
-                   whole truth, and a leaf would overstate it. -->
-              <div class="chip group-chip emo-{{ core.color }}" [class.on]="isSelected(tokenOf(core, g.name))">
-                <button
-                  type="button"
-                  class="chip-pick"
-                  [attr.aria-pressed]="isSelected(tokenOf(core, g.name))"
-                  [attr.aria-label]="(isSelected(tokenOf(core, g.name)) ? 'Remove ' : 'Add ') + g.name"
-                  (click)="toggle(tokenOf(core, g.name))"
-                >
-                  @if (isSelected(tokenOf(core, g.name))) {
-                    <mat-icon>check</mat-icon>
-                  }
-                  {{ g.name }}
-                </button>
-                <button
-                  type="button"
-                  class="chip-info"
-                  cdkOverlayOrigin
-                  #ginfo="cdkOverlayOrigin"
-                  [class.on]="peeked()?.token === tokenOf(core, g.name)"
-                  [attr.aria-label]="'What ' + g.name + ' means'"
-                  (click)="peek(core, g, ginfo)"
-                >
-                  <mat-icon>info</mat-icon>
-                </button>
-              </div>
-              <div class="chips">
-                @for (leaf of g.leaves; track leaf.name) {
-                  <div class="chip emo-{{ core.color }}" [class.on]="isSelected(tokenOf(core, leaf.name))">
-                    <button
-                      type="button"
-                      class="chip-pick"
-                      [attr.aria-pressed]="isSelected(tokenOf(core, leaf.name))"
-                      [attr.aria-label]="(isSelected(tokenOf(core, leaf.name)) ? 'Remove ' : 'Add ') + leaf.name"
-                      (click)="toggle(tokenOf(core, leaf.name))"
-                    >
-                      @if (isSelected(tokenOf(core, leaf.name))) {
-                        <mat-icon>check</mat-icon>
-                      }
-                      {{ leaf.name }}
-                    </button>
-                    <button
-                      type="button"
-                      class="chip-info"
-                      cdkOverlayOrigin
-                      #info="cdkOverlayOrigin"
-                      [class.on]="peeked()?.token === tokenOf(core, leaf.name)"
-                      [attr.aria-label]="'What ' + leaf.name + ' means'"
-                      (click)="peek(core, leaf, info)"
-                    >
-                      <mat-icon>info</mat-icon>
-                    </button>
-                  </div>
-                }
-              </div>
+      <p class="hint">Tap a word to add it · tap its ⓘ to see what it means.</p>
+
+      <!-- The whole vocabulary, on one surface: a family is a region of colour,
+           not a stack of boxes. -->
+      @for (core of wheel; track core.name) {
+        <section class="family emo-{{ core.color }}">
+          <h2>
+            <span class="dot"></span>
+            {{ core.name }}
+            @if (coreCount(core) > 0) {
+              <span class="count-badge badge">{{ coreCount(core) }}</span>
             }
-          </mat-expansion-panel>
-        }
-      </mat-accordion>
+            <span class="n">{{ wordCount(core) }} words</span>
+          </h2>
+          @for (g of core.groups; track g.name) {
+            <div class="group">
+              <ng-container
+                [ngTemplateOutlet]="word"
+                [ngTemplateOutletContext]="{ $implicit: g, core: core, grp: true }"
+              />
+              <div class="run">
+                @for (leaf of g.leaves; track leaf.name) {
+                  <ng-container
+                    [ngTemplateOutlet]="word"
+                    [ngTemplateOutletContext]="{ $implicit: leaf, core: core, grp: false }"
+                  />
+                }
+              </div>
+            </div>
+          }
+        </section>
+      }
     }
   </div>
-
-  @if (peekOrigin(); as origin) {
-    <ng-template
-      cdkConnectedOverlay
-      [cdkConnectedOverlayOrigin]="origin"
-      [cdkConnectedOverlayOpen]="!!peeked()"
-      [cdkConnectedOverlayPositions]="peekPositions"
-      [cdkConnectedOverlayViewportMargin]="8"
-      [cdkConnectedOverlayPush]="true"
-      (detach)="dismissPeek()"
-    >
-      @if (peeked(); as p) {
-        <div class="peek-pop emo-{{ p.color }}" role="status" aria-live="polite">
-          <span class="peek-name">{{ p.name }}</span>
-          <span class="peek-desc">{{ p.desc }}</span>
-        </div>
-      }
-    </ng-template>
-  }
 
   @if (count() > 0) {
     <footer class="selected">

@@ -1,4 +1,3 @@
-import { CdkOverlayOrigin } from '@angular/cdk/overlay';
 import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { describe, expect, it, vi } from 'vitest';
@@ -82,53 +81,32 @@ describe('EmotionPicker', () => {
     expect(c.path(leaf)).toBe('Angry › Frustrated');
   });
 
-  const origin = {} as CdkOverlayOrigin; // stub anchor; peek only stores it
-
-  it('the ⓘ peeks a gloss without selecting, and its ⓘ toggles it off', () => {
-    const happy = EMOTION_WHEEL.find((core) => core.name === 'Happy')!;
-    const leaf = happy.groups[0].leaves[0]; // Playful › Aroused
-    const token = `Happy/${leaf.name}`;
+  it('the ⓘ opens a gloss without selecting, and the same ⓘ closes it', () => {
     const { c } = setup([]);
 
-    c.peek(happy, leaf, origin);
-    expect(c.peeked()).toEqual({ token, name: leaf.name, desc: leaf.desc, color: 'happy' });
-    expect(c.peekOrigin()).toBe(origin); // popover anchors to the tapped ⓘ
-    expect(c.isSelected(token)).toBe(false); // reading never selects
+    c.toggleGloss('Happy/Aroused');
+    expect(c.opened()).toBe('Happy/Aroused');
+    expect(c.isSelected('Happy/Aroused')).toBe(false); // reading never selects
 
-    c.peek(happy, leaf, origin); // same ⓘ again dismisses
-    expect(c.peeked()).toBeNull();
+    c.toggleGloss('Happy/Aroused'); // same ⓘ again closes it
+    expect(c.opened()).toBeNull();
   });
 
-  it('dismisses an open peek on scroll and on an outside tap', () => {
-    const happy = EMOTION_WHEEL.find((core) => core.name === 'Happy')!;
-    const leaf = happy.groups[0].leaves[0];
-    const { c, fixture } = setup([]);
-    fixture.detectChanges(); // flush the constructor effect
-
-    c.peek(happy, leaf, origin);
-    fixture.detectChanges(); // effect now arms the document listeners
-    expect(c.peeked()).not.toBeNull();
-    document.dispatchEvent(new Event('scroll'));
-    expect(c.peeked()).toBeNull(); // scrolling anywhere closes it
-
-    c.peek(happy, leaf, origin);
-    fixture.detectChanges();
-    expect(c.peeked()).not.toBeNull();
-    document.dispatchEvent(new Event('pointerdown')); // target = document (outside)
-    expect(c.peeked()).toBeNull();
-  });
-
-  it('peeking a different feeling replaces the shown one; dismiss clears it', () => {
-    const happy = EMOTION_WHEEL.find((core) => core.name === 'Happy')!;
-    const [a, b] = happy.groups[0].leaves; // Aroused, Cheeky
+  it('opens only one gloss at a time', () => {
+    // The gloss renders in place, so two open at once would push the mosaic
+    // around; another word's ⓘ replaces the open one rather than adding to it.
     const { c } = setup([]);
+    c.toggleGloss('Happy/Aroused');
+    c.toggleGloss('Happy/Cheeky');
+    expect(c.opened()).toBe('Happy/Cheeky');
+  });
 
-    c.peek(happy, a, origin);
-    expect(c.peeked()?.name).toBe(a.name);
-    c.peek(happy, b, origin);
-    expect(c.peeked()?.name).toBe(b.name);
-    c.dismissPeek();
-    expect(c.peeked()).toBeNull();
+  it('counts every word in a family, both rings', () => {
+    const happy = EMOTION_WHEEL.find((core) => core.name === 'Happy')!;
+    const groups = happy.groups.length;
+    const leaves = happy.groups.reduce((n, g) => n + g.leaves.length, 0);
+    const { c } = setup([]);
+    expect(c.wordCount(happy)).toBe(groups + leaves);
   });
 
   it('Done closes with the new token set; Cancel closes with undefined', () => {

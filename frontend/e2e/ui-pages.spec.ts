@@ -243,8 +243,10 @@ test('conflicts — kept/theirs cards: lays out cleanly @ phone width', async ({
 });
 
 // The emotion picker is the layout class that breaks silently: a full-screen
-// dialog with a sticky header (search + Done) over an accordion of chip grids.
-test('emotion picker — accordion + sticky header: lays out cleanly @ phone width', async ({ page }, testInfo) => {
+// dialog with a sticky header (search + Done) over the whole vocabulary — every
+// family, every word, on one surface. Nothing is hidden behind an accordion, so
+// a word that wraps badly or spills sideways has nowhere to hide either.
+test('emotion picker — full mosaic + sticky header: lays out cleanly @ phone width', async ({ page }, testInfo) => {
   await mockApi(page);
   await page.goto('/wellbeing');
   // Open the seeded morning check-in (the score-2 entry — it has emotions),
@@ -253,10 +255,13 @@ test('emotion picker — accordion + sticky header: lays out cleanly @ phone wid
   await page.locator('button.add-emotions').click();
   const picker = page.locator('.picker');
   await picker.waitFor();
-  await page.getByRole('button', { name: 'Done' }).waitFor();
-  // Open one accordion family so the chip grid renders.
-  await page.getByText('Happy', { exact: true }).click();
-  await page.getByText('Curious', { exact: true }).waitFor();
+  // Not a substring match: "Add Abandoned" contains "Done".
+  await page.getByRole('button', { name: /^Done/ }).waitFor();
+  // Every family is on screen at once — no expanding needed. Words from the first
+  // and last families must both be present.
+  await expect(page.locator('.family')).toHaveCount(7);
+  await page.getByRole('button', { name: 'Add Curious' }).waitFor();
+  await page.getByRole('button', { name: 'Add Energetic' }).waitFor();
   // The selected-set footer is opaque and sticky; vocabulary text scrolling
   // behind it is occluded, not colliding — the same false-positive the to-do
   // sheet test scopes around. Measure each pinned region and the body apart.
@@ -267,68 +272,52 @@ test('emotion picker — accordion + sticky header: lays out cleanly @ phone wid
   await expectNoHorizontalOverflow(page, testInfo);
 });
 
-// The ⓘ gloss popover is an overlay, so it escapes the overflow/collision checks
-// above entirely — it can hang off the screen edge and nothing else would catch
-// it. It also has to dismiss itself, and its CDK scroll strategy CANNOT see the
-// picker's scroll (the dialog surface isn't a registered CdkScrollable), so the
-// dismissal is hand-wired and needs a test that actually scrolls and taps.
-test('emotion picker ⓘ — gloss popover stays on-screen and dismisses @ phone width', async ({
+// The gloss opens in place, under its own word — no overlay, so it can't hang off
+// a screen edge and needs no dismissal machinery. What CAN break instead: two
+// glosses open at once (which would shove the mosaic around), a gloss pushing the
+// layout sideways, or the ⓘ selecting the word it was only supposed to explain.
+test('emotion picker ⓘ — the gloss opens in place, one at a time @ phone width', async ({
   page,
-}) => {
+}, testInfo) => {
   await mockApi(page);
   await page.goto('/wellbeing');
   await page.locator('.entry.score-2').click();
   await page.locator('button.add-emotions').click();
   await page.locator('.picker').waitFor();
-  await page.getByText('Happy', { exact: true }).click();
-  await page.getByText('Curious', { exact: true }).waitFor();
-
-  const view = page.viewportSize();
-  if (!view) throw new Error('no viewport');
-  const pop = page.locator('.peek-pop');
-  // Only the expanded family's chips: a collapsed mat-expansion-panel still
-  // renders its content, so an unscoped query would match all 82 leaves.
-  const infos = page.locator('mat-expansion-panel.mat-expanded .chip-info');
-  const count = await infos.count();
-  expect(count).toBeGreaterThan(0);
 
   // The seeded check-in already carries emotions, so the selected footer is
-  // present from the start; what matters is that peeking never changes it.
+  // present from the start; what matters is that reading never changes it. Wait
+  // for the footer to render before counting — otherwise this races the first
+  // paint and banks a zero.
+  await page.locator('.picker .selected').waitFor();
   const chosen = page.locator('.picker .selected .emo');
   const chosenBefore = await chosen.count();
+  expect(chosenBefore).toBeGreaterThan(0);
 
-  // Every ⓘ in the family: its popover must sit wholly inside the viewport.
-  for (let i = 0; i < count; i++) {
-    await infos.nth(i).click();
-    await pop.waitFor();
-    const box = await pop.boundingBox();
-    if (!box) throw new Error(`no popover box for chip ${i}`);
-    expect(box.x, `chip ${i} popover off the left edge`).toBeGreaterThanOrEqual(0);
-    expect(box.y, `chip ${i} popover off the top edge`).toBeGreaterThanOrEqual(0);
-    expect(box.x + box.width, `chip ${i} popover off the right edge`).toBeLessThanOrEqual(
-      view.width,
-    );
-    expect(box.y + box.height, `chip ${i} popover off the bottom edge`).toBeLessThanOrEqual(
-      view.height,
-    );
-    await infos.nth(i).click(); // the same ⓘ toggles it shut
-    await expect(pop).toBeHidden();
-  }
+  const gloss = page.locator('.picker .gloss');
+  const curious = page.getByRole('button', { name: 'What Curious means' });
+  const absorbed = page.getByRole('button', { name: 'What Absorbed means' });
 
-  // Scrolling the picker dismisses it (the anchor has moved).
-  await infos.first().click();
-  await expect(pop).toBeVisible();
-  await page.mouse.wheel(0, 250);
-  await expect(pop).toBeHidden();
+  await curious.click();
+  await expect(gloss).toHaveCount(1);
+  await expect(gloss).toHaveText('Eager to explore, learn, or find out more.');
 
-  // Tapping outside dismisses it.
-  await infos.first().click();
-  await expect(pop).toBeVisible();
-  await page.locator('.picker .top h2').click();
-  await expect(pop).toBeHidden();
+  // Another word's ⓘ replaces the open one rather than stacking under it.
+  await absorbed.click();
+  await expect(gloss).toHaveCount(1);
+  await expect(gloss).toContainText('the hours and the world fall away');
+
+  // An open gloss must not widen the surface.
+  await expectNoHorizontalOverflow(page, testInfo, '.picker');
+  await expectNoTextOverlaps(page, testInfo, '.picker .body');
+
+  // The same ⓘ closes it.
+  await absorbed.click();
+  await expect(gloss).toHaveCount(0);
 
   // Reading a gloss must never select the feeling.
   await expect(chosen).toHaveCount(chosenBefore);
+  await expect(page.getByRole('button', { name: 'Add Absorbed' })).toBeVisible();
 });
 
 // The one the user asked for by name: tapping a to-do opens the edit sheet — a

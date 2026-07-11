@@ -1,10 +1,8 @@
-import { CdkOverlayOrigin, ConnectedPosition, OverlayModule } from '@angular/cdk/overlay';
-import { DOCUMENT } from '@angular/common';
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { MatExpansionModule } from '@angular/material/expansion';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
@@ -20,41 +18,35 @@ import {
   searchEmotions,
 } from '../../shared/emotion-wheel';
 
-/** Any node the picker can show or select: a group or a leaf, both `{name, desc}`. */
-interface Nameable {
-  readonly name: string;
-  readonly desc: string;
-}
-
 export interface EmotionPickerData {
   /** The emotions already on the entry (qualified tokens, or legacy bare words). */
   selected: string[];
 }
 
-/** The feeling being explained — its identity, word, gloss, and family colour. */
-interface Peek {
-  token: string;
-  name: string;
-  desc: string;
-  color: string;
-}
-
 /** Browse and search the feelings wheel to add/remove emotions on a check-in.
- *  Mobile-first: a search box that flattens the whole vocabulary, plus a
- *  colour-coded drill-down accordion to explore it. Multi-select and
- *  independent — any number of feelings from any families. Works throughout in
- *  qualified `Core/Leaf` tokens (so a leaf that appears under two cores stays two
- *  distinct choices); the incoming selection is normalised to tokens on open.
- *  Closes with the new set of tokens (Done), or `undefined` if dismissed. */
+ *
+ *  Browse is a mosaic, not a grid of controls: each family is a region of its own
+ *  colour, and every word in it is plain text — colour carries the family, weight
+ *  the ring. Chrome appears only on the words you actually chose. The whole
+ *  vocabulary is on one surface, because the point of holding ~130 words is to
+ *  offer you one you would not have thought to search for; hiding them behind
+ *  drill-downs or a recents list would quietly return you to the same dozen.
+ *
+ *  Meaning is per-word and opens in place: a small ⓘ beside a word drops its
+ *  gloss directly underneath it. One at a time, no overlay, no gesture.
+ *
+ *  Works throughout in qualified `Core/Name` tokens (so a word that appears under
+ *  two cores stays two distinct choices, and a group stays distinct from its
+ *  leaves); the incoming selection is normalised to tokens on open. Closes with
+ *  the new set of tokens (Done), or `undefined` if dismissed. */
 @Component({
   selector: 'app-emotion-picker',
   templateUrl: './emotion-picker.html',
   styleUrl: './emotion-picker.scss',
   imports: [
     FormsModule,
-    OverlayModule,
+    NgTemplateOutlet,
     MatButtonModule,
-    MatExpansionModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
@@ -63,31 +55,6 @@ interface Peek {
 export class EmotionPicker {
   private ref = inject<MatDialogRef<EmotionPicker, string[] | undefined>>(MatDialogRef);
   private data = inject<EmotionPickerData>(MAT_DIALOG_DATA);
-  private doc = inject(DOCUMENT);
-
-  constructor() {
-    // While a peek is open, dismiss it on any scroll or any tap outside it. Done
-    // at the document in the capture phase because the picker scrolls inside the
-    // dialog surface — a container CDK's ScrollDispatcher doesn't track, so its
-    // scroll strategy never fires — and capture-phase scroll events surface from
-    // any container. Taps on the popover or an ⓘ are ignored (the ⓘ toggles
-    // itself; a different ⓘ switches). No backdrop, so scrolling stays native.
-    effect((onCleanup) => {
-      if (!this.peeked()) return;
-      const dismiss = (): void => this.dismissPeek();
-      const onDown = (e: Event): void => {
-        const t = e.target;
-        if (t instanceof Element && (t.closest('.peek-pop') || t.closest('.chip-info'))) return;
-        this.dismissPeek();
-      };
-      this.doc.addEventListener('scroll', dismiss, true);
-      this.doc.addEventListener('pointerdown', onDown, true);
-      onCleanup(() => {
-        this.doc.removeEventListener('scroll', dismiss, true);
-        this.doc.removeEventListener('pointerdown', onDown, true);
-      });
-    });
-  }
 
   readonly wheel = EMOTION_WHEEL;
   readonly query = signal('');
@@ -117,7 +84,7 @@ export class EmotionPicker {
     return emotionColor(token);
   }
 
-  /** The bare leaf word for a token, for chip display. */
+  /** The bare word for a token, for chip display. */
   label(token: string): string {
     return emotionLabel(token);
   }
@@ -127,7 +94,12 @@ export class EmotionPicker {
     return emotionDesc(token);
   }
 
-  /** How many selected tokens fall under a given core (for the panel badge) —
+  /** Every selectable word in a family — both rings — for the family's count. */
+  wordCount(core: EmotionCore): number {
+    return core.groups.reduce((n, g) => n + g.leaves.length + 1, 0);
+  }
+
+  /** How many selected tokens fall under a given core (for the family badge) —
    *  groups count too, since a group is a selectable answer of its own. */
   coreCount(core: EmotionCore): number {
     const sel = this.selected();
@@ -145,34 +117,14 @@ export class EmotionPicker {
     this.selected.set(next);
   }
 
-  // Tapping a chip's ⓘ opens a small popover anchored to it, giving that
-  // feeling's gloss without selecting it — an explicit, visible, accessible
-  // affordance (no gesture). Browse stays compact; meaning is one tap away and
-  // also inline in search.
-  readonly peeked = signal<Peek | null>(null);
-  /** The ⓘ the open popover is anchored to (kept once set so the overlay
-   *  template always has an origin; visibility is driven by `peeked`). */
-  readonly peekOrigin = signal<CdkOverlayOrigin | null>(null);
+  /** The one word whose gloss is currently open, if any. */
+  readonly opened = signal<string | null>(null);
 
-  /** Prefer above the ⓘ, fall back below; CDK flips/pushes to stay on-screen. */
-  readonly peekPositions: ConnectedPosition[] = [
-    { originX: 'center', originY: 'top', overlayX: 'center', overlayY: 'bottom', offsetY: -8 },
-    { originX: 'center', originY: 'bottom', overlayX: 'center', overlayY: 'top', offsetY: 8 },
-  ];
-
-  /** Tap the ⓘ: explain this feeling — or dismiss if it's already the one shown. */
-  peek(core: EmotionCore, node: Nameable, origin: CdkOverlayOrigin): void {
-    const token = this.tokenOf(core, node.name);
-    if (this.peeked()?.token === token) {
-      this.peeked.set(null);
-      return;
-    }
-    this.peekOrigin.set(origin);
-    this.peeked.set({ token, name: node.name, desc: node.desc, color: core.color });
-  }
-
-  dismissPeek(): void {
-    this.peeked.set(null);
+  /** Tap a word's ⓘ: show what it means, in place. Tapping it again — or another
+   *  word's ⓘ — closes it, so only ever one gloss is open and reading a word
+   *  never selects it. */
+  toggleGloss(token: string): void {
+    this.opened.update((cur) => (cur === token ? null : token));
   }
 
   done(): void {

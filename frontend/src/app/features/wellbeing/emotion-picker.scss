@@ -45,7 +45,6 @@ header {
   padding: 0.5rem 0.75rem 1rem;
 }
 
-// Tells first-timers the hold gesture exists (browse mode only).
 .hint {
   margin: 0.25rem 0 0.75rem;
   font: var(--mat-sys-body-small);
@@ -53,108 +52,121 @@ header {
   text-align: center;
 }
 
-// A browse chip is a compound pill: the label (tap = add) and an ⓘ (tap =
-// explain), two real buttons so neither nests inside the other, split by a faint
-// divider so the ⓘ reads as its own target.
-.chip {
-  display: inline-flex;
-  align-items: stretch;
-  min-height: 40px;
-  border: 1px solid color-mix(in srgb, var(--c) 45%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--c) 12%, transparent);
-  overflow: hidden;
+// A family is a region of its own colour — a heading and its words, no boxes.
+.family {
+  padding: 0.7rem 0 0.5rem;
 
-  &.on {
-    border-color: var(--c);
-    background: color-mix(in srgb, var(--c) 30%, transparent);
+  + .family {
+    border-top: 1px solid var(--mat-sys-outline-variant);
   }
 
-  .chip-pick,
-  .chip-info {
-    display: inline-flex;
+  h2 {
+    display: flex;
     align-items: center;
-    border: none;
-    background: none;
-    cursor: pointer;
-    mat-icon {
-      width: 18px;
-      height: 18px;
-      font-size: 18px;
-    }
+    gap: 0.45rem;
+    margin: 0 0 0.5rem;
+    color: var(--c);
+    font: var(--mat-sys-label-medium);
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
   }
-  .chip-pick {
-    gap: 0.2rem;
-    padding: 0.35rem 0.4rem 0.35rem 0.7rem;
-    color: var(--mat-sys-on-surface);
+  .dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--c);
+  }
+  // How many words this family offers — the point is that there are many.
+  .n {
+    margin-left: auto;
+    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-label-small);
+    letter-spacing: 0;
+    text-transform: none;
+  }
+}
+
+// The group leads its leaves, tied to them by a rail in the family colour.
+.group {
+  margin-bottom: 0.5rem;
+  padding-left: 0.6rem;
+  border-left: 2px solid color-mix(in srgb, var(--c) 30%, transparent);
+}
+
+// A word is TEXT: colour carries the family, weight the ring. It gets no border,
+// no fill and no pill until you actually choose it — so ~130 words can sit on one
+// surface without the screen turning into a wall of buttons.
+.w {
+  display: inline;
+  margin-right: 0.4rem;
+  line-height: 1.9;
+  white-space: nowrap; // keep a word and its ⓘ together
+
+  &.grp {
+    display: block;
+    margin-bottom: 0.05rem;
+  }
+  &.grp .pick {
+    color: var(--c);
     font: var(--mat-sys-label-large);
-  }
-  &.on .chip-pick {
-    font-weight: 600;
-  }
-  .chip-info {
-    padding: 0.35rem 0.55rem;
-    border-left: 1px solid color-mix(in srgb, var(--c) 30%, transparent);
-    color: var(--mat-sys-on-surface-variant);
-    &.on {
-      color: var(--c);
-      background: color-mix(in srgb, var(--c) 18%, transparent);
-    }
+    font-weight: 700;
   }
 }
 
-// The ⓘ peek: a small popover anchored to the tapped ⓘ (CDK overlay), giving
-// one feeling's gloss. Tap outside (the transparent backdrop) or the same ⓘ to
-// dismiss. Rendered in the overlay container but keeps this component's styles.
-.peek-pop {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  max-width: min(18rem, 80vw);
-  padding: 0.6rem 0.8rem;
-  border: 1px solid color-mix(in srgb, var(--c) 55%, transparent);
-  border-radius: 12px;
+.pick {
+  padding: 0.1rem 0.15rem;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-large);
+  cursor: pointer;
+}
+// Chosen words are the only ones wearing chrome — so the selection reads at a
+// glance against the plain text around it.
+.w.on .pick {
+  padding: 0.1rem 0.45rem;
+  background: var(--c);
+  color: var(--mat-sys-inverse-on-surface);
+  font-weight: 600;
+}
+
+// The meaning affordance rides beside its word instead of being a second
+// full-size button glued to it: a glyph, not a control.
+.info {
+  padding: 0 0.15rem;
+  border: none;
+  background: none;
+  color: var(--mat-sys-outline);
+  cursor: pointer;
+
+  mat-icon {
+    width: 15px;
+    height: 15px;
+    font-size: 15px;
+    vertical-align: -0.15em;
+  }
+  &.open {
+    color: var(--c);
+  }
+}
+
+// The gloss opens in place, under its own word — no overlay, no anchoring, and
+// nothing to dismiss on scroll. Only one is ever open.
+.gloss {
+  margin: 0.15rem 0 0.4rem;
+  padding: 0.4rem 0.55rem;
+  border-left: 2px solid var(--c);
+  border-radius: 0 6px 6px 0;
   background: var(--mat-sys-surface-container-high);
-  box-shadow: var(--mat-sys-level2);
-
-  .peek-name {
-    font: var(--mat-sys-title-small);
-    font-weight: 600;
-  }
-  .peek-desc {
-    font: var(--mat-sys-body-medium);
-    color: var(--mat-sys-on-surface-variant);
-  }
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  white-space: normal;
 }
 
-// The secondary group leads its leaves — so it has to read as a heading — but it
-// is also selectable, so it has to read as a chip. It gets the chip's shape with
-// a heavier weight and a squarer corner, and its leaves indent beneath it.
-.group-chip {
-  display: flex; // own line, above the leaves it heads
-  width: fit-content;
-  margin: 0.9rem 0 0.4rem;
-  border-radius: 10px;
-
-  .chip-pick {
-    font: var(--mat-sys-title-small);
-    font-weight: 600;
-  }
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
-
-// Leaves indent under the group chip that heads them.
-.body .chips {
-  margin-left: 0.75rem;
-}
-
-// Search results are a vertical list, not chips: each row shows the word, its
-// path, and a gloss, so you can tell near-synonyms apart while choosing.
+// Search results are a vertical list: each row shows the word, its path, and a
+// gloss, so you can tell near-synonyms apart while choosing.
 .results {
   display: flex;
   flex-direction: column;
@@ -201,17 +213,9 @@ header {
   }
 }
 
-// Accordion panel header: a family swatch + a count badge of what's chosen.
-.swatch {
-  width: 14px;
-  height: 14px;
-  margin-right: 0.5rem;
-  border-radius: 50%;
-  background: var(--c);
-}
 // Shape/tint from the global .count-badge; only the placement lives here.
 .badge {
-  margin-left: 0.5rem;
+  margin-left: 0.1rem;
 }
 
 .empty {
@@ -230,4 +234,10 @@ header {
   padding: 0.6rem 0.75rem;
   border-top: 1px solid var(--mat-sys-outline-variant);
   background: var(--mat-sys-surface-container-low);
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
 }
