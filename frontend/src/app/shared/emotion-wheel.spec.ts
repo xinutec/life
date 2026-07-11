@@ -4,7 +4,9 @@ import {
   EMOTION_LEAVES,
   EMOTION_WHEEL,
   emotionColor,
+  emotionLabel,
   emotionLeaf,
+  emotionToken,
   searchEmotions,
 } from './emotion-wheel';
 
@@ -16,25 +18,51 @@ describe('emotion-wheel', () => {
     expect(EMOTION_LEAVES.length).toBe(82); // 41 secondary × 2
   });
 
-  it('resolves a leaf to its path and family colour', () => {
-    expect(emotionLeaf('Withdrawn')).toEqual({
+  it('every leaf carries a unique qualified token', () => {
+    const tokens = EMOTION_LEAVES.map((l) => l.token);
+    expect(new Set(tokens).size).toBe(tokens.length); // no collisions
+    expect(EMOTION_LEAVES.find((l) => l.leaf === 'Withdrawn')?.token).toBe('Angry/Withdrawn');
+  });
+
+  it('resolves a qualified token to its path and family colour', () => {
+    expect(emotionLeaf('Angry/Withdrawn')).toEqual({
+      token: 'Angry/Withdrawn',
       leaf: 'Withdrawn',
       secondary: 'Distant',
       core: 'Angry',
       color: 'angry',
     });
-    expect(emotionColor('Withdrawn')).toBe('angry');
+    expect(emotionColor('Angry/Withdrawn')).toBe('angry');
+    expect(emotionLabel('Angry/Withdrawn')).toBe('Withdrawn');
   });
 
-  it('resolves a duplicated leaf to its first wheel occurrence', () => {
-    // "Embarrassed" is under both Sad › Hurt and Disgusted › Disapproving; Sad
-    // comes first in the wheel, so that path wins.
+  it('keeps a same-named leaf under two cores distinct', () => {
+    // "Overwhelmed" is a leaf under both Fearful › Anxious and Bad › Stressed.
+    // The qualified tokens resolve to different cores and colours — the crux of
+    // "same name in different groups is NOT the same emotion".
+    expect(emotionLeaf('Fearful/Overwhelmed')?.core).toBe('Fearful');
+    expect(emotionLeaf('Bad/Overwhelmed')?.core).toBe('Bad');
+    expect(emotionColor('Fearful/Overwhelmed')).not.toBe(emotionColor('Bad/Overwhelmed'));
+  });
+
+  it('resolves a legacy bare word to its first wheel occurrence', () => {
+    // Pre-qualification check-ins stored a bare leaf. "Embarrassed" is under both
+    // Sad › Hurt and Disgusted › Disapproving; Sad comes first, so that wins —
+    // exactly as it displayed before tokens existed.
     expect(emotionLeaf('Embarrassed')?.core).toBe('Sad');
+    expect(emotionToken('Embarrassed')).toBe('Sad/Embarrassed'); // upgrades on next save
   });
 
-  it('returns a neutral colour for an unknown word', () => {
+  it('canonicalises words: token passes through, bare upgrades, unknown kept', () => {
+    expect(emotionToken('Bad/Overwhelmed')).toBe('Bad/Overwhelmed');
+    expect(emotionToken('Withdrawn')).toBe('Angry/Withdrawn');
+    expect(emotionToken('Flabbergasted')).toBe('Flabbergasted');
+  });
+
+  it('returns a neutral colour and verbatim label for an unknown word', () => {
     expect(emotionLeaf('Flabbergasted')).toBeNull();
     expect(emotionColor('Flabbergasted')).toBe('unknown');
+    expect(emotionLabel('Flabbergasted')).toBe('Flabbergasted');
   });
 
   it('searches across leaf, secondary and core names', () => {

@@ -30,15 +30,15 @@
     @if (query()) {
       @if (results().length) {
         <div class="chips">
-          @for (r of results(); track r.core + '/' + r.leaf) {
+          @for (r of results(); track r.token) {
             <button
               type="button"
               class="emo emo-{{ r.color }}"
-              [class.on]="isSelected(r.leaf)"
-              [attr.aria-pressed]="isSelected(r.leaf)"
-              (click)="toggle(r.leaf)"
+              [class.on]="isSelected(r.token)"
+              [attr.aria-pressed]="isSelected(r.token)"
+              (click)="toggle(r.token)"
             >
-              @if (isSelected(r.leaf)) {
+              @if (isSelected(r.token)) {
                 <mat-icon>check</mat-icon>
               }
               {{ r.leaf }}
@@ -69,11 +69,11 @@
                   <button
                     type="button"
                     class="emo emo-{{ core.color }}"
-                    [class.on]="isSelected(leaf)"
-                    [attr.aria-pressed]="isSelected(leaf)"
-                    (click)="toggle(leaf)"
+                    [class.on]="isSelected(tokenOf(core, leaf))"
+                    [attr.aria-pressed]="isSelected(tokenOf(core, leaf))"
+                    (click)="toggle(tokenOf(core, leaf))"
                   >
-                    @if (isSelected(leaf)) {
+                    @if (isSelected(tokenOf(core, leaf))) {
                       <mat-icon>check</mat-icon>
                     }
                     {{ leaf }}
@@ -90,14 +90,14 @@
   @if (count() > 0) {
     <footer class="selected">
       <div class="chips">
-        @for (leaf of selectedList(); track leaf) {
+        @for (token of selectedList(); track token) {
           <button
             type="button"
-            class="emo emo-{{ color(leaf) }} on"
-            [attr.aria-label]="'Remove ' + leaf"
-            (click)="toggle(leaf)"
+            class="emo emo-{{ color(token) }} on"
+            [attr.aria-label]="'Remove ' + label(token)"
+            (click)="toggle(token)"
           >
-            {{ leaf }}
+            {{ label(token) }}
             <mat-icon>close</mat-icon>
           </button>
         }

@@ -60,14 +60,14 @@
       </div>
       @if (e.emotions.length) {
         <div class="emo-chips">
-          @for (leaf of e.emotions; track leaf) {
+          @for (token of e.emotions; track token) {
             <button
               type="button"
-              class="emo emo-{{ emotionColor(leaf) }} on"
-              [attr.aria-label]="'Remove ' + leaf"
-              (click)="removeEmotion(leaf)"
+              class="emo emo-{{ emotionColor(token) }} on"
+              [attr.aria-label]="'Remove ' + emotionLabel(token)"
+              (click)="removeEmotion(token)"
             >
-              {{ leaf }}
+              {{ emotionLabel(token) }}
               <mat-icon>close</mat-icon>
             </button>
           }

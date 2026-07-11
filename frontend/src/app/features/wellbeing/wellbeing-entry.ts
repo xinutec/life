@@ -11,7 +11,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 
-import { emotionColor } from '../../shared/emotion-wheel';
+import { emotionColor, emotionLabel } from '../../shared/emotion-wheel';
 import { Feedback } from '../../shared/feedback';
 import { SheetHeader } from '../../shared/sheet-header';
 import { ENERGY_LEVELS, WELLBEING_SCORES } from '../../shared/wellbeing-checkin';
@@ -85,8 +85,13 @@ export class WellbeingEntry implements OnDestroy {
     void this.store.patch(this.ulid, { energy: next });
   }
 
-  emotionColor(leaf: string): string {
-    return emotionColor(leaf);
+  emotionColor(token: string): string {
+    return emotionColor(token);
+  }
+
+  /** The bare leaf word to show for a stored token (or legacy bare word). */
+  emotionLabel(token: string): string {
+    return emotionLabel(token);
   }
 
   /** Open the feelings-wheel picker seeded with the current set; on Done, store
@@ -106,8 +111,8 @@ export class WellbeingEntry implements OnDestroy {
     });
   }
 
-  removeEmotion(leaf: string): void {
-    const next = (this.entry()?.emotions ?? []).filter((e) => e !== leaf);
+  removeEmotion(token: string): void {
+    const next = (this.entry()?.emotions ?? []).filter((e) => e !== token);
     void this.store.patch(this.ulid, { emotions: next });
   }
 

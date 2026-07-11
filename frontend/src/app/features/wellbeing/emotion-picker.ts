@@ -11,19 +11,23 @@ import {
   EMOTION_WHEEL,
   EmotionCore,
   emotionColor,
+  emotionLabel,
+  emotionToken,
   searchEmotions,
 } from '../../shared/emotion-wheel';
 
 export interface EmotionPickerData {
-  /** The leaf words already on the entry. */
+  /** The emotions already on the entry (qualified tokens, or legacy bare words). */
   selected: string[];
 }
 
 /** Browse and search the feelings wheel to add/remove emotions on a check-in.
  *  Mobile-first: a search box that flattens the whole vocabulary, plus a
  *  colour-coded drill-down accordion to explore it. Multi-select and
- *  independent — any number of feelings from any families. Closes with the new
- *  set of leaf words (Done), or `undefined` if dismissed (changes discarded). */
+ *  independent — any number of feelings from any families. Works throughout in
+ *  qualified `Core/Leaf` tokens (so a leaf that appears under two cores stays two
+ *  distinct choices); the incoming selection is normalised to tokens on open.
+ *  Closes with the new set of tokens (Done), or `undefined` if dismissed. */
 @Component({
   selector: 'app-emotion-picker',
   templateUrl: './emotion-picker.html',
@@ -43,31 +47,43 @@ export class EmotionPicker {
 
   readonly wheel = EMOTION_WHEEL;
   readonly query = signal('');
-  readonly selected = signal<ReadonlySet<string>>(new Set(this.data.selected));
+  // The working set holds canonical tokens; legacy bare words are upgraded here,
+  // the single normalisation boundary — every other method deals only in tokens.
+  readonly selected = signal<ReadonlySet<string>>(new Set(this.data.selected.map(emotionToken)));
 
   readonly results = computed(() => searchEmotions(this.query()));
   readonly count = computed(() => this.selected().size);
   readonly selectedList = computed(() => [...this.selected()]);
 
-  isSelected(leaf: string): boolean {
-    return this.selected().has(leaf);
+  /** The qualified token for a leaf under a given core. */
+  tokenOf(core: EmotionCore, leaf: string): string {
+    return `${core.name}/${leaf}`;
   }
 
-  color(leaf: string): string {
-    return emotionColor(leaf);
+  isSelected(token: string): boolean {
+    return this.selected().has(token);
   }
 
-  /** How many selected leaves fall under a given core (for the panel badge). */
+  color(token: string): string {
+    return emotionColor(token);
+  }
+
+  /** The bare leaf word for a token, for chip display. */
+  label(token: string): string {
+    return emotionLabel(token);
+  }
+
+  /** How many selected tokens fall under a given core (for the panel badge). */
   coreCount(core: EmotionCore): number {
     const sel = this.selected();
     let n = 0;
-    for (const g of core.groups) for (const leaf of g.leaves) if (sel.has(leaf)) n++;
+    for (const g of core.groups) for (const leaf of g.leaves) if (sel.has(this.tokenOf(core, leaf))) n++;
     return n;
   }
 
-  toggle(leaf: string): void {
+  toggle(token: string): void {
     const next = new Set(this.selected());
-    if (!next.delete(leaf)) next.add(leaf);
+    if (!next.delete(token)) next.add(token);
     this.selected.set(next);
   }
 

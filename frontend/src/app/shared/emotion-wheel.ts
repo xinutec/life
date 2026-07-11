@@ -1,13 +1,19 @@
 /** The Geoffrey Roberts "Feelings Wheel": a fixed, three-tier emotional
  *  vocabulary — 7 core emotions, each with a ring of secondary feelings, each
- *  with two fine-grained tertiary leaves (~130 in all). Held as static data (no
- *  backend): a check-in records a set of *leaf* words, and their path back up to
- *  the core is derived here for display and colour.
+ *  with fine-grained tertiary leaves. Held as static data (no backend): a
+ *  check-in records a set of emotions, and their path back up to the core is
+ *  derived here for display and colour.
  *
- *  Leaf words are the stored identity. A few leaves ("Embarrassed",
- *  "Disappointed", "Inferior", "Overwhelmed") appear under two cores in the
- *  canonical wheel — [[emotionPath]] resolves to the first, which is enough for
- *  labelling; the stored word is unambiguous as a tag. */
+ *  Identity is the *qualified* token `Core/Leaf` (see [[emotionToken]]), not the
+ *  bare leaf word — because a few leaves ("Embarrassed", "Inferior",
+ *  "Overwhelmed") sit under two different cores, and a bare word can't tell them
+ *  apart (same name in different groups is NOT the same emotion). The `/`
+ *  delimiter is safe: no core or leaf name contains a slash.
+ *
+ *  Back-compat: check-ins saved before qualification stored a bare leaf. Those
+ *  still resolve, via a first-occurrence fallback, to exactly the core they
+ *  always displayed as — so nothing regresses and we never invent which core an
+ *  old ambiguous word "really" meant. */
 
 export interface EmotionGroup {
   /** The middle-ring (secondary) feeling. */
@@ -114,27 +120,53 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
 /** One outer-ring leaf, flattened with its path up to the core (for search and
  *  chip labelling). */
 export interface EmotionLeaf {
+  /** Qualified `Core/Leaf` identity — what a check-in stores. Unique wheel-wide. */
+  token: string;
   leaf: string;
   secondary: string;
   core: string;
   color: string;
 }
 
-/** Every leaf, in wheel order. First occurrence of a duplicated word wins for
- *  path resolution. */
+/** Every leaf, in wheel order, each carrying its qualified token. */
 export const EMOTION_LEAVES: readonly EmotionLeaf[] = EMOTION_WHEEL.flatMap((core) =>
   core.groups.flatMap((group) =>
-    group.leaves.map((leaf) => ({ leaf, secondary: group.name, core: core.name, color: core.color })),
+    group.leaves.map((leaf) => ({
+      token: `${core.name}/${leaf}`,
+      leaf,
+      secondary: group.name,
+      core: core.name,
+      color: core.color,
+    })),
   ),
 );
 
-const LEAF_BY_NAME = new Map<string, EmotionLeaf>();
-for (const l of EMOTION_LEAVES) if (!LEAF_BY_NAME.has(l.leaf)) LEAF_BY_NAME.set(l.leaf, l);
+/** Primary lookup: exact qualified token → entry. Unambiguous. */
+const BY_TOKEN = new Map<string, EmotionLeaf>();
+for (const l of EMOTION_LEAVES) BY_TOKEN.set(l.token, l);
 
-/** Resolve a stored leaf word to its wheel entry (path + colour), or null if it
- *  isn't in the vocabulary (e.g. a word retired from a later wheel revision). */
+/** Legacy fallback: bare leaf word → first wheel occurrence, preserving the
+ *  pre-qualification resolution for check-ins saved before tokens existed. */
+const BY_LEAF = new Map<string, EmotionLeaf>();
+for (const l of EMOTION_LEAVES) if (!BY_LEAF.has(l.leaf)) BY_LEAF.set(l.leaf, l);
+
+/** Resolve a stored word — a qualified `Core/Leaf` token or a legacy bare leaf —
+ *  to its wheel entry (path + colour), or null if it isn't in the vocabulary
+ *  (e.g. a word retired from a later wheel revision). */
 export function emotionLeaf(word: string): EmotionLeaf | null {
-  return LEAF_BY_NAME.get(word) ?? null;
+  return BY_TOKEN.get(word) ?? BY_LEAF.get(word) ?? null;
+}
+
+/** Canonical stored token for a word: an already-qualified token passes through,
+ *  a legacy bare leaf upgrades to its resolved `Core/Leaf`, and an unknown word
+ *  is preserved verbatim (so a retired-vocabulary tag is never silently lost). */
+export function emotionToken(word: string): string {
+  return emotionLeaf(word)?.token ?? word;
+}
+
+/** The bare leaf word to display for a stored token (unknown words shown as-is). */
+export function emotionLabel(word: string): string {
+  return emotionLeaf(word)?.leaf ?? word;
 }
 
 /** The colour key for a stored word — the family it belongs to, or a neutral

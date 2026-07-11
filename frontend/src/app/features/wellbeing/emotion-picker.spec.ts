@@ -18,34 +18,51 @@ describe('EmotionPicker', () => {
     return { c: TestBed.createComponent(EmotionPicker).componentInstance, ref };
   }
 
-  it('seeds from the passed selection', () => {
-    const { c } = setup(['Withdrawn']);
-    expect(c.isSelected('Withdrawn')).toBe(true);
-    expect(c.isSelected('Numb')).toBe(false);
+  it('seeds from a token selection', () => {
+    const { c } = setup(['Angry/Withdrawn']);
+    expect(c.isSelected('Angry/Withdrawn')).toBe(true);
+    expect(c.isSelected('Angry/Numb')).toBe(false);
     expect(c.count()).toBe(1);
   });
 
-  it('toggles a leaf on and off', () => {
+  it('upgrades a legacy bare word to its token when seeding', () => {
+    const { c } = setup(['Withdrawn']); // pre-qualification stored value
+    expect(c.isSelected('Angry/Withdrawn')).toBe(true);
+    expect(c.selectedList()).toEqual(['Angry/Withdrawn']);
+  });
+
+  it('toggles a token on and off', () => {
     const { c } = setup([]);
-    c.toggle('Anxious');
-    expect(c.isSelected('Anxious')).toBe(true);
-    expect(c.selectedList()).toEqual(['Anxious']);
-    c.toggle('Anxious');
-    expect(c.isSelected('Anxious')).toBe(false);
+    c.toggle('Fearful/Anxious');
+    expect(c.isSelected('Fearful/Anxious')).toBe(true);
+    expect(c.selectedList()).toEqual(['Fearful/Anxious']);
+    c.toggle('Fearful/Anxious');
+    expect(c.isSelected('Fearful/Anxious')).toBe(false);
     expect(c.count()).toBe(0);
   });
 
-  it('counts selected leaves per core for the panel badge', () => {
+  it('keeps a same-named leaf under two cores independently selectable', () => {
+    // "Overwhelmed" sits under both Fearful and Bad — selecting one must not
+    // light up the other (the whole point of qualified tokens).
+    const { c } = setup([]);
+    c.toggle('Fearful/Overwhelmed');
+    expect(c.isSelected('Fearful/Overwhelmed')).toBe(true);
+    expect(c.isSelected('Bad/Overwhelmed')).toBe(false);
+    expect(c.count()).toBe(1);
+  });
+
+  it('counts selected tokens per core for the panel badge', () => {
     const angry = EMOTION_WHEEL.find((core) => core.name === 'Angry')!;
-    const { c } = setup(['Withdrawn', 'Numb', 'Anxious']); // 2 Angry, 1 Fearful
+    // 2 Angry, 1 Fearful — coreCount(Angry) must ignore the Fearful one.
+    const { c } = setup(['Angry/Withdrawn', 'Angry/Numb', 'Fearful/Anxious']);
     expect(c.coreCount(angry)).toBe(2);
   });
 
-  it('Done closes with the new set; Cancel closes with undefined', () => {
-    const { c, ref } = setup(['Withdrawn']);
-    c.toggle('Numb');
+  it('Done closes with the new token set; Cancel closes with undefined', () => {
+    const { c, ref } = setup(['Angry/Withdrawn']);
+    c.toggle('Angry/Numb');
     c.done();
-    expect(ref.close).toHaveBeenCalledWith(['Withdrawn', 'Numb']);
+    expect(ref.close).toHaveBeenCalledWith(['Angry/Withdrawn', 'Angry/Numb']);
 
     c.cancel();
     expect(ref.close).toHaveBeenLastCalledWith(undefined);
