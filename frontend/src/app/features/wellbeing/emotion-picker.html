@@ -42,8 +42,8 @@
                 @if (isSelected(r.token)) {
                   <mat-icon>check</mat-icon>
                 }
-                <span class="name">{{ r.leaf }}</span>
-                <span class="path">{{ r.core }} › {{ r.secondary }}</span>
+                <span class="name">{{ r.name }}</span>
+                <span class="path">{{ path(r) }}</span>
               </span>
               <span class="desc">{{ r.desc }}</span>
             </button>
@@ -53,7 +53,10 @@
         <p class="empty">No feelings match “{{ query() }}”.</p>
       }
     } @else {
-      <p class="hint">Tap a feeling to add it · tap the ⓘ to see what it means.</p>
+      <p class="hint">
+        Tap a feeling to add it · tap the ⓘ to see what it means. The wider chips are feelings too —
+        pick one when the finer words would overstate it.
+      </p>
       <mat-accordion>
         @for (core of wheel; track core.name) {
           <mat-expansion-panel>
@@ -67,7 +70,33 @@
               </mat-panel-title>
             </mat-expansion-panel-header>
             @for (g of core.groups; track g.name) {
-              <p class="group">{{ g.name }}</p>
+              <!-- The group heading is itself a choice: "frustrated" is often the
+                   whole truth, and a leaf would overstate it. -->
+              <div class="chip group-chip emo-{{ core.color }}" [class.on]="isSelected(tokenOf(core, g.name))">
+                <button
+                  type="button"
+                  class="chip-pick"
+                  [attr.aria-pressed]="isSelected(tokenOf(core, g.name))"
+                  [attr.aria-label]="(isSelected(tokenOf(core, g.name)) ? 'Remove ' : 'Add ') + g.name"
+                  (click)="toggle(tokenOf(core, g.name))"
+                >
+                  @if (isSelected(tokenOf(core, g.name))) {
+                    <mat-icon>check</mat-icon>
+                  }
+                  {{ g.name }}
+                </button>
+                <button
+                  type="button"
+                  class="chip-info"
+                  cdkOverlayOrigin
+                  #ginfo="cdkOverlayOrigin"
+                  [class.on]="peeked()?.token === tokenOf(core, g.name)"
+                  [attr.aria-label]="'What ' + g.name + ' means'"
+                  (click)="peek(core, g, ginfo)"
+                >
+                  <mat-icon>info</mat-icon>
+                </button>
+              </div>
               <div class="chips">
                 @for (leaf of g.leaves; track leaf.name) {
                   <div class="chip emo-{{ core.color }}" [class.on]="isSelected(tokenOf(core, leaf.name))">

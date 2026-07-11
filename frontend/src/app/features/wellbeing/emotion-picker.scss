@@ -127,16 +127,30 @@ header {
   }
 }
 
-.group {
-  margin: 0.75rem 0 0.35rem;
-  font: var(--mat-sys-label-medium);
-  color: var(--mat-sys-on-surface-variant);
+// The secondary group leads its leaves — so it has to read as a heading — but it
+// is also selectable, so it has to read as a chip. It gets the chip's shape with
+// a heavier weight and a squarer corner, and its leaves indent beneath it.
+.group-chip {
+  display: flex; // own line, above the leaves it heads
+  width: fit-content;
+  margin: 0.9rem 0 0.4rem;
+  border-radius: 10px;
+
+  .chip-pick {
+    font: var(--mat-sys-title-small);
+    font-weight: 600;
+  }
 }
 
 .chips {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
+}
+
+// Leaves indent under the group chip that heads them.
+.body .chips {
+  margin-left: 0.75rem;
 }
 
 // Search results are a vertical list, not chips: each row shows the word, its

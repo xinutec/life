@@ -12,13 +12,19 @@ import { MatInputModule } from '@angular/material/input';
 import {
   EMOTION_WHEEL,
   EmotionCore,
-  EmotionLeafDef,
+  EmotionNode,
   emotionColor,
   emotionDesc,
   emotionLabel,
   emotionToken,
   searchEmotions,
 } from '../../shared/emotion-wheel';
+
+/** Any node the picker can show or select: a group or a leaf, both `{name, desc}`. */
+interface Nameable {
+  readonly name: string;
+  readonly desc: string;
+}
 
 export interface EmotionPickerData {
   /** The emotions already on the entry (qualified tokens, or legacy bare words). */
@@ -93,9 +99,14 @@ export class EmotionPicker {
   readonly count = computed(() => this.selected().size);
   readonly selectedList = computed(() => [...this.selected()]);
 
-  /** The qualified token for a leaf under a given core. */
-  tokenOf(core: EmotionCore, leaf: string): string {
-    return `${core.name}/${leaf}`;
+  /** The qualified token for a node — group or leaf — under a given core. */
+  tokenOf(core: EmotionCore, name: string): string {
+    return `${core.name}/${name}`;
+  }
+
+  /** Where a search hit sits: a group shows just its family, a leaf its group too. */
+  path(node: EmotionNode): string {
+    return node.kind === 'group' ? node.core : `${node.core} › ${node.secondary}`;
   }
 
   isSelected(token: string): boolean {
@@ -116,12 +127,15 @@ export class EmotionPicker {
     return emotionDesc(token);
   }
 
-  /** How many selected tokens fall under a given core (for the panel badge). */
+  /** How many selected tokens fall under a given core (for the panel badge) —
+   *  groups count too, since a group is a selectable answer of its own. */
   coreCount(core: EmotionCore): number {
     const sel = this.selected();
     let n = 0;
-    for (const g of core.groups)
+    for (const g of core.groups) {
+      if (sel.has(this.tokenOf(core, g.name))) n++;
       for (const leaf of g.leaves) if (sel.has(this.tokenOf(core, leaf.name))) n++;
+    }
     return n;
   }
 
@@ -147,14 +161,14 @@ export class EmotionPicker {
   ];
 
   /** Tap the ⓘ: explain this feeling — or dismiss if it's already the one shown. */
-  peek(core: EmotionCore, leaf: EmotionLeafDef, origin: CdkOverlayOrigin): void {
-    const token = this.tokenOf(core, leaf.name);
+  peek(core: EmotionCore, node: Nameable, origin: CdkOverlayOrigin): void {
+    const token = this.tokenOf(core, node.name);
     if (this.peeked()?.token === token) {
       this.peeked.set(null);
       return;
     }
     this.peekOrigin.set(origin);
-    this.peeked.set({ token, name: leaf.name, desc: leaf.desc, color: core.color });
+    this.peeked.set({ token, name: node.name, desc: node.desc, color: core.color });
   }
 
   dismissPeek(): void {

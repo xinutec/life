@@ -60,6 +60,28 @@ describe('EmotionPicker', () => {
     expect(c.coreCount(angry)).toBe(2);
   });
 
+  it('selects a secondary group as an answer in its own right', () => {
+    // "Frustrated" is often the whole truth; committing to Infuriated or Annoyed
+    // would record the feeling as more precise than it was.
+    const angry = EMOTION_WHEEL.find((core) => core.name === 'Angry')!;
+    const { c } = setup([]);
+    c.toggle('Angry/Frustrated');
+    expect(c.isSelected('Angry/Frustrated')).toBe(true);
+    expect(c.isSelected('Angry/Annoyed')).toBe(false); // no leaf implied
+    expect(c.label('Angry/Frustrated')).toBe('Frustrated');
+    expect(c.desc('Angry/Frustrated')).toBe('Blocked from what you want.');
+    expect(c.coreCount(angry)).toBe(1); // a group counts toward its family badge
+  });
+
+  it('shows a group hit by family alone, a leaf hit by family and group', () => {
+    const { c } = setup([]);
+    c.query.set('frustrat');
+    const [group, leaf] = c.results();
+    expect(group.name).toBe('Frustrated');
+    expect(c.path(group)).toBe('Angry');
+    expect(c.path(leaf)).toBe('Angry › Frustrated');
+  });
+
   const origin = {} as CdkOverlayOrigin; // stub anchor; peek only stores it
 
   it('the ⓘ peeks a gloss without selecting, and its ⓘ toggles it off', () => {

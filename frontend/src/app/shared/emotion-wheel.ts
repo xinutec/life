@@ -9,12 +9,18 @@
  *  group) and is being extended where that wheel leaves a real feeling with no
  *  word at all — so groups may now hold more than two leaves.
  *
- *  Identity is the *qualified* token `Core/Leaf` (see [[emotionToken]]), not the
- *  bare leaf word — because a few leaves ("Embarrassed", "Inferior",
- *  "Overwhelmed") sit under two different cores, and a bare word can't tell them
- *  apart (same name in different groups is NOT the same emotion, and their
- *  glosses differ accordingly). The `/` delimiter is safe: no core or leaf name
- *  contains a slash.
+ *  Both rings are selectable: a secondary group is a legitimate answer on its
+ *  own, not merely a heading over the "real" words. "Frustrated" is often the
+ *  whole truth, and making you commit to Infuriated or Annoyed would record the
+ *  feeling as more precise than it was.
+ *
+ *  Identity is the *qualified* token `Core/Name` (see [[emotionToken]]), not the
+ *  bare word — because a few leaves ("Embarrassed", "Inferior", "Overwhelmed")
+ *  sit under two different cores, and a bare word can't tell them apart (same
+ *  name in different groups is NOT the same emotion, and their glosses differ
+ *  accordingly). Within one core a name is unique across both rings, so a token
+ *  always names exactly one node. The `/` delimiter is safe: no name contains a
+ *  slash.
  *
  *  Back-compat: check-ins saved before qualification stored a bare leaf. Those
  *  still resolve, via a first-occurrence fallback, to exactly the core they
@@ -446,81 +452,99 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
   },
 ];
 
-/** One outer-ring leaf, flattened with its path up to the core (for search and
- *  chip labelling). */
-export interface EmotionLeaf {
-  /** Qualified `Core/Leaf` identity — what a check-in stores. Unique wheel-wide. */
+/** Anything a check-in can record: a secondary group or one of its leaves,
+ *  flattened with its path up to the core (for search and chip labelling). */
+export interface EmotionNode {
+  /** Qualified `Core/Name` identity — what a check-in stores. Unique wheel-wide. */
   token: string;
-  leaf: string;
-  /** Brief gloss of the leaf. */
+  name: string;
+  /** Brief gloss of the node. */
   desc: string;
+  /** Which ring it sits in. A group is a legitimate answer in its own right —
+   *  "frustrated" is often the whole truth, and forcing a leaf would make the
+   *  record more precise than the feeling was. */
+  kind: 'group' | 'leaf';
+  /** The secondary group this node belongs to (a group node's own name). */
   secondary: string;
   core: string;
   color: string;
 }
 
-/** Every leaf, in wheel order, each carrying its qualified token and gloss. */
-export const EMOTION_LEAVES: readonly EmotionLeaf[] = EMOTION_WHEEL.flatMap((core) =>
-  core.groups.flatMap((group) =>
-    group.leaves.map((leaf) => ({
+/** Every selectable node, in wheel order: each group followed by its leaves. */
+export const EMOTION_NODES: readonly EmotionNode[] = EMOTION_WHEEL.flatMap((core) =>
+  core.groups.flatMap((group) => [
+    {
+      token: `${core.name}/${group.name}`,
+      name: group.name,
+      desc: group.desc,
+      kind: 'group' as const,
+      secondary: group.name,
+      core: core.name,
+      color: core.color,
+    },
+    ...group.leaves.map((leaf) => ({
       token: `${core.name}/${leaf.name}`,
-      leaf: leaf.name,
+      name: leaf.name,
       desc: leaf.desc,
+      kind: 'leaf' as const,
       secondary: group.name,
       core: core.name,
       color: core.color,
     })),
-  ),
+  ]),
 );
 
-/** Primary lookup: exact qualified token → entry. Unambiguous. */
-const BY_TOKEN = new Map<string, EmotionLeaf>();
-for (const l of EMOTION_LEAVES) BY_TOKEN.set(l.token, l);
+/** Primary lookup: exact qualified token → node. Unambiguous. */
+const BY_TOKEN = new Map<string, EmotionNode>();
+for (const n of EMOTION_NODES) BY_TOKEN.set(n.token, n);
 
-/** Legacy fallback: bare leaf word → first wheel occurrence, preserving the
- *  pre-qualification resolution for check-ins saved before tokens existed. */
-const BY_LEAF = new Map<string, EmotionLeaf>();
-for (const l of EMOTION_LEAVES) if (!BY_LEAF.has(l.leaf)) BY_LEAF.set(l.leaf, l);
+/** Legacy fallback: bare word → first wheel occurrence, preserving the
+ *  pre-qualification resolution for check-ins saved before tokens existed.
+ *  Leaves are seeded first so that where a group and a leaf share a word, an old
+ *  bare value still resolves to the leaf it always displayed as. */
+const BY_NAME = new Map<string, EmotionNode>();
+for (const n of EMOTION_NODES) if (n.kind === 'leaf' && !BY_NAME.has(n.name)) BY_NAME.set(n.name, n);
+for (const n of EMOTION_NODES) if (!BY_NAME.has(n.name)) BY_NAME.set(n.name, n);
 
-/** Resolve a stored word — a qualified `Core/Leaf` token or a legacy bare leaf —
- *  to its wheel entry (path + colour + gloss), or null if it isn't in the
+/** Resolve a stored word — a qualified `Core/Name` token or a legacy bare word —
+ *  to its wheel node (path + colour + gloss), or null if it isn't in the
  *  vocabulary (e.g. a word retired from a later wheel revision). */
-export function emotionLeaf(word: string): EmotionLeaf | null {
-  return BY_TOKEN.get(word) ?? BY_LEAF.get(word) ?? null;
+export function emotionNode(word: string): EmotionNode | null {
+  return BY_TOKEN.get(word) ?? BY_NAME.get(word) ?? null;
 }
 
 /** Canonical stored token for a word: an already-qualified token passes through,
  *  a legacy bare leaf upgrades to its resolved `Core/Leaf`, and an unknown word
  *  is preserved verbatim (so a retired-vocabulary tag is never silently lost). */
 export function emotionToken(word: string): string {
-  return emotionLeaf(word)?.token ?? word;
+  return emotionNode(word)?.token ?? word;
 }
 
-/** The bare leaf word to display for a stored token (unknown words shown as-is). */
+/** The bare word to display for a stored token (unknown words shown as-is). */
 export function emotionLabel(word: string): string {
-  return emotionLeaf(word)?.leaf ?? word;
+  return emotionNode(word)?.name ?? word;
 }
 
 /** The brief gloss for a stored word, or '' if it isn't in the vocabulary. */
 export function emotionDesc(word: string): string {
-  return emotionLeaf(word)?.desc ?? '';
+  return emotionNode(word)?.desc ?? '';
 }
 
 /** The colour key for a stored word — the family it belongs to, or a neutral
  *  fallback for an unknown word. */
 export function emotionColor(word: string): string {
-  return emotionLeaf(word)?.color ?? 'unknown';
+  return emotionNode(word)?.color ?? 'unknown';
 }
 
-/** Case-insensitive substring search across leaf, secondary and core names, so
+/** Case-insensitive substring search across node, secondary and core names, so
  *  typing "with" finds Withdrawn and typing "ang" surfaces the Angry family. */
-export function searchEmotions(query: string): readonly EmotionLeaf[] {
+export function searchEmotions(query: string): readonly EmotionNode[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
-  return EMOTION_LEAVES.filter(
-    (l) =>
-      l.leaf.toLowerCase().includes(q) ||
-      l.secondary.toLowerCase().includes(q) ||
-      l.core.toLowerCase().includes(q),
+  return EMOTION_NODES.filter(
+    (n) =>
+      n.name.toLowerCase().includes(q) ||
+      n.secondary.toLowerCase().includes(q) ||
+      n.core.toLowerCase().includes(q),
   );
 }
