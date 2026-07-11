@@ -111,6 +111,7 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             name: 'Relieved',
             desc: "The tension drops away — the thing you dreaded didn't happen.",
           },
+          { name: 'Calm', desc: 'Unhurried and untroubled; nothing is pulling at you.' },
         ],
       },
       {
