@@ -1,4 +1,9 @@
-import { CdkOverlayOrigin, ConnectedPosition, OverlayModule } from '@angular/cdk/overlay';
+import {
+  CdkOverlayOrigin,
+  ConnectedPosition,
+  OverlayModule,
+  ScrollStrategyOptions,
+} from '@angular/cdk/overlay';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -119,6 +124,10 @@ export class EmotionPicker {
     { originX: 'center', originY: 'top', overlayX: 'center', overlayY: 'bottom', offsetY: -8 },
     { originX: 'center', originY: 'bottom', overlayX: 'center', overlayY: 'top', offsetY: 8 },
   ];
+
+  /** Close the popover on scroll — its anchor has moved, and it keeps scrolling
+   *  of the surface behind clean (a backdrop would double-scroll it). */
+  readonly peekScroll = inject(ScrollStrategyOptions).close();
 
   /** Tap the ⓘ: explain this feeling — or dismiss if it's already the one shown. */
   peek(core: EmotionCore, leaf: EmotionLeafDef, origin: CdkOverlayOrigin): void {

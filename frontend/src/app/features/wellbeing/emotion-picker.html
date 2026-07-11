@@ -110,9 +110,9 @@
       [cdkConnectedOverlayOrigin]="origin"
       [cdkConnectedOverlayOpen]="!!peeked()"
       [cdkConnectedOverlayPositions]="peekPositions"
-      [cdkConnectedOverlayHasBackdrop]="true"
-      cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop"
-      (backdropClick)="dismissPeek()"
+      [cdkConnectedOverlayScrollStrategy]="peekScroll"
+      [cdkConnectedOverlayViewportMargin]="8"
+      [cdkConnectedOverlayPush]="true"
       (detach)="dismissPeek()"
     >
       @if (peeked(); as p) {
