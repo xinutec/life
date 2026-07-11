@@ -81,6 +81,9 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Curious', desc: 'Eager to explore, learn, or find out more.' },
           { name: 'Inquisitive', desc: 'Actively questioning and probing for understanding.' },
+          // The wheel had "Unfocused" and no positive twin: it could record a bad
+          // day at the keyboard and not a good one.
+          { name: 'Absorbed', desc: 'Lost in what you are doing; the hours and the world fall away.' },
         ],
       },
       {
