@@ -368,6 +368,18 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         ],
       },
       {
+        // Arousal with no cause attached. The other Bad groups are about load
+        // (Busy, Stressed) or depletion (Bored, Tired); none of them fit, and
+        // filing this under Fearful › Anxious would import a fear that isn't part
+        // of the feeling.
+        name: 'Agitated',
+        desc: 'Stirred up and unable to settle.',
+        leaves: [
+          { name: 'Restless', desc: "Keyed up with nowhere to put it; can't sit still." },
+          { name: 'Impatient', desc: 'Chafing at the wait; wanting it to move already.' },
+        ],
+      },
+      {
         name: 'Busy',
         desc: 'Overloaded with too much to do.',
         leaves: [

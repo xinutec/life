@@ -16,7 +16,7 @@ describe('emotion-wheel', () => {
     // Roberts' wheel is exactly two per group; we extend it where a feeling has
     // no word at all, so a group may hold more — but never fewer.
     const groups = EMOTION_WHEEL.flatMap((c) => c.groups);
-    expect(groups.length).toBe(41);
+    expect(groups.length).toBe(42); // Roberts' 41, plus Bad › Agitated
     expect(groups.every((g) => g.leaves.length >= 2)).toBe(true);
     expect(EMOTION_LEAVES.length).toBe(groups.reduce((n, g) => n + g.leaves.length, 0));
   });
