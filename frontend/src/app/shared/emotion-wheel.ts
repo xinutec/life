@@ -99,6 +99,7 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Courageous', desc: 'Willing to face difficulty or fear with resolve.' },
           { name: 'Creative', desc: 'Inventive and generative; full of ideas.' },
+          { name: 'Determined', desc: 'Set on seeing something through, however hard it gets.' },
         ],
       },
       {
