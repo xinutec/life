@@ -2,7 +2,12 @@
      drops its meaning in place. Shared by both rings — a group renders the same
      way as a leaf, only bolder, because it is just as much a choice. -->
 <ng-template #word let-node let-core="core" let-grp="grp">
-  <span class="w" [class.grp]="grp" [class.on]="isSelected(tokenOf(core, node.name))">
+  <span
+    class="w"
+    [class.grp]="grp"
+    [class.on]="isSelected(tokenOf(core, node.name))"
+    [class.half]="isBlended(tokenOf(core, node.name))"
+  >
     <button
       type="button"
       class="pick"
@@ -134,6 +139,26 @@
           </button>
         }
       </div>
+
+      <!-- Two words of one group can be one feeling in the gap between them —
+           offered here, never assumed, because only you know whether you felt one
+           thing or two. -->
+      @if (fusable().length || blends().length) {
+        <div class="fuse">
+          @for (b of fusable(); track b.token) {
+            <button type="button" class="link emo-{{ b.color }}" (click)="fuse(b)">
+              <mat-icon>compress</mat-icon>
+              Neither quite? Record one feeling between {{ b.a.name }} and {{ b.b.name }}
+            </button>
+          }
+          @for (b of blends(); track b.token) {
+            <button type="button" class="link emo-{{ b.color }}" (click)="split(b)">
+              <mat-icon>expand</mat-icon>
+              Split {{ b.name }} back into two feelings
+            </button>
+          }
+        </div>
+      }
     </footer>
   }
 </div>

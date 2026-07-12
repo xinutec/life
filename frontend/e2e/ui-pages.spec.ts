@@ -320,6 +320,44 @@ test('emotion picker ⓘ — the gloss opens in place, one at a time @ phone wid
   await expect(page.getByRole('button', { name: 'Add Absorbed' })).toBeVisible();
 });
 
+// Two words of one group can be recorded as the single feeling between them. The
+// offer appears in the sticky footer, which is the tightest space on the surface —
+// so this is where a long prompt would collide with the chips or push the picker
+// sideways. It also guards the semantics: the offer must NOT appear for two words
+// that merely happen to both be chosen.
+test('emotion picker — fusing two words into one feeling @ phone width', async ({
+  page,
+}, testInfo) => {
+  await mockApi(page);
+  await page.goto('/wellbeing');
+  await page.locator('.entry.score-2').click();
+  await page.locator('button.add-emotions').click();
+  await page.locator('.picker').waitFor();
+  await page.locator('.picker .selected').waitFor();
+
+  const fuse = page.locator('.picker .fuse .link');
+  // The seeded entry carries Anxious + Withdrawn — two feelings from different
+  // cores. They are not a blend, and nothing must suggest they are.
+  await expect(fuse).toHaveCount(0);
+
+  // Two leaves of one group: Sad › Discouraged.
+  await page.getByRole('button', { name: 'Add Disheartened' }).click();
+  await page.getByRole('button', { name: 'Add Deflated' }).click();
+  await expect(fuse).toHaveCount(1);
+  await expect(fuse).toContainText('between Disheartened and Deflated');
+
+  await fuse.click();
+  // One chip now, carrying both words — and the two separate chips are gone.
+  await expect(page.locator('.picker .selected .emo', { hasText: 'Disheartened–Deflated' })).toHaveCount(1);
+  await expect(page.locator('.picker .fuse .link')).toContainText('Split Disheartened–Deflated');
+  // Both halves stay lit in the mosaic, at half strength.
+  await expect(page.locator('.picker .w.on.half')).toHaveCount(2);
+
+  await expectNoTextOverlaps(page, testInfo, '.picker .selected');
+  await expectNoHorizontalOverflow(page, testInfo, '.picker');
+  await expectNoHorizontalOverflow(page, testInfo);
+});
+
 // The one the user asked for by name: tapping a to-do opens the edit sheet — a
 // dense form (two mat-button-toggle-groups, notes, two date rows with presets,
 // connections, a search box, delete). Everything the overlap check can't catch

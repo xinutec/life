@@ -22,6 +22,10 @@
  *  always names exactly one node. The `/` delimiter is safe: no name contains a
  *  slash.
  *
+ *  A check-in entry may also be a *blend* of two leaves in one group (see
+ *  [[EmotionBlend]]) — one feeling that neither word alone catches, stored as the
+ *  single token `Core/A+Core/B` and distinct from selecting both words.
+ *
  *  Back-compat: check-ins saved before qualification stored a bare leaf. Those
  *  still resolve, via a first-occurrence fallback, to exactly the core they
  *  always displayed as — so nothing regresses and we never invent which core an
@@ -647,6 +651,11 @@ export const EMOTION_NODES: readonly EmotionNode[] = EMOTION_WHEEL.flatMap((core
 const BY_TOKEN = new Map<string, EmotionNode>();
 for (const n of EMOTION_NODES) BY_TOKEN.set(n.token, n);
 
+/** Wheel position of each node, for putting a blend's two halves in a canonical
+ *  order — so one feeling is one token however you happened to tap it. */
+const ORDER = new Map<string, number>();
+EMOTION_NODES.forEach((n, i) => ORDER.set(n.token, i));
+
 /** Legacy fallback: bare word → first wheel occurrence, preserving the
  *  pre-qualification resolution for check-ins saved before tokens existed.
  *  Leaves are seeded first so that where a group and a leaf share a word, an old
@@ -657,32 +666,113 @@ for (const n of EMOTION_NODES) if (!BY_NAME.has(n.name)) BY_NAME.set(n.name, n);
 
 /** Resolve a stored word — a qualified `Core/Name` token or a legacy bare word —
  *  to its wheel node (path + colour + gloss), or null if it isn't in the
- *  vocabulary (e.g. a word retired from a later wheel revision). */
+ *  vocabulary (e.g. a word retired from a later wheel revision). A blend token
+ *  is not a node; see [[emotionBlend]]. */
 export function emotionNode(word: string): EmotionNode | null {
   return BY_TOKEN.get(word) ?? BY_NAME.get(word) ?? null;
 }
 
-/** Canonical stored token for a word: an already-qualified token passes through,
- *  a legacy bare leaf upgrades to its resolved `Core/Leaf`, and an unknown word
- *  is preserved verbatim (so a retired-vocabulary tag is never silently lost). */
-export function emotionToken(word: string): string {
-  return emotionNode(word)?.token ?? word;
+/** Joins the two halves of a blend token: `Core/A+Core/B`. Safe for the same
+ *  reason `/` is — no emotion name contains a '+'. */
+const BLEND_SEP = '+';
+
+/** One feeling that no single word catches, recorded as two: "neither quite —
+ *  somewhere between them". This is NOT the same as selecting both words, which
+ *  says both feelings were fully present and separately true (calm AND
+ *  compassionate). A blend says there was one feeling, sitting in the gap
+ *  (disheartened–deflated). Stored as a single list entry, so the distinction
+ *  survives into the record you read back months later.
+ *
+ *  Only two leaves of the SAME group may blend. That isn't tidiness: it keeps a
+ *  blend inside one core, so it still has exactly one family, one colour, and one
+ *  place in the history — nothing downstream has to learn what a blend is. Across
+ *  cores there is no midpoint to speak of anyway; "anxious and restless" is two
+ *  feelings at once, which selecting both already says. */
+export interface EmotionBlend {
+  /** Canonical `Core/A+Core/B`, halves in wheel order. */
+  token: string;
+  /** The two halves, in wheel order. */
+  a: EmotionNode;
+  b: EmotionNode;
+  /** Display name, e.g. "Disheartened–Deflated". */
+  name: string;
+  desc: string;
+  core: string;
+  color: string;
 }
 
-/** The bare word to display for a stored token (unknown words shown as-is). */
+/** Whether two nodes may be blended: distinct leaves of one group. Groups are
+ *  excluded because a group already contains its leaves — there is no space
+ *  "between" Frustrated and Annoyed to sit in. */
+export function canBlend(a: EmotionNode, b: EmotionNode): boolean {
+  return (
+    a.kind === 'leaf' &&
+    b.kind === 'leaf' &&
+    a.core === b.core &&
+    a.secondary === b.secondary &&
+    a.token !== b.token
+  );
+}
+
+/** The canonical token for blending two nodes, or null if they may not blend.
+ *  Order-free: fusing A with B and B with A yield the same token. */
+export function blendToken(a: EmotionNode, b: EmotionNode): string | null {
+  if (!canBlend(a, b)) return null;
+  const [x, y] = ORDER.get(a.token)! < ORDER.get(b.token)! ? [a, b] : [b, a];
+  return `${x.token}${BLEND_SEP}${y.token}`;
+}
+
+/** Resolve a stored word to a blend, or null if it isn't one (a plain token, or
+ *  a pair that isn't legally blendable — e.g. from a hand-edited or retired
+ *  value, which is then left verbatim rather than silently reinterpreted). */
+export function emotionBlend(word: string): EmotionBlend | null {
+  if (!word.includes(BLEND_SEP)) return null;
+  const parts = word.split(BLEND_SEP);
+  if (parts.length !== 2) return null;
+  const a = emotionNode(parts[0]);
+  const b = emotionNode(parts[1]);
+  if (!a || !b || !canBlend(a, b)) return null;
+  const [x, y] = ORDER.get(a.token)! < ORDER.get(b.token)! ? [a, b] : [b, a];
+  return {
+    token: `${x.token}${BLEND_SEP}${y.token}`,
+    a: x,
+    b: y,
+    name: `${x.name}–${y.name}`,
+    desc: `Neither word alone — somewhere between them. ${x.name}: ${x.desc} ${y.name}: ${y.desc}`,
+    core: x.core,
+    color: x.color,
+  };
+}
+
+/** Canonical stored token for a word: an already-qualified token passes through,
+ *  a legacy bare leaf upgrades to its resolved `Core/Leaf`, a blend is put in
+ *  canonical order, and an unknown word is preserved verbatim (so a
+ *  retired-vocabulary tag is never silently lost). */
+export function emotionToken(word: string): string {
+  return emotionBlend(word)?.token ?? emotionNode(word)?.token ?? word;
+}
+
+/** The word to display for a stored token — a blend shows both halves (unknown
+ *  words shown as-is). */
 export function emotionLabel(word: string): string {
-  return emotionNode(word)?.name ?? word;
+  return emotionBlend(word)?.name ?? emotionNode(word)?.name ?? word;
 }
 
 /** The brief gloss for a stored word, or '' if it isn't in the vocabulary. */
 export function emotionDesc(word: string): string {
-  return emotionNode(word)?.desc ?? '';
+  return emotionBlend(word)?.desc ?? emotionNode(word)?.desc ?? '';
 }
 
 /** The colour key for a stored word — the family it belongs to, or a neutral
- *  fallback for an unknown word. */
+ *  fallback for an unknown word. A blend has exactly one family, by construction. */
 export function emotionColor(word: string): string {
-  return emotionNode(word)?.color ?? 'unknown';
+  return emotionBlend(word)?.color ?? emotionNode(word)?.color ?? 'unknown';
+}
+
+/** The core family a stored word belongs to (a blend has exactly one), or null if
+ *  the word isn't in the vocabulary. */
+export function emotionCore(word: string): string | null {
+  return emotionBlend(word)?.core ?? emotionNode(word)?.core ?? null;
 }
 
 /** Case-insensitive substring search across node, secondary and core names, so

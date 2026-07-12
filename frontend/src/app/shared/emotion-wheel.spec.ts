@@ -3,13 +3,22 @@ import { describe, expect, it } from 'vitest';
 import {
   EMOTION_NODES,
   EMOTION_WHEEL,
+  blendToken,
+  canBlend,
+  emotionBlend,
   emotionColor,
+  emotionCore,
   emotionDesc,
   emotionLabel,
   emotionNode,
   emotionToken,
   searchEmotions,
 } from './emotion-wheel';
+
+/** A node by token, for the blend tests. */
+function node(token: string) {
+  return emotionNode(token)!;
+}
 
 describe('emotion-wheel', () => {
   it('has the full outer ring: every group holds at least the wheel’s two leaves', () => {
@@ -125,6 +134,76 @@ describe('emotion-wheel', () => {
     expect(emotionColor('Flabbergasted')).toBe('unknown');
     expect(emotionLabel('Flabbergasted')).toBe('Flabbergasted');
     expect(emotionDesc('Flabbergasted')).toBe('');
+  });
+
+  describe('blends — one feeling between two words', () => {
+    const disheartened = 'Sad/Disheartened';
+    const deflated = 'Sad/Deflated';
+    const blend = `${disheartened}+${deflated}`;
+
+    it('blends two leaves of one group, in canonical order either way round', () => {
+      expect(blendToken(node(disheartened), node(deflated))).toBe(blend);
+      // Order-free: the feeling is the same whichever word you tapped first, so
+      // it must not be able to arrive in the record as two different tokens.
+      expect(blendToken(node(deflated), node(disheartened))).toBe(blend);
+      expect(emotionToken(`${deflated}+${disheartened}`)).toBe(blend);
+    });
+
+    it('refuses to blend across groups, across cores, or with a group word', () => {
+      // Different group, same core: "empty" and "disheartened" are two feelings,
+      // and selecting both already says so.
+      expect(canBlend(node(disheartened), node('Sad/Empty'))).toBe(false);
+      // Different core: there is no midpoint between families, and the blend would
+      // have no single colour to fly.
+      expect(canBlend(node(disheartened), node('Fearful/Worried'))).toBe(false);
+      // A group already contains its leaves — there is no gap between Frustrated
+      // and Annoyed to sit in.
+      expect(canBlend(node('Angry/Frustrated'), node('Angry/Annoyed'))).toBe(false);
+      // And nothing blends with itself.
+      expect(canBlend(node(disheartened), node(disheartened))).toBe(false);
+      expect(blendToken(node(disheartened), node('Sad/Empty'))).toBeNull();
+    });
+
+    it('resolves a blend to one entry with one family, colour, name and gloss', () => {
+      const b = emotionBlend(blend)!;
+      expect(b.a.name).toBe('Disheartened');
+      expect(b.b.name).toBe('Deflated');
+      expect(b.core).toBe('Sad');
+      expect(b.color).toBe('sad');
+      expect(emotionLabel(blend)).toBe('Disheartened–Deflated');
+      expect(emotionColor(blend)).toBe('sad'); // one family: history stays intact
+      expect(emotionCore(blend)).toBe('Sad');
+      expect(emotionDesc(blend)).toContain('Neither word alone');
+      expect(emotionDesc(blend)).toContain('The wind has gone out of you.');
+    });
+
+    it('is not a node, and a node is not a blend', () => {
+      // The two are distinct kinds of entry: selecting both words says both
+      // feelings were fully present; a blend says there was one, in the gap.
+      expect(emotionNode(blend)).toBeNull();
+      expect(emotionBlend(disheartened)).toBeNull();
+    });
+
+    it('accepts legacy bare halves and canonicalises them', () => {
+      expect(emotionToken('Disheartened+Deflated')).toBe(blend);
+    });
+
+    it('keeps an illegal or unknown pair verbatim rather than reinterpreting it', () => {
+      // A hand-edited or retired value must never be silently re-pointed at a
+      // feeling the person did not choose.
+      const illegal = 'Sad/Disheartened+Fearful/Worried';
+      expect(emotionBlend(illegal)).toBeNull();
+      expect(emotionToken(illegal)).toBe(illegal);
+      expect(emotionLabel(illegal)).toBe(illegal);
+      expect(emotionColor(illegal)).toBe('unknown');
+      expect(emotionBlend('Sad/Low+Flabbergasted')).toBeNull();
+      expect(emotionBlend('a+b+c')).toBeNull();
+    });
+
+    it('holds no emotion name containing the blend delimiter', () => {
+      // '+' is the delimiter; a name containing one would make a token ambiguous.
+      for (const n of EMOTION_NODES) expect(n.name).not.toContain('+');
+    });
   });
 
   it('searches across node, secondary and core names', () => {
