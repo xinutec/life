@@ -191,6 +191,18 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Grief', desc: 'Deep sorrow, especially at a loss.' },
           { name: 'Powerless', desc: "Unable to change or influence what's happening." },
+          {
+            // Powerless says you can't change it. Hopeless says there is nothing
+            // ahead to change — you can be perfectly capable and still see no future.
+            name: 'Hopeless',
+            desc: 'No way out that you can see; the future has closed.',
+          },
+          {
+            // What's left after you had a go — unlike Powerless, which never granted
+            // you any agency to begin with.
+            name: 'Defeated',
+            desc: 'You tried, and it beat you.',
+          },
         ],
       },
       {
@@ -207,6 +219,13 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Inferior', desc: 'Feeling lesser or not good enough next to others.' },
           { name: 'Empty', desc: 'Hollow and without feeling or meaning.' },
+          {
+            // The whole Sad core could only shout — Grief, Despair, Worthless,
+            // Empty. Without a mild word, an ordinary flat day had to be recorded
+            // as a severe one.
+            name: 'Low',
+            desc: 'Quietly down, without anything being wrong.',
+          },
         ],
       },
       {
@@ -215,6 +234,12 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Embarrassed', desc: 'Self-conscious and awkward after exposure or a slip.' },
           { name: 'Disappointed', desc: "Let down when hopes weren't met." },
+          {
+            // Hurt held only small words; there was a chasm between Disappointed
+            // and Grief with nothing in it.
+            name: 'Heartbroken',
+            desc: 'A loss that hurts in the body; something in you has broken.',
+          },
         ],
       },
     ],
