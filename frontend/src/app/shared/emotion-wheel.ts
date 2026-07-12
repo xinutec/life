@@ -122,6 +122,27 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             desc: "The tension drops away — the thing you dreaded didn't happen.",
           },
           { name: 'Calm', desc: 'Unhurried and untroubled; nothing is pulling at you.' },
+          {
+            // Not Calm (which claims nothing is pulling at you — something is) and
+            // not Apathetic (which claims you stopped caring — you didn't).
+            name: 'Accepting',
+            desc: "You've stopped fighting what you can't change, and you're settled.",
+          },
+        ],
+      },
+      {
+        // Warmth pointed at someone else. The wheel could say you feel loved and
+        // that you feel your own grief, but had no word for aching on another's
+        // behalf — so it went under a group of its own rather than being filed as
+        // a shade of Peaceful.
+        name: 'Caring',
+        desc: "Warm concern turned toward someone else's hurt.",
+        leaves: [
+          {
+            name: 'Compassionate',
+            desc: "Moved by someone else's suffering, and wanting to ease it.",
+          },
+          { name: 'Tender', desc: 'Gentle and soft toward someone who is hurting.' },
         ],
       },
       {
@@ -327,6 +348,11 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Overwhelmed', desc: 'Swamped; more coming at you than you can take in.' },
           { name: 'Worried', desc: 'Anxiously turning over what could go wrong.' },
+          {
+            // Worry turns over what *could* go wrong. Dread has stopped asking.
+            name: 'Dread',
+            desc: "Certain the bad thing is coming; it isn't 'if' any more.",
+          },
         ],
       },
       {
@@ -386,6 +412,20 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Restless', desc: "Keyed up with nowhere to put it; can't sit still." },
           { name: 'Impatient', desc: 'Chafing at the wait; wanting it to move already.' },
+        ],
+      },
+      {
+        // Being pulled two ways is not confusion (you understand it perfectly) and
+        // not agitation (it has a very specific cause) — so it earns its own group
+        // rather than borrowing a home that would misdescribe it.
+        name: 'Conflicted',
+        desc: 'Pulled two ways at once.',
+        leaves: [
+          { name: 'Torn', desc: 'Wanting both, and unable to choose; either way costs you.' },
+          {
+            name: 'Ambivalent',
+            desc: 'In two minds — drawn to it and put off by it at the same time.',
+          },
         ],
       },
       {
