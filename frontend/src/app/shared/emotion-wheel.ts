@@ -65,6 +65,8 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Aroused', desc: 'Stimulated and keenly alert; energised in the moment.' },
           { name: 'Cheeky', desc: 'Playfully bold or irreverent; teasing without meaning harm.' },
+          // Cheeky is you being playful at someone; this is the world striking you funny.
+          { name: 'Amused', desc: 'Something struck you funny.' },
         ],
       },
       {
@@ -109,6 +111,22 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
           { name: 'Courageous', desc: 'Willing to face difficulty or fear with resolve.' },
           { name: 'Creative', desc: 'Inventive and generative; full of ideas.' },
           { name: 'Determined', desc: 'Set on seeing something through, however hard it gets.' },
+          {
+            // The rest of Powerful is agency; this is the body. The wheel could
+            // record the fatigue (Bad › Tired) but not the morning it lifts.
+            name: 'Energised',
+            desc: 'Something in the tank today; the tiredness has lifted.',
+          },
+        ],
+      },
+      {
+        // Happy's ceiling was Joyful — "bright, buoyant gladness". A day that
+        // genuinely knocks you sideways charted the same as a nice Sunday.
+        name: 'Elated',
+        desc: 'Gladness too big to sit still with.',
+        leaves: [
+          { name: 'Overjoyed', desc: "Something wonderful happened and you can't stop grinning." },
+          { name: 'Thrilled', desc: 'A rush of delight you can feel in your chest.' },
         ],
       },
       {
@@ -279,6 +297,12 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Horrified', desc: 'Struck with shock and dread at something dreadful.' },
           { name: 'Hesitant', desc: 'Holding back, wary or reluctant to engage.' },
+          {
+            // The rest of Disgusted is crisis-strength — Appalled, Revolted,
+            // Nauseated, Horrified. Ordinary distaste had to be filed as horror.
+            name: 'Put off',
+            desc: "Mildly turned off; you'd rather not, and that's all it is.",
+          },
         ],
       },
     ],
@@ -334,6 +358,12 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Infuriated', desc: 'Maddened; anger boiling over.' },
           { name: 'Annoyed', desc: 'Mildly irritated or bothered.' },
+          {
+            // Annoyed is a passing bother; Resentful and Bitter are grudges against
+            // a person. Neither says "this has ground on too long".
+            name: 'Fed up',
+            desc: "It has gone on too long. You've had enough of it.",
+          },
         ],
       },
       {
@@ -365,6 +395,12 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Helpless', desc: 'Unable to protect yourself or cope.' },
           { name: 'Frightened', desc: 'Afraid in the face of danger.' },
+          {
+            // Helpless says you couldn't cope. This says you won't look — the fear
+            // that stops you opening the letter or booking the appointment.
+            name: 'Frozen',
+            desc: "Fear has stopped you; you can't make yourself do the thing.",
+          },
         ],
       },
       {
@@ -386,6 +422,12 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Inadequate', desc: 'Feeling not capable or good enough.' },
           { name: 'Inferior', desc: 'Feeling lesser than those around you.' },
+          {
+            // Inadequate and Inferior are verdicts already reached about your worth.
+            // Doubt that hasn't reached one needs its own word.
+            name: 'Unsure',
+            desc: "Doubting yourself, without concluding you're not enough.",
+          },
         ],
       },
       {
@@ -475,6 +517,23 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Sleepy', desc: 'Drowsy and needing rest.' },
           { name: 'Unfocused', desc: 'Scattered; unable to concentrate.' },
+          {
+            // Tired could only whisper: Sleepy and Unfocused both imply sleep would
+            // fix it, so a day wiped out by treatment shared a token with a late night.
+            name: 'Exhausted',
+            desc: "Wrung out. Rest doesn't touch it.",
+          },
+        ],
+      },
+      {
+        // Waiting had no word at all. Impatient claims a straining you may not feel,
+        // Bored claims understimulation, and Fearful › Anxious imports a fear that
+        // isn't part of it — the days simply do not move.
+        name: 'Waiting',
+        desc: 'Life on hold until you know.',
+        leaves: [
+          { name: 'In limbo', desc: "Nothing is decided yet, and you can't move until it is." },
+          { name: 'Stuck', desc: 'Nothing you do shifts it; the days repeat.' },
         ],
       },
     ],
@@ -490,6 +549,12 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Shocked', desc: 'Jarred by something abrupt or upsetting.' },
           { name: 'Dismayed', desc: 'Thrown and disheartened by a bad turn.' },
+          {
+            // Surprised had no quiet register: plain "huh, didn't expect that" could
+            // only be filed as Astonished or In awe.
+            name: 'Taken aback',
+            desc: 'Not what you expected; it stops you for a second.',
+          },
         ],
       },
       {
