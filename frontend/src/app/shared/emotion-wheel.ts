@@ -224,6 +224,22 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         ],
       },
       {
+        // The wheel could say hope was present (Happy › Hopeful) and that it was
+        // gone (Sad › Hopeless), but not that it had been knocked and needed
+        // rebuilding — the commoner state by far. It gets a group of its own:
+        // Despair would import a hopelessness that isn't there, and Hurt claims
+        // someone wounded you, which nobody need have.
+        name: 'Discouraged',
+        desc: 'Your hope has taken a knock, and you have to work to get back up.',
+        leaves: [
+          { name: 'Disheartened', desc: 'The wind has gone out of you.' },
+          {
+            name: 'Deflated',
+            desc: 'Something you were counting on gave way, and you sank with it.',
+          },
+        ],
+      },
+      {
         name: 'Guilty',
         desc: 'Troubled by having done wrong.',
         leaves: [
