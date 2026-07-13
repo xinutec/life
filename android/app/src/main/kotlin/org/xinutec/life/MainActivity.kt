@@ -23,6 +23,7 @@ import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
@@ -66,6 +67,34 @@ class MainActivity : Activity() {
     private var connectOverlay: FrameLayout? = null
     private var connectWeb: WebView? = null
     private var connectRequestId: String? = null
+
+    // Whether we've already dropped Nextcloud's stale cookies for this launch (see
+    // onReceivedHttpError). One shot: if the login still fails after a clean start,
+    // the fault is not stale cookies and retrying would only spin.
+    private var staleLoginRecovered = false
+
+    /** Forget every Nextcloud cookie, so the next login starts from the cookie-less
+     *  state that Nextcloud actually handles correctly. */
+    private fun clearNextcloudCookies() {
+        val cm = CookieManager.getInstance()
+        val base = "https://$NC_HOST/"
+        // The store holds HttpOnly cookies too (this is not JS), so the live names
+        // come from it — the session cookie's name is instance-specific and can't be
+        // hardcoded. The known fixed ones are cleared as well, in case the store
+        // hands back nothing.
+        val live =
+            cm
+                .getCookie(base)
+                ?.split(";")
+                ?.mapNotNull { it.substringBefore('=').trim().ifEmpty { null } }
+                .orEmpty()
+        for (name in live + NC_FIXED_COOKIES) {
+            // No Domain attribute: __Host- prefixed cookies reject one, and the rest
+            // are host-only anyway.
+            cm.setCookie(base, "$name=; Max-Age=0; Path=/; Secure")
+        }
+        cm.flush()
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -131,6 +160,41 @@ class MainActivity : Activity() {
                             if (url.startsWith(LIFE_URL)) {
                                 prefs.edit().putString(KEY_LAST_URL, url).apply()
                             }
+                        }
+
+                        // Recover from Nextcloud refusing the login with 403 "State
+                        // token does not match".
+                        //
+                        // NC writes the login's state token into the session named by
+                        // whatever session cookie you arrive with. This WebView keeps
+                        // NC's cookies for months, while NC sweeps its sessions — so
+                        // by the time we sign in again the cookie names a session the
+                        // server has forgotten, the token dies with it, and the grant
+                        // step refuses. A cookie-LESS browser skips the whole path
+                        // (NC's same-site middleware only engages when cookies exist),
+                        // which is why a fresh install works and a long-lived one does
+                        // not. Reproduced in desktop Chrome too, so this is NC's
+                        // behaviour, not a WebView quirk.
+                        //
+                        // Dropping NC's cookies and starting over is exactly the state
+                        // that works. Once per launch, so a genuinely broken login
+                        // can't loop.
+                        override fun onReceivedHttpError(
+                            view: WebView,
+                            request: WebResourceRequest,
+                            errorResponse: WebResourceResponse,
+                        ) {
+                            super.onReceivedHttpError(view, request, errorResponse)
+                            if (!request.isForMainFrame) return
+                            if (errorResponse.statusCode != HTTP_FORBIDDEN) return
+                            if (request.url.host != NC_HOST || staleLoginRecovered) return
+                            staleLoginRecovered = true
+                            Log.w(
+                                TAG,
+                                "NC refused the login (403) — clearing its stale cookies and retrying",
+                            )
+                            clearNextcloudCookies()
+                            view.loadUrl("${LIFE_URL}login")
                         }
 
                         // Paint the strips behind the system bars with the web UI's
@@ -579,8 +643,25 @@ class MainActivity : Activity() {
 
         // Hosts allowed to load inside this WebView: the app itself plus the
         // Nextcloud login hop. Everything else goes to the real browser.
-        private val ALLOWED_HOSTS = setOf("life.xinutec.org", "dash.xinutec.org")
+        private const val NC_HOST = "dash.xinutec.org"
+        private val ALLOWED_HOSTS = setOf("life.xinutec.org", NC_HOST)
         private const val KEY_LAST_URL = "last_url"
+
+        private const val TAG = "life-app"
+        private const val HTTP_FORBIDDEN = 403
+
+        // Nextcloud's fixed cookie names. The session cookie's own name is derived
+        // from the instance id, so it can't be listed here — it is read from the
+        // cookie store instead (see clearNextcloudCookies).
+        private val NC_FIXED_COOKIES =
+            listOf(
+                "oc_sessionPassphrase",
+                "__Host-nc_sameSiteCookielax",
+                "__Host-nc_sameSiteCookiestrict",
+                "nc_username",
+                "nc_token",
+                "nc_session_id",
+            )
 
         // Shop hosts the hidden fetch + connect overlay may load. Adding a shop
         // (e.g. "asda.com") is a one-line change here; everything else the shop
