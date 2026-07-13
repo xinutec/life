@@ -1,83 +1,83 @@
-.trend {
+// The chart is a subgrid of the .trends grid its host puts it in (see
+// wellbeing.scss): column 1 the axis words, column 2 the plot. Every chart in that
+// grid therefore shares ONE axis column, sized by the browser to the widest word
+// across all of them — so "energetic" can't push the energy plot right of the mood
+// plot, the same midnight lands on the same pixel in both, and no width is
+// hardcoded or wasted. Rows: the plot on the first, its caption under it.
+:host {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: stretch;
+  column-gap: 0.4rem;
   margin: 1rem 0 0.5rem;
+}
 
-  // Axis labels beside the plot; the axis column stretches to the svg's
-  // rendered height, so the two always line up.
-  .plot {
-    display: flex;
-    gap: 0.4rem;
-  }
-  .chart {
-    flex: 1;
-    min-width: 0;
-    display: block;
-    height: auto;
-    // Match the viewBox ratio (CHART.w / CHART.h in wellbeing.ts) so the svg
-    // scales uniformly — preserveAspectRatio="none" squashed the dots into
-    // ellipses at any other rendered ratio.
-    aspect-ratio: 300 / 96;
-  }
-  .mid {
-    stroke: var(--mat-sys-outline-variant);
-    stroke-width: 0.5;
-    stroke-dasharray: 3 3;
-  }
-  // Midnight rules. A full user unit wide: at 0.5 they land on a sub-pixel once
-  // the 300-wide viewBox is scaled down to a phone, and the browser fades them
-  // to near-invisible. Dashed tighter than the mid line so they still read as
-  // dividers rather than as a second scale.
-  .day {
-    stroke: var(--mat-sys-outline);
-    stroke-width: 1;
-    stroke-dasharray: 2 2;
-  }
-  // The trend line stays a soft neutral so the ramp-coloured dots carry the
-  // meaning; the line only shows the shape of the change.
-  .line {
-    fill: none;
-    stroke: var(--mat-sys-outline);
-    stroke-width: 1.5;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-  .day-name {
-    font-size: 9px; // SVG user units, not CSS px — the viewBox scales it with the chart
-    fill: var(--mat-sys-on-surface-variant);
-    text-anchor: middle;
-  }
-  // The axis column is a FIXED width, not sized to its words. Sized to the words,
-  // "energetic" pushed the energy plot further right than "great" pushed the mood
-  // plot, so the same midnight landed on two different pixels in the two charts
-  // and the days didn't line up down the page. Just wide enough for the longest
-  // word any chart uses ("energetic") and no wider — every extra pixel here is
-  // dead space on the left of the screen and a pixel stolen from the plot. The
-  // words are right-aligned, so each sits against the plot it labels; nowrap +
-  // the e2e width check means a longer word fails loudly rather than wrapping.
-  .axis {
-    flex: 0 0 3.75rem;
-    display: flex;
-    justify-content: space-between;
-    flex-direction: column;
-    text-align: right;
-    white-space: nowrap;
-    font: var(--mat-sys-label-small);
-    color: var(--mat-sys-on-surface-variant);
-  }
-  // The axis words space themselves over the axis column, which stretches to the
-  // svg's full height — but the plot no longer fills it, since the weekday names
-  // take a strip along the bottom. This spacer holds that strip back (its height
-  // as a fraction of CHART.h in wellbeing.ts) so "awful" still lands on the
-  // bottom of the scale rather than below it.
-  .axis::after {
-    content: '';
-    flex: 0 0 10.4%;
-  }
-  .caption {
-    margin: 0.15rem 0 0;
-    font: var(--mat-sys-label-small);
-    text-align: right;
-    color: var(--mat-sys-on-surface-variant);
-  }
+.chart {
+  grid-column: 2;
+  min-width: 0;
+  display: block;
+  height: auto;
+  // Match the viewBox ratio (CHART.w / CHART.h in wellbeing.ts) so the svg
+  // scales uniformly — preserveAspectRatio="none" squashed the dots into
+  // ellipses at any other rendered ratio.
+  aspect-ratio: 300 / 96;
+}
+.mid {
+  stroke: var(--mat-sys-outline-variant);
+  stroke-width: 0.5;
+  stroke-dasharray: 3 3;
+}
+// Midnight rules. A full user unit wide: at 0.5 they land on a sub-pixel once
+// the 300-wide viewBox is scaled down to a phone, and the browser fades them
+// to near-invisible. Dashed tighter than the mid line so they still read as
+// dividers rather than as a second scale.
+.day {
+  stroke: var(--mat-sys-outline);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+// The trend line stays a soft neutral so the ramp-coloured dots carry the
+// meaning; the line only shows the shape of the change.
+.line {
+  fill: none;
+  stroke: var(--mat-sys-outline);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.day-name {
+  font-size: 9px; // SVG user units, not CSS px — the viewBox scales it with the chart
+  fill: var(--mat-sys-on-surface-variant);
+  text-anchor: middle;
+}
+// Right-aligned, so each word sits against the plot it labels however wide the
+// shared column ends up.
+.axis {
+  grid-column: 1;
+  display: flex;
+  justify-content: space-between;
+  flex-direction: column;
+  text-align: right;
+  white-space: nowrap;
+  font: var(--mat-sys-label-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+// The axis words space themselves over the axis column, which stretches to the
+// svg's full height — but the plot no longer fills it, since the weekday names
+// take a strip along the bottom. This spacer holds that strip back (its height
+// as a fraction of CHART.h in wellbeing.ts) so "awful" still lands on the
+// bottom of the scale rather than below it.
+.axis::after {
+  content: '';
+  flex: 0 0 10.4%;
+}
+.caption {
+  grid-column: 2;
+  margin: 0.15rem 0 0;
+  font: var(--mat-sys-label-small);
+  text-align: right;
+  color: var(--mat-sys-on-surface-variant);
 }
 
 // Dots on the shared wellbeing ramp (--wb-score-* in styles.scss): green (5)

@@ -17,23 +17,28 @@
   </mat-button-toggle-group>
 }
 
-@if (hasChart()) {
-  <app-trend-chart
-    [chart]="chart()"
-    [axis]="['great', 'okay', 'awful']"
-    [caption]="'Mood · ' + windowLabel()"
-    [label]="'Your mood over the ' + windowLabel()"
-  />
-}
+<!-- One grid for both charts: they subgrid into its columns, so the axis column is
+     as wide as the widest word in EITHER chart and both plots start on the same
+     pixel. That's what makes a midnight line up down the page. -->
+<div class="trends">
+  @if (hasChart()) {
+    <app-trend-chart
+      [chart]="chart()"
+      [axis]="['great', 'okay', 'awful']"
+      [caption]="'Mood · ' + windowLabel()"
+      [label]="'Your mood over the ' + windowLabel()"
+    />
+  }
 
-@if (hasEnergyChart()) {
-  <app-trend-chart
-    [chart]="energyChart()"
-    [axis]="['energetic', 'okay', 'drained']"
-    [caption]="'Energy · ' + windowLabel()"
-    [label]="'Your energy over the ' + windowLabel()"
-  />
-}
+  @if (hasEnergyChart()) {
+    <app-trend-chart
+      [chart]="energyChart()"
+      [axis]="['energetic', 'okay', 'drained']"
+      [caption]="'Energy · ' + windowLabel()"
+      [label]="'Your energy over the ' + windowLabel()"
+    />
+  }
+</div>
 
 @if (hasAny() && !hasChart()) {
   <p class="empty-window">No check-ins in the {{ windowLabel() }}.</p>
