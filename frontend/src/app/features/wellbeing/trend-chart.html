@@ -1,5 +1,7 @@
 <div class="axis" aria-hidden="true">
-  <span>{{ axis()[0] }}</span><span>{{ axis()[1] }}</span><span>{{ axis()[2] }}</span>
+  @for (word of axis(); track $index) {
+    <span [style.top.%]="(100 * chart().levelY[$index]) / chart().h">{{ word }}</span>
+  }
 </div>
 <svg
   class="chart"
@@ -11,8 +13,8 @@
     class="mid"
     [attr.x1]="0"
     [attr.x2]="chart().w"
-    [attr.y1]="chart().midY"
-    [attr.y2]="chart().midY"
+    [attr.y1]="chart().levelY[1]"
+    [attr.y2]="chart().levelY[1]"
   />
   @for (x of chart().midnights; track $index) {
     <line class="day" [attr.x1]="x" [attr.x2]="x" [attr.y1]="0" [attr.y2]="chart().h" />

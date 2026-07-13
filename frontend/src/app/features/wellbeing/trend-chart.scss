@@ -51,26 +51,22 @@
   fill: var(--mat-sys-on-surface-variant);
   text-anchor: middle;
 }
-// Right-aligned, so each word sits against the plot it labels however wide the
-// shared column ends up.
+// The column stretches to the svg's height, so a word's `top` — a percentage of
+// the same viewBox its level came from — lands it on exactly the height that level
+// plots at. Right-aligned, so each word sits against the plot however wide the
+// shared column ends up; centred on its level rather than hung below it.
 .axis {
   grid-column: 1;
-  display: flex;
-  justify-content: space-between;
-  flex-direction: column;
-  text-align: right;
+  position: relative;
   white-space: nowrap;
   font: var(--mat-sys-label-small);
   color: var(--mat-sys-on-surface-variant);
-}
-// The axis words space themselves over the axis column, which stretches to the
-// svg's full height — but the plot no longer fills it, since the weekday names
-// take a strip along the bottom. This spacer holds that strip back (its height
-// as a fraction of CHART.h in wellbeing.ts) so "awful" still lands on the
-// bottom of the scale rather than below it.
-.axis::after {
-  content: '';
-  flex: 0 0 10.4%;
+
+  span {
+    position: absolute;
+    right: 0;
+    transform: translateY(-50%);
+  }
 }
 .caption {
   grid-column: 2;

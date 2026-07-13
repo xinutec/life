@@ -78,9 +78,13 @@ export interface DayLabel {
 export interface TrendData {
   w: number;
   h: number;
-  /** y of the middle of the scale — where a "3" plots. Not h/2: the strip the
-   *  weekday names sit in is part of the box but not part of the plot. */
-  midY: number;
+  /** y of the top, middle and bottom of the scale — where a 5, a 3 and a 1 plot.
+   *  The mid line is drawn on the middle one and the three axis words are hung off
+   *  all three, so a word sits at exactly the height of the dot it names. (Letting
+   *  the words space themselves put "awful" 14px above where a 1 actually plots:
+   *  even spacing over the column is not the same as the plot's own geometry, once
+   *  the weekday strip means the plot no longer fills the box.) */
+  levelY: [number, number, number];
   dots: TrendDot[];
   midnights: number[];
   dayLabels: DayLabel[];

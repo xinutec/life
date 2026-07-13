@@ -193,10 +193,25 @@ test('wellbeing — the two charts agree on where the days are', async ({ page }
   expect(energy).not.toBeNull();
   expect(Math.abs(mood!.x - energy!.x)).toBeLessThan(0.5);
   expect(Math.abs(mood!.width - energy!.width)).toBeLessThan(0.5);
-  // This also guards the hand-picked column width: a longer axis word (or a bigger
-  // type scale) outgrows the fixed basis, and since a flex item won't shrink below
-  // its min-content, the column grows on that chart alone — landing right here as
-  // a misalignment rather than as a quiet clip on the phone.
+});
+
+test('wellbeing — each axis word sits level with the dot it names', async ({ page }) => {
+  await mockApi(page);
+  await page.goto('/wellbeing');
+  await page.getByText('Energy · last 14 days').waitFor();
+  // "great"/"okay"/"awful" claim to name the 5, the 3 and the 1 — so each must sit
+  // at the height that reading actually plots at. Spaced evenly down the column
+  // instead (the obvious way, and what this used to do) "awful" landed 14px above
+  // where a 1 plots, because the weekday strip means the plot no longer fills the
+  // box. The y here is the plot's own: viewBox 0 0 300 96, padTop 8, padBottom 18.
+  const svg = (await page.locator('svg.chart').first().boundingBox())!;
+  const scale = svg.height / 96;
+  const levels = [8, 44, 78].map((u) => svg.y + u * scale); // where 5, 3 and 1 plot
+  const words = page.locator('.axis').first().locator('span');
+  for (let i = 0; i < 3; i++) {
+    const b = (await words.nth(i).boundingBox())!;
+    expect(Math.abs(b.y + b.height / 2 - levels[i])).toBeLessThan(1.5);
+  }
 });
 
 test('buy — list + bought bar: lays out cleanly @ phone width', async ({ page }, testInfo) => {

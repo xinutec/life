@@ -124,21 +124,23 @@ export class Wellbeing {
     const startMs = Date.now() - spanMs;
     const endMs = startMs + spanMs;
     const x = (ms: number): number => padX + ((ms - startMs) / spanMs) * (w - 2 * padX);
+    // The one rule that places a 1..5 reading on the y axis. The dots use it, and
+    // so do the three axis words — that's what keeps "awful" level with a 1.
+    const y = (level: number): number => r1(padTop + ((5 - level) / 4) * plotH);
     const dots: TrendDot[] = [];
     for (const e of this.items()) {
       const level = value(e);
       if (level == null) continue; // no reading of this kind on this entry
       const t = new Date(e.recordedAt).getTime();
       if (t < startMs || t > endMs) continue; // outside the window
-      const cy = padTop + ((5 - level) / 4) * plotH;
-      dots.push({ cx: r1(x(t)), cy: r1(cy), level });
+      dots.push({ cx: r1(x(t)), cy: y(level), level });
     }
     dots.sort((a, b) => a.cx - b.cx);
     const bounds = this.midnights(startMs, endMs);
     return {
       w,
       h,
-      midY: padTop + plotH / 2,
+      levelY: [y(5), y(3), y(1)],
       dots,
       midnights: bounds.map((ms) => r1(x(ms))),
       dayLabels: this.dayLabels([startMs, ...bounds, endMs], x),
