@@ -80,6 +80,20 @@ describe('Wellbeing history', () => {
     expect(c.energyChart().dots.map((d) => d.level)).toEqual([2, 5]);
   });
 
+  it('rules off each local midnight in the window', () => {
+    const c = setup([entry({ recordedAt: hoursAgo(2), score: 4 })]).fixture.componentInstance;
+    // A rolling 14-day window crosses 14 midnights whatever hour the suite runs at.
+    const xs = c.chart().midnights;
+    expect(xs.length).toBe(14);
+    // Ascending and strictly inside the plot, so they read as day dividers.
+    expect(xs).toEqual([...xs].sort((a, b) => a - b));
+    expect(xs[0]).toBeGreaterThan(0);
+    expect(xs[xs.length - 1]).toBeLessThan(c.chart().w);
+    // The 24h window crosses exactly one: last night's.
+    c.window.set(1);
+    expect(c.chart().midnights.length).toBe(1);
+  });
+
   it('has no energy chart when nothing recorded one', () => {
     const c = setup([entry({ energy: null })]).fixture.componentInstance;
     expect(c.hasChart()).toBe(true); // mood still charts

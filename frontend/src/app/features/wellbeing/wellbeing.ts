@@ -9,7 +9,7 @@ import { map } from 'rxjs';
 import { ListState } from '../../shared/list-state';
 import { WellbeingCheckin, energyMeta, scoreMeta } from '../../shared/wellbeing-checkin';
 import { WellbeingDoc, WellbeingStore } from '../../sync/wellbeing-store';
-import { TrendChart, TrendDot } from './trend-chart';
+import { TrendChart, TrendData, TrendDot } from './trend-chart';
 import { WellbeingEntry } from './wellbeing-entry';
 
 interface Day {
@@ -19,6 +19,8 @@ interface Day {
 }
 
 const CHART = { w: 300, h: 96, padX: 6, padTop: 8, padBottom: 8 };
+
+const r1 = (n: number): number => Math.round(n * 10) / 10;
 
 /** The selectable trend windows, in days. */
 export type TrendWindow = 1 | 7 | 14;
@@ -101,7 +103,7 @@ export class Wellbeing {
    *  true position in time across the window (so the line reads chronologically);
    *  entries with no reading of this kind, or outside the window, are skipped.
    *  Dots come out x-ascending so the connecting line joins them in time order. */
-  private buildChart(value: (e: WellbeingDoc) => number | null | undefined) {
+  private buildChart(value: (e: WellbeingDoc) => number | null | undefined): TrendData {
     const { w, h, padX, padTop, padBottom } = CHART;
     const days = this.window();
     const plotH = h - padTop - padBottom;
@@ -110,18 +112,35 @@ export class Wellbeing {
     // show), not calendar-today — and the newest entry sits at the right edge.
     const spanMs = days * 86_400_000;
     const startMs = Date.now() - spanMs;
+    const endMs = startMs + spanMs;
+    const x = (ms: number): number => padX + ((ms - startMs) / spanMs) * (w - 2 * padX);
     const dots: TrendDot[] = [];
     for (const e of this.items()) {
       const level = value(e);
       if (level == null) continue; // no reading of this kind on this entry
-      const frac = (new Date(e.recordedAt).getTime() - startMs) / spanMs;
-      if (frac < 0 || frac > 1) continue; // outside the window
-      const cx = padX + frac * (w - 2 * padX);
+      const t = new Date(e.recordedAt).getTime();
+      if (t < startMs || t > endMs) continue; // outside the window
       const cy = padTop + ((5 - level) / 4) * plotH;
-      dots.push({ cx: Math.round(cx * 10) / 10, cy: Math.round(cy * 10) / 10, level });
+      dots.push({ cx: r1(x(t)), cy: r1(cy), level });
     }
     dots.sort((a, b) => a.cx - b.cx);
-    return { w, h, dots };
+    const midnights = this.midnights(startMs, endMs).map((ms) => r1(x(ms)));
+    return { w, h, dots, midnights };
+  }
+
+  /** Local midnights inside the window. Walked with setDate rather than adding
+   *  86 400 000 ms so a DST change keeps each rule on the day boundary the
+   *  entries either side of it are actually stamped against. */
+  private midnights(startMs: number, endMs: number): number[] {
+    const out: number[] = [];
+    const d = new Date(startMs);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + 1); // the first midnight after the window opens
+    while (d.getTime() < endMs) {
+      out.push(d.getTime());
+      d.setDate(d.getDate() + 1);
+    }
+    return out;
   }
 
   meta(score: number) {

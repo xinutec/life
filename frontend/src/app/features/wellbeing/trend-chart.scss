@@ -22,6 +22,14 @@
     stroke-width: 0.5;
     stroke-dasharray: 3 3;
   }
+  // Midnight rules. Fainter than the mid line: they divide the plot, they don't
+  // measure it — and at 14 days there are fourteen of them behind the data.
+  .day {
+    stroke: var(--mat-sys-outline-variant);
+    stroke-width: 0.5;
+    stroke-dasharray: 1 3;
+    opacity: 0.6;
+  }
   // The trend line stays a soft neutral so the ramp-coloured dots carry the
   // meaning; the line only shows the shape of the change.
   .line {

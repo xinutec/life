@@ -64,11 +64,14 @@ export function monotonePath(dots: readonly TrendDot[]): string {
   return d;
 }
 
-/** A rendered trend: the viewBox size plus the points to plot. */
+/** A rendered trend: the viewBox size, the points to plot, and the x of every
+ *  local midnight inside the window — drawn as faint rules, so a dip reads as
+ *  "that was Tuesday" rather than "that was somewhere in the middle". */
 export interface TrendData {
   w: number;
   h: number;
   dots: TrendDot[];
+  midnights: number[];
 }
 
 /** A 14-day wellbeing trend: dots on the shared 1..5 colour ramp, three axis
