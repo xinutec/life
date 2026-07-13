@@ -178,6 +178,23 @@ test('wellbeing — chart + timeline: lays out cleanly @ phone width', async ({ 
   await expectNoHorizontalOverflow(page, testInfo);
 });
 
+test('wellbeing — the two charts agree on where the days are', async ({ page }) => {
+  await mockApi(page);
+  await page.goto('/wellbeing');
+  await page.getByText('Energy · last 14 days').waitFor();
+  // Mood and energy share one x axis (the same window, the same instant), so a
+  // midnight must land on the same pixel in both — otherwise the day rules stagger
+  // down the page and the charts can't be read against each other. They align only
+  // while the axis column is a fixed width: sized to its words instead, the longer
+  // "energetic" would push the energy plot right of the mood plot.
+  const plots = page.locator('svg.chart');
+  const [mood, energy] = [await plots.nth(0).boundingBox(), await plots.nth(1).boundingBox()];
+  expect(mood).not.toBeNull();
+  expect(energy).not.toBeNull();
+  expect(Math.abs(mood!.x - energy!.x)).toBeLessThan(0.5);
+  expect(Math.abs(mood!.width - energy!.width)).toBeLessThan(0.5);
+});
+
 test('buy — list + bought bar: lays out cleanly @ phone width', async ({ page }, testInfo) => {
   await mockApi(page);
   await page.goto('/shopping');

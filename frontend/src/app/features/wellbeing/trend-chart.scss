@@ -41,14 +41,21 @@
     stroke-linejoin: round;
   }
   .day-name {
-    font-size: 7px; // SVG user units, not CSS px — the viewBox scales it with the chart
+    font-size: 9px; // SVG user units, not CSS px — the viewBox scales it with the chart
     fill: var(--mat-sys-on-surface-variant);
     text-anchor: middle;
   }
+  // The axis column is a FIXED width, not sized to its words. Sized to the words,
+  // "energetic" pushed the energy plot further right than "great" pushed the mood
+  // plot, so the same midnight landed on two different pixels in the two charts
+  // and the days didn't line up down the page. Wide enough for the longest word
+  // in either chart; right-aligned so every word still sits against its plot.
   .axis {
+    flex: 0 0 5.25rem;
     display: flex;
     justify-content: space-between;
     flex-direction: column;
+    text-align: right;
     font: var(--mat-sys-label-small);
     color: var(--mat-sys-on-surface-variant);
   }
@@ -59,7 +66,7 @@
   // bottom of the scale rather than below it.
   .axis::after {
     content: '';
-    flex: 0 0 8.3%;
+    flex: 0 0 10.4%;
   }
   .caption {
     margin: 0.15rem 0 0;

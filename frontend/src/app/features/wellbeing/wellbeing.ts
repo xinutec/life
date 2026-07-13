@@ -19,11 +19,13 @@ interface Day {
 }
 
 // padBottom reserves the strip under the plot for the weekday names, so a "Mon"
-// never sits on top of a bad day's dot at the bottom of the scale.
-const CHART = { w: 300, h: 96, padX: 6, padTop: 8, padBottom: 16 };
+// never sits on top of a bad day's dot at the bottom of the scale. Keep it in
+// step with .axis::after in trend-chart.scss, which holds the same strip back
+// from the axis words: that spacer is (padBottom - padTop) / h.
+const CHART = { w: 300, h: 96, padX: 6, padTop: 8, padBottom: 18 };
 
 /** How wide a day must render (SVG user units) before it gets a weekday name.
- *  A 3-letter word at the .day-name font is ~16 units, so this leaves clear air
+ *  A 3-letter word at the .day-name font is ~18 units, so this leaves clear air
  *  either side. At 14 days a day is ~20.6 units — deliberately below the bar, as
  *  fourteen names that nearly touch read as a smear rather than as labels. */
 const MIN_DAY_LABEL_W = 30;
