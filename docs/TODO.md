@@ -4,6 +4,37 @@ Living checklist for the Life app. Keep it current: tick items as they ship,
 add new ones under the right section. Architecture/rationale lives in
 `docs/design/overview.md`; this is the "what's done / what's next" tracker.
 
+## Known bug: signing in from the app fails when logged OUT of Nextcloud
+
+- [ ] **Nextcloud login-flow loses its session on the cross-site hop.** Pressing
+  "Sign in with Nextcloud" in the WebView fails with Nextcloud's *"Access denied —
+  State token does not match"* whenever the WebView holds **no Nextcloud session**.
+  Sign in to Nextcloud first and it works, which is why it has gone unnoticed: the
+  WebView normally has a session. It will bite on a fresh install or after clearing
+  cookies (2026-07-13: four failed attempts, no callback ever reached us).
+
+  Mechanism, from `apps/oauth2/lib/Controller/LoginRedirectorController.php` in the
+  running Nextcloud (33.0.2, oauth2 1.21.0): a logged-out `authorize` puts
+  `oauth.state` in the PHP session, redirects to `core.ClientFlowLogin`'s
+  auth-picker, which puts a second secret (`stateToken`) in that same session; the
+  later `grantPage` compares them. So the login needs **one Nextcloud session to
+  survive three hops** — and the chain *begins with a cross-site navigation*
+  (life.xinutec.org → dash.xinutec.org), on which the browser deliberately withholds
+  Nextcloud's `__Host-nc_sameSiteCookiestrict` (SameSite=strict) cookie. Something
+  in there drops the session; which hop is not yet pinned.
+
+  NOT yet established: the exact hop. Nextcloud logs nothing (the refusal is a plain
+  403, not an exception) and the chain is self-consistent when walked with curl and a
+  cookie jar — so the divergence is in the WebView's cookie handling. Note
+  `MainActivity` sets `setAcceptThirdPartyCookies` on the hidden and connect
+  WebViews but NOT on the main one, and never calls `CookieManager.flush()`; both are
+  suspects, neither is confirmed.
+
+  To finish it: the WebView is remote-debuggable (see android/README.md § Debugging
+  the WebView) — sign out of Nextcloud in the app, attach CDP, capture the Network
+  events across the failing chain, and find the request where the session cookie goes
+  missing. That costs a Nextcloud sign-out, so do it deliberately, not in passing.
+
 ## Backup — deliberately NOT yet (wait for Pippijn's go)
 
 - [ ] **Back up the Life DB** — **DO NOT set this up yet.** It matters *after*
