@@ -24,26 +24,44 @@ Runs on any Android 8+ (minSdk 26) device.
 
 ## Build & install
 
-No toolchain lives in this repo — it borrows the recall project's `android` nix
-dev shell (JDK 17 + Android SDK; the Gradle wrapper pins Gradle):
+The toolchain is this repo's own `android` dev shell (JDK 17 + Android SDK + adb;
+the Gradle wrapper pins Gradle):
 
 ```sh
 cd android
-nix develop ~/Code/recall#android --command ./gradlew :app:assembleDebug
+nix develop ..#android --command ./gradlew :app:assembleDebug
 # → app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Install onto a phone over WiFi (Pixel 9 is at `192.168.1.133:5555`):
+Or just `./deploy.sh`, which builds and installs to the Pixel 9, finding it by
+*model* rather than IP (a Pixel 5 is often adb-connected too):
 
 ```sh
-ADB="$ANDROID_HOME/platform-tools/adb"   # inside the nix shell above
-"$ADB" connect 192.168.1.133:5555
-"$ADB" -s 192.168.1.133:5555 install -r app/build/outputs/apk/debug/app-debug.apk
-"$ADB" -s 192.168.1.133:5555 shell am start -n org.xinutec.life/.MainActivity
+nix develop ..#android --command ./deploy.sh
 ```
 
 The APK is signed with the auto-generated debug key — fine for sideloading, the
 only distribution path.
+
+## Debugging the WebView
+
+`MainActivity` calls `WebView.setWebContentsDebuggingEnabled(true)`, so the live
+page is inspectable over adb with the full Chrome DevTools protocol — console,
+network, DOM. **Use this.** The alternative is inferring what the page did from
+server logs and screenshots, which is how a Nextcloud login error once took an
+hour to identify instead of a minute (2026-07-13).
+
+```sh
+nix develop ..#android
+adb connect 10.100.0.12:5555                       # VPN IP; LAN is 192.168.1.133
+PID=$(adb -s 10.100.0.12:5555 shell pidof org.xinutec.life)
+adb -s 10.100.0.12:5555 forward tcp:9333 localabstract:webview_devtools_remote_$PID
+curl -s http://127.0.0.1:9333/json/list            # pages + their webSocketDebuggerUrl
+```
+
+Then drive it over CDP on that WebSocket, or open `chrome://inspect` in a desktop
+Chrome. Plain `adb logcat` also carries the page's `console.*` output under the
+`chromium` tag, which is enough when you only need the errors.
 
 ## Layout
 
@@ -56,5 +74,6 @@ android/
 │       ├── kotlin/org/xinutec/life/MainActivity.kt    # the WebView
 │       └── res/                                  # launcher icon (indigo dashboard), theme, strings
 ├── build.gradle.kts · settings.gradle.kts · gradle/   # project scaffolding
-└── gradlew                                       # borrows ~/Code/recall#android for the SDK
+├── deploy.sh                                     # build + install to the Pixel 9 (by model)
+└── gradlew                                       # SDK comes from ../flake.nix `.#android`
 ```

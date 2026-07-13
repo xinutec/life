@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Build the life web-viewer APK and install it to the Pixel 9 over Wi-Fi. Run from
-# android/ inside the borrowed Android dev shell:
+# android/ inside this repo's Android dev shell (SDK + adb):
 #
-#   nix develop ~/Code/recall#android --command ./deploy.sh [<ip[:port]>]
+#   nix develop ..#android --command ./deploy.sh [<ip[:port]>]
 #
 # This is a single-purpose handheld app on ONE phone (the Pixel 9). DHCP drifts the
 # IP, so we key on the device *model*, never the IP: connect, verify it really is a

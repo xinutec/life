@@ -199,8 +199,10 @@ deletion/trash (B), field-level sync merge + conflict log (C).
 19. - [~] **Polish basket** — DONE: `NC_BASE_URL` boot validation, LIKE-wildcard
       escaping. REMAINING: todo-detail title save on sheet dismiss; the
       "scenes/house.json" string in end-user copy; items sort/filter;
-      `allowBackup=false` (needs the dev-lint canonical manifest updated too);
-      `setWebContentsDebuggingEnabled` for adb debugging of the wrapper.
+      `allowBackup=false` (needs the dev-lint canonical manifest updated too).
+      (`setWebContentsDebuggingEnabled` was already done in `fbee581` — the entry
+      outlived the work, and cost an hour of debugging on 2026-07-13 by making the
+      WebView look un-inspectable. See android/README.md § Debugging the WebView.)
 
 ## 2026-07-08 review findings (priority-ordered)
 
