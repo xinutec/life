@@ -49,7 +49,8 @@ pub struct LoginQuery {
 
 /// GET /login → redirect to NC's OAuth2 authorize endpoint.
 pub async fn login(State(app): State<AppState>, Query(q): Query<LoginQuery>) -> Redirect {
-    let state = app.create_oauth_state(q.return_to);
+    let state = app.create_oauth_state(q.return_to.clone());
+    tracing::info!(return_to = ?q.return_to, "login started");
     Redirect::to(&identity::authorize_url(&app.cfg, &state))
 }
 
@@ -60,18 +61,31 @@ pub struct CallbackQuery {
 }
 
 /// GET /auth/callback → exchange code, read identity, create our session.
+///
+/// Every way this can fail says so in the log. A login that dies here otherwise
+/// looks like a bare 401 and tells you nothing — and one of the failures is not
+/// even the user's doing: the pending-`state` map lives in memory (see
+/// `state.rs`), so a pod restart between /login and the callback drops the entry
+/// and the login is refused through no fault of anyone's.
 pub async fn callback(
     State(app): State<AppState>,
     jar: CookieJar,
     Query(q): Query<CallbackQuery>,
 ) -> Result<(CookieJar, Redirect), AppError> {
-    let state = q.state.unwrap_or_default();
-    let pending = app
-        .consume_oauth_state(&state)
-        .ok_or(AppError::Unauthorized)?;
-    let code = q
-        .code
-        .ok_or_else(|| anyhow!("missing authorization code"))?;
+    let Some(state) = q.state.filter(|s| !s.is_empty()) else {
+        tracing::warn!(reason = "no_state", "login callback rejected");
+        return Err(AppError::Unauthorized);
+    };
+    let Some(pending) = app.consume_oauth_state(&state) else {
+        // Expired (>10 min at the NC consent screen), already used, or minted by
+        // a process that has since been replaced.
+        tracing::warn!(reason = "unknown_state", "login callback rejected");
+        return Err(AppError::Unauthorized);
+    };
+    let code = q.code.ok_or_else(|| {
+        tracing::warn!(reason = "no_code", "login callback rejected");
+        anyhow!("missing authorization code")
+    })?;
 
     let token = identity::exchange_code(&app.http, &app.cfg, &code).await?;
     let nc_user = identity::fetch_user(&app.http, &app.cfg, &token).await?;
@@ -82,6 +96,7 @@ pub async fn callback(
     };
     let signed = create_session(&app.pool, &app.cfg.session_secret, &user).await?;
     let dest = validate_return_to(pending.return_to.as_deref());
+    tracing::info!(user = %user.user_id, %dest, "login complete");
     Ok((jar.add(session_cookie(signed)), Redirect::to(&dest)))
 }
 
@@ -93,6 +108,7 @@ pub async fn logout(
     if let Some(c) = jar.get(COOKIE_NAME) {
         destroy_session(&app.pool, &app.cfg.session_secret, c.value()).await?;
     }
+    tracing::info!("logged out");
     Ok((jar.remove(Cookie::from(COOKIE_NAME)), Redirect::to("/")))
 }
 
