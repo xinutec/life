@@ -15,13 +15,19 @@ use crate::nextcloud::{credentials, identity, login_flow};
 use crate::session::{AuthUser, COOKIE_NAME, UserSession, create_session, destroy_session};
 use crate::state::AppState;
 
+/// The cookie deliberately outlives the session it names: the `sessions` row is
+/// the only clock, and it slides forward on every request (see
+/// `session::resolve_session`). A cookie that expired with the row would sign you
+/// out 7 days after logging in no matter how much you used the app — the bug this
+/// pairs with. Presenting a cookie whose row is gone is simply a 401, so the long
+/// life costs nothing. 400 days is the browser's own ceiling.
 fn session_cookie(value: String) -> Cookie<'static> {
     Cookie::build((COOKIE_NAME, value))
         .path("/")
         .http_only(true)
         .secure(true)
         .same_site(SameSite::Lax)
-        .max_age(time::Duration::days(7))
+        .max_age(time::Duration::days(400))
         .build()
 }
 
