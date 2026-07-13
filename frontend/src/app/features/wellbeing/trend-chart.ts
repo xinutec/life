@@ -64,14 +64,26 @@ export function monotonePath(dots: readonly TrendDot[]): string {
   return d;
 }
 
-/** A rendered trend: the viewBox size, the points to plot, and the x of every
- *  local midnight inside the window — drawn as faint rules, so a dip reads as
- *  "that was Tuesday" rather than "that was somewhere in the middle". */
+/** A weekday name ("Mon") centred in its day, below the plot. */
+export interface DayLabel {
+  x: number;
+  text: string;
+}
+
+/** A rendered trend: the viewBox size, the points to plot, the x of every local
+ *  midnight inside the window — drawn as faint rules, so a dip reads as "that
+ *  was Tuesday" rather than "that was somewhere in the middle" — and the weekday
+ *  names for those days wide enough to be worth naming (so the host decides what
+ *  fits; the chart just draws what it's given). */
 export interface TrendData {
   w: number;
   h: number;
+  /** y of the middle of the scale — where a "3" plots. Not h/2: the strip the
+   *  weekday names sit in is part of the box but not part of the plot. */
+  midY: number;
   dots: TrendDot[];
   midnights: number[];
+  dayLabels: DayLabel[];
 }
 
 /** A 14-day wellbeing trend: dots on the shared 1..5 colour ramp, three axis

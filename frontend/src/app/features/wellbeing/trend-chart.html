@@ -13,11 +13,14 @@
         class="mid"
         [attr.x1]="0"
         [attr.x2]="chart().w"
-        [attr.y1]="chart().h / 2"
-        [attr.y2]="chart().h / 2"
+        [attr.y1]="chart().midY"
+        [attr.y2]="chart().midY"
       />
       @for (x of chart().midnights; track $index) {
         <line class="day" [attr.x1]="x" [attr.x2]="x" [attr.y1]="0" [attr.y2]="chart().h" />
+      }
+      @for (day of chart().dayLabels; track $index) {
+        <text class="day-name" [attr.x]="day.x" [attr.y]="chart().h - 3">{{ day.text }}</text>
       }
       @if (chart().dots.length > 1) {
         <path class="line" [attr.d]="linePath()" />

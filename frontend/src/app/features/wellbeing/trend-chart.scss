@@ -40,12 +40,26 @@
     stroke-linecap: round;
     stroke-linejoin: round;
   }
+  .day-name {
+    font-size: 7px; // SVG user units, not CSS px — the viewBox scales it with the chart
+    fill: var(--mat-sys-on-surface-variant);
+    text-anchor: middle;
+  }
   .axis {
     display: flex;
     justify-content: space-between;
     flex-direction: column;
     font: var(--mat-sys-label-small);
     color: var(--mat-sys-on-surface-variant);
+  }
+  // The axis words space themselves over the axis column, which stretches to the
+  // svg's full height — but the plot no longer fills it, since the weekday names
+  // take a strip along the bottom. This spacer holds that strip back (its height
+  // as a fraction of CHART.h in wellbeing.ts) so "awful" still lands on the
+  // bottom of the scale rather than below it.
+  .axis::after {
+    content: '';
+    flex: 0 0 8.3%;
   }
   .caption {
     margin: 0.15rem 0 0;

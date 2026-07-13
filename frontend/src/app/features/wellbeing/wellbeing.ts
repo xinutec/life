@@ -9,7 +9,7 @@ import { map } from 'rxjs';
 import { ListState } from '../../shared/list-state';
 import { WellbeingCheckin, energyMeta, scoreMeta } from '../../shared/wellbeing-checkin';
 import { WellbeingDoc, WellbeingStore } from '../../sync/wellbeing-store';
-import { TrendChart, TrendData, TrendDot } from './trend-chart';
+import { DayLabel, TrendChart, TrendData, TrendDot } from './trend-chart';
 import { WellbeingEntry } from './wellbeing-entry';
 
 interface Day {
@@ -18,7 +18,15 @@ interface Day {
   entries: WellbeingDoc[];
 }
 
-const CHART = { w: 300, h: 96, padX: 6, padTop: 8, padBottom: 8 };
+// padBottom reserves the strip under the plot for the weekday names, so a "Mon"
+// never sits on top of a bad day's dot at the bottom of the scale.
+const CHART = { w: 300, h: 96, padX: 6, padTop: 8, padBottom: 16 };
+
+/** How wide a day must render (SVG user units) before it gets a weekday name.
+ *  A 3-letter word at the .day-name font is ~16 units, so this leaves clear air
+ *  either side. At 14 days a day is ~20.6 units — deliberately below the bar, as
+ *  fourteen names that nearly touch read as a smear rather than as labels. */
+const MIN_DAY_LABEL_W = 30;
 
 const r1 = (n: number): number => Math.round(n * 10) / 10;
 
@@ -124,8 +132,15 @@ export class Wellbeing {
       dots.push({ cx: r1(x(t)), cy: r1(cy), level });
     }
     dots.sort((a, b) => a.cx - b.cx);
-    const midnights = this.midnights(startMs, endMs).map((ms) => r1(x(ms)));
-    return { w, h, dots, midnights };
+    const bounds = this.midnights(startMs, endMs);
+    return {
+      w,
+      h,
+      midY: padTop + plotH / 2,
+      dots,
+      midnights: bounds.map((ms) => r1(x(ms))),
+      dayLabels: this.dayLabels([startMs, ...bounds, endMs], x),
+    };
   }
 
   /** Local midnights inside the window. Walked with setDate rather than adding
@@ -139,6 +154,25 @@ export class Wellbeing {
     while (d.getTime() < endMs) {
       out.push(d.getTime());
       d.setDate(d.getDate() + 1);
+    }
+    return out;
+  }
+
+  /** A weekday name centred in each day, from the window's day boundaries.
+   *  Labelled only where the day is wide enough to hold the word — measured
+   *  against the day's own rendered width, so it's the chart that decides, not
+   *  the window setting: the part-days at either edge drop their label when the
+   *  window opens late in the day, and 14d stays clean while 7d and 24h label. */
+  private dayLabels(bounds: number[], x: (ms: number) => number): DayLabel[] {
+    const out: DayLabel[] = [];
+    for (let i = 0; i < bounds.length - 1; i++) {
+      const [from, to] = [bounds[i], bounds[i + 1]];
+      if (x(to) - x(from) < MIN_DAY_LABEL_W) continue; // too narrow for the word
+      const mid = new Date(from + (to - from) / 2);
+      out.push({
+        x: r1(x(from) + (x(to) - x(from)) / 2),
+        text: mid.toLocaleDateString(undefined, { weekday: 'short' }),
+      });
     }
     return out;
   }

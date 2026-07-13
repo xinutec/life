@@ -94,6 +94,32 @@ describe('Wellbeing history', () => {
     expect(c.chart().midnights.length).toBe(1);
   });
 
+  it('names each day that is wide enough to hold the word', () => {
+    const c = setup([entry({ recordedAt: hoursAgo(2), score: 4 })]).fixture.componentInstance;
+    // 14 days: each is ~20 units wide, too narrow for a name — rules only.
+    expect(c.chart().midnights.length).toBe(14);
+    expect(c.chart().dayLabels).toEqual([]);
+
+    // 7 days: the 6 whole days always fit; the part-days at either edge fit only
+    // if the window opened early enough in the day, so the count is 6, 7 or 8.
+    c.window.set(7);
+    const week = c.chart().dayLabels;
+    expect(week.length).toBeGreaterThanOrEqual(6);
+    expect(week.length).toBeLessThanOrEqual(8);
+    // Each name is centred in its own day: strictly between the rules either side.
+    const rules = [0, ...c.chart().midnights, c.chart().w];
+    for (const d of week) {
+      const left = Math.max(...rules.filter((r) => r < d.x));
+      const right = Math.min(...rules.filter((r) => r > d.x));
+      expect(right - left).toBeGreaterThan(0);
+    }
+    // A real weekday, in the user's locale.
+    const weekdays = [0, 1, 2, 3, 4, 5, 6].map((i) =>
+      new Date(2024, 0, 7 + i).toLocaleDateString(undefined, { weekday: 'short' }),
+    );
+    for (const d of week) expect(weekdays).toContain(d.text);
+  });
+
   it('has no energy chart when nothing recorded one', () => {
     const c = setup([entry({ energy: null })]).fixture.componentInstance;
     expect(c.hasChart()).toBe(true); // mood still charts
