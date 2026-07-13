@@ -28,6 +28,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import org.json.JSONObject
@@ -72,6 +73,40 @@ class MainActivity : Activity() {
     // onReceivedHttpError). One shot: if the login still fails after a clean start,
     // the fault is not stale cookies and retrying would only spin.
     private var staleLoginRecovered = false
+
+    // The explanation strip, if one is showing.
+    private var banner: TextView? = null
+
+    /** Explain, over the page, why the app is doing something the user didn't ask
+     *  for. Native rather than injected: the page underneath at that moment belongs
+     *  to Nextcloud, and we neither can nor should write into it. Dismiss on tap;
+     *  otherwise it goes on its own once it's been read. */
+    private fun showBanner(text: String) {
+        banner?.let { root.removeView(it) }
+        val strip =
+            TextView(this).apply {
+                setText(text)
+                setPadding(BANNER_PAD, BANNER_PAD, BANNER_PAD, BANNER_PAD)
+                setBackgroundColor(BANNER_BG)
+                setTextColor(Color.WHITE)
+                textSize = 14f
+                layoutParams =
+                    FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                        Gravity.TOP,
+                    )
+                setOnClickListener { hideBanner() }
+            }
+        banner = strip
+        root.addView(strip)
+        strip.postDelayed({ if (banner === strip) hideBanner() }, BANNER_MS)
+    }
+
+    private fun hideBanner() {
+        banner?.let { root.removeView(it) }
+        banner = null
+    }
 
     /** Forget every Nextcloud cookie, so the next login starts from the cookie-less
      *  state that Nextcloud actually handles correctly. */
@@ -193,7 +228,19 @@ class MainActivity : Activity() {
                                 TAG,
                                 "NC refused the login (403) — clearing its stale cookies and retrying",
                             )
+                            // Don't let NC's "Access denied" page paint. We are about to
+                            // fix it, and someone who sees that flash past has no way to
+                            // tell whether anything is wrong or whether trying again is
+                            // pointless.
+                            view.stopLoading()
                             clearNextcloudCookies()
+                            // And say WHY the login is being asked for twice. A silent
+                            // retry still leaves you guessing: the recovery worked, but
+                            // only the log knew it.
+                            showBanner(
+                                "Your Nextcloud sign-in had expired, so it was refused. " +
+                                    "Cleared it — signing in again should work now.",
+                            )
                             view.loadUrl("${LIFE_URL}login")
                         }
 
@@ -649,6 +696,12 @@ class MainActivity : Activity() {
 
         private const val TAG = "life-app"
         private const val HTTP_FORBIDDEN = 403
+
+        // The explanation strip: dark slate, readable over any page, gone after a
+        // long-enough read (it says something the user needs, not a toast).
+        private const val BANNER_PAD = 28
+        private const val BANNER_BG = 0xEE1F2937.toInt()
+        private const val BANNER_MS = 9_000L
 
         // Nextcloud's fixed cookie names. The session cookie's own name is derived
         // from the instance id, so it can't be listed here — it is read from the

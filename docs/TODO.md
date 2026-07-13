@@ -4,36 +4,39 @@ Living checklist for the Life app. Keep it current: tick items as they ship,
 add new ones under the right section. Architecture/rationale lives in
 `docs/design/overview.md`; this is the "what's done / what's next" tracker.
 
-## Known bug: signing in from the app fails when logged OUT of Nextcloud
+## Solved 2026-07-13: "State token does not match" on sign-in (stale NC cookies)
 
-- [ ] **Nextcloud login-flow loses its session on the cross-site hop.** Pressing
-  "Sign in with Nextcloud" in the WebView fails with Nextcloud's *"Access denied —
-  State token does not match"* whenever the WebView holds **no Nextcloud session**.
-  Sign in to Nextcloud first and it works, which is why it has gone unnoticed: the
-  WebView normally has a session. It will bite on a fresh install or after clearing
-  cookies (2026-07-13: four failed attempts, no callback ever reached us).
+Recorded because the *cause* is counter-intuitive and will recur elsewhere in the
+fleet — every app here signs in through the same Nextcloud OAuth flow.
 
-  Mechanism, from `apps/oauth2/lib/Controller/LoginRedirectorController.php` in the
-  running Nextcloud (33.0.2, oauth2 1.21.0): a logged-out `authorize` puts
-  `oauth.state` in the PHP session, redirects to `core.ClientFlowLogin`'s
-  auth-picker, which puts a second secret (`stateToken`) in that same session; the
-  later `grantPage` compares them. So the login needs **one Nextcloud session to
-  survive three hops** — and the chain *begins with a cross-site navigation*
-  (life.xinutec.org → dash.xinutec.org), on which the browser deliberately withholds
-  Nextcloud's `__Host-nc_sameSiteCookiestrict` (SameSite=strict) cookie. Something
-  in there drops the session; which hop is not yet pinned.
+**Symptom.** "Sign in with Nextcloud" dead-ends on Nextcloud's *"Access denied —
+State token does not match"* (HTTP 403). No callback ever reaches us.
 
-  NOT yet established: the exact hop. Nextcloud logs nothing (the refusal is a plain
-  403, not an exception) and the chain is self-consistent when walked with curl and a
-  cookie jar — so the divergence is in the WebView's cookie handling. Note
-  `MainActivity` sets `setAcceptThirdPartyCookies` on the hidden and connect
-  WebViews but NOT on the main one, and never calls `CookieManager.flush()`; both are
-  suspects, neither is confirmed.
+**Cause.** Nextcloud writes the login's `stateToken` into the session named by
+whatever session cookie the browser arrives with (`showAuthPickerPage` →
+`grantPage`, `core/Controller/ClientFlowLoginController.php`). A long-lived client
+keeps NC's cookies for months while NC sweeps its sessions — so by the next sign-in
+that cookie names a session the server has forgotten, the token dies with it, and
+the grant step refuses. A **cookie-less** browser skips the whole path (`base.php`
+guards on `count($_COOKIE) > 0`), which is why a fresh install works and a
+long-lived one does not.
 
-  To finish it: the WebView is remote-debuggable (see android/README.md § Debugging
-  the WebView) — sign out of Nextcloud in the app, attach CDP, capture the Network
-  events across the failing chain, and find the request where the session cookie goes
-  missing. That costs a Nextcloud sign-out, so do it deliberately, not in passing.
+Reproduced in **desktop Chrome** by planting a dead NC session cookie in a fresh
+incognito context — so it is *not* a WebView quirk, and every earlier theory
+(no NC session / cross-site SameSite hop / WebView cookie handling) was wrong.
+
+Sliding Life sessions make this **more** likely, not less: logins are now rare, so
+the NC cookies will almost always be dead by the time you sign in.
+
+**Fix (android/MainActivity).** On a main-frame 403 from the NC host: stop the load,
+drop NC's cookies, explain in a banner, and restart the login from the cookie-less
+state that works. Once per launch, so a genuinely broken login can't loop. Verified
+end-to-end on the Pixel 9 by poisoning the session cookie over CDP.
+
+**Still open:** the same failure hits *plain browsers* (Chrome on the Mac) with no
+recovery — the user must clear cookies for the NC host by hand. Fixing that properly
+means fixing it upstream in Nextcloud, or having Life's `/login` route bounce
+through something that resets the NC session.
 
 ## Backup — deliberately NOT yet (wait for Pippijn's go)
 
