@@ -193,6 +193,10 @@ test('wellbeing — the two charts agree on where the days are', async ({ page }
   expect(energy).not.toBeNull();
   expect(Math.abs(mood!.x - energy!.x)).toBeLessThan(0.5);
   expect(Math.abs(mood!.width - energy!.width)).toBeLessThan(0.5);
+  // This also guards the hand-picked column width: a longer axis word (or a bigger
+  // type scale) outgrows the fixed basis, and since a flex item won't shrink below
+  // its min-content, the column grows on that chart alone — landing right here as
+  // a misalignment rather than as a quiet clip on the phone.
 });
 
 test('buy — list + bought bar: lays out cleanly @ phone width', async ({ page }, testInfo) => {

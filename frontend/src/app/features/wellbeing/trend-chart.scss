@@ -48,14 +48,18 @@
   // The axis column is a FIXED width, not sized to its words. Sized to the words,
   // "energetic" pushed the energy plot further right than "great" pushed the mood
   // plot, so the same midnight landed on two different pixels in the two charts
-  // and the days didn't line up down the page. Wide enough for the longest word
-  // in either chart; right-aligned so every word still sits against its plot.
+  // and the days didn't line up down the page. Just wide enough for the longest
+  // word any chart uses ("energetic") and no wider — every extra pixel here is
+  // dead space on the left of the screen and a pixel stolen from the plot. The
+  // words are right-aligned, so each sits against the plot it labels; nowrap +
+  // the e2e width check means a longer word fails loudly rather than wrapping.
   .axis {
-    flex: 0 0 5.25rem;
+    flex: 0 0 3.75rem;
     display: flex;
     justify-content: space-between;
     flex-direction: column;
     text-align: right;
+    white-space: nowrap;
     font: var(--mat-sys-label-small);
     color: var(--mat-sys-on-surface-variant);
   }
