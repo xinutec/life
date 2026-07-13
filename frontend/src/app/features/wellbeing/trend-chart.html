@@ -1,8 +1,3 @@
-<div class="axis" aria-hidden="true">
-  @for (word of axis(); track $index) {
-    <span [style.top.%]="(100 * chart().levelY[$index]) / chart().h">{{ word }}</span>
-  }
-</div>
 <svg
   class="chart"
   [attr.viewBox]="'0 0 ' + chart().w + ' ' + chart().h"
@@ -11,7 +6,7 @@
 >
   <line
     class="mid"
-    [attr.x1]="0"
+    [attr.x1]="chart().axisX + 6"
     [attr.x2]="chart().w"
     [attr.y1]="chart().levelY[1]"
     [attr.y2]="chart().levelY[1]"
@@ -21,6 +16,11 @@
   }
   @for (day of chart().dayLabels; track $index) {
     <text class="day-name" [attr.x]="day.x" [attr.y]="chart().h - 3">{{ day.text }}</text>
+  }
+  @for (word of axis(); track $index) {
+    <text class="axis-word" [attr.x]="chart().axisX" [attr.y]="chart().levelY[$index]">
+      {{ word }}
+    </text>
   }
   @if (chart().dots.length > 1) {
     <path class="line" [attr.d]="linePath()" />

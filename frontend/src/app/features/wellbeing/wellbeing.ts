@@ -18,11 +18,16 @@ interface Day {
   entries: WellbeingDoc[];
 }
 
-// padBottom reserves the strip under the plot for the weekday names, so a "Mon"
-// never sits on top of a bad day's dot at the bottom of the scale. Keep it in
-// step with .axis::after in trend-chart.scss, which holds the same strip back
-// from the axis words: that spacer is (padBottom - padTop) / h.
-const CHART = { w: 300, h: 96, padX: 6, padTop: 8, padBottom: 18 };
+// The whole chart lives in ONE coordinate system: the axis words, the dots, the
+// midnight rules and the weekday names are all placed in these viewBox units. The
+// words used to be CSS-positioned beside the svg, which is what let them drift off
+// the levels they name and (once absolutely positioned) slide off the screen —
+// two geometries that only agreed by luck. padLeft is the strip the words sit in;
+// padBottom the strip the weekday names sit in.
+const CHART = { w: 300, h: 96, padLeft: 48, padRight: 6, padTop: 8, padBottom: 18 };
+
+/** Where the axis words end (right-aligned against the plot). */
+const AXIS_X = CHART.padLeft - 6;
 
 /** How wide a day must render (SVG user units) before it gets a weekday name.
  *  A 3-letter word at the .day-name font is ~18 units, so this leaves clear air
@@ -114,7 +119,7 @@ export class Wellbeing {
    *  entries with no reading of this kind, or outside the window, are skipped.
    *  Dots come out x-ascending so the connecting line joins them in time order. */
   private buildChart(value: (e: WellbeingDoc) => number | null | undefined): TrendData {
-    const { w, h, padX, padTop, padBottom } = CHART;
+    const { w, h, padLeft, padRight, padTop, padBottom } = CHART;
     const days = this.window();
     const plotH = h - padTop - padBottom;
     // A true rolling window ending now: [now - days·24h, now]. So "24h" is
@@ -123,7 +128,8 @@ export class Wellbeing {
     const spanMs = days * 86_400_000;
     const startMs = Date.now() - spanMs;
     const endMs = startMs + spanMs;
-    const x = (ms: number): number => padX + ((ms - startMs) / spanMs) * (w - 2 * padX);
+    const x = (ms: number): number =>
+      padLeft + ((ms - startMs) / spanMs) * (w - padLeft - padRight);
     // The one rule that places a 1..5 reading on the y axis. The dots use it, and
     // so do the three axis words — that's what keeps "awful" level with a 1.
     const y = (level: number): number => r1(padTop + ((5 - level) / 4) * plotH);
@@ -140,6 +146,7 @@ export class Wellbeing {
     return {
       w,
       h,
+      axisX: AXIS_X,
       levelY: [y(5), y(3), y(1)],
       dots,
       midnights: bounds.map((ms) => r1(x(ms))),

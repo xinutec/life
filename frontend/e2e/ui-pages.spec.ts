@@ -184,30 +184,55 @@ test('wellbeing — the two charts agree on where the days are', async ({ page }
   await page.getByText('Energy · last 14 days').waitFor();
   // Mood and energy share one x axis (the same window, the same instant), so a
   // midnight must land on the same pixel in both — otherwise the day rules stagger
-  // down the page and the charts can't be read against each other. They align only
-  // while the axis column is a fixed width: sized to its words instead, the longer
-  // "energetic" would push the energy plot right of the mood plot.
-  const plots = page.locator('svg.chart');
-  const [mood, energy] = [await plots.nth(0).boundingBox(), await plots.nth(1).boundingBox()];
-  expect(mood).not.toBeNull();
-  expect(energy).not.toBeNull();
-  expect(Math.abs(mood!.x - energy!.x)).toBeLessThan(0.5);
-  expect(Math.abs(mood!.width - energy!.width)).toBeLessThan(0.5);
+  // down the page and the charts can't be read against each other. Measure the RULES
+  // themselves, not the svg boxes: the boxes matched even when the axis words had
+  // collapsed to nothing, which is exactly how this test missed a broken chart once.
+  const rules = (chart: number) =>
+    page
+      .locator('svg.chart')
+      .nth(chart)
+      .locator('line.day')
+      .evaluateAll((els) => els.map((e) => e.getBoundingClientRect().x));
+  const [mood, energy] = [await rules(0), await rules(1)];
+  expect(mood.length).toBeGreaterThan(0);
+  expect(energy.length).toBe(mood.length);
+  for (let i = 0; i < mood.length; i++) expect(Math.abs(mood[i] - energy[i])).toBeLessThan(0.5);
+});
+
+test('wellbeing — the axis words are actually on the screen', async ({ page }) => {
+  await mockApi(page);
+  await page.goto('/wellbeing');
+  await page.getByText('Energy · last 14 days').waitFor();
+  // The check the others were all missing: can he READ them? Absolutely-positioned
+  // axis words once collapsed their own column to zero width and slid off the left
+  // edge of the phone — while a same-x/same-y test, a vertical-alignment test and
+  // the shared overflow harness (which only measures the RIGHT edge) all passed.
+  // Count first: "no word is off-screen" is also true when there are no words, and
+  // a vacuous pass is how the last three tests missed a chart he couldn't read.
+  const words = page.locator('svg.chart text.axis-word');
+  await expect(words).toHaveCount(6); // three on each of the two charts
+  const offscreen = await words.evaluateAll((els) =>
+    els
+      .filter((e) => e.getBoundingClientRect().left < 0)
+      .map((e) => `${e.textContent?.trim()} @ ${Math.round(e.getBoundingClientRect().left)}px`),
+  );
+  expect(offscreen).toEqual([]);
 });
 
 test('wellbeing — each axis word sits level with the dot it names', async ({ page }) => {
   await mockApi(page);
   await page.goto('/wellbeing');
   await page.getByText('Energy · last 14 days').waitFor();
-  // "great"/"okay"/"awful" claim to name the 5, the 3 and the 1 — so each must sit
-  // at the height that reading actually plots at. Spaced evenly down the column
+  // "great"/"okay"/"awful" claim to name the 5, the 3 and the 1, so each must sit at
+  // the height that reading actually plots at. Spaced evenly down a CSS column
   // instead (the obvious way, and what this used to do) "awful" landed 14px above
-  // where a 1 plots, because the weekday strip means the plot no longer fills the
-  // box. The y here is the plot's own: viewBox 0 0 300 96, padTop 8, padBottom 18.
+  // where a 1 plots. The y here is the plot's own: viewBox 0 0 300 96, padTop 8,
+  // padBottom 18 — so a 5, a 3 and a 1 plot at 8, 44 and 78.
   const svg = (await page.locator('svg.chart').first().boundingBox())!;
   const scale = svg.height / 96;
-  const levels = [8, 44, 78].map((u) => svg.y + u * scale); // where 5, 3 and 1 plot
-  const words = page.locator('.axis').first().locator('span');
+  const levels = [8, 44, 78].map((u) => svg.y + u * scale);
+  const words = page.locator('svg.chart').first().locator('text.axis-word');
+  await expect(words).toHaveCount(3);
   for (let i = 0; i < 3; i++) {
     const b = (await words.nth(i).boundingBox())!;
     expect(Math.abs(b.y + b.height / 2 - levels[i])).toBeLessThan(1.5);
