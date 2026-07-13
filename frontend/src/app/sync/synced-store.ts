@@ -11,6 +11,7 @@ import {
 
 import { LifeApi } from '../life-api';
 import { TrashKind } from '../models';
+import { AuthState } from './auth-state';
 import { LifeDb } from './life-db';
 import { startHttpReplication } from './replication';
 import { SyncStatus } from './sync-status';
@@ -71,6 +72,7 @@ export abstract class SyncedStore<T extends SyncDoc> {
   private lifeDb = inject(LifeDb);
   private syncStatus = inject(SyncStatus);
   private api = inject(LifeApi);
+  private auth = inject(AuthState);
   private replication?: ReturnType<typeof startHttpReplication<T>>;
   private cfg!: SyncedCollectionConfig<T>;
 
@@ -156,6 +158,7 @@ export abstract class SyncedStore<T extends SyncDoc> {
       syncError: this.syncError,
       syncStatus: this.syncStatus,
       label: this.cfg.label,
+      onAuthLost: () => this.auth.lose(),
     });
     return col;
   }

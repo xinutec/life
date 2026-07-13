@@ -6,14 +6,20 @@ import { SyncStatus } from './sync-status';
 
 /** Auth guard for sync fetches. An expired session shows up two ways: our API
  *  returns 401/403 JSON, or a stale cookie 302-redirects to a login page that
- *  fetch follows to a 200 non-JSON body. Either way, surface "login required"
- *  and throw so RxDB retries without corrupting the queue. Must run BEFORE the
- *  generic !res.ok check so this friendly message wins over "pull failed: 401".
- *  Pure(ish) and exported so the branching is unit-testable. */
-export function guardAuth(res: Response, syncError: WritableSignal<string | null>): void {
+ *  fetch follows to a 200 non-JSON body. Either way, surface "login required",
+ *  tell the caller the session is gone, and throw so the cycle aborts without
+ *  corrupting the queue. Must run BEFORE the generic !res.ok check so this
+ *  friendly message wins over "pull failed: 401". Pure(ish) and exported so the
+ *  branching is unit-testable. */
+export function guardAuth(
+  res: Response,
+  syncError: WritableSignal<string | null>,
+  onAuthLost?: () => void,
+): void {
   const ct = res.headers.get('content-type') ?? '';
   if (res.status === 401 || res.status === 403 || res.redirected || !ct.includes('application/json')) {
     syncError.set('login required — reopen the app to sign in');
+    onAuthLost?.();
     throw new Error('auth-required');
   }
 }
@@ -36,7 +42,17 @@ export function startHttpReplication<T>(opts: {
   syncStatus: SyncStatus;
   /** console.warn tag + sync-status source key, e.g. 'shopping sync'. */
   label: string;
+  /** Raised once the server refuses us for want of a session. Replication then
+   *  STOPS: a 401 is not a transient error, and retrying it on a timer forever
+   *  neither recovers nor informs — it just burns a request every few seconds
+   *  until the tab is closed. Only a fresh login can help, so we say so and
+   *  stand down. */
+  onAuthLost: () => void;
 }) {
+  // Set by the guard inside a handler; read in error$, which is where we have the
+  // replication object to cancel.
+  let authLost = false;
+
   const replication = replicateRxCollection<T, { rev: number }>({
     collection: opts.collection,
     replicationIdentifier: opts.identifier,
@@ -49,7 +65,7 @@ export function startHttpReplication<T>(opts: {
         const res = await fetch(`${opts.path}?since=${since}&limit=${batchSize}`, {
           credentials: 'include',
         });
-        guardAuth(res, opts.syncError);
+        guardAuth(res, opts.syncError, () => (authLost = true));
         if (!res.ok) throw new Error(`pull failed: ${res.status}`);
         const body = (await res.json()) as {
           documents: (T & { _deleted: boolean })[];
@@ -69,7 +85,7 @@ export function startHttpReplication<T>(opts: {
           credentials: 'include',
           body: JSON.stringify(rows),
         });
-        guardAuth(res, opts.syncError);
+        guardAuth(res, opts.syncError, () => (authLost = true));
         if (!res.ok) throw new Error(`push failed: ${res.status}`);
         opts.syncError.set(null);
         opts.syncStatus.clearError(opts.label);
@@ -85,11 +101,20 @@ export function startHttpReplication<T>(opts: {
       opts.syncError() ??
       'Can’t reach the server — changes are saved on this device and will sync when it’s back.';
     opts.syncStatus.reportError(opts.label, message);
+
+    if (authLost) {
+      // Stand down rather than retry. RxDB's retryTime would otherwise re-run
+      // this handler every 5s for the life of the tab, and every attempt is
+      // certain to fail the same way — no session, no recovery, no message. Tell
+      // the app instead, so the shell can ask for a login.
+      opts.onAuthLost();
+      void replication.cancel();
+      return;
+    }
+
     // Keep the console breadcrumb only for the non-auth case (RxDB retries
     // transient network errors on its own).
-    if (opts.syncError() === null) {
-      console.warn(`[${opts.label}]`, err);
-    }
+    console.warn(`[${opts.label}]`, err);
   });
   return replication;
 }

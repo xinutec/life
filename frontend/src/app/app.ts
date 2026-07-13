@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, effect, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { MatBadgeModule } from '@angular/material/badge';
 import { MatButtonModule } from '@angular/material/button';
@@ -14,6 +14,7 @@ import { Alerts } from './shared/alerts';
 import { LifeApi } from './life-api';
 import { Me } from './models';
 import { SwUpdates } from './sw-updates';
+import { AuthState } from './sync/auth-state';
 import { SyncStatus } from './sync/sync-status';
 
 interface NavItem {
@@ -65,6 +66,7 @@ function cacheMe(m: Me | null): void {
 export class App {
   private api = inject(LifeApi);
   private swUpdates = inject(SwUpdates);
+  private auth = inject(AuthState);
   protected readonly alerts = inject(Alerts);
   protected readonly sync = inject(SyncStatus);
 
@@ -106,6 +108,20 @@ export class App {
   ];
 
   constructor() {
+    // Replication is usually the first to learn the session has lapsed — it polls,
+    // and the user may be sitting on a page that asks the server for nothing. Take
+    // its word for it and drop to the sign-in prompt, rather than leaving a shell
+    // that looks signed in but can no longer sync (and, before this, silently
+    // retried a doomed request every 5s for as long as the tab stayed open).
+    effect(() => {
+      if (this.auth.lost()) {
+        this.me.set(null);
+        cacheMe(null);
+        this.loading.set(false);
+        this.offline.set(false);
+      }
+    });
+
     this.swUpdates.start();
     this.beginRefresh();
     this.api.me().subscribe({
