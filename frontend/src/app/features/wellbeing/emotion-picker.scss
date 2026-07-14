@@ -131,12 +131,6 @@ header {
   color: var(--mat-sys-inverse-on-surface);
   font-weight: 600;
 }
-// Half of a blend is drawn at half strength: the word is part of the answer, but
-// it is not the answer — the feeling sits between it and its neighbour.
-.w.on.half .pick {
-  background: color-mix(in srgb, var(--c) 40%, transparent);
-  color: var(--mat-sys-on-surface);
-}
 
 // The meaning affordance rides beside its word instead of being a second
 // full-size button glued to it: a glyph, not a control.
@@ -245,33 +239,5 @@ header {
     display: flex;
     flex-wrap: wrap;
     gap: 0.4rem;
-  }
-}
-
-// Fuse/split offers: quiet text prompts under the chips, not buttons competing
-// with Done. They appear only when the selection actually admits a blend.
-.fuse {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.15rem;
-  margin-top: 0.45rem;
-
-  .link {
-    display: flex;
-    align-items: center;
-    gap: 0.3rem;
-    padding: 0.15rem 0.1rem;
-    border: none;
-    background: none;
-    color: var(--c);
-    font: var(--mat-sys-label-medium);
-    text-align: left;
-    cursor: pointer;
-  }
-  mat-icon {
-    width: 16px;
-    height: 16px;
-    font-size: 16px;
   }
 }
