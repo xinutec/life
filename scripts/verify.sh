@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
-# life verify — rust backend (fmt + clippy) + angular frontend (build + unit
-# tests) + shared rules. Backend integration tests need MariaDB; run those
-# separately.
+# life verify — rust backend (fmt + clippy + tests) + angular frontend (build +
+# unit tests) + shared rules.
+#
+# The backend's tests are integration tests against a real MariaDB, so they run
+# only when LIFE_TEST_DATABASE_URL points at one (./scripts/dev-db.sh starts one);
+# without it they are SKIPPED and this says so, loudly. It used to omit them
+# silently, which let a rename of a column land green here and fail in CI — the
+# queries are strings, so nothing else checks them. Keep them in the gate:
+#
+#   ./scripts/dev-db.sh &
+#   LIFE_TEST_DATABASE_URL=mysql://life:life@127.0.0.1:3307/life ./scripts/verify.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
 nix develop -c bash -c '
@@ -17,6 +25,14 @@ nix develop -c bash -c '
   export NG_BUILD_MAX_WORKERS=1
   cargo fmt --all --check
   cargo clippy --all-targets -- -D warnings
+  if [ -n "${LIFE_TEST_DATABASE_URL:-}" ]; then
+    cargo test -- --test-threads=1
+  else
+    echo "verify: LIFE_TEST_DATABASE_URL unset — SKIPPING the backend tests."
+    echo "verify: they are the only check on the SQL; CI runs them. To run them here:"
+    echo "verify:   ./scripts/dev-db.sh &"
+    echo "verify:   LIFE_TEST_DATABASE_URL=mysql://life:life@127.0.0.1:3307/life ./scripts/verify.sh"
+  fi
   # Generated-types drift (formerly the separate pre-push gate): regenerate the
   # ts-rs bindings and fail if the committed frontend/src/app/generated output
   # moved. Needs cargo — this shell has it.
