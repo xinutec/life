@@ -122,10 +122,16 @@ export function energyMeta(tenths: number): LevelMeta {
   return levelMeta(tenths, ENERGY_LEVELS, 'wb-score');
 }
 
-/** How long after a tap its neighbour still counts as "the same check-in" — the
- *  life of the Undo snackbar, so the window you can amend in is the window you can
- *  see. Past it, a second tap is a second feeling, which is a second entry. */
-const AMEND_WINDOW_MS = 6_000;
+/** How long after a tap its neighbour still counts as "the same check-in".
+ *
+ *  A minute, not the six seconds the Undo snackbar lives for. Tying it to the
+ *  snackbar made the window visible, which is tidy but is a fact about the UI, not
+ *  about how long "4… no, a bit below that" takes to think. The only thing a long
+ *  window can get wrong is swallowing a genuine SECOND check-in on an adjacent
+ *  face — which needs the mood to move by exactly one face, and to be recorded
+ *  twice, inside a minute. The amend announces itself when it fires and is one Undo
+ *  away; a hedge lost to a stopwatch is just gone. */
+const AMEND_WINDOW_MS = 60_000;
 
 /** The one-tap mood check-in: five face buttons that log an entry at "now".
  *  Logging is instant and offline; an Undo snackbar covers a mis-tap. Tapping a
@@ -156,7 +162,12 @@ export class WellbeingCheckin {
 
   async log(score: number): Promise<void> {
     const recent = this.pending;
-    if (recent && Date.now() - recent.at < AMEND_WINDOW_MS && Math.abs(recent.score - score) === 1) {
+    const armed = recent && Date.now() - recent.at < AMEND_WINDOW_MS;
+    // The same face again is a stray double tap, not a second check-in a minute
+    // apart on the identical score. Swallow it: two identical entries is never what
+    // the second tap meant, and the first one is already logged and undoable.
+    if (armed && recent.score === score) return;
+    if (armed && Math.abs(recent.score - score) === 1) {
       const tenths = midpoint(recent.score, score);
       await this.store.patch(recent.key, { scoreTenths: tenths });
       this.pending = null;

@@ -55,6 +55,15 @@ describe('WellbeingCheckin', () => {
     expect(store.patch).toHaveBeenCalledWith('u1', { scoreTenths: 35 });
   });
 
+  it('swallows a stray double tap on the same face', async () => {
+    const { fixture, store } = setup();
+    const c = fixture.componentInstance;
+    await c.log(4);
+    await c.log(4); // the same face again — never means "log a second identical 4"
+    expect(store.add).toHaveBeenCalledTimes(1);
+    expect(store.patch).not.toHaveBeenCalled();
+  });
+
   it('tapping a face two or more away is a second check-in, not a half-step', async () => {
     const { fixture, store } = setup();
     const c = fixture.componentInstance;
@@ -82,7 +91,7 @@ describe('WellbeingCheckin', () => {
       const { fixture, store } = setup();
       const c = fixture.componentInstance;
       await c.log(4);
-      vi.advanceTimersByTime(10_000); // past the window — the snackbar is long gone
+      vi.advanceTimersByTime(90_000); // past the minute — this is a new feeling now
       await c.log(3);
       expect(store.add).toHaveBeenCalledTimes(2);
       expect(store.patch).not.toHaveBeenCalled();
