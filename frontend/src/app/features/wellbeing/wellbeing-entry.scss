@@ -23,6 +23,13 @@
       border-color: var(--mat-sys-primary);
       background: color-mix(in srgb, var(--mat-sys-primary) 14%, transparent);
     }
+    // A half-step lights BOTH its faces, each at half strength: two faces at full
+    // strength would read as "I felt two things", which is the claim a half-step
+    // exists to avoid. Half-lit, they read as one reading spanning both.
+    &.on.half {
+      background: color-mix(in srgb, var(--mat-sys-primary) 7%, transparent);
+      border-color: color-mix(in srgb, var(--mat-sys-primary) 50%, var(--mat-sys-outline-variant));
+    }
   }
   // Score ramp on the icons — the shared wellbeing ramp (--wb-score-* in
   // styles.scss), same as the check-in strip + timeline.
@@ -52,6 +59,15 @@
   &.on mat-icon {
     color: var(--mat-sys-primary);
   }
+}
+
+// Spells the reading out under the faces ("okay–good · 3.5/5"): two lit faces is
+// a new grammar, and the number leaves no doubt what it recorded.
+.reading {
+  margin: 0.35rem 0 0;
+  font: var(--mat-sys-label-medium);
+  text-align: center;
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .field-label {

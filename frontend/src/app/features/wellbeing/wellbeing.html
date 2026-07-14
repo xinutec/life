@@ -53,17 +53,19 @@
       @for (e of day.entries; track e.ulid) {
         <button
           type="button"
-          class="entry score-{{ e.score }}"
+          class="entry"
+          [attr.data-score]="e.scoreTenths"
+          [style.--entry-color]="meta(e.scoreTenths).color"
           (click)="edit(e)"
-          [attr.aria-label]="'Edit ' + meta(e.score).label + ' at ' + time(e.recordedAt)"
+          [attr.aria-label]="'Edit ' + meta(e.scoreTenths).label + ' at ' + time(e.recordedAt)"
         >
-          <mat-icon>{{ meta(e.score).icon }}</mat-icon>
+          <mat-icon>{{ meta(e.scoreTenths).icon }}</mat-icon>
           <span class="t">{{ time(e.recordedAt) }}</span>
-          @if (e.energy !== null) {
+          @if (e.energyTenths !== null) {
             <mat-icon
               class="has-energy"
-              [attr.aria-label]="'energy: ' + energyMeta(e.energy).label"
-            >{{ energyMeta(e.energy).icon }}</mat-icon>
+              [attr.aria-label]="'energy: ' + energyMeta(e.energyTenths).label"
+            >{{ energyMeta(e.energyTenths).icon }}</mat-icon>
           }
           @if (e.emotions.length) {
             <mat-icon

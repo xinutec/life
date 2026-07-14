@@ -26,7 +26,7 @@
     <path class="line" [attr.d]="linePath()" />
   }
   @for (dot of chart().dots; track $index) {
-    <circle class="dot score-{{ dot.level }}" [attr.cx]="dot.cx" [attr.cy]="dot.cy" r="3.5" />
+    <circle class="dot" [attr.cx]="dot.cx" [attr.cy]="dot.cy" r="3.5" [style.fill]="dot.fill" />
   }
 </svg>
 <p class="caption">{{ caption() }}</p>

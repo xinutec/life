@@ -15,8 +15,8 @@ const doc = (over: Partial<WellbeingDoc>): WellbeingDoc => ({
   ulid: 'u1',
   id: 1,
   recordedAt: '2026-07-01T12:00:00.000Z',
-  score: 3,
-  energy: null,
+  scoreTenths: 30,
+  energyTenths: null,
   emotions: [],
   note: null,
   rev: 1,
@@ -52,21 +52,48 @@ describe('WellbeingEntry (edit sheet)', () => {
   }
 
   it('patches the score on tap', () => {
-    const { c, store } = setup(doc({ score: 3 }));
-    c.setScore(5);
-    expect(store.patch).toHaveBeenCalledWith('u1', { score: 5 });
+    const { c, store } = setup(doc({ scoreTenths: 30 }));
+    c.setScore(5); // two away — no half-step, just go there
+    expect(store.patch).toHaveBeenCalledWith('u1', { scoreTenths: 50 });
+  });
+
+  it('tapping the face NEXT to the one set records the half-step between them', () => {
+    const { c, store } = setup(doc({ scoreTenths: 40 })); // a 4
+    c.setScore(3); // its neighbour → "4, but a bit lower"
+    expect(store.patch).toHaveBeenCalledWith('u1', { scoreTenths: 35 });
+  });
+
+  it('tapping either face of a half-step collapses back to that whole face', () => {
+    const { c, store } = setup(doc({ scoreTenths: 35 })); // a 3.5
+    c.setScore(4);
+    expect(store.patch).toHaveBeenCalledWith('u1', { scoreTenths: 40 });
+  });
+
+  it('lights both faces of a half-step, and neither of them fully', () => {
+    const { c } = setup(doc({ scoreTenths: 35 }));
+    expect(c.isOn(35, 3)).toBe(true);
+    expect(c.isOn(35, 4)).toBe(true);
+    expect(c.isOn(35, 5)).toBe(false);
+    expect(c.isHalf(35, 3)).toBe(true); // half-lit, so it can't be read as "I felt a 3"
+    expect(c.isHalf(40, 4)).toBe(false); // a whole reading lights its face fully
   });
 
   it('sets energy on tap', () => {
-    const { c, store } = setup(doc({ energy: null }));
+    const { c, store } = setup(doc({ energyTenths: null }));
     c.setEnergy(4); // the level button passes its energy value
-    expect(store.patch).toHaveBeenCalledWith('u1', { energy: 4 });
+    expect(store.patch).toHaveBeenCalledWith('u1', { energyTenths: 40 });
+  });
+
+  it('records a half-step of energy from the neighbouring level', () => {
+    const { c, store } = setup(doc({ energyTenths: 40 }));
+    c.setEnergy(5); // "energetic in some sense"
+    expect(store.patch).toHaveBeenCalledWith('u1', { energyTenths: 45 });
   });
 
   it('toggles energy back to null when the active level is tapped again', () => {
-    const { c, store } = setup(doc({ energy: 4 }));
+    const { c, store } = setup(doc({ energyTenths: 40 }));
     c.setEnergy(4);
-    expect(store.patch).toHaveBeenCalledWith('u1', { energy: null });
+    expect(store.patch).toHaveBeenCalledWith('u1', { energyTenths: null });
   });
 
   it('removes one emotion, leaving the rest', () => {
@@ -138,7 +165,7 @@ describe('WellbeingEntry (edit sheet)', () => {
   });
 
   it('Undo restores the deleted doc (local revive + server trash restore)', () => {
-    const d = doc({ score: 2, note: 'rough' });
+    const d = doc({ scoreTenths: 20, note: 'rough' });
     const { c, store, feedback } = setup(d);
     c.remove();
     const [, undoFn] = feedback.undo.mock.calls[0];

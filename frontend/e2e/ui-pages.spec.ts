@@ -65,11 +65,11 @@ const at = (daysAgo: number, h: number): string => {
 // the suite runs earlier in the day and drop out of the window.
 const hoursAgo = (n: number): string => new Date(now.getTime() - n * 3_600_000).toISOString();
 const WELLBEING = [
-  { ulid: '01WELLA0000000000000000001', id: 1, recordedAt: hoursAgo(5), score: 2, energy: 2,
+  { ulid: '01WELLA0000000000000000001', id: 1, recordedAt: hoursAgo(5), scoreTenths: 20, energyTenths: 20,
     emotions: ['Anxious', 'Withdrawn'], note: 'rough morning', rev: 1, _deleted: false },
-  { ulid: '01WELLB0000000000000000002', id: 2, recordedAt: hoursAgo(1), score: 4, energy: null,
+  { ulid: '01WELLB0000000000000000002', id: 2, recordedAt: hoursAgo(1), scoreTenths: 40, energyTenths: null,
     emotions: [], note: null, rev: 2, _deleted: false },
-  { ulid: '01WELLC0000000000000000003', id: 3, recordedAt: at(1, 20), score: 3, energy: null,
+  { ulid: '01WELLC0000000000000000003', id: 3, recordedAt: at(1, 20), scoreTenths: 35, energyTenths: null,
     emotions: [], note: null, rev: 3, _deleted: false },
 ];
 
@@ -199,6 +199,27 @@ test('wellbeing — the two charts agree on where the days are', async ({ page }
   for (let i = 0; i < mood.length; i++) expect(Math.abs(mood[i] - energy[i])).toBeLessThan(0.5);
 });
 
+test('wellbeing — a half-step reads as one feeling between two faces', async ({ page }) => {
+  await mockApi(page);
+  await page.goto('/wellbeing');
+  await page.getByText('Mood · last 14 days').waitFor();
+
+  // The seeded 3.5 (35 tenths). Its chip says so, rather than rounding to a 3 or a
+  // 4 — the whole point of recording "4, but a bit lower at the gym".
+  const half = page.locator('.entry[data-score="35"]');
+  await expect(half).toHaveAttribute('aria-label', /okay–good/);
+
+  // Open it: BOTH faces of the half-step light up, and neither at full strength —
+  // two full faces would say "I felt two things", which is what a half-step avoids.
+  await half.click();
+  const faces = page.locator('.sheet-form .faces').first().locator('.face');
+  await expect(faces.nth(2)).toHaveClass(/\bon\b/); // okay
+  await expect(faces.nth(3)).toHaveClass(/\bon\b/); // good
+  await expect(faces.nth(2)).toHaveClass(/\bhalf\b/);
+  await expect(faces.nth(4)).not.toHaveClass(/\bon\b/); // great is not part of it
+  await expect(page.locator('.reading')).toContainText('3.5/5');
+});
+
 test('wellbeing — the axis words are actually on the screen', async ({ page }) => {
   await mockApi(page);
   await page.goto('/wellbeing');
@@ -312,7 +333,7 @@ test('emotion picker — full mosaic + sticky header: lays out cleanly @ phone w
   await page.goto('/wellbeing');
   // Open the seeded morning check-in (the score-2 entry — it has emotions),
   // then the picker via the sheet's Add-emotions button.
-  await page.locator('.entry.score-2').click();
+  await page.locator('.entry[data-score="20"]').click();
   await page.locator('button.add-emotions').click();
   const picker = page.locator('.picker');
   await picker.waitFor();
@@ -342,7 +363,7 @@ test('emotion picker ⓘ — the gloss opens in place, one at a time @ phone wid
 }, testInfo) => {
   await mockApi(page);
   await page.goto('/wellbeing');
-  await page.locator('.entry.score-2').click();
+  await page.locator('.entry[data-score="20"]').click();
   await page.locator('button.add-emotions').click();
   await page.locator('.picker').waitFor();
 

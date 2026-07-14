@@ -7,15 +7,17 @@
         <button
           type="button"
           class="face score-{{ s.score }}"
-          [class.on]="e.score === s.score"
+          [class.on]="isOn(e.scoreTenths, s.score)"
+          [class.half]="isHalf(e.scoreTenths, s.score)"
           [attr.aria-label]="s.label"
-          [attr.aria-pressed]="e.score === s.score"
+          [attr.aria-pressed]="isOn(e.scoreTenths, s.score)"
           (click)="setScore(s.score)"
         >
           <mat-icon>{{ s.icon }}</mat-icon>
         </button>
       }
     </div>
+    <p class="reading">{{ scoreLabel() }}</p>
 
     <p class="field-label">Energy <span class="optional">(optional)</span></p>
     <div class="faces energy" role="group" aria-label="Energy">
@@ -23,9 +25,10 @@
         <button
           type="button"
           class="face"
-          [class.on]="e.energy === en.energy"
+          [class.on]="isOn(e.energyTenths, en.energy)"
+          [class.half]="isHalf(e.energyTenths, en.energy)"
           [attr.aria-label]="en.label"
-          [attr.aria-pressed]="e.energy === en.energy"
+          [attr.aria-pressed]="isOn(e.energyTenths, en.energy)"
           [title]="en.label"
           (click)="setEnergy(en.energy)"
         >

@@ -51,4 +51,38 @@ describe('wellbeing migrationStrategies', () => {
   it('v3 drops the old fatigue key (renamed, not duplicated)', () => {
     expect(migrationStrategies[3]({ fatigue: 2 })).not.toHaveProperty('fatigue');
   });
+
+  it('v4 rescales the readings to tenths', () => {
+    const out = migrationStrategies[4]({ ulid: 'u', score: 4, energy: 2 });
+    expect(out).toMatchObject({ ulid: 'u', scoreTenths: 40, energyTenths: 20 });
+  });
+
+  it('v4 keeps an unrecorded energy unrecorded (not a zero)', () => {
+    // 0 tenths would be a reading below the bottom of the scale — and would say
+    // he felt drained on every check-in where he never said anything at all.
+    expect(migrationStrategies[4]({ score: 3, energy: null })).toMatchObject({
+      energyTenths: null,
+    });
+  });
+
+  it('v4 drops the old point-scale keys, so nothing can read a 4 as a 0.4', () => {
+    const out = migrationStrategies[4]({ score: 4, energy: 4 });
+    expect(out).not.toHaveProperty('score');
+    expect(out).not.toHaveProperty('energy');
+  });
+
+  it('the whole chain carries an original check-in through to tenths', () => {
+    // The device that has been closed since v0: every strategy runs in turn. A 4
+    // logged a year ago must still be a 4 — this chain is the only thing standing
+    // between his history and a silently rescaled one.
+    let doc: Record<string, unknown> = { ulid: 'u', score: 4, note: 'gym day' };
+    for (const v of [1, 2, 3, 4] as const) doc = migrationStrategies[v](doc);
+    expect(doc).toMatchObject({
+      ulid: 'u',
+      scoreTenths: 40, // still a 4 out of 5
+      energyTenths: null, // never recorded one back then
+      emotions: [],
+      note: 'gym day',
+    });
+  });
 });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { monotonePath, TrendDot } from './trend-chart';
 
-const dot = (cx: number, cy: number, level = 3): TrendDot => ({ cx, cy, level });
+const dot = (cx: number, cy: number): TrendDot => ({ cx, cy, fill: 'var(--wb-score-3)' });
 
 /** All (x,y) numbers in an SVG path, as flat pairs (M x y, then C … x y ×n). */
 function coords(d: string): { x: number; y: number }[] {

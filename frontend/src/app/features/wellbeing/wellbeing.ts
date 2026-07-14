@@ -7,7 +7,12 @@ import { MatIconModule } from '@angular/material/icon';
 import { map } from 'rxjs';
 
 import { ListState } from '../../shared/list-state';
-import { WellbeingCheckin, energyMeta, scoreMeta } from '../../shared/wellbeing-checkin';
+import {
+  WellbeingCheckin,
+  energyMeta,
+  scoreMeta,
+  toPoints,
+} from '../../shared/wellbeing-checkin';
 import { WellbeingDoc, WellbeingStore } from '../../sync/wellbeing-store';
 import { DayLabel, TrendChart, TrendData, TrendDot } from './trend-chart';
 import { WellbeingEntry } from './wellbeing-entry';
@@ -105,19 +110,21 @@ export class Wellbeing {
 
   /** The mood trend over the selected window: a dot per entry, x = its position in
    *  time across the window, y = score, joined by a smooth line. */
-  readonly chart = computed(() => this.buildChart((e) => e.score));
+  readonly chart = computed(() => this.buildChart((e) => e.scoreTenths));
   readonly hasChart = computed(() => this.chart().dots.length > 0);
 
   /** The same trend for the optional energy reading — like mood, higher
    *  (energetic) sits at the top and a rising line reads as improving. Only
    *  entries that recorded one contribute, so it's absent until there's data. */
-  readonly energyChart = computed(() => this.buildChart((e) => e.energy));
+  readonly energyChart = computed(() => this.buildChart((e) => e.energyTenths));
   readonly hasEnergyChart = computed(() => this.energyChart().dots.length > 0);
 
-  /** Build a trend from a 1..5 accessor over the current window. x is the entry's
-   *  true position in time across the window (so the line reads chronologically);
-   *  entries with no reading of this kind, or outside the window, are skipped.
-   *  Dots come out x-ascending so the connecting line joins them in time order. */
+  /** Build a trend from a tenths accessor (10..50) over the current window. x is the
+   *  entry's true position in time across the window (so the line reads
+   *  chronologically); entries with no reading of this kind, or outside the window,
+   *  are skipped. Dots come out x-ascending so the line joins them in time order.
+   *  A half-step plots between two lines, and takes a colour to match — the height
+   *  and the colour tell the same story, as they do for the whole readings. */
   private buildChart(value: (e: WellbeingDoc) => number | null | undefined): TrendData {
     const { w, h, padLeft, padRight, padTop, padBottom } = CHART;
     const days = this.window();
@@ -135,11 +142,11 @@ export class Wellbeing {
     const y = (level: number): number => r1(padTop + ((5 - level) / 4) * plotH);
     const dots: TrendDot[] = [];
     for (const e of this.items()) {
-      const level = value(e);
-      if (level == null) continue; // no reading of this kind on this entry
+      const tenths = value(e);
+      if (tenths == null) continue; // no reading of this kind on this entry
       const t = new Date(e.recordedAt).getTime();
       if (t < startMs || t > endMs) continue; // outside the window
-      dots.push({ cx: r1(x(t)), cy: y(level), level });
+      dots.push({ cx: r1(x(t)), cy: y(toPoints(tenths)), fill: scoreMeta(tenths).color });
     }
     dots.sort((a, b) => a.cx - b.cx);
     const bounds = this.midnights(startMs, endMs);

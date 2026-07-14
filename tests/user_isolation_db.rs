@@ -61,13 +61,14 @@ fn link_doc(ulid: &str, from: &str) -> TodoLinkDoc {
     }
 }
 
+/// `score` is in tenths (20 = a 2).
 fn wellbeing_doc(ulid: &str, score: u8) -> WellbeingDoc {
     WellbeingDoc {
         ulid: ulid.into(),
         id: None,
         recorded_at: Utc.with_ymd_and_hms(2026, 7, 9, 8, 0, 0).unwrap(),
-        score,
-        energy: None,
+        score_tenths: score,
+        energy_tenths: None,
         emotions: vec![],
         note: None,
         deleted: false,
@@ -129,10 +130,10 @@ async fn two_users_cannot_see_or_touch_each_others_data() {
     sync_repo::push_todo_link(&pool, B, vec![entry(link_doc(lb, tb))])
         .await
         .unwrap();
-    sync_repo::push_wellbeing(&pool, A, vec![entry(wellbeing_doc(wa, 4))])
+    sync_repo::push_wellbeing(&pool, A, vec![entry(wellbeing_doc(wa, 40))])
         .await
         .unwrap();
-    sync_repo::push_wellbeing(&pool, B, vec![entry(wellbeing_doc(wb, 2))])
+    sync_repo::push_wellbeing(&pool, B, vec![entry(wellbeing_doc(wb, 20))])
         .await
         .unwrap();
 
@@ -160,7 +161,7 @@ async fn two_users_cannot_see_or_touch_each_others_data() {
     assert!(res.is_err(), "cross-user todo push must fail loudly");
     let res = sync_repo::push_todo_link(&pool, A, vec![entry(link_doc(lb, ta))]).await;
     assert!(res.is_err(), "cross-user link push must fail loudly");
-    let res = sync_repo::push_wellbeing(&pool, A, vec![entry(wellbeing_doc(wb, 1))]).await;
+    let res = sync_repo::push_wellbeing(&pool, A, vec![entry(wellbeing_doc(wb, 10))]).await;
     assert!(res.is_err(), "cross-user wellbeing push must fail loudly");
 
     // ... and B's rows are untouched by the attempts.
@@ -172,7 +173,7 @@ async fn two_users_cannot_see_or_touch_each_others_data() {
     assert_eq!(doc.title, "B's task");
     let after = sync_repo::pull_wellbeing(&pool, B, 0, 100).await.unwrap();
     let doc = after.documents.iter().find(|d| d.ulid == wb).unwrap();
-    assert_eq!(doc.score, 2);
+    assert_eq!(doc.score_tenths, 20);
 
     // REST list surfaces are scoped the same way.
     let list = shopping_repo::list(&pool, A).await.unwrap();

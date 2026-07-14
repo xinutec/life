@@ -1,11 +1,12 @@
 import { Component, computed, input } from '@angular/core';
 
-/** One plotted point (SVG user units). `level` is the 1..5 value driving the
- *  shared wellbeing colour ramp. */
+/** One plotted point (SVG user units). `fill` is a CSS colour off the shared
+ *  wellbeing ramp — a rung of it for a whole reading, a blend of two rungs for a
+ *  half-step, so the dot's colour agrees with its height. */
 export interface TrendDot {
   cx: number;
   cy: number;
-  level: number;
+  fill: string;
 }
 
 const r1 = (n: number): number => Math.round(n * 10) / 10;

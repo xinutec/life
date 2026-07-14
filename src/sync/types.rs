@@ -61,7 +61,12 @@ pub struct TodoDoc {
 }
 
 /// One wellbeing check-in as it travels over sync. `recorded_at` is the moment
-/// the feeling was (UTC, RFC3339 on the wire); `score` is 1..5.
+/// the feeling was (UTC, RFC3339 on the wire).
+///
+/// The readings ride in TENTHS of a point: 10..50, where 35 is a 3.5 — a mood
+/// between two faces ("4, but a bit lower at the gym"). Fixed-point integers, so
+/// they average and compare exactly; the name carries the scale so no layer can
+/// mistake a 4 for a 0.4.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WellbeingDoc {
     pub ulid: String,
@@ -69,12 +74,13 @@ pub struct WellbeingDoc {
     pub id: Option<u64>,
     #[serde(rename = "recordedAt")]
     pub recorded_at: DateTime<Utc>,
-    pub score: u8,
-    /// Optional energy reading (1..5, drained..energetic; higher = better, like
-    /// `score`); `None` = mood-only check-in. The UI presents its complement as
-    /// "fatigue" (none..severe) — the inversion is display-only.
-    #[serde(default)]
-    pub energy: Option<u8>,
+    #[serde(rename = "scoreTenths")]
+    pub score_tenths: u8,
+    /// Optional energy reading (10..50 tenths, drained..energetic; higher = better,
+    /// like the score); `None` = mood-only check-in. The UI presents its complement
+    /// as "fatigue" (none..severe) — the inversion is display-only.
+    #[serde(default, rename = "energyTenths")]
+    pub energy_tenths: Option<u8>,
     /// Fine-grained feelings-wheel leaf words; independent of mood/fatigue.
     #[serde(default)]
     pub emotions: Vec<String>,

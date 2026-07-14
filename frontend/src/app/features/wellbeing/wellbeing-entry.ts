@@ -14,7 +14,16 @@ import { MatInputModule } from '@angular/material/input';
 import { emotionColor, emotionDesc, emotionLabel } from '../../shared/emotion-wheel';
 import { Feedback } from '../../shared/feedback';
 import { SheetHeader } from '../../shared/sheet-header';
-import { ENERGY_LEVELS, WELLBEING_SCORES } from '../../shared/wellbeing-checkin';
+import {
+  ENERGY_LEVELS,
+  WELLBEING_SCORES,
+  facesOf,
+  isHalfStep,
+  nextReading,
+  scoreMeta,
+  toPoints,
+  toTenths,
+} from '../../shared/wellbeing-checkin';
 import { WellbeingDoc, WellbeingStore } from '../../sync/wellbeing-store';
 import { EmotionPicker } from './emotion-picker';
 
@@ -53,6 +62,14 @@ export class WellbeingEntry implements OnDestroy {
   readonly ulid = this.data.ulid;
   readonly entry = computed(() => this.items().find((e) => e.ulid === this.ulid));
 
+  /** "okay–good · 3.5" — spells the reading out, since two lit faces is a new
+   *  grammar and a number removes any doubt about what it recorded. */
+  readonly scoreLabel = computed(() => {
+    const tenths = this.entry()?.scoreTenths;
+    if (tenths == null) return '';
+    return `${scoreMeta(tenths).label} · ${toPoints(tenths)}/5`;
+  });
+
   readonly note = signal(this.entry()?.note ?? '');
   readonly localTime = computed(() => {
     const e = this.entry();
@@ -74,15 +91,37 @@ export class WellbeingEntry implements OnDestroy {
     this.note.set(value);
   }
 
-  setScore(score: number): void {
-    void this.store.patch(this.ulid, { score });
+  /** Tap a face to set it; tap the face NEXT to the one that's on and both light
+   *  up — the reading is now the half-step between them ("4, but a bit lower").
+   *  Tapping either half of a half-step collapses back to that whole face. There's
+   *  no timer here (unlike the check-in strip): the selection is the state. */
+  setScore(face: number): void {
+    const now = this.entry()?.scoreTenths;
+    void this.store.patch(this.ulid, { scoreTenths: nextReading(now, face) ?? toTenths(face) });
   }
 
-  /** Toggle the energy reading — tapping the active level clears it to null,
-   *  keeping it optional (a mood-only check-in). */
-  setEnergy(energy: number): void {
-    const next = this.entry()?.energy === energy ? null : energy;
-    void this.store.patch(this.ulid, { energy: next });
+  /** As `setScore`, but energy is optional: tapping the single face that's on
+   *  clears it back to null (a mood-only check-in). */
+  setEnergy(face: number): void {
+    const now = this.entry()?.energyTenths;
+    if (now === toTenths(face)) {
+      void this.store.patch(this.ulid, { energyTenths: null });
+      return;
+    }
+    void this.store.patch(this.ulid, {
+      energyTenths: now == null ? toTenths(face) : (nextReading(now, face) ?? toTenths(face)),
+    });
+  }
+
+  /** Is this face lit? True for the face itself, and for BOTH faces of a half-step
+   *  — two lit neighbours is how a 3.5 shows itself on a strip of whole faces. */
+  isOn(reading: number | null | undefined, face: number): boolean {
+    return reading != null && facesOf(reading).includes(face);
+  }
+
+  /** Half-lit: one of the two faces of a half-step, so it reads as "partly this". */
+  isHalf(reading: number | null | undefined, face: number): boolean {
+    return reading != null && isHalfStep(reading) && facesOf(reading).includes(face);
   }
 
   emotionColor(token: string): string {

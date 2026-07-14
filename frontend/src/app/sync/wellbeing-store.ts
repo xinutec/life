@@ -6,16 +6,17 @@ import { ConflictReporter, FieldSpec, makeConflictHandler } from './conflict-mer
 import { SyncedCollectionConfig, SyncedStore } from './synced-store';
 
 /** A wellbeing check-in as stored locally. `recordedAt` is an ISO-8601 UTC
- *  instant (the moment the feeling was — may be backdated); `score` is 1..5.
- *  Mirrors the backend `WellbeingDoc` wire shape. */
+ *  instant (the moment the feeling was — may be backdated). Readings are in TENTHS
+ *  of a point (10..50), so a 3.5 — a mood between two faces — is a 35, and readings
+ *  stay exact integers under averaging. Mirrors the backend `WellbeingDoc`. */
 export interface WellbeingDoc {
   ulid: string;
   id: number | null;
   recordedAt: string;
-  score: number;
-  /** Optional energy reading (1..5, drained..energetic; higher = better, like
-   *  `score`); null = mood-only. */
-  energy: number | null;
+  scoreTenths: number;
+  /** Optional energy reading (10..50 tenths, drained..energetic; higher = better,
+   *  like the score); null = mood-only. */
+  energyTenths: number | null;
   /** Fine-grained emotions from the feelings wheel (leaf words); independent of
    *  mood/energy, any number, order preserved as added. */
   emotions: string[];
@@ -26,27 +27,28 @@ export interface WellbeingDoc {
 const schema: RxJsonSchema<WellbeingDoc> = {
   // Bump the version + migrate on ANY schema change, else existing local DBs hit
   // a hash mismatch. v1: optional `fatigue`. v2: `emotions` array. v3: `fatigue`
-  // → `energy` (unified polarity, higher = better).
-  version: 3,
+  // → `energy` (unified polarity, higher = better). v4: score/energy → tenths.
+  version: 4,
   primaryKey: 'ulid',
   type: 'object',
   properties: {
     ulid: { type: 'string', maxLength: 26 },
     id: { type: ['integer', 'null'] },
     recordedAt: { type: 'string', maxLength: 32 },
-    score: { type: 'number', minimum: 1, maximum: 5 },
-    energy: { type: ['number', 'null'], minimum: 1, maximum: 5 },
+    scoreTenths: { type: 'number', minimum: 10, maximum: 50 },
+    energyTenths: { type: ['number', 'null'], minimum: 10, maximum: 50 },
     emotions: { type: 'array', items: { type: 'string' } },
     note: { type: ['string', 'null'] },
     rev: { type: 'number' },
   },
-  required: ['ulid', 'recordedAt', 'score', 'rev'],
+  required: ['ulid', 'recordedAt', 'scoreTenths', 'rev'],
 };
 
 /** A prior-version doc handed to a migration strategy — loosely typed, since the
  *  fields differ across versions (RxDB passes the old shape). */
 type PriorDoc = Record<string, unknown> & {
   fatigue?: number | null;
+  score?: number;
   energy?: number | null;
   emotions?: string[];
 };
@@ -62,6 +64,15 @@ export const migrationStrategies = {
     ...rest,
     energy: fatigue == null ? null : 6 - fatigue,
   }),
+  // v4: 1..5 points → 10..50 tenths, so a mood can sit between two faces. The
+  // fields are RENAMED as well as rescaled: a leftover `score: 4` reaching code
+  // that now means tenths would read as a 0.4 — the worst day ever logged. Gone
+  // from the shape, it can't be read at all.
+  4: ({ score, energy, ...rest }: PriorDoc): PriorDoc => ({
+    ...rest,
+    scoreTenths: (score ?? 3) * 10,
+    energyTenths: energy == null ? null : energy * 10,
+  }),
 };
 
 /** The synced content fields (everything but the identity/server fields). */
@@ -73,8 +84,8 @@ type WellbeingContent = Omit<WellbeingDoc, 'ulid' | 'id' | 'rev'>;
  *  (an array) can only be `'array'`, never identity-compared. */
 const WELLBEING_FIELDS: FieldSpec<WellbeingContent> = {
   recordedAt: 'value',
-  score: 'value',
-  energy: 'value',
+  scoreTenths: 'value',
+  energyTenths: 'value',
   emotions: 'array',
   note: 'value',
 };
@@ -99,7 +110,12 @@ export class WellbeingStore extends SyncedStore<WellbeingDoc> {
       conflictHandler: makeConflictHandler<WellbeingDoc>({
         fields: WELLBEING_FIELDS,
         onConflicts: (kept, conflicts) =>
-          this.reporter.report('wellbeing', kept.ulid, `Check-in (${kept.score}/5)`, conflicts),
+          this.reporter.report(
+            'wellbeing',
+            kept.ulid,
+            `Check-in (${kept.scoreTenths / 10}/5)`,
+            conflicts,
+          ),
       }),
       // '-v2': replication-state reset (2026-07-03). The isEqual push-loss bug
       // (conflict-merge.ts) advanced the push checkpoint past field edits
@@ -115,15 +131,19 @@ export class WellbeingStore extends SyncedStore<WellbeingDoc> {
   }
 
   /** Insert a check-in; returns its minted ulid (so a caller can offer Undo). */
-  async add(input: { recordedAt: string; score: number; note: string | null }): Promise<string> {
+  async add(input: {
+    recordedAt: string;
+    scoreTenths: number;
+    note: string | null;
+  }): Promise<string> {
     const col = await this.collection;
     const key = ulid();
     await col.insert({
       ulid: key,
       id: null,
       recordedAt: input.recordedAt,
-      score: input.score,
-      energy: null,
+      scoreTenths: input.scoreTenths,
+      energyTenths: null,
       emotions: [],
       note: input.note,
       rev: 0,

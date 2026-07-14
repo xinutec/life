@@ -25,13 +25,14 @@ fn todo(ulid: &str, status: &str, todo_type: &str, priority: Option<&str>) -> To
     }
 }
 
-fn wellbeing(ulid: &str, score: u8, energy: Option<u8>) -> WellbeingDoc {
+/// Both readings are in tenths (10..50, half-points): 20 is a 2, 35 a 3.5.
+fn wellbeing(ulid: &str, score_tenths: u8, energy_tenths: Option<u8>) -> WellbeingDoc {
     WellbeingDoc {
         ulid: ulid.into(),
         id: None,
         recorded_at: Utc.with_ymd_and_hms(2026, 7, 9, 9, 0, 0).unwrap(),
-        score,
-        energy,
+        score_tenths,
+        energy_tenths,
         emotions: vec![],
         note: None,
         deleted: false,
@@ -151,7 +152,7 @@ async fn invalid_docs_are_rejected_and_nothing_is_stored() {
         .await,
         "link target kind",
     );
-    // Documented 1..=5 ranges — reject, not clamp.
+    // Documented 10..=50 tenths (1.0..=5.0) — reject, not clamp.
     assert_invalid(
         sync_repo::push_wellbeing(
             &pool,
@@ -159,7 +160,7 @@ async fn invalid_docs_are_rejected_and_nothing_is_stored() {
             vec![entry(wellbeing("01VAL0000000000000000WELLA", 0, None))],
         )
         .await,
-        "wellbeing score 0",
+        "wellbeing score 0 tenths",
     );
     assert_invalid(
         sync_repo::push_wellbeing(
@@ -168,17 +169,40 @@ async fn invalid_docs_are_rejected_and_nothing_is_stored() {
             vec![entry(wellbeing("01VAL0000000000000000WELLB", 255, None))],
         )
         .await,
-        "wellbeing score 255",
+        "wellbeing score 255 tenths",
     );
     assert_invalid(
         sync_repo::push_wellbeing(
             &pool,
             user,
-            vec![entry(wellbeing("01VAL0000000000000000WELLC", 3, Some(9)))],
+            vec![entry(wellbeing("01VAL0000000000000000WELLC", 30, Some(90)))],
         )
         .await,
-        "wellbeing energy 9",
+        "wellbeing energy 90 tenths",
     );
+    // The scale holds tenths but the app only records HALF-points, and a reading
+    // off that grid is a bug somewhere — a client sending 3.7 gets told so, rather
+    // than having it quietly rounded into a reading he never gave.
+    assert_invalid(
+        sync_repo::push_wellbeing(
+            &pool,
+            user,
+            vec![entry(wellbeing("01VAL0000000000000000WELLD", 37, None))],
+        )
+        .await,
+        "wellbeing score 3.7 (not a half-step)",
+    );
+    assert_invalid(
+        sync_repo::push_wellbeing(
+            &pool,
+            user,
+            vec![entry(wellbeing("01VAL0000000000000000WELLE", 30, Some(43)))],
+        )
+        .await,
+        "wellbeing energy 4.3 (not a half-step)",
+    );
+    // (That half-steps are ACCEPTED is asserted in wellbeing_db.rs — this test
+    // proves the gate rejects, and ends by asserting nothing at all was stored.)
 
     // A batch with one invalid doc must reject the whole request BEFORE any
     // write — each entry commits its own transaction, so a mid-loop rejection

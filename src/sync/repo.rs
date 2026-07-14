@@ -601,8 +601,8 @@ struct WellbeingDocRow {
     id: u64,
     ulid: String,
     recorded_at: NaiveDateTime,
-    score: u8,
-    energy: Option<u8>,
+    score_tenths: u8,
+    energy_tenths: Option<u8>,
     /// JSON array of leaf words, as stored; parsed in `row_doc` (invalid →
     /// error — a corrupt row must fail the read, not pull as "no emotions").
     emotions: Option<String>,
@@ -618,8 +618,13 @@ impl SyncSpec for Wellbeing {
     type Row = WellbeingDocRow;
 
     const TABLE: &'static str = "wellbeing";
-    const DATA_COLS: &'static [&'static str] =
-        &["recorded_at", "score", "energy", "emotions", "note"];
+    const DATA_COLS: &'static [&'static str] = &[
+        "recorded_at",
+        "score_tenths",
+        "energy_tenths",
+        "emotions",
+        "note",
+    ];
 
     fn row_rev(row: &WellbeingDocRow) -> u64 {
         row.rev
@@ -638,8 +643,8 @@ impl SyncSpec for Wellbeing {
             ulid: r.ulid,
             id: Some(r.id),
             recorded_at: DateTime::from_naive_utc_and_offset(r.recorded_at, Utc),
-            score: r.score,
-            energy: r.energy,
+            score_tenths: r.score_tenths,
+            energy_tenths: r.energy_tenths,
             emotions,
             note: r.note,
             deleted: r.deleted != 0,
@@ -660,13 +665,9 @@ impl SyncSpec for Wellbeing {
     }
 
     fn validate(doc: &WellbeingDoc) -> Result<(), String> {
-        if !(1..=5).contains(&doc.score) {
-            return Err(format!("wellbeing score {} out of range 1..=5", doc.score));
-        }
-        if let Some(e) = doc.energy
-            && !(1..=5).contains(&e)
-        {
-            return Err(format!("wellbeing energy {e} out of range 1..=5"));
+        check_tenths("score", doc.score_tenths)?;
+        if let Some(e) = doc.energy_tenths {
+            check_tenths("energy", e)?;
         }
         Ok(())
     }
@@ -677,11 +678,32 @@ impl SyncSpec for Wellbeing {
         let emotions_json =
             serde_json::to_string(&doc.emotions).expect("Vec<String> serialises to JSON");
         q.bind(doc.recorded_at.naive_utc())
-            .bind(doc.score)
-            .bind(doc.energy)
+            .bind(doc.score_tenths)
+            .bind(doc.energy_tenths)
             .bind(emotions_json)
             .bind(&doc.note)
     }
+}
+
+/// A reading is 1..5 points, recorded in tenths, and for now only in HALF-points:
+/// 10, 15, 20 .. 50. The column would take a 37; the domain wouldn't, so a 37 is
+/// rejected rather than rounded — a silently-rounded reading is a reading the user
+/// never gave. Finer steps later means relaxing the step check here and nothing
+/// else: the storage already holds them.
+const STEP_TENTHS: u8 = 5;
+
+fn check_tenths(what: &str, tenths: u8) -> Result<(), String> {
+    if !(10..=50).contains(&tenths) {
+        return Err(format!(
+            "wellbeing {what} {tenths} tenths out of range 10..=50 (1.0..=5.0)"
+        ));
+    }
+    if !tenths.is_multiple_of(STEP_TENTHS) {
+        return Err(format!(
+            "wellbeing {what} {tenths} tenths is not a half-point step"
+        ));
+    }
+    Ok(())
 }
 
 pub async fn pull_wellbeing(

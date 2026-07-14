@@ -23,8 +23,8 @@ const entry = (over: Partial<WellbeingDoc>): WellbeingDoc => ({
   ulid: 'u',
   id: 1,
   recordedAt: hoursAgo(2),
-  score: 3,
-  energy: null,
+  scoreTenths: 30,
+  energyTenths: null,
   emotions: [],
   note: null,
   rev: 1,
@@ -46,9 +46,9 @@ describe('Wellbeing history', () => {
   it('groups entries by local day, newest day first', () => {
     // Provided newest-first, as the store sorts them.
     const items = [
-      entry({ ulid: 'a', recordedAt: at(0, 15), score: 4 }),
-      entry({ ulid: 'b', recordedAt: at(0, 9), score: 2 }),
-      entry({ ulid: 'c', recordedAt: at(1, 10), score: 3 }),
+      entry({ ulid: 'a', recordedAt: at(0, 15), scoreTenths: 40 }),
+      entry({ ulid: 'b', recordedAt: at(0, 9), scoreTenths: 20 }),
+      entry({ ulid: 'c', recordedAt: at(1, 10), scoreTenths: 30 }),
     ];
     const days = setup(items).fixture.componentInstance.days();
     expect(days.length).toBe(2);
@@ -59,8 +59,8 @@ describe('Wellbeing history', () => {
 
   it('plots a chart dot per recent entry and none for old ones', () => {
     const items = [
-      entry({ ulid: 'a', recordedAt: hoursAgo(2), score: 5 }),
-      entry({ ulid: 'z', recordedAt: at(40, 12), score: 1 }), // outside the 14-day window
+      entry({ ulid: 'a', recordedAt: hoursAgo(2), scoreTenths: 50 }),
+      entry({ ulid: 'z', recordedAt: at(40, 12), scoreTenths: 10 }), // outside the 14-day window
     ];
     const c = setup(items).fixture.componentInstance;
     expect(c.chart().dots.length).toBe(1);
@@ -69,19 +69,37 @@ describe('Wellbeing history', () => {
 
   it('plots the energy chart only from entries that recorded one', () => {
     const c = setup([
-      entry({ ulid: 'a', recordedAt: hoursAgo(2), score: 4, energy: 5 }),
-      entry({ ulid: 'b', recordedAt: at(1, 12), score: 3, energy: null }),
-      entry({ ulid: 'c', recordedAt: at(2, 12), score: 2, energy: 2 }),
+      entry({ ulid: 'a', recordedAt: hoursAgo(2), scoreTenths: 40, energyTenths: 50 }),
+      entry({ ulid: 'b', recordedAt: at(1, 12), scoreTenths: 30, energyTenths: null }),
+      entry({ ulid: 'c', recordedAt: at(2, 12), scoreTenths: 20, energyTenths: 20 }),
     ]).fixture.componentInstance;
     expect(c.hasEnergyChart()).toBe(true);
     // Dots come out chronological (oldest→newest, left→right) so the line joins
     // them in time order: c (2 days ago, energy 2) then a (2h ago, energy 5);
-    // b recorded no energy and is excluded.
-    expect(c.energyChart().dots.map((d) => d.level)).toEqual([2, 5]);
+    // b recorded no energy and is excluded. A 2 sits low, a 5 rides at the top.
+    const [low, high] = c.energyChart().dots;
+    expect(low.cy).toBeGreaterThan(high.cy);
+    expect(high.cy).toBe(c.energyChart().levelY[0]); // a 5 is the top of the scale
+  });
+
+  it('plots a half-step between the two whole readings it sits between', () => {
+    const c = setup([
+      entry({ ulid: 'a', recordedAt: hoursAgo(3), scoreTenths: 30 }), // a 3
+      entry({ ulid: 'b', recordedAt: hoursAgo(2), scoreTenths: 35 }), // a 3.5
+      entry({ ulid: 'c', recordedAt: hoursAgo(1), scoreTenths: 40 }), // a 4
+    ]).fixture.componentInstance;
+    const [three, half, four] = c.chart().dots;
+    // Halfway up, to within the 0.1-unit rounding the dots are stored at: it must
+    // not land on either neighbour, or the reading he took the trouble to hedge is
+    // lost. (A whole step is 18 units here, so 0.05 is nowhere near ambiguous.)
+    expect(Math.abs(half.cy - (three.cy + four.cy) / 2)).toBeLessThanOrEqual(0.05);
+    // ...and its colour is the blend of the two rungs, so height and hue agree.
+    expect(half.fill).toContain('color-mix');
+    expect(three.fill).toBe('var(--wb-score-3)');
   });
 
   it('rules off each local midnight in the window', () => {
-    const c = setup([entry({ recordedAt: hoursAgo(2), score: 4 })]).fixture.componentInstance;
+    const c = setup([entry({ recordedAt: hoursAgo(2), scoreTenths: 40 })]).fixture.componentInstance;
     // A rolling 14-day window crosses 14 midnights whatever hour the suite runs at.
     const xs = c.chart().midnights;
     expect(xs.length).toBe(14);
@@ -95,7 +113,7 @@ describe('Wellbeing history', () => {
   });
 
   it('names each day that is wide enough to hold the word', () => {
-    const c = setup([entry({ recordedAt: hoursAgo(2), score: 4 })]).fixture.componentInstance;
+    const c = setup([entry({ recordedAt: hoursAgo(2), scoreTenths: 40 })]).fixture.componentInstance;
     // 14 days: each is ~20 units wide, too narrow for a name — rules only.
     expect(c.chart().midnights.length).toBe(14);
     expect(c.chart().dayLabels).toEqual([]);
@@ -121,7 +139,7 @@ describe('Wellbeing history', () => {
   });
 
   it('has no energy chart when nothing recorded one', () => {
-    const c = setup([entry({ energy: null })]).fixture.componentInstance;
+    const c = setup([entry({ energyTenths: null })]).fixture.componentInstance;
     expect(c.hasChart()).toBe(true); // mood still charts
     expect(c.hasEnergyChart()).toBe(false);
   });
@@ -134,8 +152,8 @@ describe('Wellbeing history', () => {
 
   it('shows an energy icon only on entries that recorded one', () => {
     const { fixture } = setup([
-      entry({ ulid: 'a', recordedAt: at(0, 15), energy: 2 }), // energy 2 → "low"
-      entry({ ulid: 'b', recordedAt: at(0, 9), energy: null }),
+      entry({ ulid: 'a', recordedAt: at(0, 15), energyTenths: 20 }), // energy 2 → "low"
+      entry({ ulid: 'b', recordedAt: at(0, 9), energyTenths: null }),
     ]);
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;

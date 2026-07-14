@@ -60,22 +60,7 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
-// Dots on the shared wellbeing ramp (--wb-score-* in styles.scss): green (5)
-// rides high = good, red (1) sinks low = bad. Mood plots the score, energy plots
-// the stored `energy` value — same grammar, told apart by the caption + axis
-// words the host supplies.
-.dot.score-1 {
-  fill: var(--wb-score-1);
-}
-.dot.score-2 {
-  fill: var(--wb-score-2);
-}
-.dot.score-3 {
-  fill: var(--wb-score-3);
-}
-.dot.score-4 {
-  fill: var(--wb-score-4);
-}
-.dot.score-5 {
-  fill: var(--wb-score-5);
-}
+// The dot's colour comes off the shared wellbeing ramp (--wb-score-* in
+// styles.scss): green (5) rides high = good, red (1) sinks low = bad. The host
+// supplies it per dot rather than by class, because a half-step's colour is a
+// blend of two rungs — a colour there is no class for.

@@ -18,25 +18,6 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
-// Timeline faces, driven by the shared wellbeing ramp (--wb-score-* in
-// styles.scss): the face icon takes the ramp colour for its score. (The trend
-// dots reuse the same ramp inside app-trend-chart.)
-.score-1 {
-  color: var(--wb-score-1);
-}
-.score-2 {
-  color: var(--wb-score-2);
-}
-.score-3 {
-  color: var(--wb-score-3);
-}
-.score-4 {
-  color: var(--wb-score-4);
-}
-.score-5 {
-  color: var(--wb-score-5);
-}
-
 .day {
   margin-top: 1rem;
 
@@ -47,6 +28,10 @@
     // never overlap a vertically adjacent chip's.
     gap: 0.9rem 0.5rem;
   }
+  // The face takes its colour off the shared wellbeing ramp (--wb-score-* in
+  // styles.scss), handed down per entry as --entry-color: a rung of the ramp for a
+  // whole reading, a blend of two rungs for a half-step — a colour no class could
+  // hold. (The trend dots take the same colour from the same place.)
   .entry {
     position: relative;
     display: inline-flex;
@@ -56,6 +41,7 @@
     border: 1px solid var(--mat-sys-outline-variant);
     border-radius: 999px;
     background: var(--mat-sys-surface-container-low);
+    color: var(--entry-color);
     cursor: pointer;
 
     // The chip is ~34px tall; extend the hit area to the 48px touch minimum
