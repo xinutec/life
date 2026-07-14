@@ -236,6 +236,105 @@ async fn patch_leaves_absent_fields_alone_and_clears_on_null() {
     );
 }
 
+/// Merging server-side means PATCH writes back fields the caller never mentioned,
+/// so it must read the row *inside* the transaction it writes in, with the row
+/// locked. Reading on the pool first (a snapshot outside the transaction) makes a
+/// concurrent write to an untouched field silently disappear: the merge restores
+/// the value it read a moment earlier, and `next_rev()` stamps it as a legitimate
+/// newer revision, so RxDB sees no conflict.
+///
+/// Deterministic, not timing-luck: a second transaction holds the row with
+/// `SELECT … FOR UPDATE`. A plain (non-locking) read sails past that lock and gets
+/// the stale row; a locking read blocks until the writer commits and sees the truth.
+#[tokio::test]
+async fn patch_does_not_revert_a_concurrent_write_to_an_untouched_field() {
+    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
+        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping patch-race test");
+        return;
+    };
+    let pool = db::connect(&url).await.unwrap();
+    db::migrate(&pool).await.unwrap();
+    const USER: &str = "patch-race-user";
+    sqlx::query("DELETE FROM todos WHERE user_id = ?")
+        .bind(USER)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let orig = repo::create(
+        &pool,
+        USER,
+        NewTodo {
+            title: "Raise the eye watering at the review".into(),
+            todo_type: TodoType::Task,
+            priority: Some(TodoPriority::Medium),
+            notes: Some("old wording".into()),
+            not_before: None,
+            due: None,
+            shared: true,
+        },
+    )
+    .await
+    .unwrap();
+
+    // A concurrent writer (think: an RxDB sync push from the phone) takes the row
+    // and is mid-flight — it has the lock but has not committed yet.
+    let mut writer = pool.begin().await.unwrap();
+    sqlx::query("SELECT id FROM todos WHERE id = ? FOR UPDATE")
+        .bind(orig.id)
+        .fetch_one(&mut *writer)
+        .await
+        .unwrap();
+
+    // Meanwhile a PATCH arrives that touches ONLY the notes.
+    let patch_pool = pool.clone();
+    let id = orig.id;
+    let patching = tokio::spawn(async move {
+        repo::update(
+            &patch_pool,
+            USER,
+            id,
+            UpdateTodo {
+                notes: Some(Some("new wording".into())),
+                ..Default::default()
+            },
+        )
+        .await
+    });
+
+    // Long enough for the PATCH to have done its read. If that read is a plain
+    // SELECT on the pool, it is unblocked by the row lock and snapshots status=open.
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+
+    // The concurrent writer now completes: the to-do is done.
+    sqlx::query("UPDATE todos SET status = 'done' WHERE id = ?")
+        .bind(orig.id)
+        .execute(&mut *writer)
+        .await
+        .unwrap();
+    writer.commit().await.unwrap();
+
+    let patched = patching.await.unwrap().unwrap().expect("exists");
+    assert_eq!(patched.notes.as_deref(), Some("new wording"));
+    assert_eq!(
+        patched.status,
+        TodoStatus::Done,
+        "PATCH wrote back status from a stale pre-lock read, reverting the concurrent completion"
+    );
+
+    // And in the database, not just the returned struct.
+    let stored = repo::get(&pool, USER, orig.id)
+        .await
+        .unwrap()
+        .expect("exists");
+    assert_eq!(
+        stored.status,
+        TodoStatus::Done,
+        "the concurrent completion was lost in the database"
+    );
+    assert_eq!(stored.notes.as_deref(), Some("new wording"));
+}
+
 /// The absent-vs-null distinction lives in serde, so pin it there too.
 #[test]
 fn patch_json_distinguishes_absent_from_null() {

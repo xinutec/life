@@ -74,6 +74,27 @@ pub async fn get(pool: &MySqlPool, user_id: &str, id: u64) -> Result<Option<Todo
     row.map(Todo::try_from).transpose()
 }
 
+/// Same read as [`get`], but inside a caller's transaction and holding the row
+/// (`FOR UPDATE`). A merging PATCH writes back fields the caller never sent, so it
+/// must read under the same lock it writes under — a plain read on the pool is a
+/// snapshot from *outside* the transaction, and a write landing in between would be
+/// silently restored to its old value.
+async fn get_for_update(
+    tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
+    user_id: &str,
+    id: u64,
+) -> Result<Option<Todo>> {
+    let row: Option<Row> = sqlx::query_as(
+        "SELECT id, title, todo_type, status, priority, notes, not_before, due, shared FROM todos \
+         WHERE id = ? AND user_id = ? AND deleted_at IS NULL FOR UPDATE",
+    )
+    .bind(id)
+    .bind(user_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    row.map(Todo::try_from).transpose()
+}
+
 pub async fn create(pool: &MySqlPool, user_id: &str, new: NewTodo) -> Result<Todo> {
     let ulid = Ulid::new().to_string();
     let mut tx = pool.begin().await?;
@@ -117,8 +138,10 @@ pub async fn update(
     upd: UpdateTodo,
 ) -> Result<Option<Todo>> {
     // PATCH is partial: merge onto the stored row, so an absent field keeps its
-    // current value rather than being overwritten with a type default.
-    let Some(cur) = get(pool, user_id, id).await? else {
+    // current value rather than being overwritten with a type default. The read has
+    // to happen inside this transaction, with the row locked — see `get_for_update`.
+    let mut tx = pool.begin().await?;
+    let Some(cur) = get_for_update(&mut tx, user_id, id).await? else {
         return Ok(None);
     };
     let title = upd.title.unwrap_or(cur.title);
@@ -130,7 +153,6 @@ pub async fn update(
     let due = upd.due.unwrap_or(cur.due);
     let shared = upd.shared.unwrap_or(cur.shared);
 
-    let mut tx = pool.begin().await?;
     let rev = next_rev(&mut tx).await?;
     let res = sqlx::query(
         "UPDATE todos SET title = ?, todo_type = ?, status = ?, priority = ?, notes = ?, \
