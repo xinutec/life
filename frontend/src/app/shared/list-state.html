@@ -2,6 +2,7 @@
   <mat-progress-bar mode="indeterminate" />
 } @else {
   @if (showRefresh()) {
+    <!-- dev-lint: allow-unstyled-class temporary adoption waiver -- decide: style, rename, or delete -->
     <mat-progress-bar mode="indeterminate" class="refresh" aria-label="Refreshing" />
   }
   @if (error()) {

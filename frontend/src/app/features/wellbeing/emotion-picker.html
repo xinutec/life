@@ -108,6 +108,7 @@
                 [ngTemplateOutlet]="word"
                 [ngTemplateOutletContext]="{ $implicit: g, core: core, grp: true }"
               />
+              <!-- dev-lint: allow-unstyled-class temporary adoption waiver -- decide: style, rename, or delete -->
               <div class="run">
                 @for (leaf of g.leaves; track leaf.name) {
                   <ng-container
