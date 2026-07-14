@@ -153,23 +153,41 @@ pub struct NewTodo {
     pub shared: bool,
 }
 
-/// Full update (edits, the type, the priority, the timing, and open/done).
-#[derive(Debug, Deserialize)]
+/// Partial update, as `PATCH` implies: **an absent field is left alone.** For the
+/// nullable columns, `null` is *not* the same as absent — it clears the value,
+/// while absent preserves it. That distinction is what lets a caller send
+/// `{"notes": "..."}` without having to restate the whole to-do (and without
+/// silently resetting `shared` to private, which a `#[serde(default)]` bool would
+/// do).
+#[derive(Debug, Default, Deserialize)]
 pub struct UpdateTodo {
-    pub title: String,
-    #[serde(rename = "type")]
-    pub todo_type: TodoType,
-    pub status: TodoStatus,
     #[serde(default)]
-    pub priority: Option<TodoPriority>,
+    pub title: Option<String>,
+    #[serde(rename = "type", default)]
+    pub todo_type: Option<TodoType>,
     #[serde(default)]
-    pub notes: Option<String>,
-    #[serde(rename = "notBefore", default)]
-    pub not_before: Option<NaiveDate>,
+    pub status: Option<TodoStatus>,
+    #[serde(default, deserialize_with = "absent_or_null")]
+    pub priority: Option<Option<TodoPriority>>,
+    #[serde(default, deserialize_with = "absent_or_null")]
+    pub notes: Option<Option<String>>,
+    #[serde(rename = "notBefore", default, deserialize_with = "absent_or_null")]
+    pub not_before: Option<Option<NaiveDate>>,
+    #[serde(default, deserialize_with = "absent_or_null")]
+    pub due: Option<Option<NaiveDate>>,
     #[serde(default)]
-    pub due: Option<NaiveDate>,
-    #[serde(default)]
-    pub shared: bool,
+    pub shared: Option<bool>,
+}
+
+/// Deserialize a nullable field into `Option<Option<T>>` so the two cases stay
+/// distinct: field absent → `None` (leave it), field present as `null` →
+/// `Some(None)` (clear it). Plain `#[serde(default)]` collapses both to `None`.
+fn absent_or_null<'de, T, D>(de: D) -> Result<Option<Option<T>>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: serde::Deserializer<'de>,
+{
+    Option::deserialize(de).map(Some)
 }
 
 /// How a to-do connects to its target. Directional: the edge runs *from* the

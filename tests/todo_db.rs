@@ -80,14 +80,14 @@ async fn todo_crud_and_sync_against_real_db() {
         user,
         milk.id,
         UpdateTodo {
-            title: milk.title.clone(),
-            todo_type: TodoType::Purchase,
-            status: TodoStatus::Done,
-            priority: Some(TodoPriority::Medium),
-            notes: Some("got oat milk".into()),
-            not_before: Some(date(2026, 7, 5)),
-            due: Some(date(2026, 7, 20)),
-            shared: true,
+            title: Some(milk.title.clone()),
+            todo_type: Some(TodoType::Purchase),
+            status: Some(TodoStatus::Done),
+            priority: Some(Some(TodoPriority::Medium)),
+            notes: Some(Some("got oat milk".into())),
+            not_before: Some(Some(date(2026, 7, 5))),
+            due: Some(Some(date(2026, 7, 20))),
+            shared: Some(true),
         },
     )
     .await
@@ -148,4 +148,106 @@ async fn todo_crud_and_sync_against_real_db() {
         && t.todo_type == TodoType::Call
         && t.priority == Some(TodoPriority::Low)
         && t.due == Some(date(2026, 8, 1))));
+}
+
+/// PATCH must be a *partial* update: an absent field leaves the stored value
+/// alone, and an explicit `null` clears it. Before this, `UpdateTodo` required
+/// title/type/status on every call, so sending just `{"notes": "..."}` was a 422
+/// — the verb said PATCH but the payload had to be a whole to-do.
+#[tokio::test]
+async fn patch_leaves_absent_fields_alone_and_clears_on_null() {
+    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
+        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping partial-update test");
+        return;
+    };
+    let pool = db::connect(&url).await.unwrap();
+    db::migrate(&pool).await.unwrap();
+    let user = "patch-partial-user";
+    sqlx::query("DELETE FROM todos WHERE user_id = ?")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let orig = repo::create(
+        &pool,
+        user,
+        NewTodo {
+            title: "Raise scalp pain at the review".into(),
+            todo_type: TodoType::Task,
+            priority: Some(TodoPriority::Medium),
+            notes: Some("old wording".into()),
+            not_before: None,
+            due: Some(date(2026, 7, 17)),
+            shared: true,
+        },
+    )
+    .await
+    .unwrap();
+
+    // Notes only: everything else must survive untouched.
+    let patched = repo::update(
+        &pool,
+        user,
+        orig.id,
+        UpdateTodo {
+            notes: Some(Some("new wording".into())),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap()
+    .expect("exists");
+    assert_eq!(patched.notes.as_deref(), Some("new wording"));
+    assert_eq!(patched.title, orig.title, "absent title was overwritten");
+    assert_eq!(
+        patched.todo_type, orig.todo_type,
+        "absent type was overwritten"
+    );
+    assert_eq!(patched.status, orig.status, "absent status was overwritten");
+    assert_eq!(
+        patched.priority, orig.priority,
+        "absent priority was overwritten"
+    );
+    assert_eq!(patched.due, orig.due, "absent due was overwritten");
+    assert!(patched.shared, "absent shared silently flipped to private");
+
+    // Explicit null clears — distinct from absent.
+    let cleared = repo::update(
+        &pool,
+        user,
+        orig.id,
+        UpdateTodo {
+            due: Some(None),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap()
+    .expect("exists");
+    assert_eq!(
+        cleared.due, None,
+        "explicit null did not clear the due date"
+    );
+    assert_eq!(
+        cleared.notes.as_deref(),
+        Some("new wording"),
+        "clearing due touched notes"
+    );
+}
+
+/// The absent-vs-null distinction lives in serde, so pin it there too.
+#[test]
+fn patch_json_distinguishes_absent_from_null() {
+    let absent: UpdateTodo = serde_json::from_str(r#"{"notes":"hi"}"#).unwrap();
+    assert_eq!(absent.notes, Some(Some("hi".into())));
+    assert_eq!(absent.due, None, "an omitted field must read as absent");
+    assert_eq!(absent.title, None);
+
+    let nulled: UpdateTodo = serde_json::from_str(r#"{"due":null}"#).unwrap();
+    assert_eq!(
+        nulled.due,
+        Some(None),
+        "an explicit null must read as clear-it"
+    );
 }

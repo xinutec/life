@@ -116,6 +116,20 @@ pub async fn update(
     id: u64,
     upd: UpdateTodo,
 ) -> Result<Option<Todo>> {
+    // PATCH is partial: merge onto the stored row, so an absent field keeps its
+    // current value rather than being overwritten with a type default.
+    let Some(cur) = get(pool, user_id, id).await? else {
+        return Ok(None);
+    };
+    let title = upd.title.unwrap_or(cur.title);
+    let todo_type = upd.todo_type.unwrap_or(cur.todo_type);
+    let status = upd.status.unwrap_or(cur.status);
+    let priority = upd.priority.unwrap_or(cur.priority);
+    let notes = upd.notes.unwrap_or(cur.notes);
+    let not_before = upd.not_before.unwrap_or(cur.not_before);
+    let due = upd.due.unwrap_or(cur.due);
+    let shared = upd.shared.unwrap_or(cur.shared);
+
     let mut tx = pool.begin().await?;
     let rev = next_rev(&mut tx).await?;
     let res = sqlx::query(
@@ -123,14 +137,14 @@ pub async fn update(
          not_before = ?, due = ?, shared = ?, rev = ?, updated_at = NOW() \
          WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
     )
-    .bind(&upd.title)
-    .bind(upd.todo_type.to_string())
-    .bind(upd.status.to_string())
-    .bind(upd.priority.map(|p| p.to_string()))
-    .bind(&upd.notes)
-    .bind(upd.not_before)
-    .bind(upd.due)
-    .bind(upd.shared)
+    .bind(&title)
+    .bind(todo_type.to_string())
+    .bind(status.to_string())
+    .bind(priority.map(|p| p.to_string()))
+    .bind(&notes)
+    .bind(not_before)
+    .bind(due)
+    .bind(shared)
     .bind(rev)
     .bind(id)
     .bind(user_id)
