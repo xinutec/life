@@ -16,6 +16,20 @@ html {
     )
   );
 
+  // Lift dialogs off the base surface. Angular Material 3 maps the dialog
+  // container to `surface` (@angular/material 22 _m3-dialog.scss) — the SAME
+  // token as the page body and a hair off the bottom sheet (surface-container-low).
+  // On the dark scheme all three are near-black (#121410 / #1a1c18) and the
+  // elevation shadow is invisible, so a dialog has no visible boundary against
+  // what it floats over (seen live: the "Find on Waitrose" dialog bleeding into
+  // the item sheet behind it). M3's own spec puts dialogs on surface-container-high;
+  // this restores that tonal step, which is what separates them on dark.
+  @include mat.dialog-overrides(
+    (
+      container-color: var(--mat-sys-surface-container-high),
+    )
+  );
+
   // Wellbeing score colour ramp — the ONE source of truth for the check-in
   // faces, the trend-chart dots and the history timeline. A diverging scale
   // through the neutral: strong red (awful) → soft red → grey (okay) → soft
