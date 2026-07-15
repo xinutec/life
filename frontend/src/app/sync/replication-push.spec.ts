@@ -126,6 +126,18 @@ describe('replication upstream — local writes actually push', () => {
     await doc!.remove();
     await replication.awaitInSync();
     await vi.waitFor(() => expect(pushed).toHaveLength(2));
+    // The tombstone carries the FULL last-known document, not a stripped
+    // {ulid,_deleted} — the delete-push has every content field it had when
+    // alive. The backend relies on this: WellbeingDoc.score_tenths is a required
+    // u8 and push validation runs check_tenths on EVERY entry incl. tombstones,
+    // so a delete whose body lost `score` would 400 on serde/validation and the
+    // delete would never reach the server. Assert the fields survive the delete.
+    expect(pushed[1]).toMatchObject({
+      ulid: 'u1',
+      recordedAt: '2026-07-03T12:00:00.000Z',
+      score: 4,
+      _deleted: true,
+    });
     await db.close();
   });
 
