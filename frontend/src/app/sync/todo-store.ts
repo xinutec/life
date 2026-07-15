@@ -10,6 +10,8 @@ import { SyncedCollectionConfig, SyncedStore } from './synced-store';
  *  last server revision seen (set by sync, not local edits); `id` is the server
  *  autoincrement (null until synced). RxDB manages `_deleted` + internal fields.
  *  Mirrors the backend `TodoDoc` wire shape. */
+// dev-lint: allow-wire-mirror RxDB owns the _deleted tombstone dimension;
+// the wire type adds it in the replication layer, not in this local doc.
 export interface TodoDoc {
   ulid: string;
   id: number | null;

@@ -8,6 +8,8 @@ import { SyncedCollectionConfig, SyncedStore } from './synced-store';
 /** A to-do connection stored locally. `from` is the source to-do's ulid; the
  *  target is a soft ref (`targetRef` interpreted per `targetKind`). Mirrors the
  *  backend `TodoLinkDoc`. */
+// dev-lint: allow-wire-mirror RxDB owns the _deleted tombstone dimension;
+// the wire type adds it in the replication layer, not in this local doc.
 export interface TodoLinkDoc {
   ulid: string;
   id: number | null;

@@ -9,6 +9,8 @@ import { SyncedCollectionConfig, SyncedStore } from './synced-store';
  *  instant (the moment the feeling was — may be backdated). Readings are in TENTHS
  *  of a point (10..50), so a 3.5 — a mood between two faces — is a 35, and readings
  *  stay exact integers under averaging. Mirrors the backend `WellbeingDoc`. */
+// dev-lint: allow-wire-mirror RxDB owns the _deleted tombstone dimension;
+// the wire type adds it in the replication layer, not in this local doc.
 export interface WellbeingDoc {
   ulid: string;
   id: number | null;
