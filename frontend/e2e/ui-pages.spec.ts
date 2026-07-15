@@ -384,6 +384,10 @@ test('emotion picker — full mosaic + sticky header: lays out cleanly @ phone w
   await expectNoTextOverlaps(page, testInfo, '.picker .selected');
   await expectNoHorizontalOverflow(page, testInfo, '.picker');
   await expectNoHorizontalOverflow(page, testInfo);
+  // The picker isn't a form-dialog (custom full-screen chrome, not app-dialog),
+  // but its sticky header carries an outline search field — the same shear risk.
+  // Guard it with the clip oracle rather than force it into the wrapper.
+  await expectNoClippedText(page, testInfo, '.picker');
 });
 
 // The gloss opens in place, under its own word — no overlay, so it can't hang off
