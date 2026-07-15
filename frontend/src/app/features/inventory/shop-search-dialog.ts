@@ -1,13 +1,14 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatListModule } from '@angular/material/list';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 
+import { Dialog } from '../../shared/dialog';
 import { ShopCandidate, ShopProvider, Shops } from '../../shop';
 
 export interface ShopSearchData {
@@ -25,9 +26,9 @@ export interface ShopSearchData {
   templateUrl: './shop-search-dialog.html',
   styleUrl: './shop-search-dialog.scss',
   imports: [
+    Dialog,
     FormsModule,
     MatButtonModule,
-    MatDialogModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,

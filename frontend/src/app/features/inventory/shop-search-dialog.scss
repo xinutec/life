@@ -1,34 +1,21 @@
-.shop-search {
+mat-form-field {
+  width: 100%;
+}
+
+.state {
   display: flex;
-  flex-direction: column;
-  min-width: min(90vw, 22rem);
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  opacity: 0.8;
 
-  // Material zeroes a dialog-content's top padding when it directly follows the
-  // title (`mat-dialog-title + .mat-mdc-dialog-content`). The first field is an
-  // outline field whose floating label straddles its top border, so with no top
-  // padding the label is sheared by the content's overflow clip. Restore enough
-  // room for the label. (DL-ANGULAR-DIALOG-FIELD-LABEL-CLIP)
-  padding-top: 0.75rem;
-
-  mat-form-field {
-    width: 100%;
+  &.error {
+    opacity: 1;
+    color: var(--mat-sys-error);
   }
+}
 
-  .state {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.5rem 0;
-    opacity: 0.8;
-
-    &.error {
-      opacity: 1;
-      color: var(--mat-sys-error);
-    }
-  }
-
-  img[matListItemAvatar] {
-    object-fit: contain;
-    background: color-mix(in srgb, var(--mat-sys-on-surface) 4%, transparent);
-  }
+img[matListItemAvatar] {
+  object-fit: contain;
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 4%, transparent);
 }

@@ -1,0 +1,9 @@
+<h2 mat-dialog-title>{{ title() }}</h2>
+
+<mat-dialog-content>
+  <div class="dialog-body"><ng-content /></div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <ng-content select="[dialogActions]" />
+</mat-dialog-actions>

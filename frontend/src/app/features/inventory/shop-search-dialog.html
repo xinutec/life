@@ -1,6 +1,4 @@
-<h2 mat-dialog-title>Find on {{ provider.displayName }}</h2>
-
-<mat-dialog-content class="shop-search">
+<app-dialog title="Find on {{ provider.displayName }}">
   <mat-form-field appearance="outline" subscriptSizing="dynamic">
     <mat-label>Search</mat-label>
     <input
@@ -34,8 +32,6 @@
       }
     </mat-action-list>
   }
-</mat-dialog-content>
 
-<mat-dialog-actions align="end">
-  <button mat-button (click)="close()">Cancel</button>
-</mat-dialog-actions>
+  <button dialogActions mat-button (click)="close()">Cancel</button>
+</app-dialog>

@@ -29,6 +29,15 @@ export default tseslint.config(
     },
   },
   {
+    // Test-host components in specs use tiny inline templates by necessity — an
+    // external .html per throwaway host would be noise. The external-template
+    // rule targets production components, not test scaffolding.
+    files: ["src/**/*.spec.ts"],
+    rules: {
+      "@angular-eslint/component-max-inline-declarations": "off",
+    },
+  },
+  {
     files: ["src/**/*.html"],
     extends: [...angular.configs.templateRecommended, ...angular.configs.templateAccessibility],
   },

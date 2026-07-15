@@ -1,0 +1,20 @@
+// A sensible phone-first default width so a dialog isn't a sliver; a feature that
+// needs another width sets it on `dialog.open({ width })`.
+mat-dialog-content {
+  min-width: min(90vw, 22rem);
+}
+
+.dialog-body {
+  // Material zeroes `mat-dialog-content`'s top padding when it follows the title
+  // (`mat-dialog-title + .mat-mdc-dialog-content`). An `appearance="outline"`
+  // field's floating label straddles the field's top border, so with no top
+  // padding it is sheared by the content's overflow clip. Reserve the room here,
+  // on our OWN class — nothing in Material competes for `.dialog-body`, so this
+  // can't lose a specificity tie the way a `mat-dialog-content` override would.
+  padding-top: 0.75rem;
+}
+
+// No buttons projected → don't show an empty action bar.
+mat-dialog-actions:empty {
+  display: none;
+}
