@@ -24,10 +24,4 @@
     object-fit: contain;
     background: color-mix(in srgb, var(--mat-sys-on-surface) 4%, transparent);
   }
-
-  .actions {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 0.5rem;
-  }
 }
