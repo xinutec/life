@@ -3,6 +3,13 @@
   flex-direction: column;
   min-width: min(90vw, 22rem);
 
+  // Material zeroes a dialog-content's top padding when it directly follows the
+  // title (`mat-dialog-title + .mat-mdc-dialog-content`). The first field is an
+  // outline field whose floating label straddles its top border, so with no top
+  // padding the label is sheared by the content's overflow clip. Restore enough
+  // room for the label. (DL-ANGULAR-DIALOG-FIELD-LABEL-CLIP)
+  padding-top: 0.75rem;
+
   mat-form-field {
     width: 100%;
   }
