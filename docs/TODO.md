@@ -188,6 +188,35 @@ through something that resets the NC session.
       - Asda only: its storefront search is a public API callable from anywhere.
         Waitrose needs the Android app's WebView to pass its bot-wall, so it
         stays in the picker's shop tier rather than being half-offered here.
+- [x] **Product data model, increment 6 — keep what the shop already told us;
+      refresh on demand** (2026-07-17) — everything fetched was already stored
+      (the product page makes ZERO shop calls), but each Asda hit carried data we
+      were binning, and a second fact source would have been erased.
+      - **Migration 0028**: `product_dietary_flags` keyed
+        `(product_id, source, flag)`, replace scoped per source. 0027 keyed it
+        `(product_id, flag)` with a delete-by-product — fine for ONE authority
+        (OFF), fatal for two: storing Asda's tags then re-looking-up the barcode
+        on OFF would silently DELETE them.
+      - **Merge on read** (`nutrition::merge_dietary`, pure + tested): sources
+        agree → that value; a firm claim settles a guess ('yes' over 'maybe');
+        **'yes' against 'no' → 'maybe'** — over-claiming is the harmful
+        direction, and the tri-state exists so we needn't pick a side.
+      - **Asda's `NUTRITIONAL_INFO`** → dietary flags (Vegan/Vegetarian/Halal/
+        Kosher/NoGluten→gluten_free/NoLactose→lactose_free). **A 0 is NOT a
+        "no"** — Asda ships all 24 tags on every product and sets what it claims
+        (Quaker oats really do carry `Vegetarian: 0`), so flags only ever assert
+        'yes'. Its other tags (LowSalt, HighFibre, NoNuts…) have no slug in our
+        vocabulary and are dropped rather than invented. `PACK_SIZE` →
+        `quantity_label` when OFF gave none.
+      - **`POST /api/products/id/{id}/listings`** — one idempotent server-side
+        pull that both attaches a shop and refreshes it, so a refresh can never
+        capture less than an attach. Fetches by CIN (`asda::fetch_by_id`; the CIN
+        IS searchable, and the hit's own CIN is verified — a search is a
+        relevance guess, this must be an identity) and re-checks the barcode
+        server-side rather than trusting the client's match.
+      - **Refresh is manual, by design**: a button per Asda row, no cron, no
+        staleness check, nothing on load. Shop data goes stale silently; a wrong
+        price you didn't ask for is worse than an old one you can refresh.
 - [x] 3D house renders the real `scenes/house.json` (perimeter walls + furniture)
 - [x] Mobile-first UI (bottom tabs ↔ side rail), management forms, NC avatar
 - [x] Deployed: isis k3s, CI/CD (`xinutec/life`), DNS, TLS, live login
