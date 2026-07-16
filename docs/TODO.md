@@ -90,6 +90,16 @@ through something that resets the NC session.
 - [x] Camera barcode scanner (native BarcodeDetector, graceful fallback) on
       Buy + Inventory → scans the code, fills it, runs the lookup
 - [x] Search → location breadcrumb ("where is my X")
+- [x] Shopping rows carry `category` + `product_id` (2026-07-16) — the
+      buy→inventory conversion uses them instead of guessing; category select
+      in the Buy sheet; RxDB v1 migration + server migration 0024
+- [x] Inventory→Buy bridge (2026-07-16) — cart button on inventory rows adds
+      the item to the Buy list with its full identity, deduped against un-done
+      rows (matchesIdentity: product link, then barcode, then name)
+- [x] Product picker (2026-07-16) — one "find a product" dialog on both
+      sheets' Name fields: inventory tier (instant, offline), catalog tier
+      (`GET /api/products?q=`, debounced), shop tier (Waitrose, in-app only;
+      picking imports into the catalog). Replaced the Find-on-Waitrose dialog.
 - [x] 3D house renders the real `scenes/house.json` (perimeter walls + furniture)
 - [x] Mobile-first UI (bottom tabs ↔ side rail), management forms, NC avatar
 - [x] Deployed: isis k3s, CI/CD (`xinutec/life`), DNS, TLS, live login
@@ -170,8 +180,8 @@ through something that resets the NC session.
         cheapest-shop, estimated totals, shop-trip scheduling via NC Calendar
         (overview §5).
 - [ ] **Shopping list refinements** — add a recipe's missing ingredients to the
-      Buy list in one tap; low-stock auto-suggestions; carry category through
-      buy→inventory (currently defaults to `other`).
+      Buy list in one tap; low-stock auto-suggestions. ~~Carry category through
+      buy→inventory~~ DONE 2026-07-16 (shopping rows own category/product_id).
 - [ ] **Recipe ingredients → product links** — a `recipe_ingredient.product_id`
       FK so ingredients resolve to catalog products instead of matching by name
       string ("cumin" vs "ground cumin" vs "cumin seeds" don't match today). This
