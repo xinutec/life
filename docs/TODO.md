@@ -4,6 +4,34 @@ Living checklist for the Life app. Keep it current: tick items as they ship,
 add new ones under the right section. Architecture/rationale lives in
 `docs/design/overview.md`; this is the "what's done / what's next" tracker.
 
+## Solved 2026-07-16: offline boot dumped a signed-in user onto the sign-in screen
+
+Recorded because the cause is a fleet-wide pattern (any app with ngsw + raw
+`fetch`), and because it shows how a "helpful" heuristic becomes a sign-out.
+
+**Symptom.** Open the app with no network: the shell renders signed-in for a
+moment, then drops to "Sign in with Nextcloud" — and stays there on every later
+offline launch.
+
+**Cause.** The Angular service worker intercepts every page fetch and answers
+network failure with a bodiless synthetic **504** (it never lets the fetch
+reject). The sync auth guard (`sync/replication.ts` `guardAuth`) classified any
+non-JSON response as "logged out" — a heuristic meant for the stale-cookie
+302→login-page case. First replication cycle offline → 504 → `AuthState.lost`
+→ the shell dropped `me` AND erased the cached identity from localStorage,
+poisoning all later offline boots. A downed backend (ingress HTML error page)
+would have triggered the same sign-out.
+
+**Fix.** Classification moved to the shared boundary: `classifyFetchResponse`
+(`shared/api-error.ts`) returns the same `ApiFailure` union as the HttpClient
+side; auth loss is only a positive signal (401/403, followed redirect, or a
+*2xx* non-JSON body). Non-ok non-JSON (the SW 504, ingress error pages) is
+offline/server → replication retries quietly. Guards: unit regression tests,
+an e2e that boots offline signed-in and asserts the shell survives the first
+sync cycle (`e2e/offline-boot.spec.ts` — red on the old build, green on the
+fix), and dev-lint `DL-ANGULAR-FETCH-ERROR-CLASSIFIED` fleet-wide (no
+auth-shaped decisions on raw Responses outside the classifier).
+
 ## Solved 2026-07-13: "State token does not match" on sign-in (stale NC cookies)
 
 Recorded because the *cause* is counter-intuitive and will recur elsewhere in the
@@ -287,10 +315,9 @@ Space-key on `role="button"`, muted-text token vs opacity, one badge class,
 shared `pathOf`; `.tappable` itself had drifted into three copies and was
 consolidated global too).
 
-Open decision for Pippijn: recipes edit path — add one, or deliberately
-create+delete-only? B7 shipped with recipes create+delete-only (the delete
-got `.danger`); an edit path needs a backend update route + sheet edit mode
-once decided.
+~~Open decision for Pippijn: recipes edit path~~ — DECIDED and SHIPPED
+2026-07-11: recipes got an edit path (backend update route + sheet edit
+mode), matching the tap-to-edit grammar everywhere else.
 
 ## Open decisions
 
