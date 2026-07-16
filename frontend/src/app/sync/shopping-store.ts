@@ -18,12 +18,20 @@ export interface ShoppingDoc {
   quantity: number | null;
   unit: string | null;
   barcode: string | null;
+  /** Inventory category the buy→inventory conversion will use (ItemCategory
+   *  string; the server validates it at push). */
+  category: string;
+  /** Optional link to the products catalog (mirrors items.product_id) — how a
+   *  barcodeless shop product rides the Buy list. */
+  product_id: number | null;
   done: boolean;
   rev: number;
 }
 
 const schema: RxJsonSchema<ShoppingDoc> = {
-  version: 0,
+  // Bump the version + migrate on ANY schema change, else existing local DBs hit
+  // a hash mismatch. v1: category + product_id (buy→inventory identity).
+  version: 1,
   primaryKey: 'ulid',
   type: 'object',
   properties: {
@@ -33,10 +41,25 @@ const schema: RxJsonSchema<ShoppingDoc> = {
     quantity: { type: ['number', 'null'] },
     unit: { type: ['string', 'null'] },
     barcode: { type: ['string', 'null'] },
+    category: { type: 'string' },
+    product_id: { type: ['integer', 'null'] },
     done: { type: 'boolean' },
     rev: { type: 'number' },
   },
-  required: ['ulid', 'name', 'done', 'rev'],
+  required: ['ulid', 'name', 'category', 'done', 'rev'],
+};
+
+// Exported for shopping-store.spec.ts — a stale local DB (an old browser
+// profile, the Android WebView) runs these once on next open, so pin them.
+export const migrationStrategies = {
+  // v1: pre-identity rows take the same defaults the server backfill gives
+  // them (0024: category 'food', no product link), so both sides converge
+  // without a rev bump.
+  1: (doc: Record<string, unknown>): Record<string, unknown> => ({
+    ...doc,
+    category: 'food',
+    product_id: null,
+  }),
 };
 
 /** The synced content fields (everything but the identity/server fields). */
@@ -49,6 +72,8 @@ const SHOPPING_FIELDS: FieldSpec<ShoppingContent> = {
   quantity: 'value',
   unit: 'value',
   barcode: 'value',
+  category: 'value',
+  product_id: 'value',
   done: 'value',
 };
 
@@ -83,6 +108,7 @@ export class ShoppingStore extends SyncedStore<ShoppingDoc> {
       path: '/api/sync/shopping',
       label: 'shopping sync',
       trashKind: 'shopping',
+      migrationStrategies,
     };
   }
 
@@ -91,6 +117,8 @@ export class ShoppingStore extends SyncedStore<ShoppingDoc> {
     quantity: number | null;
     unit: string | null;
     barcode: string | null;
+    category: string;
+    product_id: number | null;
   }): Promise<void> {
     const col = await this.collection;
     await col.insert({
@@ -100,6 +128,8 @@ export class ShoppingStore extends SyncedStore<ShoppingDoc> {
       quantity: input.quantity,
       unit: input.unit,
       barcode: input.barcode,
+      category: input.category,
+      product_id: input.product_id,
       done: false,
       rev: 0,
     });

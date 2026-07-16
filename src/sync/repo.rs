@@ -14,6 +14,7 @@ use sqlx::{AssertSqlSafe, MySql, MySqlConnection, MySqlPool};
 use ulid::Ulid;
 
 use crate::error::AppError;
+use crate::inventory::types::ItemCategory;
 use crate::todo::types::{LinkKind, TargetKind, TodoPriority, TodoStatus, TodoType};
 
 use super::types::{
@@ -234,6 +235,8 @@ struct ShoppingDocRow {
     quantity: Option<f64>,
     unit: Option<String>,
     barcode: Option<String>,
+    category: String,
+    product_id: Option<u64>,
     done: bool,
     deleted: i64,
     rev: u64,
@@ -246,7 +249,15 @@ impl SyncSpec for Shopping {
     type Row = ShoppingDocRow;
 
     const TABLE: &'static str = "shopping_items";
-    const DATA_COLS: &'static [&'static str] = &["name", "quantity", "unit", "barcode", "done"];
+    const DATA_COLS: &'static [&'static str] = &[
+        "name",
+        "quantity",
+        "unit",
+        "barcode",
+        "category",
+        "product_id",
+        "done",
+    ];
 
     fn row_rev(row: &ShoppingDocRow) -> u64 {
         row.rev
@@ -260,6 +271,8 @@ impl SyncSpec for Shopping {
             quantity: r.quantity,
             unit: r.unit,
             barcode: r.barcode,
+            category: r.category,
+            product_id: r.product_id,
             done: r.done,
             deleted: r.deleted != 0,
             rev: r.rev,
@@ -278,8 +291,10 @@ impl SyncSpec for Shopping {
         doc.deleted
     }
 
-    /// Free-form fields only — nothing the typed boundary re-parses.
-    fn validate(_doc: &ShoppingDoc) -> Result<(), String> {
+    /// `category` must be a readable [`ItemCategory`] — the buy→inventory
+    /// conversion re-parses it.
+    fn validate(doc: &ShoppingDoc) -> Result<(), String> {
+        doc.category.parse::<ItemCategory>()?;
         Ok(())
     }
 
@@ -288,6 +303,8 @@ impl SyncSpec for Shopping {
             .bind(doc.quantity)
             .bind(&doc.unit)
             .bind(&doc.barcode)
+            .bind(&doc.category)
+            .bind(doc.product_id)
             .bind(doc.done)
     }
 }

@@ -10,6 +10,8 @@ const FIELDS: FieldSpec<Omit<ShoppingDoc, 'ulid' | 'id' | 'rev'>> = {
   quantity: 'value',
   unit: 'value',
   barcode: 'value',
+  category: 'value',
+  product_id: 'value',
   done: 'value',
 };
 
@@ -20,6 +22,8 @@ const base: MasterDoc = {
   quantity: 1,
   unit: null,
   barcode: null,
+  category: 'food',
+  product_id: null,
   done: false,
   rev: 5,
   _deleted: false,

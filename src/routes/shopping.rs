@@ -6,7 +6,7 @@ use axum::http::StatusCode;
 
 use crate::error::AppError;
 use crate::inventory::repo as inventory_repo;
-use crate::inventory::types::{Item, ItemCategory, NewItem};
+use crate::inventory::types::{Item, NewItem};
 use crate::session::AuthUser;
 use crate::shopping::repo;
 use crate::shopping::types::{NewShoppingItem, ShoppingItem, UpdateShoppingItem};
@@ -52,9 +52,9 @@ pub async fn delete(
 }
 
 /// POST /api/shopping/{id}/buy → turn a bought item into an inventory item
-/// (unplaced) and remove it from the list. Returns the item. A barcoded item
-/// came from Open *Food* Facts, so it defaults to `food`; everything else to
-/// `other`.
+/// (unplaced) and remove it from the list. Returns the item. The row's own
+/// `category` and `product_id` carry onto the item — the row knows what it is;
+/// nothing is guessed here.
 ///
 /// Ordering makes a double-tap idempotent: the soft-delete (guarded by
 /// `rows_affected`) is the claim — only the request that actually tombstones the
@@ -72,23 +72,18 @@ pub async fn buy(
     if !repo::delete(&app.pool, &user.user_id, id).await? {
         return Err(AppError::NotFound); // already bought/deleted concurrently
     }
-    let category = if s.barcode.is_some() {
-        ItemCategory::Food
-    } else {
-        ItemCategory::Other
-    };
     let item = inventory_repo::create_item(
         &app.pool,
         &user.user_id,
         NewItem {
             name: s.name,
-            category,
+            category: s.category,
             quantity: s.quantity,
             unit: s.unit,
             expiry: None,
             location_id: None,
             barcode: s.barcode,
-            product_id: None, // shopping items link by barcode only
+            product_id: s.product_id,
         },
     )
     .await?;

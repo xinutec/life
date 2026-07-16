@@ -26,6 +26,19 @@ export type { ConflictKind } from './generated/ConflictKind';
 export type { TrashEntry } from './generated/TrashEntry';
 export type { TrashKind } from './generated/TrashKind';
 
+import type { ItemCategory as ItemCategoryT } from './generated/ItemCategory';
+
+/** Every ItemCategory, in the order category pickers show them. The `Record`
+ *  keys make the compiler prove the list is exhaustive and duplicate-free — a
+ *  new enum value won't build until it's placed here. */
+export const ITEM_CATEGORIES = Object.keys({
+  food: true,
+  medication: true,
+  tool: true,
+  document: true,
+  other: true,
+} satisfies Record<ItemCategoryT, true>) as ItemCategoryT[];
+
 // Scene-file types are frontend-owned: /api/house streams scenes/house.json
 // through as raw JSON (no Rust struct), so these aren't generated.
 

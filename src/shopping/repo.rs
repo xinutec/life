@@ -5,11 +5,14 @@
 //! `deleted_at`) so deletes propagate to offline clients as tombstones. Reads hide
 //! tombstoned rows.
 
-use anyhow::Result;
+use std::str::FromStr;
+
+use anyhow::{Result, anyhow};
 use sqlx::MySqlPool;
 use ulid::Ulid;
 
 use super::types::{NewShoppingItem, ShoppingItem, UpdateShoppingItem};
+use crate::inventory::types::ItemCategory;
 use crate::sync::repo::next_rev;
 
 #[derive(sqlx::FromRow)]
@@ -19,44 +22,54 @@ struct Row {
     quantity: Option<f64>,
     unit: Option<String>,
     barcode: Option<String>,
+    category: String,
+    product_id: Option<u64>,
     done: bool,
 }
 
-impl From<Row> for ShoppingItem {
-    fn from(r: Row) -> Self {
-        ShoppingItem {
-            id: r.id,
-            name: r.name,
-            quantity: r.quantity,
-            unit: r.unit,
-            barcode: r.barcode,
-            done: r.done,
-        }
+impl Row {
+    /// `category` is validated at every write boundary (REST enum, sync push),
+    /// so a parse failure here means the DB was edited out-of-band — error out
+    /// rather than mask it.
+    fn into_item(self) -> Result<ShoppingItem> {
+        let category = ItemCategory::from_str(&self.category).map_err(|e| anyhow!(e))?;
+        Ok(ShoppingItem {
+            id: self.id,
+            name: self.name,
+            quantity: self.quantity,
+            unit: self.unit,
+            barcode: self.barcode,
+            category,
+            product_id: self.product_id,
+            done: self.done,
+        })
     }
 }
 
 /// To-buy items, undone first, then by name. Tombstoned rows are hidden.
 pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<ShoppingItem>> {
     let rows: Vec<Row> = sqlx::query_as(
-        "SELECT id, name, quantity, unit, barcode, done FROM shopping_items \
+        "SELECT id, name, quantity, unit, barcode, category, product_id, done \
+         FROM shopping_items \
          WHERE user_id = ? AND deleted_at IS NULL ORDER BY done, name",
     )
     .bind(user_id)
     .fetch_all(pool)
     .await?;
-    Ok(rows.into_iter().map(Into::into).collect())
+    rows.into_iter().map(Row::into_item).collect()
 }
 
 pub async fn get(pool: &MySqlPool, user_id: &str, id: u64) -> Result<Option<ShoppingItem>> {
     let row: Option<Row> = sqlx::query_as(
-        "SELECT id, name, quantity, unit, barcode, done FROM shopping_items \
+        "SELECT id, name, quantity, unit, barcode, category, product_id, done \
+         FROM shopping_items \
          WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
     )
     .bind(id)
     .bind(user_id)
     .fetch_optional(pool)
     .await?;
-    Ok(row.map(Into::into))
+    row.map(Row::into_item).transpose()
 }
 
 pub async fn create(pool: &MySqlPool, user_id: &str, new: NewShoppingItem) -> Result<ShoppingItem> {
@@ -64,8 +77,8 @@ pub async fn create(pool: &MySqlPool, user_id: &str, new: NewShoppingItem) -> Re
     let mut tx = pool.begin().await?;
     let rev = next_rev(&mut tx).await?;
     let res = sqlx::query(
-        "INSERT INTO shopping_items (user_id, ulid, name, quantity, unit, barcode, rev, \
-         created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+        "INSERT INTO shopping_items (user_id, ulid, name, quantity, unit, barcode, category, \
+         product_id, rev, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
     )
     .bind(user_id)
     .bind(&ulid)
@@ -73,6 +86,8 @@ pub async fn create(pool: &MySqlPool, user_id: &str, new: NewShoppingItem) -> Re
     .bind(new.quantity)
     .bind(&new.unit)
     .bind(&new.barcode)
+    .bind(new.category.to_string())
+    .bind(new.product_id)
     .bind(rev)
     .execute(&mut *tx)
     .await?;
@@ -84,6 +99,8 @@ pub async fn create(pool: &MySqlPool, user_id: &str, new: NewShoppingItem) -> Re
         quantity: new.quantity,
         unit: new.unit,
         barcode: new.barcode,
+        category: new.category,
+        product_id: new.product_id,
         done: false,
     })
 }
@@ -97,13 +114,16 @@ pub async fn update(
     let mut tx = pool.begin().await?;
     let rev = next_rev(&mut tx).await?;
     let res = sqlx::query(
-        "UPDATE shopping_items SET name = ?, quantity = ?, unit = ?, barcode = ?, done = ?, \
-         rev = ?, updated_at = NOW() WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
+        "UPDATE shopping_items SET name = ?, quantity = ?, unit = ?, barcode = ?, category = ?, \
+         product_id = ?, done = ?, rev = ?, updated_at = NOW() \
+         WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
     )
     .bind(&upd.name)
     .bind(upd.quantity)
     .bind(&upd.unit)
     .bind(&upd.barcode)
+    .bind(upd.category.to_string())
+    .bind(upd.product_id)
     .bind(upd.done)
     .bind(rev)
     .bind(id)

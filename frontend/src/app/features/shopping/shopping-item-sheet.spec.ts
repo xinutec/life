@@ -19,6 +19,8 @@ const doc = (over: Partial<ShoppingDoc>): ShoppingDoc => ({
   quantity: 2,
   unit: 'pots',
   barcode: null,
+  category: 'food',
+  product_id: null,
   done: false,
   rev: 1,
   ...over,
@@ -34,7 +36,7 @@ describe('ShoppingItemSheet', () => {
     const dialog = { open: vi.fn(() => ({ afterClosed: () => of(opts.scanned ?? null) })) };
     const api = {
       lookupProduct: vi.fn(() =>
-        of({ barcode: opts.scanned, name: 'Nomadic', brand: 'Lassi', quantity_label: null, has_image: false }),
+        of({ id: 42, barcode: opts.scanned, name: 'Nomadic', brand: 'Lassi', quantity_label: null, has_image: false }),
       ),
       productImageUrl: (b: string) => `/api/products/${b}/image`,
     };
@@ -68,6 +70,8 @@ describe('ShoppingItemSheet', () => {
 
     expect(fixture.componentInstance.barcode()).toBe('5029617001045');
     expect(fixture.componentInstance.name()).toBe('Nomadic');
+    // The lookup also linked the row to the catalog product it found.
+    expect(fixture.componentInstance.productId()).toBe(42);
 
     // Rendered view reflects it (this is what the zoneless bug broke).
     const input = (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>(
@@ -91,7 +95,14 @@ describe('ShoppingItemSheet', () => {
     c.name.set(' Milk ');
     c.quantity.set(1);
     c.save();
-    expect(store.add).toHaveBeenCalledWith({ name: 'Milk', quantity: 1, unit: null, barcode: null });
+    expect(store.add).toHaveBeenCalledWith({
+      name: 'Milk',
+      quantity: 1,
+      unit: null,
+      barcode: null,
+      category: 'food',
+      product_id: null,
+    });
     expect(ref.dismiss).not.toHaveBeenCalled();
     expect(c.name()).toBe('');
     expect(c.quantity()).toBeNull();
@@ -116,6 +127,8 @@ describe('ShoppingItemSheet', () => {
       quantity: 4,
       unit: 'tins',
       barcode: null,
+      category: 'food',
+      product_id: null,
     });
     expect(ref.dismiss).toHaveBeenCalled();
   });

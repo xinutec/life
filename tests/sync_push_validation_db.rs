@@ -6,7 +6,7 @@
 use chrono::{TimeZone, Utc};
 use life::db;
 use life::sync::repo::{self as sync_repo, PushError};
-use life::sync::types::{PushEntry, TodoDoc, TodoLinkDoc, WellbeingDoc};
+use life::sync::types::{PushEntry, ShoppingDoc, TodoDoc, TodoLinkDoc, WellbeingDoc};
 
 fn todo(ulid: &str, status: &str, todo_type: &str, priority: Option<&str>) -> TodoDoc {
     TodoDoc {
@@ -53,6 +53,22 @@ fn link(ulid: &str, kind: &str, target_kind: &str) -> TodoLinkDoc {
     }
 }
 
+fn shopping(ulid: &str, category: &str) -> ShoppingDoc {
+    ShoppingDoc {
+        ulid: ulid.into(),
+        id: None,
+        name: "validate me".into(),
+        quantity: None,
+        unit: None,
+        barcode: None,
+        category: category.into(),
+        product_id: None,
+        done: false,
+        deleted: false,
+        rev: 0,
+    }
+}
+
 fn entry<D>(doc: D) -> PushEntry<D> {
     PushEntry {
         new_document_state: doc,
@@ -77,7 +93,7 @@ async fn invalid_docs_are_rejected_and_nothing_is_stored() {
     db::migrate(&pool).await.expect("migrate");
 
     let user = "test-user-push-validation";
-    for table in ["todos", "todo_links", "wellbeing"] {
+    for table in ["todos", "todo_links", "wellbeing", "shopping_items"] {
         sqlx::query(sqlx::AssertSqlSafe(format!(
             "DELETE FROM {table} WHERE user_id = ?"
         )))
@@ -151,6 +167,16 @@ async fn invalid_docs_are_rejected_and_nothing_is_stored() {
         )
         .await,
         "link target kind",
+    );
+    // A shopping category the buy→inventory conversion could not re-parse.
+    assert_invalid(
+        sync_repo::push_shopping(
+            &pool,
+            user,
+            vec![entry(shopping("01VAL0000000000000000SHOPA", "groceries"))],
+        )
+        .await,
+        "shopping category",
     );
     // Documented 10..=50 tenths (1.0..=5.0) — reject, not clamp.
     assert_invalid(
@@ -242,6 +268,12 @@ async fn invalid_docs_are_rejected_and_nothing_is_stored() {
         well.documents.is_empty(),
         "no wellbeing stored: {:?}",
         well.documents
+    );
+    let shop = sync_repo::pull_shopping(&pool, user, 0, 100).await.unwrap();
+    assert!(
+        shop.documents.is_empty(),
+        "no shopping row stored: {:?}",
+        shop.documents
     );
 
     // A valid doc still lands (the gate rejects bad input, not all input).

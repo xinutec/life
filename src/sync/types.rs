@@ -23,6 +23,14 @@ pub struct ShoppingDoc {
     pub quantity: Option<f64>,
     pub unit: Option<String>,
     pub barcode: Option<String>,
+    /// Inventory category the buy→inventory conversion will use (an
+    /// `ItemCategory` string; validated at push). Defaults to `food` so docs
+    /// from pre-0024 clients stay pushable.
+    #[serde(default = "default_shopping_category")]
+    pub category: String,
+    /// Optional link to the products catalog (mirrors `items.product_id`).
+    #[serde(default)]
+    pub product_id: Option<u64>,
     pub done: bool,
     /// RxDB tombstone flag (maps to `deleted_at IS NOT NULL`).
     #[serde(rename = "_deleted", default)]
@@ -30,6 +38,10 @@ pub struct ShoppingDoc {
     /// Server revision (version). Ignored as push *input*; set by the server.
     #[serde(default)]
     pub rev: u64,
+}
+
+fn default_shopping_category() -> String {
+    "food".into()
 }
 
 /// One to-do row as it travels over sync. The type/status enums ride as their

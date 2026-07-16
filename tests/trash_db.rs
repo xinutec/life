@@ -232,6 +232,8 @@ async fn sync_push_cannot_resurrect_a_tombstone_but_restore_can() {
             quantity: None,
             unit: None,
             barcode: None,
+            category: ItemCategory::Food,
+            product_id: None,
         },
     )
     .await

@@ -37,12 +37,21 @@
   </div>
 
   <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>Category</mat-label>
+    <mat-select [ngModel]="category()" (ngModelChange)="category.set($event)">
+      @for (c of categories; track c) {
+        <mat-option [value]="c">{{ c }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
     <mat-label>Barcode</mat-label>
     <input
       matInput
       inputmode="numeric"
       [ngModel]="barcode()"
-      (ngModelChange)="barcode.set($event)"
+      (ngModelChange)="barcodeChanged($event)"
       (keyup.enter)="lookup()"
     />
     <button matSuffix mat-icon-button (click)="scan()" aria-label="Scan barcode">

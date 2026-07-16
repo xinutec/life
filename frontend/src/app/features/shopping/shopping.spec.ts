@@ -16,6 +16,8 @@ const doc = (over: Partial<ShoppingDoc>): ShoppingDoc => ({
   quantity: null,
   unit: null,
   barcode: null,
+  category: 'food',
+  product_id: null,
   done: false,
   rev: 1,
   ...over,

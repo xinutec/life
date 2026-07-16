@@ -28,7 +28,8 @@ async fn shopping_crud_and_buy_against_real_db() {
         .await
         .unwrap();
 
-    // Add a couple of things to buy.
+    // Add a couple of things to buy. Yoghurt takes the food default; the
+    // batteries say what they are.
     let yog = repo::create(
         &pool,
         user,
@@ -37,11 +38,13 @@ async fn shopping_crud_and_buy_against_real_db() {
             quantity: Some(1.0),
             unit: Some("kg".into()),
             barcode: None,
+            category: ItemCategory::Food,
+            product_id: None,
         },
     )
     .await
     .unwrap();
-    repo::create(
+    let batteries = repo::create(
         &pool,
         user,
         NewShoppingItem {
@@ -49,12 +52,15 @@ async fn shopping_crud_and_buy_against_real_db() {
             quantity: None,
             unit: None,
             barcode: None,
+            category: ItemCategory::Tool,
+            product_id: None,
         },
     )
     .await
     .unwrap();
     assert_eq!(repo::list(&pool, user).await.unwrap().len(), 2);
     assert!(!yog.done);
+    assert_eq!(batteries.category, ItemCategory::Tool);
 
     // Tick one off (done toggle via full update).
     let toggled = repo::update(
@@ -66,6 +72,8 @@ async fn shopping_crud_and_buy_against_real_db() {
             quantity: yog.quantity,
             unit: yog.unit.clone(),
             barcode: None,
+            category: yog.category,
+            product_id: None,
             done: true,
         },
     )
@@ -74,20 +82,21 @@ async fn shopping_crud_and_buy_against_real_db() {
     .expect("exists");
     assert!(toggled.done);
 
-    // Buy it → becomes an inventory item, leaves the list (mirrors the route).
+    // Buy it → becomes an inventory item, leaves the list (mirrors the route:
+    // the row's own category/product_id carry onto the item).
     let got = repo::get(&pool, user, yog.id).await.unwrap().unwrap();
     let item = inv_repo::create_item(
         &pool,
         user,
         NewItem {
             name: got.name,
-            category: ItemCategory::Other,
+            category: got.category,
             quantity: got.quantity,
             unit: got.unit,
             expiry: None,
             location_id: None,
             barcode: got.barcode,
-            product_id: None,
+            product_id: got.product_id,
         },
     )
     .await
@@ -95,7 +104,7 @@ async fn shopping_crud_and_buy_against_real_db() {
     assert!(repo::delete(&pool, user, yog.id).await.unwrap());
 
     assert_eq!(item.name, "Yoghurt");
-    assert_eq!(item.category, ItemCategory::Other);
+    assert_eq!(item.category, ItemCategory::Food);
     assert!(repo::get(&pool, user, yog.id).await.unwrap().is_none());
     assert_eq!(repo::list(&pool, user).await.unwrap().len(), 1); // Batteries remain
     assert_eq!(inv_repo::list_items(&pool, user).await.unwrap().len(), 1); // Yoghurt now owned

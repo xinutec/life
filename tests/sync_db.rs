@@ -2,6 +2,7 @@
 //! LIFE_TEST_DATABASE_URL is set; skips otherwise.
 
 use life::db;
+use life::inventory::types::ItemCategory;
 use life::shopping::repo as shop;
 use life::shopping::types::NewShoppingItem;
 use life::sync::repo as sync;
@@ -16,6 +17,8 @@ fn doc(ulid: &str, name: &str, rev: u64) -> ShoppingDoc {
         quantity: None,
         unit: None,
         barcode: None,
+        category: "food".into(),
+        product_id: None,
         done: false,
         deleted: false,
         rev,
@@ -47,6 +50,8 @@ async fn shopping_sync_pull_push_conflict_tombstone() {
             quantity: Some(2.0),
             unit: Some("L".into()),
             barcode: None,
+            category: ItemCategory::Food,
+            product_id: None,
         },
     )
     .await

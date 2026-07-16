@@ -25,6 +25,8 @@ fn shopping_doc(ulid: &str, name: &str) -> ShoppingDoc {
         quantity: None,
         unit: None,
         barcode: None,
+        category: "food".into(),
+        product_id: None,
         done: false,
         deleted: false,
         rev: 0,

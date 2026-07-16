@@ -16,13 +16,11 @@ import { isNotFound, onlineHint } from '../../shared/api-error';
 import { Feedback } from '../../shared/feedback';
 import { SheetHeader } from '../../shared/sheet-header';
 import { LifeApi } from '../../life-api';
-import { Item, ItemCategory } from '../../models';
+import { ITEM_CATEGORIES, Item, ItemCategory } from '../../models';
 import { ShopCandidate, ShopProvider, Shops } from '../../shop';
 import { WAITROSE } from '../../shops/waitrose';
 import { ScannerDialog } from '../scanner/scanner-dialog';
 import { ShopSearchData, ShopSearchDialog } from './shop-search-dialog';
-
-const CATEGORIES: ItemCategory[] = ['food', 'medication', 'tool', 'document', 'other'];
 
 /** Shops offered for enrichment. Adding one (Asda) is a single entry here plus
  *  its `shops/<shop>.ts` provider — no other change in this sheet. */
@@ -73,7 +71,7 @@ export class ItemSheet {
   private feedback = inject(Feedback);
   private shops = inject(Shops);
 
-  readonly categories = CATEGORIES;
+  readonly categories = ITEM_CATEGORIES;
   readonly locations = this.data.locations;
   readonly editing = this.data.item != null;
   readonly saving = signal(false);

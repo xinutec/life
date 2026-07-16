@@ -10,8 +10,10 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 
 import { isNotFound } from '../../shared/api-error';
+import { ITEM_CATEGORIES, ItemCategory } from '../../models';
 import { Feedback } from '../../shared/feedback';
 import { SheetHeader } from '../../shared/sheet-header';
 import { LifeApi } from '../../life-api';
@@ -31,6 +33,7 @@ import { ShoppingDoc, ShoppingStore } from '../../sync/shopping-store';
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
+    MatSelectModule,
     SheetHeader,
   ],
 })
@@ -47,10 +50,16 @@ export class ShoppingItemSheet {
   readonly ulid = this.data?.ulid ?? null;
   readonly editing = this.ulid != null;
 
+  readonly categories = ITEM_CATEGORIES;
+
   readonly name = signal('');
   readonly quantity = signal<number | null>(null);
   readonly unit = signal<string | null>(null);
   readonly barcode = signal('');
+  /** Carried onto the inventory item at buy-time; a grocery list defaults to food. */
+  readonly category = signal<ItemCategory>('food');
+  /** Catalog link (set by a successful product lookup); rides through to the item. */
+  readonly productId = signal<number | null>(null);
   readonly lookingUp = signal(false);
 
   constructor() {
@@ -61,6 +70,8 @@ export class ShoppingItemSheet {
         this.quantity.set(it.quantity);
         this.unit.set(it.unit);
         this.barcode.set(it.barcode ?? '');
+        this.category.set(it.category as ItemCategory);
+        this.productId.set(it.product_id);
       }
     }
   }
@@ -75,6 +86,8 @@ export class ShoppingItemSheet {
       quantity: this.quantity(),
       unit: unit !== undefined && unit !== '' ? unit : null,
       barcode,
+      category: this.category(),
+      product_id: this.productId(),
     };
     // Best-effort online: warm the product (image) cache for the thumbnail.
     if (barcode) this.api.lookupProduct(barcode).subscribe({ next: () => {}, error: () => {} });
@@ -91,7 +104,16 @@ export class ShoppingItemSheet {
     this.quantity.set(null);
     this.unit.set(null);
     this.barcode.set('');
+    this.category.set('food');
+    this.productId.set(null);
     document.querySelector<HTMLElement>('app-shopping-item-sheet input')?.focus();
+  }
+
+  /** A hand-edited barcode invalidates any earlier lookup's catalog link — the
+   *  link is re-established by the next successful lookup, never assumed. */
+  barcodeChanged(code: string): void {
+    this.barcode.set(code);
+    this.productId.set(null);
   }
 
   /** Open the camera scanner; on a detected code, fill the field and look up. */
@@ -120,6 +142,7 @@ export class ShoppingItemSheet {
     this.api.lookupProduct(code).subscribe({
       next: (p) => {
         this.lookingUp.set(false);
+        this.productId.set(p.id);
         if (!this.name().trim() && p.name) this.name.set(p.name);
         this.feedback.notify(p.name ? `Found: ${p.name}` : 'Product found');
       },
