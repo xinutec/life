@@ -134,15 +134,37 @@ through something that resets the NC session.
       the SAME OFF response the barcode lookup already fetches (`nutrition.rs`
       `RawFacts::parse`, pure + unit-tested) and stored against the canonical
       product, so facts land on the product every source's listings share.
-      `GET /api/products/id/{id}/facts` + `LifeApi.getProductFacts`. Not yet shown
-      — the display is increment 4. Asda LIFESTYLES enrichment is a later add
-      (facts today come from OFF only).
-- [ ] **Product data model, increment 4 — payoff screen + deep links + clean
-      names** (design agreed 2026-07-16) — per-listing product-page URLs;
-      canonical name prefers a retailer's clean title over OFF's crowd one
-      (deterministic, `name_source`-tracked); scan → rich product page (image,
-      the increment-3 nutrition/ingredients/allergens/dietary, "where to buy / at
-      what price").
+      Stored against the canonical product and served as part of the product
+      detail (increment 4). Asda LIFESTYLES enrichment is a later add (facts
+      today come from OFF only).
+- [x] **Product data model, increment 4 — payoff screen + deep links + clean
+      names** (2026-07-16) — the increment that pays the model off: scan a
+      barcode, get everything we know on one screen.
+      - `GET /api/products/id/{id}` → `ProductDetail` {product, listings, prices,
+        facts} in ONE fetch (replaces the `/prices` + `/facts` sub-routes; the
+        page needs all of it at once, and three round-trips to render one screen
+        was never the plan).
+      - **Deep links** derive from listing identity — no stored slug needed
+        (probed live 2026-07-16: Asda's PDP is slugless at
+        `www.asda.com/groceries/product/{CIN}`, and Waitrose redirects ANY slug
+        to the canonical one, keyed by the trailing lineNumber). A stored
+        `product_listings.url` still wins when a source supplies one.
+      - **Clean names**: `source::NAME_PREFERENCE` (waitrose > asda > off) picks
+        the canonical title from the listings' `raw_name`s, deterministically —
+        by source quality, never recency, so a later OFF lookup can't clobber a
+        retailer's clean title with a crowd one. `refresh_canonical_name` runs
+        last on every listing-touching path and tracks provenance in
+        `name_source`. No hand-editing (see the no-user-edits rule).
+      - **`ShopPrice` is now one row per SOURCE**, its cheapest listing, carrying
+        that listing's `external_id` — a shop CAN list one product twice (two
+        Asda CINs on an EAN), which made the old per-listing rows contradict the
+        type's own "the latest price for one shop" promise.
+      - Frontend: `/product/:id` page (hero image, dietary chips, where-to-buy
+        cheapest-first with deep links, the UK panel, ingredients, allergen
+        chips, OFF attribution). Entry points: "View product" in the
+        inventory/buy sheets and "Scan a product" in the hamburger — barcode →
+        lookup → page. Failures are classified (a 404 says the product isn't in
+        the catalogue; only a real network failure blames the connection).
 - [x] 3D house renders the real `scenes/house.json` (perimeter walls + furniture)
 - [x] Mobile-first UI (bottom tabs ↔ side rail), management forms, NC avatar
 - [x] Deployed: isis k3s, CI/CD (`xinutec/life`), DNS, TLS, live login
