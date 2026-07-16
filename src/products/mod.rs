@@ -2,6 +2,7 @@
 //! then stored (incl. image) in our own DB. See docs/TODO.md product-lookup.
 
 pub mod asda;
+pub mod nutrition;
 pub mod off;
 pub mod prices;
 pub mod repo;

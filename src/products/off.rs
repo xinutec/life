@@ -4,6 +4,8 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
 
+use super::nutrition::{ProductFacts, RawFacts};
+
 const USER_AGENT: &str = "Life/0.1 (https://life.xinutec.org)";
 
 /// Product images are small; cap the download so a poisoned URL can't OOM the
@@ -15,6 +17,9 @@ pub struct OffProduct {
     pub brand: Option<String>,
     pub quantity: Option<String>,
     pub image_url: Option<String>,
+    /// Nutrition panel, ingredients, allergens, dietary flags parsed from the
+    /// same response (see products::nutrition).
+    pub facts: ProductFacts,
 }
 
 #[derive(Deserialize)]
@@ -29,6 +34,10 @@ struct Raw {
     brands: Option<String>,
     quantity: Option<String>,
     image_front_url: Option<String>,
+    /// The fact-bearing fields (nutriments, ingredients, allergen/label tags),
+    /// read from the same product object.
+    #[serde(flatten)]
+    facts: RawFacts,
 }
 
 fn non_empty(s: Option<String>) -> Option<String> {
@@ -125,7 +134,10 @@ pub async fn fetch(http: &reqwest::Client, barcode: &str) -> Result<Option<OffPr
     }
     let url = format!(
         "https://world.openfoodfacts.org/api/v2/product/{barcode}.json\
-         ?fields=product_name,brands,quantity,image_front_url"
+         ?fields=product_name,brands,quantity,image_front_url,\
+         nutriments,nutrition_data_per,serving_size,\
+         ingredients_text,ingredients_text_en,\
+         allergens_tags,traces_tags,ingredients_analysis_tags,labels_tags"
     );
     let res = http
         .get(&url)
@@ -147,6 +159,7 @@ pub async fn fetch(http: &reqwest::Client, barcode: &str) -> Result<Option<OffPr
         brand: non_empty(p.brands),
         quantity: non_empty(p.quantity),
         image_url: non_empty(p.image_front_url),
+        facts: p.facts.parse(),
     }))
 }
 

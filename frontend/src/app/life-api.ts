@@ -11,6 +11,7 @@ import {
   Me,
   PriceInput,
   Product,
+  ProductFacts,
   ShopPrice,
   Recipe,
   RecipeIngredient,
@@ -124,6 +125,11 @@ export class LifeApi {
   /** Latest price at each shop that lists this product, cheapest first. */
   getProductPrices(id: number): Observable<ShopPrice[]> {
     return this.http.get<ShopPrice[]>(`/api/products/id/${id}/prices`);
+  }
+  /** Nutrition panel, ingredients, allergens, and dietary flags for a product.
+   *  Populated once the product's barcode has been looked up via Open Food Facts. */
+  getProductFacts(id: number): Observable<ProductFacts> {
+    return this.http.get<ProductFacts>(`/api/products/id/${id}/facts`);
   }
   /** URL of a catalog image addressed by product id — for barcodeless shop
    *  products, which have no /products/{barcode}/image URL. */

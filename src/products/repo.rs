@@ -1,9 +1,13 @@
 //! Persistence for the product cache.
 
+use std::collections::BTreeMap;
+
 use anyhow::Result;
 use chrono::NaiveDateTime;
 use sqlx::MySqlPool;
+use sqlx::types::Json;
 
+use super::nutrition::{Allergen, DietaryFlag, Nutrition, ProductFacts};
 use super::prices::{PriceInput, ShopPrice};
 use super::types::Product;
 
@@ -243,6 +247,221 @@ pub async fn latest_prices(pool: &MySqlPool, product_id: u64) -> Result<Vec<Shop
             observed_at: r.observed_at.and_utc().timestamp_millis(),
         })
         .collect())
+}
+
+// --- Product facts: nutrition, ingredients, allergens, dietary flags ---
+//
+// Facts describe the physical product, so they hang off `products.id` and are
+// reconciled by barcode like every other enrichment. They come from a single
+// authority per fact (Open Food Facts today), so writes are whole-product
+// REPLACE: re-looking-up a barcode restates the product's facts in full.
+
+#[derive(sqlx::FromRow)]
+struct NutritionRow {
+    basis: String,
+    serving_size: Option<String>,
+    energy_kj: Option<f64>,
+    energy_kcal: Option<f64>,
+    fat_g: Option<f64>,
+    saturates_g: Option<f64>,
+    carbohydrate_g: Option<f64>,
+    sugars_g: Option<f64>,
+    fibre_g: Option<f64>,
+    protein_g: Option<f64>,
+    salt_g: Option<f64>,
+    extra: Option<Json<BTreeMap<String, f64>>>,
+}
+
+/// Upsert the 1:1 nutrition panel for a product.
+pub async fn upsert_nutrition(
+    pool: &MySqlPool,
+    product_id: u64,
+    n: &Nutrition,
+    source: &str,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO product_nutrition \
+         (product_id, basis, serving_size, energy_kj, energy_kcal, fat_g, saturates_g, \
+          carbohydrate_g, sugars_g, fibre_g, protein_g, salt_g, extra, source) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
+         ON DUPLICATE KEY UPDATE basis = VALUES(basis), serving_size = VALUES(serving_size), \
+          energy_kj = VALUES(energy_kj), energy_kcal = VALUES(energy_kcal), fat_g = VALUES(fat_g), \
+          saturates_g = VALUES(saturates_g), carbohydrate_g = VALUES(carbohydrate_g), \
+          sugars_g = VALUES(sugars_g), fibre_g = VALUES(fibre_g), protein_g = VALUES(protein_g), \
+          salt_g = VALUES(salt_g), extra = VALUES(extra), source = VALUES(source)",
+    )
+    .bind(product_id)
+    .bind(&n.basis)
+    .bind(&n.serving_size)
+    .bind(n.energy_kj)
+    .bind(n.energy_kcal)
+    .bind(n.fat_g)
+    .bind(n.saturates_g)
+    .bind(n.carbohydrate_g)
+    .bind(n.sugars_g)
+    .bind(n.fibre_g)
+    .bind(n.protein_g)
+    .bind(n.salt_g)
+    .bind(Json(&n.extra))
+    .bind(source)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Set the product's ingredients text (a single block, source-tracked).
+pub async fn set_ingredients(
+    pool: &MySqlPool,
+    product_id: u64,
+    text: &str,
+    source: &str,
+) -> Result<()> {
+    sqlx::query("UPDATE products SET ingredients_text = ?, ingredients_source = ? WHERE id = ?")
+        .bind(text)
+        .bind(source)
+        .bind(product_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Replace the product's allergen set. Whole-product replace: the incoming set
+/// is authoritative (an empty set clears the product's allergens).
+pub async fn replace_allergens(
+    pool: &MySqlPool,
+    product_id: u64,
+    allergens: &[Allergen],
+    source: &str,
+) -> Result<()> {
+    sqlx::query("DELETE FROM product_allergens WHERE product_id = ?")
+        .bind(product_id)
+        .execute(pool)
+        .await?;
+    for a in allergens {
+        sqlx::query(
+            "INSERT INTO product_allergens (product_id, allergen, presence, source) \
+             VALUES (?, ?, ?, ?)",
+        )
+        .bind(product_id)
+        .bind(&a.allergen)
+        .bind(&a.presence)
+        .bind(source)
+        .execute(pool)
+        .await?;
+    }
+    Ok(())
+}
+
+/// Replace the product's dietary flags. Whole-product replace, like allergens.
+pub async fn replace_dietary(
+    pool: &MySqlPool,
+    product_id: u64,
+    flags: &[DietaryFlag],
+    source: &str,
+) -> Result<()> {
+    sqlx::query("DELETE FROM product_dietary_flags WHERE product_id = ?")
+        .bind(product_id)
+        .execute(pool)
+        .await?;
+    for f in flags {
+        sqlx::query(
+            "INSERT INTO product_dietary_flags (product_id, flag, value, source) \
+             VALUES (?, ?, ?, ?)",
+        )
+        .bind(product_id)
+        .bind(&f.flag)
+        .bind(&f.value)
+        .bind(source)
+        .execute(pool)
+        .await?;
+    }
+    Ok(())
+}
+
+/// Persist a product's full fact set from one source, each part restated. Skips
+/// nutrition/ingredients the source didn't provide (leaving any existing rows);
+/// allergens and dietary flags always replace (their absence is meaningful).
+pub async fn store_facts(
+    pool: &MySqlPool,
+    product_id: u64,
+    facts: &ProductFacts,
+    source: &str,
+) -> Result<()> {
+    if let Some(n) = &facts.nutrition {
+        upsert_nutrition(pool, product_id, n, source).await?;
+    }
+    if let Some(ing) = &facts.ingredients {
+        set_ingredients(pool, product_id, ing, source).await?;
+    }
+    replace_allergens(pool, product_id, &facts.allergens, source).await?;
+    replace_dietary(pool, product_id, &facts.dietary, source).await?;
+    Ok(())
+}
+
+/// Read back everything we know about a product beyond its identity. Feeds
+/// GET /api/products/id/{id}/facts and the rich product page.
+pub async fn facts_for(pool: &MySqlPool, product_id: u64) -> Result<ProductFacts> {
+    let nrow: Option<NutritionRow> = sqlx::query_as(
+        "SELECT basis, serving_size, energy_kj, energy_kcal, fat_g, saturates_g, \
+         carbohydrate_g, sugars_g, fibre_g, protein_g, salt_g, extra \
+         FROM product_nutrition WHERE product_id = ?",
+    )
+    .bind(product_id)
+    .fetch_optional(pool)
+    .await?;
+    let nutrition = nrow.map(|r| Nutrition {
+        basis: r.basis,
+        serving_size: r.serving_size,
+        energy_kj: r.energy_kj,
+        energy_kcal: r.energy_kcal,
+        fat_g: r.fat_g,
+        saturates_g: r.saturates_g,
+        carbohydrate_g: r.carbohydrate_g,
+        sugars_g: r.sugars_g,
+        fibre_g: r.fibre_g,
+        protein_g: r.protein_g,
+        salt_g: r.salt_g,
+        extra: r.extra.map(|j| j.0).unwrap_or_default(),
+    });
+
+    // `ingredients_text` is NULLable → the column decodes as Option<String>; the
+    // outer Option is row presence. (query_as tuple form, not query_scalar, so the
+    // nullable column type stays visible to DL-SQLX-ROW-TYPES.)
+    let ingredients: Option<(Option<String>,)> =
+        sqlx::query_as("SELECT ingredients_text FROM products WHERE id = ?")
+            .bind(product_id)
+            .fetch_optional(pool)
+            .await?;
+    let ingredients = ingredients.and_then(|(t,)| t);
+
+    let allergens: Vec<(String, String)> = sqlx::query_as(
+        "SELECT allergen, presence FROM product_allergens WHERE product_id = ? ORDER BY allergen",
+    )
+    .bind(product_id)
+    .fetch_all(pool)
+    .await?;
+    let allergens = allergens
+        .into_iter()
+        .map(|(allergen, presence)| Allergen { allergen, presence })
+        .collect();
+
+    let dietary: Vec<(String, String)> = sqlx::query_as(
+        "SELECT flag, value FROM product_dietary_flags WHERE product_id = ? ORDER BY flag",
+    )
+    .bind(product_id)
+    .fetch_all(pool)
+    .await?;
+    let dietary = dietary
+        .into_iter()
+        .map(|(flag, value)| DietaryFlag { flag, value })
+        .collect();
+
+    Ok(ProductFacts {
+        nutrition,
+        ingredients,
+        allergens,
+        dietary,
+    })
 }
 
 /// Find the canonical product for `barcode`, creating a bare one if absent. On a

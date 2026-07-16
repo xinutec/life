@@ -124,16 +124,25 @@ through something that resets the NC session.
       an observation on import. Waitrose price capture deferred until its
       amount unit (pounds vs pence) is confirmed in-app — precision over a 100×
       risk. Subsumes the old "Purchases: shop + price observations" item.
-- [ ] **Product data model, increments 3–4** (design agreed 2026-07-16) — on the
-      product/listing foundation:
-      - **3. Nutrition + ingredients + allergens + dietary flags**: wide table of
-        the UK "big 8" per 100g/ml + a JSON tail for OFF's long list; allergen +
-        dietary-flag tags. Quantitative nutrition/ingredients from OFF; dietary
-        flags from Asda/OFF.
-      - **4. Payoff screen + deep links + clean names**: per-listing product-page
-        URLs; canonical name prefers a retailer's clean title over OFF's crowd
-        one (deterministic, `name_source`-tracked); scan → rich product page
-        (image, nutrition, ingredients, "where to buy / at what price").
+- [x] **Product data model, increment 3 — nutrition + ingredients + allergens +
+      dietary flags** (2026-07-16) — `product_nutrition` (migration 0027): the UK
+      "big 8" per 100g/ml wide (energy kJ+kcal, fat, saturates, carbs, sugars,
+      fibre, protein, salt), with OFF's per-100 tail (sodium, …) kept verbatim in
+      a JSON `extra`. `product_allergens` (contains / may_contain) and
+      `product_dietary_flags` (vegan/vegetarian/palm-oil tri-state + gluten-free/
+      organic/kosher/… label claims); `products.ingredients_text`. All parsed from
+      the SAME OFF response the barcode lookup already fetches (`nutrition.rs`
+      `RawFacts::parse`, pure + unit-tested) and stored against the canonical
+      product, so facts land on the product every source's listings share.
+      `GET /api/products/id/{id}/facts` + `LifeApi.getProductFacts`. Not yet shown
+      — the display is increment 4. Asda LIFESTYLES enrichment is a later add
+      (facts today come from OFF only).
+- [ ] **Product data model, increment 4 — payoff screen + deep links + clean
+      names** (design agreed 2026-07-16) — per-listing product-page URLs;
+      canonical name prefers a retailer's clean title over OFF's crowd one
+      (deterministic, `name_source`-tracked); scan → rich product page (image,
+      the increment-3 nutrition/ingredients/allergens/dietary, "where to buy / at
+      what price").
 - [x] 3D house renders the real `scenes/house.json` (perimeter walls + furniture)
 - [x] Mobile-first UI (bottom tabs ↔ side rail), management forms, NC avatar
 - [x] Deployed: isis k3s, CI/CD (`xinutec/life`), DNS, TLS, live login

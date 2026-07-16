@@ -8,6 +8,7 @@ use axum::response::Response;
 use serde::Deserialize;
 
 use crate::error::AppError;
+use crate::products::nutrition::ProductFacts;
 use crate::products::prices::{PriceInput, ShopPrice};
 use crate::products::{asda, off, repo, source, types::Product};
 use crate::session::AuthUser;
@@ -93,6 +94,9 @@ pub async fn lookup(
         product.name.as_deref(),
     )
     .await?;
+    // Store the nutrition/ingredients/allergens/dietary facts from the same OFF
+    // response, attached to the canonical product.
+    repo::store_facts(&app.pool, product.id, &found.facts, "off").await?;
     Ok(Json(product))
 }
 
@@ -258,6 +262,17 @@ pub async fn product_prices(
     Path(id): Path<u64>,
 ) -> Result<Json<Vec<ShopPrice>>, AppError> {
     Ok(Json(repo::latest_prices(&app.pool, id).await?))
+}
+
+/// GET /api/products/id/{id}/facts → nutrition panel, ingredients, allergens,
+/// and dietary flags for a product. All fields are optional/empty until the
+/// product's barcode has been looked up against Open Food Facts.
+pub async fn product_facts(
+    State(app): State<AppState>,
+    AuthUser(_user): AuthUser,
+    Path(id): Path<u64>,
+) -> Result<Json<ProductFacts>, AppError> {
+    Ok(Json(repo::facts_for(&app.pool, id).await?))
 }
 
 /// GET /api/products/id/{id}/image → cached image bytes for a catalog row by id.
