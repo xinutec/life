@@ -110,6 +110,9 @@ export class LifeApi {
     external_id: string;
     name: string;
     brand?: string | null;
+    /** The EAN when the source knows it — merges shop + Open Food Facts data
+     *  onto one canonical product by barcode. */
+    barcode?: string | null;
     image_url?: string | null;
   }): Observable<Product> {
     return this.http.post<Product>('/api/products/import', body);

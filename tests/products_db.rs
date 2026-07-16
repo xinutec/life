@@ -162,9 +162,10 @@ async fn external_import_against_real_db() {
         &pool,
         source,
         ext,
+        None, // no EAN — keyed by the shop's external id
         Some("Cravendale Semi-Skimmed Milk"),
         Some("Cravendale"),
-        Some("Milk"),
+        None, // no deep link yet
     )
     .await
     .unwrap();
@@ -209,6 +210,7 @@ async fn external_import_against_real_db() {
         &pool,
         source,
         ext,
+        None,
         Some("Cravendale Whole Milk"),
         None,
         None,

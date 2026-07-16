@@ -84,15 +84,19 @@ pub async fn get_by_id(pool: &MySqlPool, id: u64) -> Result<Option<Product>> {
     Ok(row.map(Product::from))
 }
 
-/// Catalog row by (source, external_id) — how a shop product is addressed, or None.
+/// The canonical product carrying a listing for (source, external_id), or None.
+/// Resolved through `product_listings`, so it finds a product via ANY of its
+/// sources — not only the one it was first created from.
 pub async fn get_by_source_external(
     pool: &MySqlPool,
     source: &str,
     external_id: &str,
 ) -> Result<Option<Product>> {
     let row: Option<MetaRow> = sqlx::query_as(
-        "SELECT id, barcode, external_id, name, brand, quantity_label, source, \
-         (image IS NOT NULL) AS has_image FROM products WHERE source = ? AND external_id = ?",
+        "SELECT p.id, p.barcode, p.external_id, p.name, p.brand, p.quantity_label, p.source, \
+         (p.image IS NOT NULL) AS has_image \
+         FROM products p JOIN product_listings l ON l.product_id = p.id \
+         WHERE l.source = ? AND l.external_id = ?",
     )
     .bind(source)
     .bind(external_id)
@@ -101,31 +105,145 @@ pub async fn get_by_source_external(
     Ok(row.map(Product::from))
 }
 
-/// Insert or refresh a catalog row imported from an external source, keyed on
-/// (source, external_id). Metadata only — the image is fetched and stored
-/// separately by id (a shop product may have no barcode). Returns the stored row.
+/// One source's listing of a canonical product.
+#[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
+pub struct Listing {
+    pub source: String,
+    pub external_id: String,
+    pub url: Option<String>,
+    pub raw_name: Option<String>,
+}
+
+/// Every source that lists a canonical product, oldest first.
+pub async fn listings_for(pool: &MySqlPool, product_id: u64) -> Result<Vec<Listing>> {
+    let rows = sqlx::query_as::<_, Listing>(
+        "SELECT source, external_id, url, raw_name FROM product_listings \
+         WHERE product_id = ? ORDER BY created_at, id",
+    )
+    .bind(product_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+/// Attach (or refresh) a listing for (source, external_id) onto `product_id`.
+/// Keyed on (source, external_id): re-importing the same source id updates the
+/// same listing in place (and can re-point it if products were merged).
+pub async fn upsert_listing(
+    pool: &MySqlPool,
+    product_id: u64,
+    source: &str,
+    external_id: &str,
+    url: Option<&str>,
+    raw_name: Option<&str>,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO product_listings (product_id, source, external_id, url, raw_name) \
+         VALUES (?, ?, ?, ?, ?) \
+         ON DUPLICATE KEY UPDATE product_id = VALUES(product_id), url = VALUES(url), \
+         raw_name = VALUES(raw_name), last_seen_at = CURRENT_TIMESTAMP",
+    )
+    .bind(product_id)
+    .bind(source)
+    .bind(external_id)
+    .bind(url)
+    .bind(raw_name)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// The canonical product id an existing listing points at, if any.
+async fn listing_product_id(
+    pool: &MySqlPool,
+    source: &str,
+    external_id: &str,
+) -> Result<Option<u64>> {
+    let row: Option<(u64,)> = sqlx::query_as(
+        "SELECT product_id FROM product_listings WHERE source = ? AND external_id = ?",
+    )
+    .bind(source)
+    .bind(external_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|(id,)| id))
+}
+
+/// Find the canonical product for `barcode`, creating a bare one if absent. On a
+/// hit the existing canonical fields are left untouched (picking the cleanest
+/// name across sources is a later increment); on create they're seeded from the
+/// calling source. Returns the canonical id.
+async fn find_or_create_by_barcode(
+    pool: &MySqlPool,
+    barcode: &str,
+    name: Option<&str>,
+    brand: Option<&str>,
+    source: &str,
+) -> Result<u64> {
+    sqlx::query(
+        "INSERT INTO products (barcode, name, brand, source, name_source) \
+         VALUES (?, ?, ?, ?, ?) \
+         ON DUPLICATE KEY UPDATE barcode = barcode",
+    )
+    .bind(barcode)
+    .bind(name)
+    .bind(brand)
+    .bind(source)
+    .bind(source)
+    .execute(pool)
+    .await?;
+    let (id,): (u64,) = sqlx::query_as("SELECT id FROM products WHERE barcode = ?")
+        .bind(barcode)
+        .fetch_one(pool)
+        .await?;
+    Ok(id)
+}
+
+/// Import (or refresh) a catalog product from an external source, reconciled by
+/// barcode: the canonical `products` row is keyed by EAN, so Asda and Open Food
+/// Facts describing the same barcode land on ONE product with two listings. A
+/// barcodeless source (Waitrose, by lineNumber) gets/keeps its own canonical
+/// row, found via its existing listing. Returns the canonical product.
 pub async fn upsert_external(
     pool: &MySqlPool,
     source: &str,
     external_id: &str,
+    barcode: Option<&str>,
     name: Option<&str>,
     brand: Option<&str>,
-    category: Option<&str>,
+    url: Option<&str>,
 ) -> Result<Product> {
-    sqlx::query(
-        "INSERT INTO products (source, external_id, name, brand, category) \
-         VALUES (?, ?, ?, ?, ?) \
-         ON DUPLICATE KEY UPDATE name = VALUES(name), brand = VALUES(brand), \
-         category = VALUES(category)",
-    )
-    .bind(source)
-    .bind(external_id)
-    .bind(name)
-    .bind(brand)
-    .bind(category)
-    .execute(pool)
-    .await?;
-    get_by_source_external(pool, source, external_id)
+    let product_id = if let Some(bc) = barcode {
+        find_or_create_by_barcode(pool, bc, name, brand, source).await?
+    } else if let Some(id) = listing_product_id(pool, source, external_id).await? {
+        // A barcodeless product has a single owning source, so a re-import may
+        // refresh its canonical name/brand (unlike the shared barcoded case).
+        sqlx::query("UPDATE products SET name = ?, brand = ? WHERE id = ?")
+            .bind(name)
+            .bind(brand)
+            .bind(id)
+            .execute(pool)
+            .await?;
+        id
+    } else {
+        // First sighting of a barcodeless product → a fresh canonical row. The
+        // origin source/external_id are kept on the row too (vestigial, for the
+        // single-source case) so `Product` still reports them.
+        sqlx::query(
+            "INSERT INTO products (name, brand, source, name_source, external_id) \
+             VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(name)
+        .bind(brand)
+        .bind(source)
+        .bind(source)
+        .bind(external_id)
+        .execute(pool)
+        .await?
+        .last_insert_id()
+    };
+    upsert_listing(pool, product_id, source, external_id, url, name).await?;
+    get_by_id(pool, product_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("row vanished immediately after upsert"))
 }

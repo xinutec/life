@@ -107,6 +107,28 @@ through something that resets the NC session.
       by CIN; scene7 image fetched server-side); the hit's EAN rides back so the
       row is barcoded. Reverse barcode→product isn't available (IMAGE_ID isn't a
       searchable Algolia attribute) — name search only.
+- [x] Product data model, increment 1 — the split (2026-07-16) — canonical
+      `products` (keyed by EAN) vs per-source `product_listings` (migration
+      0025). Enrichment reconciles sources onto one product by barcode: Asda and
+      Open Food Facts describing the same EAN now land on ONE product with two
+      listings, instead of two rows (the old flat table's UNIQUE(barcode) made
+      that impossible, which is why Asda had been imported barcodeless). Import
+      takes an optional `barcode`; Asda passes its IMAGE_ID, Waitrose its
+      barCode. `products.source`/`external_id` kept as vestigial origin columns
+      (a later migration drops them).
+- [ ] **Product data model, increments 2–4** (design agreed 2026-07-16) — on the
+      product/listing foundation:
+      - **2. Prices**: `price_observations` (append-only; INT minor units, never
+        float; region-tagged; per-unit derived). Cheapest-shop, price-per-unit,
+        history. Subsumes the "Purchases: shop + price observations" item below.
+      - **3. Nutrition + ingredients + allergens + dietary flags**: wide table of
+        the UK "big 8" per 100g/ml + a JSON tail for OFF's long list; allergen +
+        dietary-flag tags. Quantitative nutrition/ingredients from OFF; dietary
+        flags from Asda/OFF.
+      - **4. Payoff screen + deep links + clean names**: per-listing product-page
+        URLs; canonical name prefers a retailer's clean title over OFF's crowd
+        one (deterministic, `name_source`-tracked); scan → rich product page
+        (image, nutrition, ingredients, "where to buy / at what price").
 - [x] 3D house renders the real `scenes/house.json` (perimeter walls + furniture)
 - [x] Mobile-first UI (bottom tabs ↔ side rail), management forms, NC avatar
 - [x] Deployed: isis k3s, CI/CD (`xinutec/life`), DNS, TLS, live login

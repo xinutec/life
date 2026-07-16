@@ -219,6 +219,7 @@ export class ProductPicker {
         external_id: hit.external_id,
         name: hit.name,
         brand: hit.brand,
+        barcode: hit.barcode, // Asda's IMAGE_ID is the EAN — merge onto it
         image_url: hit.image_url,
       }),
     )
@@ -269,6 +270,7 @@ export class ProductPicker {
             external_id: p.external_id,
             name: p.name ?? candidate.name,
             brand: p.brand,
+            barcode: p.barcodes[0] ?? null, // Waitrose SUMMARY carries barCodes[]
             image_url: p.image_url,
           }),
         ),

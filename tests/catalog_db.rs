@@ -115,9 +115,10 @@ async fn item_links_to_barcodeless_shop_product_by_id() {
         &pool,
         "waitrose",
         external_id,
+        None, // barcodeless shop product
         Some("Waitrose Cheddar"),
         Some("Waitrose"),
-        None,
+        None, // no deep link yet
     )
     .await
     .unwrap();

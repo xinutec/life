@@ -78,10 +78,21 @@ pub async fn lookup(
         image,
     )
     .await?;
-    repo::get(&app.pool, &barcode)
+    let product = repo::get(&app.pool, &barcode)
         .await?
-        .map(Json)
-        .ok_or(AppError::NotFound)
+        .ok_or(AppError::NotFound)?;
+    // Record the 'off' listing so this product joins the source model (its
+    // barcode is Open Food Facts' own id for it).
+    repo::upsert_listing(
+        &app.pool,
+        product.id,
+        "off",
+        &barcode,
+        None,
+        product.name.as_deref(),
+    )
+    .await?;
+    Ok(Json(product))
 }
 
 /// PUT /api/products/{barcode}/image → replace the cached image with the raw
@@ -140,6 +151,10 @@ pub struct ImportProduct {
     pub external_id: String,
     pub name: String,
     pub brand: Option<String>,
+    /// The product's EAN, when the source knows it (Asda's IMAGE_ID, a Waitrose
+    /// barCode). Reconciles this listing onto the canonical product for that
+    /// barcode, so shop + Open Food Facts data merge into one product.
+    pub barcode: Option<String>,
     /// Optional image on the source's CDN; fetched server-side, host-allowlisted.
     pub image_url: Option<String>,
     // NB: no `category` — `products.category` is the short ItemCategory enum
@@ -182,9 +197,31 @@ pub async fn import(
         .as_deref()
         .map(str::trim)
         .filter(|v| !v.is_empty());
-    let product =
-        repo::upsert_external(&app.pool, &body.source, ext, Some(name), brand, None).await?;
-    tracing::info!(source = %body.source, external_id = %ext, name, "product imported");
+    // A supplied barcode must be a real EAN before we key a canonical product on
+    // it (same guard as the OFF lookup path).
+    let barcode = body
+        .barcode
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty());
+    if let Some(bc) = barcode
+        && !off::is_valid_barcode(bc)
+    {
+        return Err(AppError::BadRequest(
+            "barcode must be up to 14 digits".into(),
+        ));
+    }
+    let product = repo::upsert_external(
+        &app.pool,
+        &body.source,
+        ext,
+        barcode,
+        Some(name),
+        brand,
+        None,
+    )
+    .await?;
+    tracing::info!(source = %body.source, external_id = %ext, ?barcode, name, "product imported");
 
     // Optional image: SSRF-gated against the source's host allowlist, fetched
     // from the source CDN. A failed fetch just leaves the row image-less.
