@@ -15,6 +15,11 @@ source: string | null,
  */
 external_id: string | null, 
 /**
+ * Which source's title `name` currently is (see repo's canonical-name
+ * refresh) — provenance for display, never hand-assigned.
+ */
+name_source: string | null, 
+/**
  * True if we have a cached image. Served from /api/products/id/{id}/image
  * (barcodeless shop products), or /api/products/{barcode}/image when barcoded.
  */

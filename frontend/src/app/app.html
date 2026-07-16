@@ -25,6 +25,10 @@
       <mat-icon>menu</mat-icon>
     </button>
     <mat-menu #moreMenu="matMenu">
+      <button mat-menu-item (click)="scanProduct()">
+        <mat-icon>qr_code_scanner</mat-icon>
+        <span>Scan a product</span>
+      </button>
       @for (m of more; track m.path) {
         <a mat-menu-item [routerLink]="m.path">
           <mat-icon>{{ m.icon }}</mat-icon>

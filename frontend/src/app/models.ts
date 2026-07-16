@@ -11,6 +11,8 @@ export type { Loc } from './generated/Loc';
 export type { ItemCategory } from './generated/ItemCategory';
 export type { Item } from './generated/Item';
 export type { Product } from './generated/Product';
+export type { ProductListing } from './generated/ProductListing';
+export type { ProductDetail } from './generated/ProductDetail';
 export type { AsdaHit } from './generated/AsdaHit';
 export type { PriceInput } from './generated/PriceInput';
 export type { ShopPrice } from './generated/ShopPrice';

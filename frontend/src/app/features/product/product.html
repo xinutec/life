@@ -1,0 +1,109 @@
+<div class="head">
+  <button mat-icon-button (click)="back()" aria-label="Back">
+    <mat-icon>arrow_back</mat-icon>
+  </button>
+  <h1>Product</h1>
+</div>
+
+<app-list-state
+  [loading]="loading()"
+  [error]="error()"
+  [errorText]="errorText()"
+  (retry)="reload()"
+/>
+
+@if (detail(); as d) {
+  @if (imageUrl(); as img) {
+    <img class="hero" [src]="img" alt="" />
+  }
+  <h2 class="name">{{ d.product.name || 'Unnamed product' }}</h2>
+  @if (subtitle()) {
+    <p class="subtitle">{{ subtitle() }}</p>
+  }
+
+  @if (dietary().length) {
+    <div class="chips" aria-label="Dietary">
+      @for (c of dietary(); track c.label) {
+        <span class="chip" [class.no]="c.value === 'no'" [class.maybe]="c.value === 'maybe'">
+          <mat-icon inline>
+            {{ c.value === 'yes' ? 'check' : c.value === 'no' ? 'close' : 'question_mark' }}
+          </mat-icon>
+          {{ c.label }}
+        </span>
+      }
+    </div>
+  }
+
+  @if (buyRows().length) {
+    <h3>Where to buy</h3>
+    <div class="buy">
+      @for (r of buyRows(); track r.key) {
+        <div class="buy-row">
+          <span class="shop">{{ r.label }}</span>
+          <span class="price-block">
+            @if (r.price) {
+              <span class="price">{{ r.price }}</span>
+              <span class="fine">
+                {{ r.perUnit }}@if (r.perUnit && r.observed) {&nbsp;·&nbsp;}{{ r.observed }}
+              </span>
+            } @else {
+              <span class="fine">no price yet</span>
+            }
+          </span>
+          @if (r.url) {
+            <a
+              mat-icon-button
+              [href]="r.url"
+              target="_blank"
+              rel="noopener"
+              [attr.aria-label]="'Open at ' + r.label"
+            >
+              <mat-icon>open_in_new</mat-icon>
+            </a>
+          }
+        </div>
+      }
+    </div>
+  }
+
+  @if (nutrientRows().length) {
+    <h3>Nutrition <span class="basis">per {{ basis() }}</span></h3>
+    <table class="nutrition">
+      <tbody>
+        @for (row of nutrientRows(); track row.label) {
+          <tr [class.sub]="row.sub">
+            <td>{{ row.label }}</td>
+            <td class="num">{{ row.value }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+    @if (servingSize()) {
+      <p class="fine">Suggested serving: {{ servingSize() }}</p>
+    }
+  }
+
+  @if (d.facts.ingredients) {
+    <h3>Ingredients</h3>
+    <p class="ingredients">{{ d.facts.ingredients }}</p>
+  }
+
+  @if (contains().length || mayContain().length) {
+    <h3>Allergens</h3>
+    <div class="chips" aria-label="Allergens">
+      @for (a of contains(); track a) {
+        <span class="chip allergen">{{ a }}</span>
+      }
+      @for (a of mayContain(); track a) {
+        <span class="chip maybe">may contain {{ a }}</span>
+      }
+    </div>
+  }
+
+  @if (offUrl(); as url) {
+    <p class="attribution">
+      Food data:
+      <a [href]="url" target="_blank" rel="noopener">Open Food Facts</a>
+    </p>
+  }
+}

@@ -34,6 +34,7 @@ const product = (over: Partial<Product>): Product => ({
   quantity_label: null,
   source: 'off',
   external_id: null,
+  name_source: 'off',
   has_image: false,
   ...over,
 });

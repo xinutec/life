@@ -4,6 +4,7 @@ import { Conflicts } from './features/conflicts/conflicts';
 import { House } from './features/house/house';
 import { Inventory } from './features/inventory/inventory';
 import { Items } from './features/items/items';
+import { ProductPage } from './features/product/product';
 import { Recipes } from './features/recipes/recipes';
 import { Settings } from './features/settings/settings';
 import { Shopping } from './features/shopping/shopping';
@@ -20,6 +21,7 @@ export const routes: Routes = [
   { path: 'recipes', title: 'Life · recipes', component: Recipes },
   { path: 'house', title: 'Life · house', component: House },
   { path: 'items', title: 'Life · all items', component: Items },
+  { path: 'product/:id', title: 'Life · product', component: ProductPage },
   { path: 'todo', title: 'Life · to-do', component: Todo },
   { path: 'wellbeing', title: 'Life · wellbeing', component: Wellbeing },
   { path: 'trash', title: 'Life · recently deleted', component: Trash },

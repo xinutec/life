@@ -59,8 +59,8 @@ pub struct DietaryFlag {
     pub value: String,
 }
 
-/// Everything we know about a product beyond its identity — the payload of
-/// GET /api/products/id/{id}/facts.
+/// Everything we know about a product beyond its identity — the `facts` part
+/// of the product detail (GET /api/products/id/{id}).
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct ProductFacts {

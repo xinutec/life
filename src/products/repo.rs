@@ -9,6 +9,7 @@ use sqlx::types::Json;
 
 use super::nutrition::{Allergen, DietaryFlag, Nutrition, ProductFacts};
 use super::prices::{PriceInput, ShopPrice};
+use super::source;
 use super::types::Product;
 
 #[derive(sqlx::FromRow)]
@@ -20,6 +21,7 @@ struct MetaRow {
     brand: Option<String>,
     quantity_label: Option<String>,
     source: Option<String>,
+    name_source: Option<String>,
     has_image: i64,
 }
 
@@ -33,22 +35,23 @@ impl From<MetaRow> for Product {
             quantity_label: r.quantity_label,
             source: r.source,
             external_id: r.external_id,
+            name_source: r.name_source,
             has_image: r.has_image != 0,
         }
     }
 }
 
 // The metadata columns every getter selects (no image bytes). Kept in sync by
-// hand across the three getters below — sqlx 0.8 only accepts `&'static str`
+// hand across the getters below — sqlx 0.8 only accepts `&'static str`
 // SQL (its injection guard), so this can't be a shared runtime `format!`.
 // "SELECT id, barcode, external_id, name, brand, quantity_label, source,
-//  (image IS NOT NULL) AS has_image FROM products WHERE …"
+//  name_source, (image IS NOT NULL) AS has_image FROM products WHERE …"
 
 /// Cached metadata for a barcode (no image bytes), or None if not cached.
 pub async fn get(pool: &MySqlPool, barcode: &str) -> Result<Option<Product>> {
     let row: Option<MetaRow> = sqlx::query_as(
         "SELECT id, barcode, external_id, name, brand, quantity_label, source, \
-         (image IS NOT NULL) AS has_image FROM products WHERE barcode = ?",
+         name_source, (image IS NOT NULL) AS has_image FROM products WHERE barcode = ?",
     )
     .bind(barcode)
     .fetch_optional(pool)
@@ -67,7 +70,7 @@ pub async fn search(pool: &MySqlPool, query: &str, limit: u64) -> Result<Vec<Pro
     let pattern = format!("%{escaped}%");
     let rows: Vec<MetaRow> = sqlx::query_as(
         "SELECT id, barcode, external_id, name, brand, quantity_label, source, \
-         (image IS NOT NULL) AS has_image FROM products \
+         name_source, (image IS NOT NULL) AS has_image FROM products \
          WHERE name LIKE ? OR brand LIKE ? ORDER BY name LIMIT ?",
     )
     .bind(&pattern)
@@ -82,7 +85,7 @@ pub async fn search(pool: &MySqlPool, query: &str, limit: u64) -> Result<Vec<Pro
 pub async fn get_by_id(pool: &MySqlPool, id: u64) -> Result<Option<Product>> {
     let row: Option<MetaRow> = sqlx::query_as(
         "SELECT id, barcode, external_id, name, brand, quantity_label, source, \
-         (image IS NOT NULL) AS has_image FROM products WHERE id = ?",
+         name_source, (image IS NOT NULL) AS has_image FROM products WHERE id = ?",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -100,7 +103,7 @@ pub async fn get_by_source_external(
 ) -> Result<Option<Product>> {
     let row: Option<MetaRow> = sqlx::query_as(
         "SELECT p.id, p.barcode, p.external_id, p.name, p.brand, p.quantity_label, p.source, \
-         (p.image IS NOT NULL) AS has_image \
+         p.name_source, (p.image IS NOT NULL) AS has_image \
          FROM products p JOIN product_listings l ON l.product_id = p.id \
          WHERE l.source = ? AND l.external_id = ?",
     )
@@ -159,6 +162,42 @@ pub async fn upsert_listing(
     Ok(())
 }
 
+/// Recompute the canonical display name from the product's listings: the
+/// highest-preference source (see source::name_rank) with a non-blank raw name
+/// wins — deterministically, so a re-import can never flip the name on recency,
+/// only on source quality. Ties within a source go to its oldest listing
+/// (listings_for order). No ranked candidate → the row is left untouched, so a
+/// product named by an unranked path keeps its name.
+///
+/// Other paths do write `name` first — `upsert_external` seeds it for a
+/// barcodeless product, `upsert` restates OFF's crowd name on a cache fill —
+/// so this must run LAST on any path that touches a listing, and have the final
+/// say. That ordering is what keeps a retailer's title from being clobbered by
+/// a later Open Food Facts lookup of the same barcode.
+pub async fn refresh_canonical_name(pool: &MySqlPool, product_id: u64) -> Result<()> {
+    let listings = listings_for(pool, product_id).await?;
+    let best = listings
+        .iter()
+        .filter_map(|l| {
+            let name = l
+                .raw_name
+                .as_deref()
+                .map(str::trim)
+                .filter(|n| !n.is_empty())?;
+            Some((source::name_rank(&l.source)?, name, l.source.as_str()))
+        })
+        .min_by_key(|(rank, ..)| *rank);
+    if let Some((_, name, name_source)) = best {
+        sqlx::query("UPDATE products SET name = ?, name_source = ? WHERE id = ?")
+            .bind(name)
+            .bind(name_source)
+            .bind(product_id)
+            .execute(pool)
+            .await?;
+    }
+    Ok(())
+}
+
 /// The canonical product id an existing listing points at, if any.
 async fn listing_product_id(
     pool: &MySqlPool,
@@ -211,6 +250,7 @@ pub async fn record_price(pool: &MySqlPool, listing_id: u64, price: &PriceInput)
 #[derive(sqlx::FromRow)]
 struct ShopPriceRow {
     source: String,
+    external_id: String,
     amount_minor: i64,
     currency: String,
     unit_amount_minor: Option<i64>,
@@ -219,26 +259,35 @@ struct ShopPriceRow {
     observed_at: NaiveDateTime,
 }
 
-/// The latest price at each shop that lists this product, cheapest first — one
-/// row per listing that has any price (its most recent observation). Feeds the
-/// "available at Asda £X · Waitrose £Y" view.
+/// What each shop currently charges for this product, cheapest shop first —
+/// feeds the "available at Asda £X · Waitrose £Y" view.
+///
+/// Each listing contributes its most recent observation (prices are a time
+/// series; the newest row is "current"). A shop listing the product twice —
+/// two Asda CINs on one EAN — collapses to its cheapest listing, so the result
+/// holds exactly one row per source, as `ShopPrice` promises.
 pub async fn latest_prices(pool: &MySqlPool, product_id: u64) -> Result<Vec<ShopPrice>> {
     let rows: Vec<ShopPriceRow> = sqlx::query_as(
-        "SELECT l.source, po.amount_minor, po.currency, po.unit_amount_minor, \
+        "SELECT l.source, l.external_id, po.amount_minor, po.currency, po.unit_amount_minor, \
          po.unit_measure, po.region, po.observed_at \
          FROM price_observations po \
          JOIN product_listings l ON l.id = po.listing_id \
          WHERE l.product_id = ? \
          AND po.id = (SELECT MAX(p2.id) FROM price_observations p2 WHERE p2.listing_id = po.listing_id) \
-         ORDER BY po.amount_minor",
+         ORDER BY po.amount_minor, l.id",
     )
     .bind(product_id)
     .fetch_all(pool)
     .await?;
+    // Cheapest-first already, so the first row for a source IS that shop's best
+    // price; later rows from the same shop are its dearer listings.
+    let mut seen = std::collections::HashSet::new();
     Ok(rows
         .into_iter()
+        .filter(|r| seen.insert(r.source.clone()))
         .map(|r| ShopPrice {
             source: r.source,
+            external_id: r.external_id,
             amount_minor: r.amount_minor,
             currency: r.currency,
             unit_amount_minor: r.unit_amount_minor,
@@ -399,7 +448,7 @@ pub async fn store_facts(
 }
 
 /// Read back everything we know about a product beyond its identity. Feeds
-/// GET /api/products/id/{id}/facts and the rich product page.
+/// the product detail (GET /api/products/id/{id}) — the rich product page.
 pub async fn facts_for(pool: &MySqlPool, product_id: u64) -> Result<ProductFacts> {
     let nrow: Option<NutritionRow> = sqlx::query_as(
         "SELECT basis, serving_size, energy_kj, energy_kcal, fat_g, saturates_g, \
@@ -538,6 +587,7 @@ pub async fn upsert_external(
         .last_insert_id()
     };
     upsert_listing(pool, product_id, source, external_id, url, name).await?;
+    refresh_canonical_name(pool, product_id).await?;
     get_by_id(pool, product_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("row vanished immediately after upsert"))

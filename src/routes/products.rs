@@ -8,9 +8,9 @@ use axum::response::Response;
 use serde::Deserialize;
 
 use crate::error::AppError;
-use crate::products::nutrition::ProductFacts;
-use crate::products::prices::{PriceInput, ShopPrice};
-use crate::products::{asda, off, repo, source, types::Product};
+use crate::products::prices::PriceInput;
+use crate::products::types::{Product, ProductDetail, ProductListing};
+use crate::products::{asda, off, repo, source};
 use crate::session::AuthUser;
 use crate::state::AppState;
 
@@ -91,13 +91,20 @@ pub async fn lookup(
         "off",
         &barcode,
         None,
-        product.name.as_deref(),
+        found.name.as_deref(),
     )
     .await?;
     // Store the nutrition/ingredients/allergens/dietary facts from the same OFF
     // response, attached to the canonical product.
     repo::store_facts(&app.pool, product.id, &found.facts, "off").await?;
-    Ok(Json(product))
+    // The upsert restated OFF's crowd name; give the preferred source (a
+    // retailer listing, if the product has one) the last word, and answer with
+    // the settled row.
+    repo::refresh_canonical_name(&app.pool, product.id).await?;
+    repo::get_by_id(&app.pool, product.id)
+        .await?
+        .map(Json)
+        .ok_or(AppError::NotFound)
 }
 
 /// PUT /api/products/{barcode}/image → replace the cached image with the raw
@@ -254,25 +261,41 @@ pub async fn import(
     Ok(Json(product))
 }
 
-/// GET /api/products/id/{id}/prices → the latest price at each shop that lists
-/// this product, cheapest first. Empty when no price has been observed yet.
-pub async fn product_prices(
+/// GET /api/products/id/{id} → everything the product page shows in one fetch:
+/// the canonical product, its per-source listings (deep links resolved), the
+/// latest price per shop (cheapest first), and its facts. Prices and facts are
+/// empty until a shop quote / OFF lookup has provided them.
+pub async fn product_detail(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
     Path(id): Path<u64>,
-) -> Result<Json<Vec<ShopPrice>>, AppError> {
-    Ok(Json(repo::latest_prices(&app.pool, id).await?))
-}
-
-/// GET /api/products/id/{id}/facts → nutrition panel, ingredients, allergens,
-/// and dietary flags for a product. All fields are optional/empty until the
-/// product's barcode has been looked up against Open Food Facts.
-pub async fn product_facts(
-    State(app): State<AppState>,
-    AuthUser(_user): AuthUser,
-    Path(id): Path<u64>,
-) -> Result<Json<ProductFacts>, AppError> {
-    Ok(Json(repo::facts_for(&app.pool, id).await?))
+) -> Result<Json<ProductDetail>, AppError> {
+    let product = repo::get_by_id(&app.pool, id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let (listings, prices, facts) = tokio::try_join!(
+        repo::listings_for(&app.pool, id),
+        repo::latest_prices(&app.pool, id),
+        repo::facts_for(&app.pool, id),
+    )?;
+    let listings = listings
+        .into_iter()
+        .map(|l| ProductListing {
+            url: l
+                .url
+                .clone()
+                .or_else(|| source::listing_url(&l.source, &l.external_id)),
+            source: l.source,
+            external_id: l.external_id,
+            raw_name: l.raw_name,
+        })
+        .collect();
+    Ok(Json(ProductDetail {
+        product,
+        listings,
+        prices,
+        facts,
+    }))
 }
 
 /// GET /api/products/id/{id}/image → cached image bytes for a catalog row by id.

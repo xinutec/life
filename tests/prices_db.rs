@@ -118,3 +118,81 @@ async fn latest_price_per_shop_cheapest_first_with_history() {
     .unwrap();
     assert_eq!(count, 3, "observations are append-only");
 }
+
+#[tokio::test]
+async fn a_shop_listing_a_product_twice_collapses_to_its_cheapest() {
+    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
+        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping shop-collapse DB test");
+        return;
+    };
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    // Asda can carry two CINs for one EAN (a relist), so one product ends up with
+    // two 'asda' listings. "Where to buy" wants ONE answer per shop — its best
+    // price — and the link must point at the listing that quoted it.
+    let barcode = "5000000000987";
+    let (cin_a, cin_b) = ("pricetest-asda-dup-a", "pricetest-asda-dup-b");
+    sqlx::query("DELETE FROM products WHERE barcode = ?")
+        .bind(barcode)
+        .execute(&pool)
+        .await
+        .unwrap();
+    for ext in [cin_a, cin_b] {
+        sqlx::query("DELETE FROM product_listings WHERE external_id = ?")
+            .bind(ext)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+
+    let product = repo::upsert_external(
+        &pool,
+        "asda",
+        cin_a,
+        Some(barcode),
+        Some("Butter"),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    repo::upsert_external(
+        &pool,
+        "asda",
+        cin_b,
+        Some(barcode),
+        Some("Butter"),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    let listing_a = repo::listing_id(&pool, "asda", cin_a)
+        .await
+        .unwrap()
+        .unwrap();
+    let listing_b = repo::listing_id(&pool, "asda", cin_b)
+        .await
+        .unwrap()
+        .unwrap();
+
+    repo::record_price(&pool, listing_a, &gbp(420, None))
+        .await
+        .unwrap();
+    repo::record_price(&pool, listing_b, &gbp(395, None))
+        .await
+        .unwrap();
+
+    let prices = repo::latest_prices(&pool, product.id).await.unwrap();
+    assert_eq!(prices.len(), 1, "one row per shop, not one per listing");
+    assert_eq!(prices[0].source, "asda");
+    assert_eq!(
+        prices[0].amount_minor, 395,
+        "the shop's cheapest listing wins"
+    );
+    assert_eq!(
+        prices[0].external_id, cin_b,
+        "the row names the listing that quoted the winning price"
+    );
+}

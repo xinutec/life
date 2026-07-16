@@ -23,13 +23,20 @@ pub struct PriceInput {
     pub region: Option<String>,
 }
 
-/// The latest price for one shop of a product — returned by
-/// GET /api/products/id/{id}/prices, cheapest first.
+/// What one shop currently charges for a product — the `prices` part of the
+/// product detail (GET /api/products/id/{id}), cheapest shop first.
+///
+/// Exactly one row per source: a shop can list the same physical product twice
+/// (two Asda CINs sharing an EAN), and "where do I buy this, for how much" wants
+/// one answer per shop — the cheapest. `external_id` names the listing that
+/// quoted this price, so the shop link goes to the item actually being quoted.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct ShopPrice {
-    /// The listing's source ('asda', 'waitrose', …).
+    /// The listing's source ('asda', 'waitrose', …). Unique within a response.
     pub source: String,
+    /// Source-scoped id of the listing this price came from.
+    pub external_id: String,
     #[ts(type = "number")]
     pub amount_minor: i64,
     pub currency: String,

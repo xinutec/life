@@ -71,6 +71,15 @@
     </button>
   </mat-form-field>
 
+  @if (canViewProduct()) {
+    <div class="shop-row">
+      <button mat-button (click)="viewProduct()">
+        <mat-icon>open_in_new</mat-icon>
+        View product
+      </button>
+    </div>
+  }
+
   <div class="actions">
     <button mat-flat-button (click)="save()" [disabled]="!name().trim()">
       {{ editing ? 'Save' : 'Add' }}

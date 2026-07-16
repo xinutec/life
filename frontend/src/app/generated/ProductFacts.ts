@@ -4,7 +4,7 @@ import type { DietaryFlag } from "./DietaryFlag";
 import type { Nutrition } from "./Nutrition";
 
 /**
- * Everything we know about a product beyond its identity — the payload of
- * GET /api/products/id/{id}/facts.
+ * Everything we know about a product beyond its identity — the `facts` part
+ * of the product detail (GET /api/products/id/{id}).
  */
 export type ProductFacts = { nutrition: Nutrition | null, ingredients: string | null, allergens: Array<Allergen>, dietary: Array<DietaryFlag>, };

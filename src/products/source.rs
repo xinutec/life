@@ -37,3 +37,35 @@ static IMPORTABLE: &[&Source] = &[&WAITROSE, &ASDA];
 pub fn importable(id: &str) -> Option<&'static Source> {
     IMPORTABLE.iter().copied().find(|s| s.id == id)
 }
+
+/// The public product-page URL for a listing, derived from its identity alone —
+/// no slug needed (probed 2026-07-16: Asda's PDP is slugless and the old
+/// groceries.asda.com host just 301s to it; Waitrose redirects any slug to the
+/// canonical one, keyed by the trailing lineNumber). `external_id` is safe to
+/// splice: import validates it as [A-Za-z0-9_-]{1,64}, and OFF's is a validated
+/// numeric barcode. `None` for sources without a page ('user').
+pub fn listing_url(source: &str, external_id: &str) -> Option<String> {
+    match source {
+        "off" => Some(format!(
+            "https://world.openfoodfacts.org/product/{external_id}"
+        )),
+        "asda" => Some(format!(
+            "https://www.asda.com/groceries/product/{external_id}"
+        )),
+        "waitrose" => Some(format!(
+            "https://www.waitrose.com/ecom/products/x/{external_id}"
+        )),
+        _ => None,
+    }
+}
+
+/// Canonical-name preference, best first: retailers curate their titles, Open
+/// Food Facts names are crowd-sourced and often messy. A source not listed here
+/// (e.g. 'user') never supplies the canonical name.
+const NAME_PREFERENCE: &[&str] = &["waitrose", "asda", "off"];
+
+/// Rank of `source` in the canonical-name preference order (lower wins), or
+/// `None` if the source doesn't participate.
+pub fn name_rank(source: &str) -> Option<usize> {
+    NAME_PREFERENCE.iter().position(|s| *s == source)
+}

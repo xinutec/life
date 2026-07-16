@@ -1,5 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import {
   MAT_BOTTOM_SHEET_DATA,
   MatBottomSheetRef,
@@ -61,6 +62,7 @@ export class ItemSheet {
   private api = inject(LifeApi);
   private dialog = inject(MatDialog);
   private feedback = inject(Feedback);
+  private router = inject(Router);
 
   readonly categories = ITEM_CATEGORIES;
   readonly locations = this.data.locations;
@@ -159,6 +161,36 @@ export class ItemSheet {
         this.patch({ name: pick.name, barcode: pick.barcode, product_id: pick.product_id });
         if (pick.unit != null && !this.form().unit?.trim()) this.patch({ unit: pick.unit });
       });
+  }
+
+  /** Whether "View product" has somewhere to go: a linked product, or a barcode
+   *  it can resolve to one. */
+  canViewProduct(): boolean {
+    return this.form().product_id != null || !!this.form().barcode?.trim();
+  }
+
+  /** Leave the sheet for the linked product's page — the scan → payoff-screen
+   *  path. A barcode without an established link is looked up first. */
+  viewProduct(): void {
+    const pid = this.form().product_id;
+    if (pid != null) {
+      this.ref.dismiss();
+      void this.router.navigate(['/product', pid]);
+      return;
+    }
+    const barcode = this.form().barcode?.trim();
+    if (!barcode) return;
+    this.api.lookupProduct(barcode).subscribe({
+      next: (p) => {
+        this.ref.dismiss();
+        void this.router.navigate(['/product', p.id]);
+      },
+      error: (e: unknown) => {
+        this.feedback.error(
+          isNotFound(e) ? `No product found for ${barcode}.` : 'Lookup failed — are you online?',
+        );
+      },
+    });
   }
 
   close(): void {

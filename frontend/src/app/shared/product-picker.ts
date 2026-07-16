@@ -25,6 +25,7 @@ import { WAITROSE } from '../shops/waitrose';
 import { ItemsStore } from '../stores/catalog';
 import { Dialog } from './dialog';
 import { Feedback } from './feedback';
+import { sourceLabel } from './sources';
 
 export interface ProductPickData {
   /** Prefill (usually what's typed in the Name field); searched immediately. */
@@ -173,18 +174,8 @@ export class ProductPicker {
     return null;
   }
 
-  sourceLabel(p: Product): string {
-    switch (p.source) {
-      case 'off':
-        return 'Open Food Facts';
-      case 'user':
-        return 'added by you';
-      case null:
-        return '';
-      default:
-        return p.source; // a shop id ('waitrose', …) reads fine as-is
-    }
-  }
+  /** Shared source naming (see shared/sources.ts), for the template. */
+  protected readonly sourceLabel = sourceLabel;
 
   pickItem(it: Item): void {
     this.ref.close({

@@ -1,6 +1,7 @@
 import { Component, effect, inject, signal } from '@angular/core';
-import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { MatBadgeModule } from '@angular/material/badge';
+import { MatDialog } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
@@ -9,8 +10,10 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { assertNever, classifyApiError } from './shared/api-error';
+import { assertNever, classifyApiError, isNotFound } from './shared/api-error';
 import { Alerts } from './shared/alerts';
+import { Feedback } from './shared/feedback';
+import { ScannerDialog } from './features/scanner/scanner-dialog';
 import { LifeApi } from './life-api';
 import { Me } from './models';
 import { SwUpdates } from './sw-updates';
@@ -67,6 +70,9 @@ export class App {
   private api = inject(LifeApi);
   private swUpdates = inject(SwUpdates);
   private auth = inject(AuthState);
+  private dialog = inject(MatDialog);
+  private feedback = inject(Feedback);
+  private router = inject(Router);
   protected readonly alerts = inject(Alerts);
   protected readonly sync = inject(SyncStatus);
 
@@ -194,6 +200,30 @@ export class App {
     this.api.recipes().subscribe(ignore);
     this.api.cookable().subscribe(ignore);
     this.api.house().subscribe(ignore);
+  }
+
+  /** The hamburger's "Scan a product": camera → barcode lookup → the product
+   *  page. The standalone payoff-screen path — no form, no item, just "what is
+   *  this thing on my shelf". Every outcome is announced (see the sheets'
+   *  scan flows: silence reads as a broken scanner). */
+  scanProduct(): void {
+    this.dialog
+      .open<ScannerDialog, unknown, string | null>(ScannerDialog, {
+        panelClass: 'scanner-pane',
+        ariaLabel: 'Barcode scanner',
+      })
+      .afterClosed()
+      .subscribe((code) => {
+        if (!code) return;
+        this.api.lookupProduct(code).subscribe({
+          next: (p) => void this.router.navigate(['/product', p.id]),
+          error: (e: unknown) => {
+            this.feedback.error(
+              isNotFound(e) ? `No product found for ${code}.` : 'Lookup failed — are you online?',
+            );
+          },
+        });
+      });
   }
 
   signOut(): void {

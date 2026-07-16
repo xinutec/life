@@ -79,15 +79,21 @@
     </button>
   </mat-form-field>
 
-  @if (form().product_id) {
+  @if (canViewProduct()) {
     <div class="shop-row">
-      <span class="linked">
-        <mat-icon>link</mat-icon>
-        Linked
-        <button mat-icon-button (click)="patch({ product_id: null })" aria-label="Unlink product">
-          <mat-icon>close</mat-icon>
-        </button>
-      </span>
+      <button mat-button (click)="viewProduct()">
+        <mat-icon>open_in_new</mat-icon>
+        View product
+      </button>
+      @if (form().product_id) {
+        <span class="linked">
+          <mat-icon>link</mat-icon>
+          Linked
+          <button mat-icon-button (click)="patch({ product_id: null })" aria-label="Unlink product">
+            <mat-icon>close</mat-icon>
+          </button>
+        </span>
+      }
     </div>
   }
 

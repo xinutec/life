@@ -1,7 +1,11 @@
-//! Product reference data (cached from Open Food Facts).
+//! Product wire types: the canonical product, its per-source listings, and the
+//! aggregate the product page fetches.
 
 use serde::Serialize;
 use ts_rs::TS;
+
+use super::nutrition::ProductFacts;
+use super::prices::ShopPrice;
 
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
@@ -18,7 +22,38 @@ pub struct Product {
     /// Source-scoped external id (e.g. a Waitrose lineNumber). Unique per source;
     /// how a shop product with no barcode is addressed and de-duped.
     pub external_id: Option<String>,
+    /// Which source's title `name` currently is (see repo's canonical-name
+    /// refresh) — provenance for display, never hand-assigned.
+    pub name_source: Option<String>,
     /// True if we have a cached image. Served from /api/products/id/{id}/image
     /// (barcodeless shop products), or /api/products/{barcode}/image when barcoded.
     pub has_image: bool,
+}
+
+/// One source's listing of a product, with its public product page resolved
+/// (stored URL if the source supplied one, else derived from the listing's
+/// identity — see source::listing_url).
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct ProductListing {
+    pub source: String,
+    pub external_id: String,
+    /// Deep link to the source's product page, when it has one.
+    pub url: Option<String>,
+    /// What this source titles the product (the canonical `name` picks among
+    /// these).
+    pub raw_name: Option<String>,
+}
+
+/// Everything the product page shows, in one fetch —
+/// GET /api/products/id/{id}.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct ProductDetail {
+    pub product: Product,
+    /// Every source that lists the product, oldest first.
+    pub listings: Vec<ProductListing>,
+    /// Latest price per shop, cheapest first.
+    pub prices: Vec<ShopPrice>,
+    pub facts: ProductFacts,
 }

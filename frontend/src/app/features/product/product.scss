@@ -1,0 +1,162 @@
+// No page-level padding/max-width here: the app shell's `.content` owns the
+// page box (insets, max-width, and the bottom-nav clearance) for every screen.
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+
+  h1 {
+    margin: 0.5rem 0;
+    font: var(--mat-sys-title-large);
+  }
+}
+
+.hero {
+  display: block;
+  max-width: 100%;
+  max-height: 14rem;
+  margin: 0 auto 0.75rem;
+  object-fit: contain;
+  border-radius: 0.75rem;
+}
+
+.name {
+  margin: 0;
+  font: var(--mat-sys-headline-small);
+  overflow-wrap: anywhere;
+}
+
+.subtitle {
+  margin: 0.25rem 0 0;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+h3 {
+  margin: 1.25rem 0 0.5rem;
+  font: var(--mat-sys-title-medium);
+
+  .basis {
+    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-body-medium);
+  }
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: 0.75rem;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.625rem;
+  border-radius: 1rem;
+  font: var(--mat-sys-label-large);
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+
+  mat-icon {
+    font-size: 1rem;
+    width: 1rem;
+    height: 1rem;
+  }
+
+  // A trace warning / an unconfirmed flag: outlined, not filled.
+  &.maybe {
+    background: transparent;
+    border: 1px solid var(--mat-sys-outline);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  // A firm "no" (e.g. not vegan): muted, so the yeses stand out.
+  &.no {
+    background: var(--mat-sys-surface-container-high);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  // A declared allergen: the one chip class that must shout.
+  &.allergen {
+    background: var(--mat-sys-error-container);
+    color: var(--mat-sys-on-error-container);
+  }
+}
+
+.buy {
+  display: flex;
+  flex-direction: column;
+}
+
+.buy-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  .shop {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .price-block {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+
+    .price {
+      font: var(--mat-sys-title-medium);
+    }
+  }
+}
+
+.fine {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
+.nutrition {
+  width: 100%;
+  border-collapse: collapse;
+
+  td {
+    padding: 0.25rem 0;
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+  }
+
+  tr:last-child td {
+    border-bottom: none;
+  }
+
+  .num {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .sub td:first-child {
+    padding-left: 1rem;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.ingredients {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.attribution {
+  margin-top: 1.5rem;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+
+  a {
+    color: inherit;
+  }
+}

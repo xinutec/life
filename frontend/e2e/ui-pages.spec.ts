@@ -105,6 +105,49 @@ const TRASH = [
   { kind: 'recipe', ref: '3', name: 'Lentil soup', deleted_at: now.getTime() - 86_400_000 },
 ];
 
+/** A fully-populated product detail: two shops with prices + deep links, the
+ *  whole nutrition panel, long ingredients, allergen + dietary chips — the
+ *  busiest the product page gets. */
+const PRODUCT_DETAIL = {
+  product: { id: 42, barcode: '5000328042732', name: 'Quaker Oat So Simple Original Big Pack Porridge Sachets',
+    brand: 'Quaker', quantity_label: '22x27G', source: 'off', external_id: '5000328042732',
+    name_source: 'asda', has_image: false },
+  listings: [
+    { source: 'off', external_id: '5000328042732',
+      url: 'https://world.openfoodfacts.org/product/5000328042732', raw_name: 'oat so simple' },
+    { source: 'asda', external_id: '9346702',
+      url: 'https://www.asda.com/groceries/product/9346702', raw_name: 'Quaker Oat So Simple' },
+    { source: 'waitrose', external_id: '271105',
+      url: 'https://www.waitrose.com/ecom/products/x/271105', raw_name: 'Oat So Simple' },
+  ],
+  prices: [
+    { source: 'waitrose', external_id: '271105', amount_minor: 450, currency: 'GBP', unit_amount_minor: null,
+      unit_measure: null, region: null, observed_at: now.getTime() },
+    { source: 'asda', external_id: '9346702', amount_minor: 475, currency: 'GBP', unit_amount_minor: 800,
+      unit_measure: 'KG', region: 'EN', observed_at: now.getTime() - 2 * 86_400_000 },
+  ],
+  facts: {
+    nutrition: { basis: '100g', serving_size: '40 g', energy_kj: 1500, energy_kcal: 356,
+      fat_g: 6.5, saturates_g: 1.2, carbohydrate_g: 60, sugars_g: 1, fibre_g: 10,
+      protein_g: 11, salt_g: 0.1, extra: { sodium: 0.04 } },
+    ingredients:
+      'Wholegrain rolled oats (95%), sugar, natural flavouring, salt, an improbably ' +
+      'long tail of emulsifiers and stabilisers to make this paragraph wrap on a phone',
+    allergens: [
+      { allergen: 'gluten', presence: 'contains' },
+      { allergen: 'milk', presence: 'may_contain' },
+      { allergen: 'nuts', presence: 'may_contain' },
+    ],
+    dietary: [
+      { flag: 'gluten_free', value: 'no' },
+      { flag: 'organic', value: 'yes' },
+      { flag: 'palm_oil_free', value: 'maybe' },
+      { flag: 'vegan', value: 'yes' },
+      { flag: 'vegetarian', value: 'yes' },
+    ],
+  },
+};
+
 const CONFLICTS = [
   { id: 1, kind: 'todo', ulid: '01TODOOVERDUE0000000000001', field: 'title',
     label: 'Call the GP about the referral letter',
@@ -125,6 +168,7 @@ async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/recipes', (r) => r.fulfill({ json: RECIPES }));
   await page.route('**/api/cookable*', (r) => r.fulfill({ json: [RECIPES[1]] }));
   await page.route('**/api/trash*', (r) => r.fulfill({ json: TRASH }));
+  await page.route('**/api/products/id/42', (r) => r.fulfill({ json: PRODUCT_DETAIL }));
   await page.route('**/api/conflicts*', (r) => r.fulfill({ json: CONFLICTS }));
   const sync = (docs: unknown[]) => (r: Parameters<Parameters<Page['route']>[1]>[0]) => {
     if (r.request().method() === 'POST') return r.fulfill({ json: [] });
@@ -336,6 +380,24 @@ test('recipes — ingredient-chip cards: lays out cleanly @ phone width', async 
   await page.getByText('Chicken curry').waitFor();
   await page.getByText('cookable with what', { exact: false }).waitFor();
   await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo);
+});
+
+test('product page — prices, panel, chips: lays out cleanly @ phone width', async ({ page }, testInfo) => {
+  await mockApi(page);
+  await page.goto('/product/42');
+  await page.getByText('Quaker Oat So Simple', { exact: false }).first().waitFor();
+  await page.getByText('Where to buy').waitFor();
+  await page.getByText('£4.50').waitFor();
+  await page.getByText('Nutrition', { exact: false }).waitFor();
+  await page.getByText('of which saturates').waitFor();
+  await page.getByText('may contain milk').waitFor();
+  await page.getByText('Open Food Facts').waitFor();
+  // Scoped to the page's own text: this screen is the first that genuinely
+  // outgrows a phone viewport, and mid-scroll its content passes BEHIND the
+  // fixed bottom nav (opaque by design). A whole-page assertion would read that
+  // as a collision. Overflow stays whole-page — that's the body scroller's job.
+  await expectNoTextOverlaps(page, testInfo, 'app-product-page');
   await expectNoHorizontalOverflow(page, testInfo);
 });
 
