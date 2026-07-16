@@ -90,7 +90,7 @@ export interface TrendData {
   dayLabels: DayLabel[];
 }
 
-/** A 14-day wellbeing trend: dots on the shared 1..5 colour ramp, three axis
+/** A wellbeing trend chart: dots on the shared 1..5 colour ramp, three axis
  *  words down the left edge, a caption below. Purely presentational — the host
  *  computes the dots (mood, energy, or any future 1..5 axis) and supplies the
  *  labels, so the two charts share one implementation. */

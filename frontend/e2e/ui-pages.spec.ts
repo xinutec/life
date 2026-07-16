@@ -173,8 +173,8 @@ test('wellbeing — chart + timeline: lays out cleanly @ phone width', async ({ 
   await mockApi(page);
   await page.goto('/wellbeing');
   await page.getByText('How do you feel right now?').waitFor();
-  await page.getByText('Mood · last 14 days').waitFor();
-  await page.getByText('Energy · last 14 days').waitFor();
+  await page.getByText('Mood · last 7 days').waitFor();
+  await page.getByText('Energy · last 7 days').waitFor();
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
 });
@@ -182,7 +182,7 @@ test('wellbeing — chart + timeline: lays out cleanly @ phone width', async ({ 
 test('wellbeing — the two charts agree on where the days are', async ({ page }) => {
   await mockApi(page);
   await page.goto('/wellbeing');
-  await page.getByText('Energy · last 14 days').waitFor();
+  await page.getByText('Energy · last 7 days').waitFor();
   // Mood and energy share one x axis (the same window, the same instant), so a
   // midnight must land on the same pixel in both — otherwise the day rules stagger
   // down the page and the charts can't be read against each other. Measure the RULES
@@ -203,7 +203,7 @@ test('wellbeing — the two charts agree on where the days are', async ({ page }
 test('wellbeing — a half-step reads as one feeling between two faces', async ({ page }) => {
   await mockApi(page);
   await page.goto('/wellbeing');
-  await page.getByText('Mood · last 14 days').waitFor();
+  await page.getByText('Mood · last 7 days').waitFor();
 
   // The seeded 3.5 (35 tenths). Its chip says so, rather than rounding to a 3 or a
   // 4 — the whole point of recording "4, but a bit lower at the gym".
@@ -224,7 +224,7 @@ test('wellbeing — a half-step reads as one feeling between two faces', async (
 test('wellbeing — the axis words are actually on the screen', async ({ page }) => {
   await mockApi(page);
   await page.goto('/wellbeing');
-  await page.getByText('Energy · last 14 days').waitFor();
+  await page.getByText('Energy · last 7 days').waitFor();
   // The check the others were all missing: can he READ them? Absolutely-positioned
   // axis words once collapsed their own column to zero width and slid off the left
   // edge of the phone — while a same-x/same-y test, a vertical-alignment test and
@@ -244,7 +244,7 @@ test('wellbeing — the axis words are actually on the screen', async ({ page })
 test('wellbeing — each axis word sits level with the dot it names', async ({ page }) => {
   await mockApi(page);
   await page.goto('/wellbeing');
-  await page.getByText('Energy · last 14 days').waitFor();
+  await page.getByText('Energy · last 7 days').waitFor();
   // "great"/"okay"/"awful" claim to name the 5, the 3 and the 1, so each must sit at
   // the height that reading actually plots at. Spaced evenly down a CSS column
   // instead (the obvious way, and what this used to do) "awful" landed 14px above

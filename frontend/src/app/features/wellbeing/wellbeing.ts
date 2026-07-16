@@ -50,8 +50,9 @@ function dayKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** Wellbeing history: a one-tap check-in strip, a 14-day trend, and a day-by-day
- *  timeline of entries. Tapping an entry opens the edit sheet. */
+/** Wellbeing history: a one-tap check-in strip, a trend chart (7 days by
+ *  default, 24h/7d/14d selectable), and a day-by-day timeline of entries.
+ *  Tapping an entry opens the edit sheet. */
 @Component({
   selector: 'app-wellbeing',
   templateUrl: './wellbeing.html',
@@ -74,7 +75,7 @@ export class Wellbeing {
   readonly loaded = toSignal(this.store.items$.pipe(map(() => true)), { initialValue: false });
 
   /** Trend window (days). The charts recompute when this changes. */
-  readonly window = signal<TrendWindow>(14);
+  readonly window = signal<TrendWindow>(7);
   readonly windows: readonly { value: TrendWindow; label: string }[] = [
     { value: 1, label: '24h' },
     { value: 7, label: '7d' },
