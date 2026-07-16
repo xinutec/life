@@ -21,6 +21,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use super::nutrition::DietaryFlag;
 use super::off::is_valid_barcode;
 use super::prices::PriceInput;
 
@@ -57,6 +58,9 @@ pub struct AsdaHit {
     pub price: Option<PriceInput>,
     /// scene7 thumbnail URL (host-allowlisted for server-side import).
     pub image_url: Option<String>,
+    /// Asda's own lifestyle tags for this product (vegan, gluten-free, …), as
+    /// dietary flags. Only ever assertions — see `LIFESTYLE_FLAGS`.
+    pub dietary: Vec<DietaryFlag>,
 }
 
 // --- Algolia wire shapes (only the fields we use) ---
@@ -88,6 +92,43 @@ struct RawHit {
     pack_size: Option<String>,
     #[serde(rename = "PRICES")]
     prices: Option<Prices>,
+    /// Asda's lifestyle tag block: every tag it knows, 1 = claimed, 0 = NOT
+    /// claimed (see `lifestyle_flags`).
+    #[serde(rename = "NUTRITIONAL_INFO", default)]
+    nutritional_info: std::collections::BTreeMap<String, i64>,
+}
+
+/// Asda's lifestyle tag → our dietary flag slug. Only tags with a meaning in our
+/// own vocabulary (see products::nutrition) are mapped, so the two sources'
+/// flags line up and merge instead of sitting alongside as near-duplicates.
+/// Asda's remaining tags are nutrition *claims* (LowSalt, HighFibre, …) and
+/// free-from ones we have no slug for yet (NoNuts, NoEgg, …) — deliberately
+/// unmapped rather than invented.
+const LIFESTYLE_FLAGS: &[(&str, &str)] = &[
+    ("Vegan", "vegan"),
+    ("Vegetarian", "vegetarian"),
+    ("Halal", "halal"),
+    ("Kosher", "kosher"),
+    ("NoGluten", "gluten_free"),
+    ("NoLactose", "lactose_free"),
+];
+
+/// Asda's lifestyle tags as dietary flags.
+///
+/// **A 0 is not a "no".** Asda ships all 24 tags on every product and sets the
+/// ones it claims: Quaker Oat So Simple has `Vegetarian: 0` though oats plainly
+/// are, while an oat drink has `Vegetarian: 1`. So 0 means "not claimed" and
+/// must assert NOTHING — reading it as a negative would have the app telling you
+/// a vegetarian product isn't one. Every flag here is therefore 'yes'.
+fn lifestyle_flags(info: &std::collections::BTreeMap<String, i64>) -> Vec<DietaryFlag> {
+    LIFESTYLE_FLAGS
+        .iter()
+        .filter(|(tag, _)| info.get(*tag).is_some_and(|v| *v == 1))
+        .map(|(_, flag)| DietaryFlag {
+            flag: (*flag).to_string(),
+            value: "yes".to_string(),
+        })
+        .collect()
 }
 
 #[derive(Deserialize)]
@@ -186,7 +227,19 @@ fn normalize(raw: RawHit) -> Option<AsdaHit> {
         price_label,
         price,
         image_url,
+        dietary: lifestyle_flags(&raw.nutritional_info),
     })
+}
+
+/// One product by its CIN — the exact-identity fetch behind "refresh this
+/// listing". Asda has no by-id endpoint, but the CIN IS a searchable attribute,
+/// so we query it and then VERIFY the hit's own CIN rather than trusting the
+/// first result: a search is a relevance guess, and this must be an identity.
+pub async fn fetch_by_id(http: &reqwest::Client, cin: &str) -> Result<Option<AsdaHit>> {
+    Ok(search(http, cin, 5)
+        .await?
+        .into_iter()
+        .find(|h| h.external_id == cin))
 }
 
 /// Search the Asda storefront by product name. Returns up to `limit` normalized

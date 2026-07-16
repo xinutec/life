@@ -69,6 +69,7 @@ const hit = (over: Partial<AsdaHit>): AsdaHit => ({
   price_label: null,
   price: null,
   image_url: null,
+  dietary: [],
   ...over,
 });
 
@@ -112,7 +113,7 @@ describe('ProductPage', () => {
       getProductDetail: vi.fn(() => of(detail)),
       productImageByIdUrl: (id: number) => `/api/products/id/${id}/image`,
       searchAsda: vi.fn(() => of(asdaHits)),
-      importProduct: vi.fn(() => of(detail.product)),
+      syncListing: vi.fn(() => of(detail.product)),
     };
     TestBed.configureTestingModule({
       imports: [ProductPage],
@@ -244,23 +245,19 @@ describe('ProductPage', () => {
     expect(page.shopLookup()).toBe('found');
     expect(page.shopMatch()?.external_id).toBe('9020290');
 
+    // Attaching hands the backend only the listing's identity — it re-fetches
+    // shop-side and re-checks the barcode itself, so no facts are client-supplied.
     page.attach(page.shopMatch()!);
-    expect(api.importProduct).toHaveBeenCalledWith({
-      source: 'asda',
-      external_id: '9020290',
-      name: 'Extra Special Balsamic Vinegar of Modena 250ml',
-      brand: null,
-      barcode: '5063089281581', // its own EAN — equal to ours, never forced
-      image_url: null,
-      price: {
-        amount_minor: 800, // what Asda charges, recorded as an observation
-        currency: 'GBP',
-        unit_amount_minor: null,
-        unit_measure: null,
-        region: 'EN',
-      },
-    });
+    expect(api.syncListing).toHaveBeenCalledWith(42, 'asda', '9020290');
     expect(page.shopLookup()).toBe('idle'); // panel resets; the page reloads
+  });
+
+  it('refreshes a shop row only when asked, by the listing it names', () => {
+    const { page, api } = setup();
+    const asda = page.buyRows().find((r) => r.label === 'Asda')!;
+    expect(api.syncListing).not.toHaveBeenCalled(); // nothing on load — no timer
+    page.refresh(asda);
+    expect(api.syncListing).toHaveBeenCalledWith(42, 'asda', '9346702');
   });
 
   it('reports an honest "not stocked" rather than offering a look-alike', () => {

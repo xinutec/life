@@ -7,7 +7,7 @@ use chrono::NaiveDateTime;
 use sqlx::MySqlPool;
 use sqlx::types::Json;
 
-use super::nutrition::{Allergen, DietaryFlag, Nutrition, ProductFacts};
+use super::nutrition::{Allergen, DietaryFlag, Nutrition, ProductFacts, merge_dietary};
 use super::prices::{PriceInput, ShopPrice};
 use super::source;
 use super::types::Product;
@@ -358,6 +358,16 @@ pub async fn upsert_nutrition(
     Ok(())
 }
 
+/// Set the product's pack-size label (e.g. Asda's "22x27G").
+pub async fn set_quantity_label(pool: &MySqlPool, product_id: u64, label: &str) -> Result<()> {
+    sqlx::query("UPDATE products SET quantity_label = ? WHERE id = ?")
+        .bind(label)
+        .bind(product_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Set the product's ingredients text (a single block, source-tracked).
 pub async fn set_ingredients(
     pool: &MySqlPool,
@@ -401,15 +411,19 @@ pub async fn replace_allergens(
     Ok(())
 }
 
-/// Replace the product's dietary flags. Whole-product replace, like allergens.
+/// Replace THIS SOURCE's dietary flags, leaving other sources' claims alone
+/// (migration 0028). Open Food Facts and Asda each tag the same product, and a
+/// re-lookup of one must not erase the other's contribution; `facts_for` merges
+/// them on read.
 pub async fn replace_dietary(
     pool: &MySqlPool,
     product_id: u64,
     flags: &[DietaryFlag],
     source: &str,
 ) -> Result<()> {
-    sqlx::query("DELETE FROM product_dietary_flags WHERE product_id = ?")
+    sqlx::query("DELETE FROM product_dietary_flags WHERE product_id = ? AND source = ?")
         .bind(product_id)
+        .bind(source)
         .execute(pool)
         .await?;
     for f in flags {
@@ -494,16 +508,20 @@ pub async fn facts_for(pool: &MySqlPool, product_id: u64) -> Result<ProductFacts
         .map(|(allergen, presence)| Allergen { allergen, presence })
         .collect();
 
-    let dietary: Vec<(String, String)> = sqlx::query_as(
-        "SELECT flag, value FROM product_dietary_flags WHERE product_id = ? ORDER BY flag",
+    // Every source's claims for this product, reconciled into one answer per
+    // flag by the domain rule (see nutrition::merge_dietary).
+    let claims: Vec<(String, String)> = sqlx::query_as(
+        "SELECT flag, value FROM product_dietary_flags WHERE product_id = ? ORDER BY flag, source",
     )
     .bind(product_id)
     .fetch_all(pool)
     .await?;
-    let dietary = dietary
-        .into_iter()
-        .map(|(flag, value)| DietaryFlag { flag, value })
-        .collect();
+    let dietary = merge_dietary(
+        claims
+            .into_iter()
+            .map(|(flag, value)| DietaryFlag { flag, value })
+            .collect(),
+    );
 
     Ok(ProductFacts {
         nutrition,

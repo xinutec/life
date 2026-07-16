@@ -54,6 +54,69 @@ fn maps_a_real_response() {
     );
 }
 
+// A real hit's NUTRITIONAL_INFO block: Asda ships ALL its lifestyle tags on
+// every product and sets the ones it claims. Trimmed here, values verbatim.
+const OAT_DRINK: &str = r#"{
+  "results": [{
+    "hits": [{
+      "CIN": "9100001",
+      "NAME": "Chocolate High Fibre Vegan Oat Drink 330ml",
+      "IMAGE_ID": "5050854000001",
+      "PACK_SIZE": "330ML",
+      "NUTRITIONAL_INFO": {
+        "Vegan": 1, "Vegetarian": 1, "Halal": 0, "Kosher": 0,
+        "NoGluten": 0, "NoLactose": 1, "NoNuts": 1,
+        "LowSalt": 1, "LowFat": 1, "HighFibre": 0
+      }
+    }]
+  }]
+}"#;
+
+#[test]
+fn lifestyle_tags_become_dietary_flags() {
+    let hits = asda::parse_hits(OAT_DRINK).expect("parses");
+    let flags: Vec<(&str, &str)> = hits[0]
+        .dietary
+        .iter()
+        .map(|d| (d.flag.as_str(), d.value.as_str()))
+        .collect();
+    // Only the claimed tags we have a slug for. NoNuts/LowSalt/LowFat have no
+    // slug in our vocabulary yet and are dropped rather than invented; Halal,
+    // Kosher and NoGluten are 0 — not claimed — so they assert nothing.
+    assert_eq!(
+        flags,
+        vec![
+            ("vegan", "yes"),
+            ("vegetarian", "yes"),
+            ("lactose_free", "yes")
+        ]
+    );
+    assert_eq!(hits[0].quantity_label.as_deref(), Some("330ML"));
+}
+
+#[test]
+fn an_unset_lifestyle_tag_is_never_read_as_a_no() {
+    // Quaker Oat So Simple really does ship Vegetarian: 0 — oats plainly are
+    // vegetarian, so 0 means "not claimed", not "no". Asserting a negative here
+    // would have the app contradicting the pack.
+    let hits = asda::parse_hits(
+        r#"{ "results": [{ "hits": [{ "CIN": "9346702", "NAME": "Oat So Simple",
+             "NUTRITIONAL_INFO": { "Vegetarian": 0, "Vegan": 0 } }] }] }"#,
+    )
+    .expect("parses");
+    assert!(
+        hits[0].dietary.is_empty(),
+        "an unclaimed tag must assert nothing, got {:?}",
+        hits[0].dietary
+    );
+}
+
+#[test]
+fn a_hit_with_no_lifestyle_block_has_no_flags() {
+    let hits = asda::parse_hits(RESPONSE).expect("parses");
+    assert!(hits[0].dietary.is_empty());
+}
+
 #[test]
 fn a_hit_without_a_price_has_none() {
     let hits =

@@ -122,6 +122,48 @@ const LABEL_FLAGS: &[(&str, &str)] = &[
     ("palm-oil-free", "palm_oil_free"),
 ];
 
+/// Reconcile every source's claims about each dietary flag into one answer.
+///
+/// Sources overlap: Open Food Facts derives flags from a crowd-entered
+/// ingredient list, while a retailer tags the product it actually sells (see
+/// products::asda). Both are stored, per source (migration 0028), and this
+/// decides what the product page shows — in the tri-state the flags already
+/// speak:
+/// - sources agree → that value;
+/// - a firm claim beats a soft guess ('yes' over 'maybe') — a retailer tagging
+///   its own product Vegan settles OFF's "maybe-vegan" analysis;
+/// - **'yes' against 'no' → 'maybe'.** They genuinely disagree, so say so rather
+///   than pick a winner. Over-claiming is the harmful direction: telling someone
+///   avoiding animal products that a thing is vegan when a source says otherwise
+///   is a real-world error, where "we're not sure" merely sends them to the
+///   label. This is why `value` is tri-state at all.
+///
+/// Input may hold repeated flags (one per source, in any order); the result has
+/// one entry per flag, sorted. Pure — the unit under test.
+pub fn merge_dietary(claims: Vec<DietaryFlag>) -> Vec<DietaryFlag> {
+    let mut by_flag: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for c in claims {
+        by_flag.entry(c.flag).or_default().push(c.value);
+    }
+    by_flag
+        .into_iter()
+        .map(|(flag, values)| {
+            let yes = values.iter().any(|v| v == "yes");
+            let no = values.iter().any(|v| v == "no");
+            let value = match (yes, no) {
+                (true, true) => "maybe", // a real conflict — don't take a side
+                (true, false) => "yes",
+                (false, true) => "no",
+                (false, false) => "maybe",
+            };
+            DietaryFlag {
+                flag,
+                value: value.to_string(),
+            }
+        })
+        .collect()
+}
+
 /// A numeric OFF value, whether it arrived as a JSON number or a numeric string
 /// (OFF is inconsistent). `None` for anything non-numeric.
 fn as_f64(v: &Value) -> Option<f64> {

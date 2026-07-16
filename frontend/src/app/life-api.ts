@@ -121,6 +121,16 @@ export class LifeApi {
   }): Observable<Product> {
     return this.http.post<Product>('/api/products/import', body);
   }
+  /** Pull a product's listing at a shop and store what it says — price, the
+   *  shop's lifestyle tags, pack size, clean name. Same call attaches a shop for
+   *  the first time and refreshes it later; the backend fetches shop-side and
+   *  enforces that the listing's barcode really is this product's. */
+  syncListing(id: number, source: string, externalId: string): Observable<Product> {
+    return this.http.post<Product>(`/api/products/id/${id}/listings`, {
+      source,
+      external_id: externalId,
+    });
+  }
   /** Everything the product page shows, in one fetch: the canonical product,
    *  its per-source listings (deep links resolved), latest price per shop
    *  (cheapest first), and its nutrition/ingredients/allergen/dietary facts. */

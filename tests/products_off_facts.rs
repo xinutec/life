@@ -2,7 +2,7 @@
 //! `RawFacts::parse` half of the OFF lookup, exercised without any network by
 //! deserializing captured-shape OFF product JSON.
 
-use life::products::nutrition::RawFacts;
+use life::products::nutrition::{DietaryFlag, RawFacts, merge_dietary};
 
 fn parse(value: serde_json::Value) -> life::products::nutrition::ProductFacts {
     serde_json::from_value::<RawFacts>(value)
@@ -162,4 +162,75 @@ fn a_product_with_no_facts_parses_to_nothing() {
     assert!(facts.ingredients.is_none());
     assert!(facts.allergens.is_empty());
     assert!(facts.dietary.is_empty());
+}
+
+// --- merge_dietary: reconciling what several sources claim about one product ---
+
+fn claim(flag: &str, value: &str) -> DietaryFlag {
+    DietaryFlag {
+        flag: flag.to_string(),
+        value: value.to_string(),
+    }
+}
+
+fn merged(claims: &[(&str, &str)]) -> Vec<(String, String)> {
+    merge_dietary(claims.iter().map(|(f, v)| claim(f, v)).collect())
+        .into_iter()
+        .map(|d| (d.flag, d.value))
+        .collect()
+}
+
+#[test]
+fn a_firm_claim_settles_a_soft_guess() {
+    // Asda tags its own product Vegan; OFF's ingredient analysis only guessed.
+    assert_eq!(
+        merged(&[("vegan", "yes"), ("vegan", "maybe")]),
+        [("vegan".to_string(), "yes".to_string())]
+    );
+}
+
+#[test]
+fn sources_that_agree_just_agree() {
+    assert_eq!(
+        merged(&[("gluten_free", "yes"), ("gluten_free", "yes")]),
+        [("gluten_free".to_string(), "yes".to_string())]
+    );
+    assert_eq!(
+        merged(&[("vegan", "no"), ("vegan", "no")]),
+        [("vegan".to_string(), "no".to_string())]
+    );
+}
+
+#[test]
+fn a_yes_against_a_no_is_never_reported_as_yes() {
+    // The point of the tri-state: telling someone avoiding animal products that
+    // this is vegan, while a source says it isn't, is the harmful direction.
+    // Say we're unsure and let them read the label.
+    assert_eq!(
+        merged(&[("vegan", "yes"), ("vegan", "no")]),
+        [("vegan".to_string(), "maybe".to_string())]
+    );
+}
+
+#[test]
+fn flags_stay_independent_and_sorted() {
+    assert_eq!(
+        merged(&[("vegan", "yes"), ("halal", "yes"), ("vegan", "no")]),
+        [
+            ("halal".to_string(), "yes".to_string()),
+            ("vegan".to_string(), "maybe".to_string()),
+        ]
+    );
+}
+
+#[test]
+fn a_single_source_passes_straight_through() {
+    assert_eq!(
+        merged(&[("vegan", "maybe"), ("organic", "yes")]),
+        [
+            ("organic".to_string(), "yes".to_string()),
+            ("vegan".to_string(), "maybe".to_string()),
+        ]
+    );
+    assert!(merged(&[]).is_empty());
 }

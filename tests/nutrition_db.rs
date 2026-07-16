@@ -155,3 +155,122 @@ async fn store_and_read_facts_then_replace_on_relookup() {
             .unwrap();
     assert_eq!(count, 0, "nutrition cascades on product delete");
 }
+
+#[tokio::test]
+async fn two_sources_dietary_claims_coexist_and_merge() {
+    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
+        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping multi-source dietary test");
+        return;
+    };
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    let barcode = "5000000000654";
+    sqlx::query("DELETE FROM products WHERE barcode = ?")
+        .bind(barcode)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let product = repo::upsert_external(
+        &pool,
+        "off",
+        barcode,
+        Some(barcode),
+        Some("Oat Drink"),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+
+    // Open Food Facts' ingredient analysis: a guess on vegan, firm on palm oil.
+    repo::replace_dietary(
+        &pool,
+        product.id,
+        &[
+            DietaryFlag {
+                flag: "vegan".into(),
+                value: "maybe".into(),
+            },
+            DietaryFlag {
+                flag: "palm_oil_free".into(),
+                value: "yes".into(),
+            },
+            DietaryFlag {
+                flag: "vegetarian".into(),
+                value: "no".into(),
+            },
+        ],
+        "off",
+    )
+    .await
+    .unwrap();
+
+    // Asda's lifestyle tags for the same product: firm claims, 'yes'-only.
+    repo::replace_dietary(
+        &pool,
+        product.id,
+        &[
+            DietaryFlag {
+                flag: "vegan".into(),
+                value: "yes".into(),
+            },
+            DietaryFlag {
+                flag: "vegetarian".into(),
+                value: "yes".into(),
+            },
+        ],
+        "asda",
+    )
+    .await
+    .unwrap();
+
+    let read = |flag: &str, facts: &life::products::nutrition::ProductFacts| {
+        facts
+            .dietary
+            .iter()
+            .find(|d| d.flag == flag)
+            .map(|d| d.value.clone())
+    };
+    let facts = repo::facts_for(&pool, product.id).await.unwrap();
+    assert_eq!(
+        read("vegan", &facts).as_deref(),
+        Some("yes"),
+        "a firm claim settles a maybe"
+    );
+    assert_eq!(
+        read("palm_oil_free", &facts).as_deref(),
+        Some("yes"),
+        "OFF's own claim survives"
+    );
+    assert_eq!(
+        read("vegetarian", &facts).as_deref(),
+        Some("maybe"),
+        "sources disagree — say so rather than over-claim"
+    );
+
+    // The regression this migration exists for: re-looking-up the barcode on OFF
+    // restates OFF's flags, and must NOT wipe Asda's.
+    repo::replace_dietary(
+        &pool,
+        product.id,
+        &[DietaryFlag {
+            flag: "vegan".into(),
+            value: "maybe".into(),
+        }],
+        "off",
+    )
+    .await
+    .unwrap();
+    let facts = repo::facts_for(&pool, product.id).await.unwrap();
+    assert_eq!(
+        read("vegan", &facts).as_deref(),
+        Some("yes"),
+        "Asda's claim survives an OFF re-lookup"
+    );
+    assert_eq!(
+        read("vegetarian", &facts).as_deref(),
+        Some("yes"),
+        "and OFF dropping its own claim leaves Asda's standing"
+    );
+}

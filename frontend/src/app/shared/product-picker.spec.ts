@@ -168,6 +168,7 @@ describe('ProductPicker', () => {
         region: 'EN',
       },
       image_url: 'https://asdagroceries.scene7.com/is/image/asdagroceries/5740900404465?$ProdList$',
+      dietary: [],
     };
     const { fixture, ref, api } = setup({ asda: [hit] });
     fixture.detectChanges();
@@ -195,6 +196,7 @@ describe('ProductPicker', () => {
       price_label: null,
       price: null,
       image_url: null,
+      dietary: [],
     };
     const { fixture } = setup({ asda: [hit] });
     fixture.detectChanges();

@@ -298,6 +298,87 @@ pub async fn product_detail(
     }))
 }
 
+/// Which shop listing to pull, for `sync_listing`.
+#[derive(serde::Deserialize)]
+pub struct SyncListing {
+    /// Registered source id — 'asda' today (see below).
+    pub source: String,
+    /// The source's id for the product (an Asda CIN).
+    pub external_id: String,
+}
+
+/// POST /api/products/id/{id}/listings → pull this product's listing at a shop
+/// and store what it says: the price (a new observation), the shop's lifestyle
+/// tags, its pack size, and its clean name.
+///
+/// One operation for both "attach this shop" and "refresh it" — they differ only
+/// in whether the listing already exists, and doing them by one idempotent path
+/// means a refresh can never capture less than an attach did. Fetching shop-side
+/// here (rather than accepting facts from the client) keeps the client from
+/// asserting product facts, and lets the barcode guard below be enforced by the
+/// server rather than trusted from the caller.
+///
+/// Asda only: its storefront search is a public API we can call from anywhere.
+/// Waitrose needs the Android app's WebView to pass its bot-wall, so it has no
+/// server-side fetch to offer here.
+pub async fn sync_listing(
+    State(app): State<AppState>,
+    AuthUser(_user): AuthUser,
+    Path(id): Path<u64>,
+    Json(body): Json<SyncListing>,
+) -> Result<Json<Product>, AppError> {
+    if body.source != "asda" {
+        return Err(AppError::BadRequest(format!(
+            "cannot pull listings from {} server-side",
+            body.source
+        )));
+    }
+    let product = repo::get_by_id(&app.pool, id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let Some(hit) = asda::fetch_by_id(&app.http, body.external_id.trim()).await? else {
+        return Err(AppError::NotFound);
+    };
+    // The barcode is what makes this listing THIS product; a shop search is only
+    // ever a relevance guess. Enforce the identity here so a mistaken (or
+    // malicious) caller can't staple someone else's product onto this one.
+    if hit.barcode.is_none() || hit.barcode != product.barcode {
+        return Err(AppError::BadRequest(
+            "that listing's barcode doesn't match this product".into(),
+        ));
+    }
+    let updated = repo::upsert_external(
+        &app.pool,
+        "asda",
+        &hit.external_id,
+        hit.barcode.as_deref(),
+        Some(&hit.name),
+        hit.brand.as_deref(),
+        None,
+    )
+    .await?;
+    // Pack size only if we have none: OFF's quantity is the product's own, while
+    // Asda's PACK_SIZE describes the pack it sells.
+    if product.quantity_label.is_none()
+        && let Some(q) = hit.quantity_label.as_deref()
+    {
+        repo::set_quantity_label(&app.pool, updated.id, q).await?;
+    }
+    // The shop's own lifestyle tags, kept apart from OFF's claims (migration
+    // 0028) and merged on read.
+    repo::replace_dietary(&app.pool, updated.id, &hit.dietary, "asda").await?;
+    if let Some(price) = &hit.price
+        && let Some(lid) = repo::listing_id(&app.pool, "asda", &hit.external_id).await?
+    {
+        repo::record_price(&app.pool, lid, price).await?;
+    }
+    tracing::info!(product = updated.id, cin = %hit.external_id, flags = hit.dietary.len(), "asda listing pulled");
+    repo::get_by_id(&app.pool, updated.id)
+        .await?
+        .map(Json)
+        .ok_or(AppError::NotFound)
+}
+
 /// GET /api/products/id/{id}/image → cached image bytes for a catalog row by id.
 /// The barcodeless counterpart to /products/{barcode}/image (shop products have
 /// no barcode to address the image by).

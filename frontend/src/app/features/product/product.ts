@@ -17,6 +17,9 @@ import { sourceLabel } from '../../shared/sources';
 interface BuyRow {
   key: string;
   label: string;
+  /** The source's own id for the listing — what a refresh re-reads. */
+  externalId: string;
+  source: string;
   url: string | null;
   price: string | null;
   perUnit: string | null;
@@ -200,35 +203,36 @@ export class ProductPage {
     });
   }
 
-  /** Attach the confirmed hit: importing under ITS OWN barcode (equal to ours,
-   *  which is why it matched) lets the backend reconcile the two onto one
-   *  product — we never force our barcode onto a shop's listing. */
+  /** Attach the barcode-confirmed hit. The backend re-fetches it shop-side and
+   *  re-checks the barcode itself, so the match this screen made is a
+   *  convenience, not something the server takes on trust. */
   attach(hit: AsdaHit): void {
+    this.pull(hit.external_id, 'Added Asda.', 'Could not add Asda');
+  }
+
+  /** Re-read a shop listing on demand — pressed when you've seen the shelf price
+   *  change. Nothing refetches on a timer: shop data goes stale silently, and a
+   *  wrong price you didn't ask for is worse than an old one you can refresh. */
+  refresh(row: BuyRow): void {
+    this.pull(row.externalId, `Refreshed ${row.label}.`, `Could not refresh ${row.label}`);
+  }
+
+  private pull(externalId: string, ok: string, bad: string): void {
     if (this.attaching()) return;
     this.attaching.set(true);
-    this.api
-      .importProduct({
-        source: 'asda',
-        external_id: hit.external_id,
-        name: hit.name,
-        brand: hit.brand,
-        barcode: hit.barcode,
-        image_url: hit.image_url,
-        price: hit.price,
-      })
-      .subscribe({
-        next: () => {
-          this.attaching.set(false);
-          this.shopLookup.set('idle');
-          this.shopMatch.set(null);
-          this.feedback.notify('Added Asda.');
-          this.reload();
-        },
-        error: (e: unknown) => {
-          this.attaching.set(false);
-          this.feedback.error(`Could not add Asda${onlineHint(e)}`);
-        },
-      });
+    this.api.syncListing(this.id(), 'asda', externalId).subscribe({
+      next: () => {
+        this.attaching.set(false);
+        this.shopLookup.set('idle');
+        this.shopMatch.set(null);
+        this.feedback.notify(ok);
+        this.reload();
+      },
+      error: (e: unknown) => {
+        this.attaching.set(false);
+        this.feedback.error(`${bad}${onlineHint(e)}`);
+      },
+    });
   }
 
   back(): void {
@@ -262,6 +266,8 @@ export class ProductPage {
       return {
         key,
         label: sourceLabel(p.source),
+        externalId: p.external_id,
+        source: p.source,
         url: listing.get(key)?.url ?? null,
         price: money(p.amount_minor, p.currency),
         perUnit:
@@ -279,6 +285,8 @@ export class ProductPage {
         rows.push({
           key: listingKey(l),
           label: sourceLabel(l.source),
+          externalId: l.external_id,
+          source: l.source,
           url: l.url,
           price: null,
           perUnit: null,

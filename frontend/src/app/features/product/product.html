@@ -50,6 +50,17 @@
               <span class="fine">no price yet</span>
             }
           </span>
+          @if (r.source === 'asda') {
+            <!-- On demand only: never refetched on a timer (see refresh()). -->
+            <button
+              mat-icon-button
+              (click)="refresh(r)"
+              [disabled]="attaching()"
+              [attr.aria-label]="'Refresh the price at ' + r.label"
+            >
+              <mat-icon>refresh</mat-icon>
+            </button>
+          }
           @if (r.url) {
             <a
               mat-icon-button
