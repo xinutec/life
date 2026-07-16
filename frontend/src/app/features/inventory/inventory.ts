@@ -11,6 +11,7 @@ import { ExpiryInfo, expiryInfo } from "../../expiry";
 import { LifeApi } from "../../life-api";
 import { ProductThumb } from "../../product-thumb";
 import { ItemsStore, LocationsStore, locationPath } from "../../stores/catalog";
+import { ShoppingStore } from "../../sync/shopping-store";
 import { Item } from "../../models";
 import { ItemSheet, ItemSheetData } from "./item-sheet";
 import { PlaceSheet, PlaceSheetData } from "./place-sheet";
@@ -34,6 +35,7 @@ export class Inventory {
   private feedback = inject(Feedback);
   private itemsStore = inject(ItemsStore);
   private placesStore = inject(LocationsStore);
+  private shopping = inject(ShoppingStore);
 
   /** Online-only writes must not fail into silence: announce and move on. */
   private failed(what: string) {
@@ -148,6 +150,28 @@ export class Inventory {
       },
       error: this.failed("delete the place"),
     });
+  }
+
+  /** The Inventory→Buy bridge: put this item on the Buy list carrying its full
+   *  identity — category, barcode, catalog link, unit. Not quantity: the
+   *  inventory quantity is what's owned, not what to buy. Local-first (works
+   *  offline); deduped against the un-done rows so a double-tap or a
+   *  forgotten earlier add doesn't stack duplicates. */
+  async addToBuy(it: Item): Promise<void> {
+    const identity = { name: it.name, barcode: it.barcode, product_id: it.product_id };
+    if (await this.shopping.findActive(identity)) {
+      this.feedback.notify(`${it.name} is already on the Buy list.`);
+      return;
+    }
+    await this.shopping.add({
+      name: it.name,
+      quantity: null,
+      unit: it.unit,
+      barcode: it.barcode,
+      category: it.category,
+      product_id: it.product_id,
+    });
+    this.feedback.notify(`Added ${it.name} to the Buy list.`);
   }
 
   deleteItem(id: number): void {

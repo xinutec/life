@@ -62,6 +62,22 @@ export const migrationStrategies = {
   }),
 };
 
+/** What identifies "the same thing to buy" across catalogs. Matching tries the
+ *  strongest key first: the catalog link, then the barcode, then the name
+ *  (case-insensitive). Null keys never match null — two hand-typed rows are
+ *  only the same thing if their names say so. */
+export interface BuyIdentity {
+  name: string;
+  barcode: string | null;
+  product_id: number | null;
+}
+
+export function matchesIdentity(doc: ShoppingDoc, identity: BuyIdentity): boolean {
+  if (identity.product_id != null && doc.product_id === identity.product_id) return true;
+  if (identity.barcode != null && doc.barcode === identity.barcode) return true;
+  return doc.name.trim().toLowerCase() === identity.name.trim().toLowerCase();
+}
+
 /** The synced content fields (everything but the identity/server fields). */
 type ShoppingContent = Omit<ShoppingDoc, 'ulid' | 'id' | 'rev'>;
 
@@ -133,6 +149,16 @@ export class ShoppingStore extends SyncedStore<ShoppingDoc> {
       done: false,
       rev: 0,
     });
+  }
+
+  /** The un-done row for the same thing, if the list already has one — what the
+   *  Inventory→Buy bridge checks before adding a duplicate. */
+  async findActive(identity: BuyIdentity): Promise<ShoppingDoc | null> {
+    const col = await this.collection;
+    const docs = await col.find({ selector: { done: false } }).exec();
+    return (
+      docs.map((d) => d.toJSON() as ShoppingDoc).find((d) => matchesIdentity(d, identity)) ?? null
+    );
   }
 
   async setDone(key: string, done: boolean): Promise<void> {

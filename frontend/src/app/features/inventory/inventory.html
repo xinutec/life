@@ -39,6 +39,14 @@
             · <span class="expiry" [class]="expiryOf(expiry).cls">{{ expiryOf(expiry).label }}</span>
           }
         </span>
+        <button
+          matListItemMeta
+          mat-icon-button
+          (click)="addToBuy(it)"
+          aria-label="Add to Buy list"
+        >
+          <mat-icon>add_shopping_cart</mat-icon>
+        </button>
         <button matListItemMeta mat-icon-button (click)="deleteItem(it.id)" aria-label="Delete">
           <mat-icon>delete</mat-icon>
         </button>
