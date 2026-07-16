@@ -24,7 +24,15 @@ nix develop -c bash -c '
   # verify. Harmless on Linux/CI, which build cleanly. NOT the sandbox.
   export NG_BUILD_MAX_WORKERS=1
   cargo fmt --all --check
-  cargo clippy --all-targets -- -D warnings
+  # Clippy gets its OWN target dir (shared across projects, like the main one --
+  # two dirs total, not one per project). Cargo fingerprints workspace crates by
+  # compiler front-end, so clippy (clippy-driver) and cargo build/test (rustc)
+  # evict each other when they share a dir: a plain cargo build between commits
+  # would force clippy to recompile the whole workspace. A dedicated dir keeps
+  # the clippy cache warm and independent. Costs one extra copy of the deps.
+  # (No apostrophes in this block: the whole thing is a single-quoted bash -c.)
+  CARGO_TARGET_DIR="${CARGO_CLIPPY_TARGET_DIR:-$HOME/.cache/cargo/clippy-target}" \
+    cargo clippy --all-targets -- -D warnings
   if [ -n "${LIFE_TEST_DATABASE_URL:-}" ]; then
     cargo test -- --test-threads=1
   else
