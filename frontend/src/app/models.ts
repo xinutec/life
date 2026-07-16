@@ -12,6 +12,8 @@ export type { ItemCategory } from './generated/ItemCategory';
 export type { Item } from './generated/Item';
 export type { Product } from './generated/Product';
 export type { AsdaHit } from './generated/AsdaHit';
+export type { PriceInput } from './generated/PriceInput';
+export type { ShopPrice } from './generated/ShopPrice';
 export type { ShoppingItem } from './generated/ShoppingItem';
 export type { RecipeIngredient } from './generated/RecipeIngredient';
 export type { Recipe } from './generated/Recipe';

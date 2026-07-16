@@ -159,6 +159,13 @@ describe('ProductPicker', () => {
       barcode: '5740900404465',
       quantity_label: '400G',
       price_label: '£3.57',
+      price: {
+        amount_minor: 357,
+        currency: 'GBP',
+        unit_amount_minor: 892,
+        unit_measure: 'KG',
+        region: 'EN',
+      },
       image_url: 'https://asdagroceries.scene7.com/is/image/asdagroceries/5740900404465?$ProdList$',
     };
     const { fixture, ref, api } = setup({ asda: [hit] });
@@ -166,8 +173,9 @@ describe('ProductPicker', () => {
     fixture.componentInstance.pickAsda(hit);
     await new Promise((r) => setTimeout(r));
 
+    // The price rides along to be recorded as an observation.
     expect(api.importProduct).toHaveBeenCalledWith(
-      expect.objectContaining({ source: 'asda', external_id: '7690049', image_url: hit.image_url }),
+      expect.objectContaining({ source: 'asda', external_id: '7690049', price: hit.price }),
     );
     // The imported catalogue row is barcodeless; the hit's EAN must still ride
     // back so the shopping row is barcoded.
@@ -184,6 +192,7 @@ describe('ProductPicker', () => {
       barcode: null,
       quantity_label: null,
       price_label: null,
+      price: null,
       image_url: null,
     };
     const { fixture } = setup({ asda: [hit] });

@@ -9,7 +9,9 @@ import {
   Item,
   Loc,
   Me,
+  PriceInput,
   Product,
+  ShopPrice,
   Recipe,
   RecipeIngredient,
   ShoppingItem,
@@ -114,8 +116,14 @@ export class LifeApi {
      *  onto one canonical product by barcode. */
     barcode?: string | null;
     image_url?: string | null;
+    /** Price the source quoted — appended to the product's price history. */
+    price?: PriceInput | null;
   }): Observable<Product> {
     return this.http.post<Product>('/api/products/import', body);
+  }
+  /** Latest price at each shop that lists this product, cheapest first. */
+  getProductPrices(id: number): Observable<ShopPrice[]> {
+    return this.http.get<ShopPrice[]>(`/api/products/id/${id}/prices`);
   }
   /** URL of a catalog image addressed by product id — for barcodeless shop
    *  products, which have no /products/{barcode}/image URL. */

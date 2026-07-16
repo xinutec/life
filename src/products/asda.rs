@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::off::is_valid_barcode;
+use super::prices::PriceInput;
 
 /// Algolia application id — also the request host (`{app}-dsn.algolia.net`).
 const APP_ID: &str = "8I6WSKCCNV";
@@ -49,8 +50,11 @@ pub struct AsdaHit {
     pub barcode: Option<String>,
     /// Pack size, e.g. "400G".
     pub quantity_label: Option<String>,
-    /// Formatted England price, e.g. "£3.57".
+    /// Formatted England price for display, e.g. "£3.57".
     pub price_label: Option<String>,
+    /// Structured England price (minor units + per-unit), recorded as a price
+    /// observation when this hit is imported. `None` when the hit has no price.
+    pub price: Option<PriceInput>,
     /// scene7 thumbnail URL (host-allowlisted for server-side import).
     pub image_url: Option<String>,
 }
@@ -96,10 +100,42 @@ struct Prices {
 struct PriceRegion {
     #[serde(rename = "PRICE")]
     price: Option<f64>,
+    #[serde(rename = "PRICEPERUOM")]
+    price_per_uom: Option<f64>,
+    #[serde(rename = "PRICEPERUOMFORMATTED")]
+    price_per_uom_formatted: Option<String>,
 }
 
 fn non_empty(s: Option<String>) -> Option<String> {
     s.map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+}
+
+/// Pounds (Asda gives prices as floats) → integer minor units (pence). Rounded,
+/// so float error can't leak into stored money.
+fn to_minor(pounds: f64) -> i64 {
+    (pounds * 100.0).round() as i64
+}
+
+/// The unit of measure out of Asda's per-unit label: "£8.93/KG" → "KG". `None`
+/// when there's no "/…" measure to take.
+fn unit_measure(formatted: &str) -> Option<String> {
+    formatted
+        .rsplit_once('/')
+        .map(|(_, m)| m.trim().to_string())
+        .filter(|m| !m.is_empty())
+}
+
+/// Build a price observation from Asda's England price region, or `None` if it
+/// has no positive shelf price.
+fn price_input(r: &PriceRegion) -> Option<PriceInput> {
+    let amount = r.price.filter(|p| *p > 0.0)?;
+    Some(PriceInput {
+        amount_minor: to_minor(amount),
+        currency: "GBP".into(),
+        unit_amount_minor: r.price_per_uom.filter(|p| *p > 0.0).map(to_minor),
+        unit_measure: r.price_per_uom_formatted.as_deref().and_then(unit_measure),
+        region: Some("EN".into()),
+    })
 }
 
 /// Parse a raw Algolia multi-query response body into normalized hits. The pure
@@ -133,9 +169,11 @@ fn normalize(raw: RawHit) -> Option<AsdaHit> {
     let image_id = non_empty(raw.image_id);
     let barcode = image_id.clone().filter(|id| is_valid_barcode(id));
     let image_url = image_id.map(|id| format!("{IMAGE_BASE}{id}?$ProdList$"));
-    let price_label = raw
-        .prices
-        .and_then(|p| p.en)
+    // The England region feeds both the display label and the structured price.
+    let en = raw.prices.and_then(|p| p.en);
+    let price = en.as_ref().and_then(price_input);
+    let price_label = en
+        .as_ref()
         .and_then(|r| r.price)
         .filter(|p| *p > 0.0)
         .map(|p| format!("£{p:.2}"));
@@ -146,6 +184,7 @@ fn normalize(raw: RawHit) -> Option<AsdaHit> {
         barcode,
         quantity_label: non_empty(raw.pack_size),
         price_label,
+        price,
         image_url,
     })
 }

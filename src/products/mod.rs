@@ -3,6 +3,7 @@
 
 pub mod asda;
 pub mod off;
+pub mod prices;
 pub mod repo;
 pub mod source;
 pub mod types;

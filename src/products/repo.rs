@@ -1,8 +1,10 @@
 //! Persistence for the product cache.
 
 use anyhow::Result;
+use chrono::NaiveDateTime;
 use sqlx::MySqlPool;
 
+use super::prices::{PriceInput, ShopPrice};
 use super::types::Product;
 
 #[derive(sqlx::FromRow)]
@@ -167,6 +169,80 @@ async fn listing_product_id(
     .fetch_optional(pool)
     .await?;
     Ok(row.map(|(id,)| id))
+}
+
+/// The listing id for (source, external_id) — the FK target a price observation
+/// hangs off. Public: the import route records a price against the listing it
+/// just upserted.
+pub async fn listing_id(pool: &MySqlPool, source: &str, external_id: &str) -> Result<Option<u64>> {
+    let row: Option<(u64,)> =
+        sqlx::query_as("SELECT id FROM product_listings WHERE source = ? AND external_id = ?")
+            .bind(source)
+            .bind(external_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.map(|(id,)| id))
+}
+
+/// Append a price observation to a listing's history. Prices are a time series —
+/// never overwritten — so "current price" is the latest row, and history is all
+/// of them.
+pub async fn record_price(pool: &MySqlPool, listing_id: u64, price: &PriceInput) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO price_observations \
+         (listing_id, amount_minor, currency, region, unit_amount_minor, unit_measure) \
+         VALUES (?, ?, ?, ?, ?, ?)",
+    )
+    .bind(listing_id)
+    .bind(price.amount_minor)
+    .bind(&price.currency)
+    .bind(price.region.as_deref())
+    .bind(price.unit_amount_minor)
+    .bind(price.unit_measure.as_deref())
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+#[derive(sqlx::FromRow)]
+struct ShopPriceRow {
+    source: String,
+    amount_minor: i64,
+    currency: String,
+    unit_amount_minor: Option<i64>,
+    unit_measure: Option<String>,
+    region: Option<String>,
+    observed_at: NaiveDateTime,
+}
+
+/// The latest price at each shop that lists this product, cheapest first — one
+/// row per listing that has any price (its most recent observation). Feeds the
+/// "available at Asda £X · Waitrose £Y" view.
+pub async fn latest_prices(pool: &MySqlPool, product_id: u64) -> Result<Vec<ShopPrice>> {
+    let rows: Vec<ShopPriceRow> = sqlx::query_as(
+        "SELECT l.source, po.amount_minor, po.currency, po.unit_amount_minor, \
+         po.unit_measure, po.region, po.observed_at \
+         FROM price_observations po \
+         JOIN product_listings l ON l.id = po.listing_id \
+         WHERE l.product_id = ? \
+         AND po.id = (SELECT MAX(p2.id) FROM price_observations p2 WHERE p2.listing_id = po.listing_id) \
+         ORDER BY po.amount_minor",
+    )
+    .bind(product_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| ShopPrice {
+            source: r.source,
+            amount_minor: r.amount_minor,
+            currency: r.currency,
+            unit_amount_minor: r.unit_amount_minor,
+            unit_measure: r.unit_measure,
+            region: r.region,
+            observed_at: r.observed_at.and_utc().timestamp_millis(),
+        })
+        .collect())
 }
 
 /// Find the canonical product for `barcode`, creating a bare one if absent. On a

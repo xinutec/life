@@ -16,7 +16,10 @@ const RESPONSE: &str = r#"{
       "BRAND": "Lurpak",
       "IMAGE_ID": "5740900404465",
       "PACK_SIZE": "400G",
-      "PRICES": { "EN": { "PRICE": 3.57 }, "SC": { "PRICE": 3.57 } }
+      "PRICES": {
+        "EN": { "PRICE": 3.57, "PRICEPERUOM": 8.925, "PRICEPERUOMFORMATTED": "£8.93/KG" },
+        "SC": { "PRICE": 3.57 }
+      }
     }]
   }]
 }"#;
@@ -36,10 +39,28 @@ fn maps_a_real_response() {
     assert_eq!(hit.barcode.as_deref(), Some("5740900404465"));
     assert_eq!(hit.quantity_label.as_deref(), Some("400G"));
     assert_eq!(hit.price_label.as_deref(), Some("£3.57")); // England price, formatted
+    // Structured price: minor units (pence), never a float; per-unit for compare.
+    let price = hit.price.as_ref().expect("has a structured price");
+    assert_eq!(price.amount_minor, 357);
+    assert_eq!(price.currency, "GBP");
+    // 8.925 is stored as just-over-8.925 in f64, so round(*100) = 893 — which
+    // also matches Asda's own displayed "£8.93/KG".
+    assert_eq!(price.unit_amount_minor, Some(893));
+    assert_eq!(price.unit_measure.as_deref(), Some("KG"));
+    assert_eq!(price.region.as_deref(), Some("EN"));
     assert_eq!(
         hit.image_url.as_deref(),
         Some("https://asdagroceries.scene7.com/is/image/asdagroceries/5740900404465?$ProdList$")
     );
+}
+
+#[test]
+fn a_hit_without_a_price_has_none() {
+    let hits =
+        asda::parse_hits(r#"{ "results": [{ "hits": [{ "CIN": "1", "NAME": "No price" }] }] }"#)
+            .expect("parses");
+    assert!(hits[0].price.is_none());
+    assert!(hits[0].price_label.is_none());
 }
 
 #[test]

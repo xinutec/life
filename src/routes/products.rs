@@ -8,6 +8,7 @@ use axum::response::Response;
 use serde::Deserialize;
 
 use crate::error::AppError;
+use crate::products::prices::{PriceInput, ShopPrice};
 use crate::products::{asda, off, repo, source, types::Product};
 use crate::session::AuthUser;
 use crate::state::AppState;
@@ -157,6 +158,8 @@ pub struct ImportProduct {
     pub barcode: Option<String>,
     /// Optional image on the source's CDN; fetched server-side, host-allowlisted.
     pub image_url: Option<String>,
+    /// Optional price the source quoted; appended to the listing's price history.
+    pub price: Option<PriceInput>,
     // NB: no `category` — `products.category` is the short ItemCategory enum
     // (food/medication/…), not a shop taxonomy. Mapping a shop's categories is a
     // separate increment.
@@ -223,6 +226,15 @@ pub async fn import(
     .await?;
     tracing::info!(source = %body.source, external_id = %ext, ?barcode, name, "product imported");
 
+    // Optional price: append an observation to this listing's history. Best-effort
+    // relative to the import — a missing listing id (shouldn't happen) just skips it.
+    if let Some(price) = &body.price
+        && let Some(lid) = repo::listing_id(&app.pool, &body.source, ext).await?
+    {
+        repo::record_price(&app.pool, lid, price).await?;
+        tracing::info!(source = %body.source, external_id = %ext, amount_minor = price.amount_minor, "price recorded");
+    }
+
     // Optional image: SSRF-gated against the source's host allowlist, fetched
     // from the source CDN. A failed fetch just leaves the row image-less.
     if let Some(url) = body.image_url.as_deref().filter(|s| !s.is_empty())
@@ -236,6 +248,16 @@ pub async fn import(
             .ok_or(AppError::NotFound);
     }
     Ok(Json(product))
+}
+
+/// GET /api/products/id/{id}/prices → the latest price at each shop that lists
+/// this product, cheapest first. Empty when no price has been observed yet.
+pub async fn product_prices(
+    State(app): State<AppState>,
+    AuthUser(_user): AuthUser,
+    Path(id): Path<u64>,
+) -> Result<Json<Vec<ShopPrice>>, AppError> {
+    Ok(Json(repo::latest_prices(&app.pool, id).await?))
 }
 
 /// GET /api/products/id/{id}/image → cached image bytes for a catalog row by id.

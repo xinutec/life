@@ -221,6 +221,7 @@ export class ProductPicker {
         brand: hit.brand,
         barcode: hit.barcode, // Asda's IMAGE_ID is the EAN — merge onto it
         image_url: hit.image_url,
+        price: hit.price, // record what Asda charges
       }),
     )
       .then((product) =>

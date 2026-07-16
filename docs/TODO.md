@@ -116,11 +116,16 @@ through something that resets the NC session.
       takes an optional `barcode`; Asda passes its IMAGE_ID, Waitrose its
       barCode. `products.source`/`external_id` kept as vestigial origin columns
       (a later migration drops them).
-- [ ] **Product data model, increments 2–4** (design agreed 2026-07-16) — on the
+- [x] **Product data model, increment 2 — prices** (2026-07-16) —
+      `price_observations` (migration 0026): append-only, INT minor units (never
+      float), region-tagged, per-unit for fair comparison. `record_price` +
+      `latest_prices` (cheapest-per-shop); `GET /api/products/id/{id}/prices`.
+      Asda hits carry a structured price (amount + per-unit + region) and record
+      an observation on import. Waitrose price capture deferred until its
+      amount unit (pounds vs pence) is confirmed in-app — precision over a 100×
+      risk. Subsumes the old "Purchases: shop + price observations" item.
+- [ ] **Product data model, increments 3–4** (design agreed 2026-07-16) — on the
       product/listing foundation:
-      - **2. Prices**: `price_observations` (append-only; INT minor units, never
-        float; region-tagged; per-unit derived). Cheapest-shop, price-per-unit,
-        history. Subsumes the "Purchases: shop + price observations" item below.
       - **3. Nutrition + ingredients + allergens + dietary flags**: wide table of
         the UK "big 8" per 100g/ml + a JSON tail for OFF's long list; allergen +
         dietary-flag tags. Quantitative nutrition/ingredients from OFF; dietary
