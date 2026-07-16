@@ -29,8 +29,12 @@
         (keydown.enter)="edit(it)"
         (keydown.space)="edit(it); $event.preventDefault()"
       >
-        @if (it.barcode) {
-          <app-product-thumb class="inline-thumb" [barcode]="it.barcode" />
+        @if (it.barcode || it.product_id) {
+          <app-product-thumb
+            class="inline-thumb"
+            [barcode]="it.barcode"
+            [productId]="it.product_id"
+          />
         }
         <span [class.done]="it.done">{{ it.name }}</span>
       </span>

@@ -290,31 +290,31 @@ test('inventory — items + places: lays out cleanly @ phone width', async ({ pa
   await expectNoHorizontalOverflow(page, testInfo);
 });
 
-// The Find-on-Waitrose dialog — the widget this whole oracle was built for. Its
-// outline "Search" label was sheared in half by mat-dialog-content's zeroed top
-// padding; nothing caught it until it shipped. Open it and assert no text is
-// clipped. The shop bridge is Android-only, so stub it so the Shops button shows;
-// the search itself never resolves (that's fine — the field + label render on open).
-test('find-on-shop dialog — the Search label is not sheared @ phone width', async ({ page }, testInfo) => {
+// The product picker — successor to the Find-on-Waitrose dialog this oracle was
+// built for, whose outline "Search" label was sheared in half by
+// mat-dialog-content's zeroed top padding; nothing caught it until it shipped.
+// Open it and assert no text is clipped. The shop bridge is Android-only, so
+// stub it so the shop tier renders too.
+test('product-picker dialog — the Search label is not sheared @ phone width', async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     (window as unknown as { ShopBridge: unknown }).ShopBridge = {
       available: () => true,
       connect: () => {},
-      run: () => {}, // fire-and-forget; leaves the dialog on "Searching…", label rendered
+      run: () => {},
     };
   });
   await mockApi(page);
   await page.goto('/inventory');
   await page.getByText('Milk (semi-skimmed)').click();
-  await page.getByRole('button', { name: /Shops/ }).click();
-  await page.getByRole('menuitem', { name: /Find on Waitrose/ }).click();
+  await page.getByRole('button', { name: 'Find a product' }).click();
 
   const dialog = page.locator('.mat-mdc-dialog-container');
   await dialog.waitFor();
   // The outline field (with the "Search" label under test) is what must be
-  // rendered before we measure; scope to the dialog to avoid the menu item and
-  // title both matching a text query.
+  // rendered before we measure; the shop tier's button proves that section
+  // rendered too.
   await dialog.locator('mat-form-field').waitFor();
+  await dialog.getByRole('button', { name: /Search Waitrose/ }).waitFor();
 
   await expectNoClippedText(page, testInfo, '.mat-mdc-dialog-container');
   await expectNoTextOverlaps(page, testInfo, '.mat-mdc-dialog-container');

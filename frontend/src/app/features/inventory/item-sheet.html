@@ -9,6 +9,9 @@
       (ngModelChange)="patch({ name: $event })"
       placeholder="e.g. Cumin"
     />
+    <button matSuffix mat-icon-button (click)="findProduct()" aria-label="Find a product">
+      <mat-icon>manage_search</mat-icon>
+    </button>
   </mat-form-field>
 
   <div class="pair">
@@ -76,34 +79,15 @@
     </button>
   </mat-form-field>
 
-  @if (shopProviders.length) {
+  @if (form().product_id) {
     <div class="shop-row">
-      <button mat-stroked-button [matMenuTriggerFor]="shopMenu">
-        <mat-icon>storefront</mat-icon>
-        Shops
-      </button>
-      <mat-menu #shopMenu="matMenu">
-        @for (p of shopProviders; track p.id) {
-          <button mat-menu-item (click)="findOnShop(p)">
-            <mat-icon>search</mat-icon>
-            <span>Find on {{ p.displayName }}</span>
-          </button>
-          <button mat-menu-item (click)="connectShop(p)">
-            <mat-icon>login</mat-icon>
-            <span>Connect {{ p.displayName }}</span>
-          </button>
-        }
-      </mat-menu>
-
-      @if (form().product_id) {
-        <span class="linked">
-          <mat-icon>link</mat-icon>
-          Linked
-          <button mat-icon-button (click)="patch({ product_id: null })" aria-label="Unlink product">
-            <mat-icon>close</mat-icon>
-          </button>
-        </span>
-      }
+      <span class="linked">
+        <mat-icon>link</mat-icon>
+        Linked
+        <button mat-icon-button (click)="patch({ product_id: null })" aria-label="Unlink product">
+          <mat-icon>close</mat-icon>
+        </button>
+      </span>
     </div>
   }
 

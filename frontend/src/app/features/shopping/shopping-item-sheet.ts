@@ -15,6 +15,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { isNotFound } from '../../shared/api-error';
 import { ITEM_CATEGORIES, ItemCategory } from '../../models';
 import { Feedback } from '../../shared/feedback';
+import { ProductPick, ProductPickData, ProductPicker } from '../../shared/product-picker';
 import { SheetHeader } from '../../shared/sheet-header';
 import { LifeApi } from '../../life-api';
 import { ScannerDialog } from '../scanner/scanner-dialog';
@@ -114,6 +115,24 @@ export class ShoppingItemSheet {
   barcodeChanged(code: string): void {
     this.barcode.set(code);
     this.productId.set(null);
+  }
+
+  /** Name-first product search (the shared picker); a pick fills the form. */
+  findProduct(): void {
+    this.dialog
+      .open<ProductPicker, ProductPickData, ProductPick | null>(ProductPicker, {
+        data: { initialQuery: this.name().trim() },
+        ariaLabel: 'Find a product',
+      })
+      .afterClosed()
+      .subscribe((pick) => {
+        if (!pick) return;
+        this.name.set(pick.name);
+        this.barcode.set(pick.barcode ?? '');
+        this.productId.set(pick.product_id);
+        if (pick.unit != null && !this.unit()?.trim()) this.unit.set(pick.unit);
+        if (pick.category != null) this.category.set(pick.category);
+      });
   }
 
   /** Open the camera scanner; on a detected code, fill the field and look up. */

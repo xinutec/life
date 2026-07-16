@@ -1,0 +1,100 @@
+<app-dialog title="Find a product">
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>Search</mat-label>
+    <input
+      matInput
+      [ngModel]="query()"
+      (ngModelChange)="queryChanged($event)"
+      placeholder="e.g. yoghurt"
+    />
+    <mat-icon matSuffix>search</mat-icon>
+  </mat-form-field>
+
+  @if (locals().length) {
+    <h4 class="tier">In your inventory</h4>
+    <mat-action-list>
+      @for (it of locals(); track it.id) {
+        <button mat-list-item lines="2" (click)="pickItem(it)">
+          @if (thumbUrl(it.barcode, it.product_id, it.has_image); as src) {
+            <img matListItemAvatar [src]="src" alt="" />
+          } @else {
+            <mat-icon matListItemIcon>inventory_2</mat-icon>
+          }
+          <span matListItemTitle>{{ it.name }}</span>
+          <span matListItemLine>
+            @if (it.brand) {
+              {{ it.brand }} ·
+            }
+            {{ it.category }}
+          </span>
+        </button>
+      }
+    </mat-action-list>
+  }
+
+  @if (catalog().length) {
+    <h4 class="tier">Catalog</h4>
+    <mat-action-list>
+      @for (p of catalog(); track p.id) {
+        <button mat-list-item lines="2" (click)="pickProduct(p)">
+          @if (thumbUrl(p.barcode, p.id, p.has_image); as src) {
+            <img matListItemAvatar [src]="src" alt="" />
+          } @else {
+            <mat-icon matListItemIcon>sell</mat-icon>
+          }
+          <span matListItemTitle>{{ p.name ?? p.barcode }}</span>
+          <span matListItemLine>
+            @if (p.brand) {
+              {{ p.brand }} ·
+            }
+            @if (p.quantity_label) {
+              {{ p.quantity_label }} ·
+            }
+            {{ sourceLabel(p) }}
+          </span>
+        </button>
+      }
+    </mat-action-list>
+  }
+
+  @if (query().trim() && !locals().length && !catalog().length) {
+    <p class="state">No matches yet — keep typing, or add it by name.</p>
+  }
+
+  @for (provider of shopProviders; track provider.id) {
+    <div class="shop-tier">
+      <button
+        mat-stroked-button
+        (click)="searchShop(provider)"
+        [disabled]="shopBusy() || !query().trim()"
+      >
+        <mat-icon>storefront</mat-icon>
+        Search {{ provider.displayName }}
+      </button>
+      <button mat-button (click)="connectShop(provider)">Connect</button>
+    </div>
+    @if (shopBusy() || importing()) {
+      <div class="state">
+        <mat-progress-spinner mode="indeterminate" diameter="28" />
+        <span>{{ importing() ? 'Linking…' : 'Searching ' + provider.displayName + '…' }}</span>
+      </div>
+    } @else if (shopError(); as msg) {
+      <p class="state error">{{ msg }}</p>
+    } @else if (shopResults(); as candidates) {
+      @if (candidates.length === 0) {
+        <p class="state">No matches on {{ provider.displayName }}.</p>
+      } @else {
+        <mat-action-list>
+          @for (c of candidates; track c.external_id) {
+            <button mat-list-item (click)="pickShop(provider, c)">
+              <img matListItemAvatar [src]="c.image_url" alt="" />
+              <span matListItemTitle>{{ c.name }}</span>
+            </button>
+          }
+        </mat-action-list>
+      }
+    }
+  }
+
+  <button dialogActions mat-button (click)="close()">Cancel</button>
+</app-dialog>

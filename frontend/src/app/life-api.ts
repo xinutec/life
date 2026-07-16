@@ -79,6 +79,10 @@ export class LifeApi {
   lookupProduct(barcode: string): Observable<Product> {
     return this.http.get<Product>(`/api/products/${encodeURIComponent(barcode)}`);
   }
+  /** Catalog name/brand substring search (the product picker's catalog tier). */
+  searchProducts(q: string): Observable<Product[]> {
+    return this.http.get<Product[]>('/api/products', { params: { q } });
+  }
   /** URL of the cached product image (use directly as <img src>). Pass a
    *  `version` after a replace to bust the browser/service-worker cache. */
   productImageUrl(barcode: string, version?: number): string {
