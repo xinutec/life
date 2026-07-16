@@ -14,8 +14,13 @@ use sqlx::mysql::MySqlPoolOptions;
 use tower::ServiceExt; // oneshot
 
 fn test_state() -> AppState {
-    // Lazy pool: constructing it does not connect (only used on paths we never
-    // reach here). The URL just has to parse.
+    state_with_static(None)
+}
+
+/// `static_dir` = Some mounts the SPA fallback, as production does; None is
+/// API-only. The pool is lazy: constructing it does not connect (only used on
+/// paths we never reach here). The URL just has to parse.
+fn state_with_static(static_dir: Option<String>) -> AppState {
     let pool = MySqlPoolOptions::new()
         .connect_lazy("mysql://life:life@127.0.0.1:3307/life")
         .expect("lazy pool");
@@ -27,7 +32,7 @@ fn test_state() -> AppState {
         nc_client_id: "id".into(),
         nc_client_secret: "secret".into(),
         nc_redirect_uri: "https://life.example/auth/callback".into(),
-        static_dir: None,
+        static_dir,
         dev_login_user: None,
         house_scene: "scenes/house.json".into(),
     };
@@ -40,10 +45,27 @@ async fn get(path: &str) -> (StatusCode, String) {
 }
 
 async fn send(req: Request<Body>) -> (StatusCode, String) {
-    let res = routes::router(test_state()).oneshot(req).await.unwrap();
+    let (status, body, _) = send_to(test_state(), req).await;
+    (status, body)
+}
+
+/// Drive a request against a given state; also hands back the Content-Type,
+/// which is the whole point when asserting "this is an API answer, not a page".
+async fn send_to(state: AppState, req: Request<Body>) -> (StatusCode, String, String) {
+    let res = routes::router(state).oneshot(req).await.unwrap();
     let status = res.status();
+    let content_type = res
+        .headers()
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default()
+        .to_string();
     let bytes = res.into_body().collect().await.unwrap().to_bytes();
-    (status, String::from_utf8(bytes.to_vec()).unwrap())
+    (
+        status,
+        String::from_utf8_lossy(&bytes).into_owned(),
+        content_type,
+    )
 }
 
 #[tokio::test]
@@ -95,6 +117,60 @@ async fn dev_login_is_absent_without_dev_login_user() {
 async fn unknown_path_is_404_when_api_only() {
     let (status, _) = get("/no/such/thing").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// A throwaway SPA bundle — just the index.html the fallback serves. Returned
+/// path is removed by the caller.
+fn spa_dir(name: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("life-routes-{name}-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create spa dir");
+    std::fs::write(dir.join("index.html"), "<!doctype html><title>Life</title>")
+        .expect("write index.html");
+    dir
+}
+
+#[tokio::test]
+async fn unknown_api_path_is_a_json_404_even_with_the_spa_mounted() {
+    // In production STATIC_DIR is set, so a catch-all serves index.html for
+    // client-side routes. It must NOT catch /api/*: answering an API call with
+    // 200 text/html is exactly what the client reads as a lapsed session (see
+    // the frontend's classifyFetchResponse — "a 2xx body that isn't JSON"), so
+    // a retired or mistyped route would surface to the user as a bogus
+    // "signed out" instead of an honest 404.
+    let dir = spa_dir("api404");
+    let state = state_with_static(Some(dir.to_string_lossy().into_owned()));
+    let req = Request::get("/api/products/id/1/facts") // a route that once existed
+        .body(Body::empty())
+        .unwrap();
+    let (status, body, content_type) = send_to(state, req).await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND, "body was {body:?}");
+    assert!(
+        content_type.starts_with("application/json"),
+        "an API 404 must answer in JSON, got {content_type:?} / {body:?}"
+    );
+    assert!(body.contains("\"error\""), "body was {body:?}");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[tokio::test]
+async fn an_unknown_non_api_path_still_falls_back_to_the_spa() {
+    // The other half of the contract: client-side routes (/product/42, /today…)
+    // are NOT server routes, and must still boot the app rather than 404.
+    let dir = spa_dir("spa");
+    let state = state_with_static(Some(dir.to_string_lossy().into_owned()));
+    let req = Request::get("/product/42").body(Body::empty()).unwrap();
+    let (status, body, content_type) = send_to(state, req).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        content_type.starts_with("text/html"),
+        "got {content_type:?}"
+    );
+    assert!(body.contains("<title>Life</title>"), "body was {body:?}");
+
+    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[tokio::test]

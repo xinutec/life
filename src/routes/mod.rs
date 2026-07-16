@@ -15,6 +15,7 @@ use axum::Router;
 use axum::extract::DefaultBodyLimit;
 use axum::routing::{delete, get, patch, post};
 
+use crate::error::AppError;
 use crate::products::off;
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
@@ -93,6 +94,12 @@ pub fn router(state: AppState) -> Router {
                 .put(products::set_image)
                 .layer(DefaultBodyLimit::max(off::MAX_UPLOAD_BYTES + 64 * 1024)),
         )
+        // An unmatched /api path is a 404 in the API's own language. Without this
+        // it would fall through to the SPA fallback below and answer 200 with
+        // index.html — and a 2xx non-JSON body is precisely how the client's
+        // `classifyFetchResponse` recognises a lapsed session, so a typo'd or
+        // retired route would read to the sync layer as "you're logged out".
+        .fallback(|| async { AppError::NotFound })
         // One INFO line per API request (method, path, status, latency). Scoped to
         // /api so static-asset serving and the k8s /healthz probe don't spam it.
         .layer(
