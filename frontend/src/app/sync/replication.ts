@@ -2,6 +2,7 @@ import { WritableSignal } from '@angular/core';
 import { RxCollection } from 'rxdb';
 import { replicateRxCollection } from 'rxdb/plugins/replication';
 
+import { assertNever, classifyFetchResponse } from '../shared/api-error';
 import { SyncStatus } from './sync-status';
 
 /** Auth guard for sync fetches. An expired session shows up two ways: our API
@@ -9,18 +10,32 @@ import { SyncStatus } from './sync-status';
  *  fetch follows to a 200 non-JSON body. Either way, surface "login required",
  *  tell the caller the session is gone, and throw so the cycle aborts without
  *  corrupting the queue. Must run BEFORE the generic !res.ok check so this
- *  friendly message wins over "pull failed: 401". Pure(ish) and exported so the
- *  branching is unit-testable. */
+ *  friendly message wins over "pull failed: 401".
+ *
+ *  What counts as auth loss is decided by `classifyFetchResponse` — the shared
+ *  boundary, NOT re-derived here. This guard once read status/content-type
+ *  inline and treated every non-JSON response as "logged out", which signed
+ *  users out on the service worker's offline 504 and wiped their cached
+ *  identity (2026-07-16). An offline/server failure returns normally so the
+ *  caller's generic !res.ok throw retries it quietly. Pure(ish) and exported
+ *  so the branching is unit-testable. */
 export function guardAuth(
   res: Response,
   syncError: WritableSignal<string | null>,
   onAuthLost?: () => void,
 ): void {
-  const ct = res.headers.get('content-type') ?? '';
-  if (res.status === 401 || res.status === 403 || res.redirected || !ct.includes('application/json')) {
-    syncError.set('login required — reopen the app to sign in');
-    onAuthLost?.();
-    throw new Error('auth-required');
+  const f = classifyFetchResponse(res);
+  switch (f.kind) {
+    case 'ok':
+    case 'offline':
+    case 'server':
+      return;
+    case 'unauthenticated':
+      syncError.set('login required — reopen the app to sign in');
+      onAuthLost?.();
+      throw new Error('auth-required');
+    default:
+      assertNever(f);
   }
 }
 

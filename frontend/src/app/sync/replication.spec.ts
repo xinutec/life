@@ -4,10 +4,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { AuthState } from './auth-state';
 import { guardAuth } from './replication';
 
-/** Minimal Response stand-in — guardAuth only reads status/redirected/headers. */
+/** Minimal Response stand-in — guardAuth classifies status/ok/redirected/headers. */
 function res(over: { status?: number; contentType?: string | null; redirected?: boolean }): Response {
+  const status = over.status ?? 200;
   return {
-    status: over.status ?? 200,
+    status,
+    ok: status >= 200 && status < 300,
     redirected: over.redirected ?? false,
     headers: new Headers(over.contentType === null ? {} : { 'content-type': over.contentType ?? 'application/json' }),
   } as Response;
@@ -67,9 +69,35 @@ describe('guardAuth — expired-session detection on sync fetches', () => {
     expect(() => guardAuth(res({ contentType: 'text/html' }), err)).toThrow('auth-required');
   });
 
-  it('flags a missing content-type', () => {
+  it('flags a missing content-type on a 200', () => {
     const err = signal<string | null>(null);
     expect(() => guardAuth(res({ contentType: null }), err)).toThrow('auth-required');
+  });
+
+  it('does NOT sign the user out on the service worker’s offline 504', () => {
+    // The bug this pins (2026-07-16): opening the app offline dumped the user on
+    // the sign-in screen AND erased the cached identity. ngsw intercepts every
+    // fetch; with no network it answers a bodiless synthetic 504 (no
+    // content-type) instead of letting the fetch reject — and the old inline
+    // "non-JSON means logged out" heuristic read that as an expired session.
+    // Offline is never proof of auth loss; the cycle must retry quietly.
+    const err = signal<string | null>(null);
+    const lost = vi.fn();
+    expect(() => guardAuth(res({ status: 504, contentType: null }), err, lost)).not.toThrow();
+    expect(err()).toBeNull();
+    expect(lost).not.toHaveBeenCalled();
+  });
+
+  it('does NOT sign the user out on an ingress HTML error page', () => {
+    // Backend down: traefik serves its own HTML 502/503. Same story as the 504 —
+    // a non-ok non-JSON response is a broken server, not a logged-out session.
+    for (const status of [502, 503]) {
+      const lost = vi.fn();
+      expect(() =>
+        guardAuth(res({ status, contentType: 'text/html' }), signal<string | null>(null), lost),
+      ).not.toThrow();
+      expect(lost).not.toHaveBeenCalled();
+    }
   });
 
   it('does NOT flag a JSON error status like 500 — that is a plain retry, not auth', () => {
