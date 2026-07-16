@@ -4,8 +4,9 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 
 import { LifeApi } from '../../life-api';
-import { ProductDetail, ProductListing } from '../../models';
-import { assertNever, classifyApiError } from '../../shared/api-error';
+import { AsdaHit, ProductDetail, ProductListing } from '../../models';
+import { assertNever, classifyApiError, onlineHint } from '../../shared/api-error';
+import { Feedback } from '../../shared/feedback';
 import { ListState } from '../../shared/list-state';
 import { sourceLabel } from '../../shared/sources';
 
@@ -33,6 +34,25 @@ interface NutrientRow {
 interface DietaryChip {
   label: string;
   value: 'yes' | 'no' | 'maybe';
+}
+
+/** How the shop lookup is going. `none` = searched, nothing carried this
+ *  barcode — a real answer, not an error. */
+type ShopLookup = 'idle' | 'searching' | 'found' | 'none' | 'error';
+
+/** The one hit that IS this product, or null.
+ *
+ *  Identity is the barcode, never the name: neither Asda nor Waitrose supports
+ *  barcode→product lookup, so we can only reach a shop by NAME search — and a
+ *  name search for "Asda ES Balsamic Modena" ranks a *raspberry* glaze above
+ *  the product itself. Every hit carries its EAN, so we ignore the shop's
+ *  relevance order entirely and take the one whose barcode matches. A hit that
+ *  merely reads alike is a DIFFERENT product and must never be attached — the
+ *  same precision-over-recall rule the visit matcher follows.
+ *
+ *  Pure, so the rule is tested without a network. */
+export function eanMatch(hits: AsdaHit[], barcode: string): AsdaHit | null {
+  return hits.find((h) => h.barcode != null && h.barcode === barcode) ?? null;
 }
 
 /** A listing's identity — what joins a price to the listing that quoted it, and
@@ -82,6 +102,7 @@ export class ProductPage {
 
   private api = inject(LifeApi);
   private location = inject(Location);
+  private feedback = inject(Feedback);
 
   readonly detail = signal<ProductDetail | null>(null);
   readonly loading = signal(true);
@@ -140,6 +161,74 @@ export class ProductPage {
 
   reload(): void {
     this.load(this.id());
+  }
+
+  // --- Finding this product at a shop ---
+  //
+  // Asda only, deliberately: its storefront search is a public, CORS-open API we
+  // can call from anywhere (see products::asda), so this works in the browser.
+  // Waitrose needs the Android app's hidden WebView to get past its bot-wall, so
+  // it stays in the picker's shop tier rather than being half-offered here.
+
+  readonly shopLookup = signal<ShopLookup>('idle');
+  readonly shopMatch = signal<AsdaHit | null>(null);
+  readonly attaching = signal(false);
+
+  /** Only offer the lookup when it can give a truthful answer: we need a barcode
+   *  to match on, and there's nothing to find if Asda already lists it. */
+  readonly canFindAtAsda = computed(() => {
+    const d = this.detail();
+    if (!d?.product.barcode) return false;
+    return !d.listings.some((l) => l.source === 'asda');
+  });
+
+  /** Search Asda by name, then keep only a barcode-confirmed hit. */
+  findAtAsda(): void {
+    const d = this.detail();
+    const barcode = d?.product.barcode;
+    const query = d?.product.name?.trim();
+    if (!barcode || !query) return;
+    this.shopLookup.set('searching');
+    this.shopMatch.set(null);
+    this.api.searchAsda(query).subscribe({
+      next: (hits) => {
+        const match = eanMatch(hits, barcode);
+        this.shopMatch.set(match);
+        this.shopLookup.set(match ? 'found' : 'none');
+      },
+      error: () => this.shopLookup.set('error'),
+    });
+  }
+
+  /** Attach the confirmed hit: importing under ITS OWN barcode (equal to ours,
+   *  which is why it matched) lets the backend reconcile the two onto one
+   *  product — we never force our barcode onto a shop's listing. */
+  attach(hit: AsdaHit): void {
+    if (this.attaching()) return;
+    this.attaching.set(true);
+    this.api
+      .importProduct({
+        source: 'asda',
+        external_id: hit.external_id,
+        name: hit.name,
+        brand: hit.brand,
+        barcode: hit.barcode,
+        image_url: hit.image_url,
+        price: hit.price,
+      })
+      .subscribe({
+        next: () => {
+          this.attaching.set(false);
+          this.shopLookup.set('idle');
+          this.shopMatch.set(null);
+          this.feedback.notify('Added Asda.');
+          this.reload();
+        },
+        error: (e: unknown) => {
+          this.attaching.set(false);
+          this.feedback.error(`Could not add Asda${onlineHint(e)}`);
+        },
+      });
   }
 
   back(): void {

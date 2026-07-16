@@ -4,8 +4,8 @@ import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { LifeApi } from '../../life-api';
-import { ProductDetail } from '../../models';
-import { ProductPage } from './product';
+import { AsdaHit, ProductDetail } from '../../models';
+import { ProductPage, eanMatch } from './product';
 
 const DETAIL: ProductDetail = {
   product: {
@@ -60,13 +60,59 @@ const DETAIL: ProductDetail = {
   },
 };
 
+const hit = (over: Partial<AsdaHit>): AsdaHit => ({
+  external_id: '1',
+  name: 'A thing',
+  brand: null,
+  barcode: null,
+  quantity_label: null,
+  price_label: null,
+  price: null,
+  image_url: null,
+  ...over,
+});
+
+describe('eanMatch', () => {
+  // Asda's real answer for "Asda ES Balsamic Modena" — the product's own Open
+  // Food Facts name. Asda ranks a RASPBERRY glaze first and the actual product
+  // fourth, which is exactly why relevance order can't be trusted.
+  const asdaHits = [
+    hit({ external_id: '2266257', barcode: '5050854946264', name: 'Glaze with Balsamic Vinegar of Modena 250ml' }),
+    hit({ external_id: '9020293', barcode: '5063089281598', name: 'Raspberry Glaze with Balsamic Vinegar of Modena' }),
+    hit({ external_id: '1554788', barcode: '27595466', name: 'Balsamic Vinegar of Modena 250ml' }),
+    hit({ external_id: '9020290', barcode: '5063089281581', name: 'Extra Special Balsamic Vinegar of Modena 250ml', price_label: '£8.00' }),
+  ];
+
+  it('takes the barcode match, not the shop’s top hit', () => {
+    const match = eanMatch(asdaHits, '5063089281581');
+    expect(match?.external_id).toBe('9020290');
+    expect(match?.name).toBe('Extra Special Balsamic Vinegar of Modena 250ml');
+  });
+
+  it('refuses look-alikes: no barcode match means no match at all', () => {
+    // A Spanish gourmet olive oil against Asda's own-brand/Filippo Berio oils —
+    // same words, different products. Linking them would invent a fact.
+    const oils = [
+      hit({ barcode: '5057172338665', name: 'Extra Virgin Olive Oil 1 Litre' }),
+      hit({ barcode: '8002210500204', name: 'Filippo Berio Extra Virgin Olive Oil 500ml' }),
+    ];
+    expect(eanMatch(oils, '8410660200013')).toBeNull();
+  });
+
+  it('never matches a barcodeless hit', () => {
+    expect(eanMatch([hit({ barcode: null })], '5063089281581')).toBeNull();
+  });
+});
+
 describe('ProductPage', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  function setup(detail: ProductDetail = DETAIL) {
+  function setup(detail: ProductDetail = DETAIL, asdaHits: AsdaHit[] = []) {
     const api = {
       getProductDetail: vi.fn(() => of(detail)),
       productImageByIdUrl: (id: number) => `/api/products/id/${id}/image`,
+      searchAsda: vi.fn(() => of(asdaHits)),
+      importProduct: vi.fn(() => of(detail.product)),
     };
     TestBed.configureTestingModule({
       imports: [ProductPage],
@@ -156,6 +202,91 @@ describe('ProductPage', () => {
       { label: 'Vegetarian', value: 'yes' },
       { label: 'Palm oil free', value: 'maybe' },
     ]);
+  });
+
+  /** A product Open Food Facts knows but no shop lists yet — the state the
+   *  "Find at Asda" action exists for. */
+  const UNLISTED: ProductDetail = {
+    ...DETAIL,
+    product: { ...DETAIL.product, barcode: '5063089281581', name: 'Asda ES Balsamic Modena' },
+    listings: [DETAIL.listings[0]], // the off listing only
+    prices: [],
+  };
+
+  // The lookup is offered only when it can answer truthfully:
+  it('hides the Asda lookup when Asda already lists the product', () => {
+    expect(setup().page.canFindAtAsda()).toBe(false);
+  });
+
+  it('hides the Asda lookup with no barcode — there’d be nothing to match on', () => {
+    const detail = { ...UNLISTED, product: { ...UNLISTED.product, barcode: null } };
+    expect(setup(detail).page.canFindAtAsda()).toBe(false);
+  });
+
+  it('offers the Asda lookup for a barcoded product no shop lists yet', () => {
+    expect(setup(UNLISTED).page.canFindAtAsda()).toBe(true);
+  });
+
+  it('finds the product Asda ranks fourth, and adds it under its own barcode', () => {
+    const asdaHits = [
+      hit({ external_id: '9020293', barcode: '5063089281598', name: 'Raspberry Glaze' }),
+      hit({
+        external_id: '9020290',
+        barcode: '5063089281581',
+        name: 'Extra Special Balsamic Vinegar of Modena 250ml',
+        price: { amount_minor: 800, currency: 'GBP', unit_amount_minor: null, unit_measure: null, region: 'EN' },
+      }),
+    ];
+    const { page, api } = setup(UNLISTED, asdaHits);
+    page.findAtAsda();
+    // Searched by the only name we have — Open Food Facts' cryptic one.
+    expect(api.searchAsda).toHaveBeenCalledWith('Asda ES Balsamic Modena');
+    expect(page.shopLookup()).toBe('found');
+    expect(page.shopMatch()?.external_id).toBe('9020290');
+
+    page.attach(page.shopMatch()!);
+    expect(api.importProduct).toHaveBeenCalledWith({
+      source: 'asda',
+      external_id: '9020290',
+      name: 'Extra Special Balsamic Vinegar of Modena 250ml',
+      brand: null,
+      barcode: '5063089281581', // its own EAN — equal to ours, never forced
+      image_url: null,
+      price: {
+        amount_minor: 800, // what Asda charges, recorded as an observation
+        currency: 'GBP',
+        unit_amount_minor: null,
+        unit_measure: null,
+        region: 'EN',
+      },
+    });
+    expect(page.shopLookup()).toBe('idle'); // panel resets; the page reloads
+  });
+
+  it('reports an honest "not stocked" rather than offering a look-alike', () => {
+    const { page } = setup(UNLISTED, [
+      hit({ external_id: '1', barcode: '5057172338665', name: 'Extra Virgin Olive Oil 1 Litre' }),
+    ]);
+    page.findAtAsda();
+    expect(page.shopLookup()).toBe('none');
+    expect(page.shopMatch()).toBeNull();
+  });
+
+  it('distinguishes a failed search from an empty one', () => {
+    const api = {
+      getProductDetail: vi.fn(() => of(UNLISTED)),
+      productImageByIdUrl: () => '',
+      searchAsda: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 0 }))),
+    };
+    TestBed.configureTestingModule({
+      imports: [ProductPage],
+      providers: [{ provide: LifeApi, useValue: api }],
+    });
+    const fixture = TestBed.createComponent(ProductPage);
+    fixture.componentRef.setInput('id', '42');
+    fixture.detectChanges();
+    fixture.componentInstance.findAtAsda();
+    expect(fixture.componentInstance.shopLookup()).toBe('error');
   });
 
   /** Mount the page with an API that fails the detail load with `err`. */

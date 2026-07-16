@@ -165,6 +165,29 @@ through something that resets the NC session.
         inventory/buy sheets and "Scan a product" in the hamburger — barcode →
         lookup → page. Failures are classified (a 404 says the product isn't in
         the catalogue; only a real network failure blames the connection).
+- [x] **Product data model, increment 5 — "Find at Asda" on the product page**
+      (2026-07-16) — attach a shop to a product you already have, without
+      detouring through the Buy sheet's picker. Frontend-only: the Asda search
+      endpoint and the barcode-reconciling import already existed.
+      - **Matched by EAN, never by name or the shop's ranking** (`eanMatch`, pure
+        + tested). Neither retailer supports barcode→product, so we can only
+        reach them by NAME search — and searching Asda for a product's Open Food
+        Facts name ("Asda ES Balsamic Modena") ranks a *raspberry glaze* above
+        the product itself. Every hit carries its EAN, so relevance order is
+        discarded: the hit whose barcode equals ours IS the product; everything
+        else is a different product and cannot be attached. Precision over
+        recall, as with visits.
+      - Offered only when it can answer honestly: needs a barcode to match on,
+        and hidden once Asda already lists the product. No match → an explicit
+        "No Asda product carries this barcode" (a Spanish olive oil genuinely
+        isn't at Asda; a Filippo Berio is NOT it).
+      - Attaching imports under the HIT's own barcode (equal to ours — that's why
+        it matched), so the backend reconciles the two; we never force our
+        barcode onto a shop's listing. Price + deep link + Asda's clean name
+        (via the increment-4 ranking) all follow.
+      - Asda only: its storefront search is a public API callable from anywhere.
+        Waitrose needs the Android app's WebView to pass its bot-wall, so it
+        stays in the picker's shop tier rather than being half-offered here.
 - [x] 3D house renders the real `scenes/house.json` (perimeter walls + furniture)
 - [x] Mobile-first UI (bottom tabs ↔ side rail), management forms, NC avatar
 - [x] Deployed: isis k3s, CI/CD (`xinutec/life`), DNS, TLS, live login

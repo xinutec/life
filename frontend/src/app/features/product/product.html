@@ -34,7 +34,7 @@
     </div>
   }
 
-  @if (buyRows().length) {
+  @if (buyRows().length || canFindAtAsda()) {
     <h3>Where to buy</h3>
     <div class="buy">
       @for (r of buyRows(); track r.key) {
@@ -64,6 +64,41 @@
         </div>
       }
     </div>
+
+    @if (canFindAtAsda()) {
+      <div class="shop-lookup">
+        @switch (shopLookup()) {
+          @case ('searching') {
+            <span class="fine">Looking for this barcode at Asda…</span>
+          }
+          @case ('found') {
+            @if (shopMatch(); as hit) {
+              <!-- Barcode-confirmed: same EAN, so this IS the product. -->
+              <div class="match">
+                <mat-icon class="ok">verified</mat-icon>
+                <span class="match-name">
+                  {{ hit.name }}
+                  <span class="fine">same barcode · {{ hit.price_label }}</span>
+                </span>
+                <button mat-flat-button (click)="attach(hit)" [disabled]="attaching()">Add</button>
+              </div>
+            }
+          }
+          @case ('none') {
+            <span class="fine">No Asda product carries this barcode.</span>
+          }
+          @case ('error') {
+            <span class="fine">Couldn’t reach Asda — are you online?</span>
+          }
+          @default {
+            <button mat-button (click)="findAtAsda()">
+              <mat-icon>storefront</mat-icon>
+              Find at Asda
+            </button>
+          }
+        }
+      </div>
+    }
   }
 
   @if (nutrientRows().length) {

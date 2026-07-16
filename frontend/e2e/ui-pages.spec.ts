@@ -148,6 +148,33 @@ const PRODUCT_DETAIL = {
   },
 };
 
+/** A product Open Food Facts knows under a cryptic crowd name, that no shop
+ *  lists yet — the state the "Find at Asda" lookup exists for. */
+const UNLISTED_DETAIL = {
+  product: { id: 43, barcode: '5063089281581', name: 'Asda ES Balsamic Modena', brand: 'Asda',
+    quantity_label: null, source: 'off', external_id: '5063089281581', name_source: 'off',
+    has_image: false },
+  listings: [
+    { source: 'off', external_id: '5063089281581',
+      url: 'https://world.openfoodfacts.org/product/5063089281581', raw_name: 'Asda ES Balsamic Modena' },
+  ],
+  prices: [],
+  facts: { nutrition: null, ingredients: null, allergens: [], dietary: [] },
+};
+
+/** Asda's real answer for that crowd name: the product itself ranks LAST,
+ *  behind a raspberry glaze. The barcode is what identifies it. */
+const ASDA_HITS = [
+  { external_id: '2266257', name: 'Glaze with Balsamic Vinegar of Modena 250ml', brand: 'Asda',
+    barcode: '5050854946264', quantity_label: '250ml', price_label: '£2.25', price: null, image_url: null },
+  { external_id: '9020293', name: 'Raspberry Glaze with Balsamic Vinegar of Modena', brand: 'Asda',
+    barcode: '5063089281598', quantity_label: '250ml', price_label: '£2.50', price: null, image_url: null },
+  { external_id: '9020290', name: 'Extra Special Balsamic Vinegar of Modena 250ml', brand: 'Asda',
+    barcode: '5063089281581', quantity_label: '250ml', price_label: '£8.00',
+    price: { amount_minor: 800, currency: 'GBP', unit_amount_minor: null, unit_measure: null, region: 'EN' },
+    image_url: null },
+];
+
 const CONFLICTS = [
   { id: 1, kind: 'todo', ulid: '01TODOOVERDUE0000000000001', field: 'title',
     label: 'Call the GP about the referral letter',
@@ -169,6 +196,8 @@ async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/cookable*', (r) => r.fulfill({ json: [RECIPES[1]] }));
   await page.route('**/api/trash*', (r) => r.fulfill({ json: TRASH }));
   await page.route('**/api/products/id/42', (r) => r.fulfill({ json: PRODUCT_DETAIL }));
+  await page.route('**/api/products/id/43', (r) => r.fulfill({ json: UNLISTED_DETAIL }));
+  await page.route('**/api/products/shop/asda*', (r) => r.fulfill({ json: ASDA_HITS }));
   await page.route('**/api/conflicts*', (r) => r.fulfill({ json: CONFLICTS }));
   const sync = (docs: unknown[]) => (r: Parameters<Parameters<Page['route']>[1]>[0]) => {
     if (r.request().method() === 'POST') return r.fulfill({ json: [] });
@@ -397,6 +426,17 @@ test('product page — prices, panel, chips: lays out cleanly @ phone width', as
   // outgrows a phone viewport, and mid-scroll its content passes BEHIND the
   // fixed bottom nav (opaque by design). A whole-page assertion would read that
   // as a collision. Overflow stays whole-page — that's the body scroller's job.
+  await expectNoTextOverlaps(page, testInfo, 'app-product-page');
+  await expectNoHorizontalOverflow(page, testInfo);
+});
+
+test('product page — the Asda match reads cleanly @ phone width', async ({ page }, testInfo) => {
+  await mockApi(page);
+  await page.goto('/product/43');
+  await page.getByRole('button', { name: 'Find at Asda' }).click();
+  // The barcode match wins over Asda's own relevance order (it ranks 3rd here).
+  await page.getByText('Extra Special Balsamic Vinegar of Modena').waitFor();
+  await page.getByText('same barcode', { exact: false }).waitFor();
   await expectNoTextOverlaps(page, testInfo, 'app-product-page');
   await expectNoHorizontalOverflow(page, testInfo);
 });

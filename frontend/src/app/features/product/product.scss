@@ -122,6 +122,29 @@ h3 {
   font: var(--mat-sys-body-small);
 }
 
+// "Find at Asda" and whatever the lookup came back with.
+.shop-lookup {
+  margin-top: 0.25rem;
+
+  .match {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    .ok {
+      color: var(--mat-sys-primary);
+      flex: none;
+    }
+
+    .match-name {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+  }
+}
+
 .nutrition {
   width: 100%;
   border-collapse: collapse;
