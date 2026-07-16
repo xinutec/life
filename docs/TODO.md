@@ -100,6 +100,13 @@ through something that resets the NC session.
       sheets' Name fields: inventory tier (instant, offline), catalog tier
       (`GET /api/products?q=`, debounced), shop tier (Waitrose, in-app only;
       picking imports into the catalog). Replaced the Find-on-Waitrose dialog.
+- [x] Asda product tier (2026-07-16) — `GET /api/products/shop/asda?q=` searches
+      Asda's storefront via their public Algolia index (`src/products/asda.rs`).
+      Unlike the Waitrose WebView bridge this is a plain backend call, so the
+      Asda tier works in the browser too. Picking imports (source `asda`, keyed
+      by CIN; scene7 image fetched server-side); the hit's EAN rides back so the
+      row is barcoded. Reverse barcode→product isn't available (IMAGE_ID isn't a
+      searchable Algolia attribute) — name search only.
 - [x] 3D house renders the real `scenes/house.json` (perimeter walls + furniture)
 - [x] Mobile-first UI (bottom tabs ↔ side rail), management forms, NC avatar
 - [x] Deployed: isis k3s, CI/CD (`xinutec/life`), DNS, TLS, live login

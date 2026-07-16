@@ -23,8 +23,15 @@ static WAITROSE: Source = Source {
     image_hosts: &["wtrecom.com"],
 };
 
+/// Asda: products keyed by their CIN (see products::asda); images on the
+/// (ungated) scene7 CDN, keyed by the product's EAN.
+static ASDA: Source = Source {
+    id: "asda",
+    image_hosts: &["scene7.com"],
+};
+
 /// Every source importable through `POST /api/products/import`.
-static IMPORTABLE: &[&Source] = &[&WAITROSE];
+static IMPORTABLE: &[&Source] = &[&WAITROSE, &ASDA];
 
 /// The source policy for `id`, or `None` if that source can't be imported.
 pub fn importable(id: &str) -> Option<&'static Source> {

@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
+  AsdaHit,
   ConflictEntry,
   ConflictKind,
   HouseScene,
@@ -82,6 +83,12 @@ export class LifeApi {
   /** Catalog name/brand substring search (the product picker's catalog tier). */
   searchProducts(q: string): Observable<Product[]> {
     return this.http.get<Product[]>('/api/products', { params: { q } });
+  }
+  /** Live name search against Asda's storefront (the picker's Asda tier). Unlike
+   *  the Waitrose shop tier, this is a plain backend call — no app bridge — so
+   *  it works in the browser too. */
+  searchAsda(q: string): Observable<AsdaHit[]> {
+    return this.http.get<AsdaHit[]>('/api/products/shop/asda', { params: { q } });
   }
   /** URL of the cached product image (use directly as <img src>). Pass a
    *  `version` after a replace to bust the browser/service-worker cache. */

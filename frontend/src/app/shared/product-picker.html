@@ -57,7 +57,39 @@
     </mat-action-list>
   }
 
-  @if (query().trim() && !locals().length && !catalog().length) {
+  @if (asda().length) {
+    <h4 class="tier">Asda</h4>
+    <mat-action-list>
+      @for (h of asda(); track h.external_id) {
+        <button mat-list-item lines="2" (click)="pickAsda(h)" [disabled]="importing()">
+          @if (h.image_url) {
+            <img matListItemAvatar [src]="h.image_url" alt="" />
+          } @else {
+            <mat-icon matListItemIcon>storefront</mat-icon>
+          }
+          <span matListItemTitle>{{ h.name }}</span>
+          <span matListItemLine>
+            @if (h.brand) {
+              {{ h.brand }} ·
+            }
+            @if (h.quantity_label) {
+              {{ h.quantity_label }} ·
+            }
+            {{ h.price_label ?? 'Asda' }}
+          </span>
+        </button>
+      }
+    </mat-action-list>
+  }
+
+  @if (importing()) {
+    <div class="state">
+      <mat-progress-spinner mode="indeterminate" diameter="28" />
+      <span>Linking…</span>
+    </div>
+  }
+
+  @if (query().trim() && !locals().length && !catalog().length && !asda().length) {
     <p class="state">No matches yet — keep typing, or add it by name.</p>
   }
 
@@ -73,10 +105,10 @@
       </button>
       <button mat-button (click)="connectShop(provider)">Connect</button>
     </div>
-    @if (shopBusy() || importing()) {
+    @if (shopBusy()) {
       <div class="state">
         <mat-progress-spinner mode="indeterminate" diameter="28" />
-        <span>{{ importing() ? 'Linking…' : 'Searching ' + provider.displayName + '…' }}</span>
+        <span>Searching {{ provider.displayName }}…</span>
       </div>
     } @else if (shopError(); as msg) {
       <p class="state error">{{ msg }}</p>

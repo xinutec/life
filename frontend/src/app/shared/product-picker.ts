@@ -19,7 +19,7 @@ import {
 } from 'rxjs';
 
 import { LifeApi } from '../life-api';
-import { Item, ItemCategory, Product } from '../models';
+import { AsdaHit, Item, ItemCategory, Product } from '../models';
 import { ShopCandidate, ShopProvider, Shops } from '../shop';
 import { WAITROSE } from '../shops/waitrose';
 import { ItemsStore } from '../stores/catalog';
@@ -128,6 +128,20 @@ export class ProductPicker {
     { initialValue: [] as Product[] },
   );
 
+  /** Asda tier: same debounced query, but a live search against Asda's
+   *  storefront (backend → Algolia). Works everywhere (no app bridge). A failed
+   *  search is just an empty tier. */
+  readonly asda = toSignal(
+    this.query$.pipe(
+      debounceTime(250),
+      distinctUntilChanged(),
+      switchMap((q) =>
+        q ? this.api.searchAsda(q).pipe(catchError(() => of([] as AsdaHit[]))) : of([] as AsdaHit[]),
+      ),
+    ),
+    { initialValue: [] as AsdaHit[] },
+  );
+
   readonly locals = computed(() => localHits(this.itemsStore.value() ?? [], this.query()));
   readonly catalog = computed(() => withoutLocalDupes(this.catalogRaw(), this.locals()));
 
@@ -190,6 +204,35 @@ export class ProductPicker {
       unit: null,
       category: null,
     });
+  }
+
+  /** Import the Asda product into the catalog (server caches its scene7 image),
+   *  then close linked. The imported catalog row is barcodeless (keyed by CIN),
+   *  but the hit's EAN rides along so the shopping/inventory row still carries a
+   *  barcode. */
+  pickAsda(hit: AsdaHit): void {
+    if (this.importing()) return;
+    this.importing.set(true);
+    firstValueFrom(
+      this.api.importProduct({
+        source: 'asda',
+        external_id: hit.external_id,
+        name: hit.name,
+        brand: hit.brand,
+        image_url: hit.image_url,
+      }),
+    )
+      .then((product) =>
+        this.ref.close({
+          name: product.name ?? hit.name,
+          barcode: hit.barcode ?? product.barcode,
+          product_id: product.id,
+          unit: null,
+          category: null,
+        }),
+      )
+      .catch(() => this.feedback.error('Could not link the Asda product.'))
+      .finally(() => this.importing.set(false));
   }
 
   searchShop(provider: ShopProvider): void {

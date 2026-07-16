@@ -8,13 +8,25 @@ use axum::response::Response;
 use serde::Deserialize;
 
 use crate::error::AppError;
-use crate::products::{off, repo, source, types::Product};
+use crate::products::{asda, off, repo, source, types::Product};
 use crate::session::AuthUser;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct SearchParams {
     q: String,
+}
+
+/// GET /api/products/shop/asda?q= → live name search against Asda's storefront
+/// (see products::asda). Distinct from the local catalog tier at
+/// GET /api/products: this hits the shop, so the picker offers it as its own
+/// explicit tier. A blank query returns `[]` with no outbound call.
+pub async fn search_asda(
+    State(app): State<AppState>,
+    AuthUser(_user): AuthUser,
+    Query(params): Query<SearchParams>,
+) -> Result<Json<Vec<asda::AsdaHit>>, AppError> {
+    Ok(Json(asda::search(&app.http, params.q.trim(), 15).await?))
 }
 
 /// GET /api/products?q= → catalog name/brand substring search (the product

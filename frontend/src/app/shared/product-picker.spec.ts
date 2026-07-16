@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Feedback } from './feedback';
 import { LifeApi } from '../life-api';
-import { Item, Product } from '../models';
+import { AsdaHit, Item, Product } from '../models';
 import { Shops } from '../shop';
 import { ItemsStore } from '../stores/catalog';
 import { ProductPicker, localHits, withoutLocalDupes } from './product-picker';
@@ -81,7 +81,9 @@ describe('withoutLocalDupes', () => {
 });
 
 describe('ProductPicker', () => {
-  function setup(opts: { items?: Item[]; catalog?: Product[]; shopAvailable?: boolean } = {}) {
+  function setup(
+    opts: { items?: Item[]; catalog?: Product[]; asda?: AsdaHit[]; shopAvailable?: boolean } = {},
+  ) {
     const ref = { close: vi.fn() };
     const shops = {
       available: opts.shopAvailable ?? false,
@@ -100,6 +102,7 @@ describe('ProductPicker', () => {
     };
     const api = {
       searchProducts: vi.fn(() => of(opts.catalog ?? [])),
+      searchAsda: vi.fn(() => of(opts.asda ?? [])),
       importProduct: vi.fn(() => of(product({ id: 99, name: 'Waitrose Cheddar' }))),
       productImageUrl: (b: string) => `/api/products/${b}/image`,
       productImageByIdUrl: (id: number) => `/api/products/id/${id}/image`,
@@ -146,6 +149,52 @@ describe('ProductPicker', () => {
     fixture.detectChanges();
     expect(fixture.componentInstance.shopProviders).toEqual([]);
     expect((fixture.nativeElement as HTMLElement).querySelector('.shop-tier')).toBeNull();
+  });
+
+  it('picking an Asda hit imports it and closes with the hit’s barcode', async () => {
+    const hit: AsdaHit = {
+      external_id: '7690049',
+      name: 'Lurpak Spreadable 400g',
+      brand: 'Lurpak',
+      barcode: '5740900404465',
+      quantity_label: '400G',
+      price_label: '£3.57',
+      image_url: 'https://asdagroceries.scene7.com/is/image/asdagroceries/5740900404465?$ProdList$',
+    };
+    const { fixture, ref, api } = setup({ asda: [hit] });
+    fixture.detectChanges();
+    fixture.componentInstance.pickAsda(hit);
+    await new Promise((r) => setTimeout(r));
+
+    expect(api.importProduct).toHaveBeenCalledWith(
+      expect.objectContaining({ source: 'asda', external_id: '7690049', image_url: hit.image_url }),
+    );
+    // The imported catalogue row is barcodeless; the hit's EAN must still ride
+    // back so the shopping row is barcoded.
+    expect(ref.close).toHaveBeenCalledWith(
+      expect.objectContaining({ product_id: 99, barcode: '5740900404465' }),
+    );
+  });
+
+  it('the Asda tier is backend-backed, so it shows even outside the app', async () => {
+    const hit: AsdaHit = {
+      external_id: '1',
+      name: 'Asda thing',
+      brand: null,
+      barcode: null,
+      quantity_label: null,
+      price_label: null,
+      image_url: null,
+    };
+    const { fixture } = setup({ asda: [hit] });
+    fixture.detectChanges();
+    // The tier is driven by the same 250ms-debounced query as the catalog tier;
+    // let it settle before asserting.
+    await new Promise((r) => setTimeout(r, 300));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.asda()).toEqual([hit]);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Asda thing');
+    expect(fixture.componentInstance.shopProviders).toEqual([]); // no app bridge, yet Asda shows
   });
 
   it('picking a shop hit fetches, imports, and closes linked to the import', async () => {
