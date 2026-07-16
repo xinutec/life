@@ -2,14 +2,35 @@
 
 use axum::Json;
 use axum::body::{Body, Bytes};
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{StatusCode, header};
 use axum::response::Response;
+use serde::Deserialize;
 
 use crate::error::AppError;
 use crate::products::{off, repo, source, types::Product};
 use crate::session::AuthUser;
 use crate::state::AppState;
+
+#[derive(Debug, Deserialize)]
+pub struct SearchParams {
+    q: String,
+}
+
+/// GET /api/products?q= → catalog name/brand substring search (the product
+/// picker's catalog tier). Catalog-only and cheap: no OFF/shop traffic — the
+/// external tiers are separate, explicit actions in the picker.
+pub async fn search(
+    State(app): State<AppState>,
+    AuthUser(_user): AuthUser,
+    Query(params): Query<SearchParams>,
+) -> Result<Json<Vec<Product>>, AppError> {
+    let q = params.q.trim();
+    if q.is_empty() {
+        return Ok(Json(vec![]));
+    }
+    Ok(Json(repo::search(&app.pool, q, 20).await?))
+}
 
 /// GET /api/products/{barcode} → cached metadata, fetching+caching from OFF on
 /// a miss. 404 if OFF has no such product.

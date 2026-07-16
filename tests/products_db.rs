@@ -78,6 +78,61 @@ async fn product_cache_against_real_db() {
 }
 
 #[tokio::test]
+async fn catalog_search_against_real_db() {
+    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
+        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping catalog-search DB test");
+        return;
+    };
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    // Fixture rows, isolated by a prefix no other test uses.
+    sqlx::query("DELETE FROM products WHERE barcode LIKE 'test-search-%'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    // Names/brands carry a token no real catalog row would ('yoghurtzz'), so
+    // the assertions hold whatever else the shared DB contains.
+    for (bc, name, brand) in [
+        ("test-search-0001", "Greek Style Yoghurtzz", "Fage"),
+        ("test-search-0002", "Natural Yoghurtzz 950g", "Yeo Valley"),
+        ("test-search-0003", "Oat Milk", "Oatlyzz"),
+    ] {
+        repo::upsert(&pool, bc, Some(name), Some(brand), None, None)
+            .await
+            .unwrap();
+    }
+
+    // Name substring, case-insensitive (utf8mb4 collation), name-ordered.
+    let yog = repo::search(&pool, "YOGHURTZZ", 20).await.unwrap();
+    let names: Vec<_> = yog.iter().map(|p| p.name.as_deref().unwrap()).collect();
+    assert_eq!(names, ["Greek Style Yoghurtzz", "Natural Yoghurtzz 950g"]);
+
+    // Brand matches too.
+    let oatly = repo::search(&pool, "oatlyzz", 20).await.unwrap();
+    assert!(
+        oatly.iter().any(|p| p.name.as_deref() == Some("Oat Milk")),
+        "brand substring finds the row"
+    );
+
+    // LIKE metacharacters match literally, not as wildcards.
+    assert!(
+        repo::search(&pool, "yoghurt%z", 20)
+            .await
+            .unwrap()
+            .is_empty(),
+        "% is a literal, not a wildcard"
+    );
+    assert!(
+        repo::search(&pool, "yoghurt_z", 20)
+            .await
+            .unwrap()
+            .is_empty(),
+        "_ is a literal, not a wildcard"
+    );
+}
+
+#[tokio::test]
 async fn external_import_against_real_db() {
     let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
         eprintln!("LIFE_TEST_DATABASE_URL unset — skipping external-import DB test");

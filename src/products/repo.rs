@@ -50,6 +50,28 @@ pub async fn get(pool: &MySqlPool, barcode: &str) -> Result<Option<Product>> {
     Ok(row.map(Product::from))
 }
 
+/// Name/brand substring search over the catalog (the picker's catalog tier).
+/// Case-insensitivity comes from the columns' utf8mb4 collation; `%`/`_`/`\`
+/// in the query are escaped so they match literally.
+pub async fn search(pool: &MySqlPool, query: &str, limit: u64) -> Result<Vec<Product>> {
+    let escaped = query
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_");
+    let pattern = format!("%{escaped}%");
+    let rows: Vec<MetaRow> = sqlx::query_as(
+        "SELECT id, barcode, external_id, name, brand, quantity_label, source, \
+         (image IS NOT NULL) AS has_image FROM products \
+         WHERE name LIKE ? OR brand LIKE ? ORDER BY name LIMIT ?",
+    )
+    .bind(&pattern)
+    .bind(&pattern)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(Product::from).collect())
+}
+
 /// Catalog row by surrogate id, or None.
 pub async fn get_by_id(pool: &MySqlPool, id: u64) -> Result<Option<Product>> {
     let row: Option<MetaRow> = sqlx::query_as(
