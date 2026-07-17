@@ -3,7 +3,7 @@
 //! URLs and non-numeric barcodes short-circuit *before* any network call, so
 //! these assertions are hermetic (no OFF request is ever made).
 
-use life::products::off;
+use life::products::{off, source};
 
 #[tokio::test]
 async fn image_proxy_refuses_non_off_and_non_https_urls() {
@@ -47,6 +47,40 @@ async fn generic_image_guard_enforces_per_source_allowlist() {
             .await
             .expect("the guard returns Ok(None), never an error");
         assert!(got.is_none(), "expected {url} to be refused");
+    }
+}
+
+#[tokio::test]
+async fn asda_attach_pulls_its_image_only_from_scene7() {
+    // The product-page attach (routes::products::sync_listing) now fetches the
+    // product picture from Asda through this exact allowlist. Tie the test to the
+    // CONFIGURED list, not a hand-copied one, so the guard can't silently drift
+    // from what the attach path actually passes.
+    let asda = source::importable("asda").expect("asda is importable");
+    assert!(
+        asda.image_hosts.contains(&"scene7.com"),
+        "attach relies on scene7 being the Asda image host"
+    );
+
+    // A scene7 URL is the shape the real hit carries: the EAN keys the image.
+    // We can't assert the ALLOWED fetch here (that would hit the CDN — verified
+    // live instead); we CAN prove every poisoned look-alike is refused before any
+    // network call, which is the SSRF surface the attach opened.
+    for url in [
+        "http://asdagroceries.scene7.com/is/image/asdagroceries/5063089281581", // not https
+        "https://scene7.com.evil.com/x.jpg",                                    // look-alike suffix
+        "https://scene7.com@evil.com/x.jpg", // userinfo trick: real host is evil.com
+        "https://asdagroceries.wtrecom.com/x", // another source's host, not Asda's
+        "https://openfoodfacts.org/x.jpg",   // allowed for OFF, not for an Asda pull
+        "file:///etc/passwd",
+    ] {
+        let got = off::fetch_image_from(url, asda.image_hosts)
+            .await
+            .expect("the guard returns Ok(None), never an error");
+        assert!(
+            got.is_none(),
+            "expected {url} to be refused for an Asda pull"
+        );
     }
 }
 

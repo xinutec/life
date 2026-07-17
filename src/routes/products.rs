@@ -490,6 +490,20 @@ pub async fn sync_listing(
     {
         repo::record_price(&app.pool, lid, price).await?;
     }
+    // The picture is part of the identity we know about this product, not a
+    // rotting figure — so pull it onto the product now, the same SSRF-gated
+    // fetch the picker's import path and OFF lookups use. Only when the product
+    // has none yet: an image we already have (from OFF, or a hand upload) is not
+    // overwritten, matching the pack-size rule above. Best-effort — a failed
+    // fetch just leaves the product image-less, never fails the attach.
+    if !updated.has_image
+        && let Some(url) = hit.image_url.as_deref().filter(|s| !s.is_empty())
+        && let Some(src) = source::importable("asda")
+        && !src.image_hosts.is_empty()
+        && let Some((bytes, mime)) = off::fetch_image_from(url, src.image_hosts).await?
+    {
+        repo::set_image_by_id(&app.pool, updated.id, &bytes, &mime).await?;
+    }
     tracing::info!(product = updated.id, cin = %hit.external_id, flags = hit.dietary.len(), "asda listing pulled");
     repo::get_by_id(&app.pool, updated.id)
         .await?
