@@ -252,6 +252,20 @@ through something that resets the NC session.
         barcode, so it fetches candidates until one matches — uncapped, cache
         first, app-only. The cache + `find` endpoint are already shop-agnostic;
         7b wires the bridge into `shop_cache::remember` and a Waitrose provider.
+- [x] **Client activity trace** (2026-07-17) — the navigations and taps the
+      browser sees but the API doesn't, folded into the SAME log stream as the
+      per-request trace so a session reads as one timeline (`nav /product/56` →
+      `tap "Find at Asda"` → `GET …/find/asda 200`). Instrumented ONCE, no
+      per-screen code: `Telemetry` (`frontend/src/app/telemetry.ts`, wired in the
+      `app.ts` shell) captures from two central seams — Router events (nav) and a
+      single global capture-phase click listener that reads the nearest control's
+      accessible name (`labelFor`) — batches, and POSTs to `POST /api/telemetry`
+      (`src/routes/telemetry.rs`), which only logs them (NO storage; these are
+      logs, not data). Best-effort: dropped-not-retried, `sendBeacon` on
+      backgrounding, auth-gated (an open log-write would be an injection vector).
+      Labels are verbatim — `labelFor` strips `mat-icon`/`[aria-hidden]` text so a
+      Material icon's ligature doesn't prefix every button. Read a session with
+      `kubectl -n life logs deploy/life-app | grep client-event`.
 - [x] 3D house renders the real `scenes/house.json` (perimeter walls + furniture)
 - [x] Mobile-first UI (bottom tabs ↔ side rail), management forms, NC avatar
 - [x] Deployed: isis k3s, CI/CD (`xinutec/life`), DNS, TLS, live login
