@@ -217,6 +217,41 @@ through something that resets the NC session.
       - **Refresh is manual, by design**: a button per Asda row, no cron, no
         staleness check, nothing on load. Shop data goes stale silently; a wrong
         price you didn't ask for is worse than an old one you can refresh.
+- [x] **Product data model, increment 7a — remember every shop query, look it up
+      before asking again** (2026-07-17) — a shop query returns far more than the
+      product that prompted it: one Asda search hands back ~15 hits, each with
+      its own EAN. We read the one that matched and dropped the rest, then paid
+      for a fresh search next time. Those were durable barcode → CIN facts, bought
+      and binned.
+      - **Migration 0029 — `shop_listings`**: our memory of the shops'
+        catalogues, keyed `(source, external_id)`, barcode-indexed. Deliberately
+        NOT `product_listings` (whose `product_id` is NOT NULL — storing a hit
+        there would mint a catalogue `products` row, and an image blob, for every
+        incidental result). Image is a URL, never bytes. A row graduates into a
+        real `product_listings` row only when matched to a product and attached.
+      - **`shop_cache::remember`** stores every hit a search returns;
+        `search_asda` and the new find endpoint both write through it. Upsert on
+        the shop's identity; **`COALESCE(VALUES(x), x)`** so a thinner re-sighting
+        (a Waitrose *search* hit, which carries no barcode) never erases what a
+        fuller one taught us — the same silent-erasure shape as inc 6, guarded the
+        same way and proved by a fault-injection test.
+      - **`GET /api/products/id/{id}/find/{source}`** — memory first, shop
+        second. A cache hit answers with ZERO outbound traffic; only a miss
+        searches, and that whole result is remembered on the way back, so lookups
+        tend toward no queries as the cache fills. `ShopFind { hit, from_cache }`
+        — the UI shows *"already knew this one"* so a cache you can't see can't be
+        wrong unnoticed.
+      - **Match moved server-side** (`asda::match_barcode`, pure + tested, the
+        raspberry-glaze case ported from the frontend's `eanMatch`): identity is
+        the barcode, never the shop's relevance order. No cap or sampling — a
+        `None` means every hit was checked and none carried this EAN, a real
+        answer, not "gave up early".
+      - This caches OUR OWN queries only — never a crawl of a shop's catalogue.
+      - **7b (next): "Find at Waitrose"** on the product page, via the Android
+        bridge (server can't pass the bot-wall). Its search hits carry no
+        barcode, so it fetches candidates until one matches — uncapped, cache
+        first, app-only. The cache + `find` endpoint are already shop-agnostic;
+        7b wires the bridge into `shop_cache::remember` and a Waitrose provider.
 - [x] 3D house renders the real `scenes/house.json` (perimeter walls + furniture)
 - [x] Mobile-first UI (bottom tabs ↔ side rail), management forms, NC avatar
 - [x] Deployed: isis k3s, CI/CD (`xinutec/life`), DNS, TLS, live login

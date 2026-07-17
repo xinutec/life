@@ -89,7 +89,18 @@
                 <mat-icon class="ok">verified</mat-icon>
                 <span class="match-name">
                   {{ hit.name }}
-                  <span class="fine">same barcode · {{ hit.price_label }}</span>
+                  <!-- A remembered hit has no price: the cache keeps identity,
+                       which doesn't rot, not figures, which do. Adding it
+                       fetches the real price from Asda. -->
+                  <span class="fine">
+                    same barcode
+                    @if (hit.price_label) {
+                      · {{ hit.price_label }}
+                    }
+                    @if (fromCache()) {
+                      · already knew this one
+                    }
+                  </span>
                 </span>
                 <button mat-flat-button (click)="attach(hit)" [disabled]="attaching()">Add</button>
               </div>

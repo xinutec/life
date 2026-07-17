@@ -84,6 +84,10 @@ pub fn router(state: AppState) -> Router {
         .route("/products/import", post(products::import))
         .route("/products/id/{id}", get(products::product_detail))
         .route("/products/id/{id}/listings", post(products::sync_listing))
+        .route(
+            "/products/id/{id}/find/{source}",
+            get(products::find_at_shop),
+        )
         .route("/products/id/{id}/image", get(products::image_by_id))
         .route("/products/{barcode}", get(products::lookup))
         .route(

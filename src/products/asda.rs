@@ -231,6 +231,26 @@ fn normalize(raw: RawHit) -> Option<AsdaHit> {
     })
 }
 
+/// The one hit that IS this product, or `None`.
+///
+/// Identity is the barcode, never the name: Asda has no barcode→product lookup
+/// (`IMAGE_ID` isn't a searchable attribute), so we can only reach it by NAME
+/// search — and a name search for "Asda ES Balsamic Modena" ranks a *raspberry*
+/// glaze above the product itself. Every hit carries its EAN, so we ignore the
+/// shop's relevance order entirely and take the one whose barcode matches. A hit
+/// that merely reads alike is a DIFFERENT product and must never be attached —
+/// the same precision-over-recall rule the visit matcher follows.
+///
+/// `None` therefore means "every hit was checked and none carried this EAN",
+/// which is a real answer. It is never "we stopped looking early": nothing here
+/// caps or samples the hits.
+///
+/// Pure, so the rule is tested without a network.
+pub fn match_barcode(hits: Vec<AsdaHit>, barcode: &str) -> Option<AsdaHit> {
+    hits.into_iter()
+        .find(|h| h.barcode.as_deref() == Some(barcode))
+}
+
 /// One product by its CIN — the exact-identity fetch behind "refresh this
 /// listing". Asda has no by-id endpoint, but the CIN IS a searchable attribute,
 /// so we query it and then VERIFY the hit's own CIN rather than trusting the

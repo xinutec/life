@@ -197,7 +197,15 @@ async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/trash*', (r) => r.fulfill({ json: TRASH }));
   await page.route('**/api/products/id/42', (r) => r.fulfill({ json: PRODUCT_DETAIL }));
   await page.route('**/api/products/id/43', (r) => r.fulfill({ json: UNLISTED_DETAIL }));
+  // The picker's Asda tier still searches by name.
   await page.route('**/api/products/shop/asda*', (r) => r.fulfill({ json: ASDA_HITS }));
+  // The product page's lookup is answered server-side: the backend checks what
+  // past shop queries taught it before searching, and matches on the EAN itself
+  // (products::asda::match_barcode). So the wire carries an already-confirmed
+  // hit, and what's exercised here is how that answer renders.
+  await page.route('**/api/products/id/43/find/asda', (r) =>
+    r.fulfill({ json: { hit: ASDA_HITS[2], from_cache: false } }),
+  );
   await page.route('**/api/conflicts*', (r) => r.fulfill({ json: CONFLICTS }));
   const sync = (docs: unknown[]) => (r: Parameters<Parameters<Page['route']>[1]>[0]) => {
     if (r.request().method() === 'POST') return r.fulfill({ json: [] });
@@ -434,7 +442,8 @@ test('product page — the Asda match reads cleanly @ phone width', async ({ pag
   await mockApi(page);
   await page.goto('/product/43');
   await page.getByRole('button', { name: 'Find at Asda' }).click();
-  // The barcode match wins over Asda's own relevance order (it ranks 3rd here).
+  // The confirmed match — the product itself, which Asda's own relevance order
+  // ranks last. That rule is enforced (and tested) server-side now.
   await page.getByText('Extra Special Balsamic Vinegar of Modena').waitFor();
   await page.getByText('same barcode', { exact: false }).waitFor();
   await expectNoTextOverlaps(page, testInfo, 'app-product-page');

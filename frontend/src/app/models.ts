@@ -14,6 +14,7 @@ export type { Product } from './generated/Product';
 export type { ProductListing } from './generated/ProductListing';
 export type { ProductDetail } from './generated/ProductDetail';
 export type { AsdaHit } from './generated/AsdaHit';
+export type { ShopFind } from './generated/ShopFind';
 export type { PriceInput } from './generated/PriceInput';
 export type { ShopPrice } from './generated/ShopPrice';
 export type { ProductFacts } from './generated/ProductFacts';

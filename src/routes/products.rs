@@ -10,7 +10,7 @@ use serde::Deserialize;
 use crate::error::AppError;
 use crate::products::prices::PriceInput;
 use crate::products::types::{Product, ProductDetail, ProductListing};
-use crate::products::{asda, off, repo, source};
+use crate::products::{asda, off, repo, shop_cache, source};
 use crate::session::AuthUser;
 use crate::state::AppState;
 
@@ -23,12 +23,37 @@ pub struct SearchParams {
 /// (see products::asda). Distinct from the local catalog tier at
 /// GET /api/products: this hits the shop, so the picker offers it as its own
 /// explicit tier. A blank query returns `[]` with no outbound call.
+///
+/// Every hit is remembered on the way past (products::shop_cache), not just the
+/// one the caller ends up using: each carries its own EAN, so a search we've
+/// already paid for teaches us ~15 barcode → CIN mappings. Dropping them meant
+/// re-querying Asda for a product this very search had already described.
 pub async fn search_asda(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
     Query(params): Query<SearchParams>,
 ) -> Result<Json<Vec<asda::AsdaHit>>, AppError> {
-    Ok(Json(asda::search(&app.http, params.q.trim(), 15).await?))
+    let hits = asda::search(&app.http, params.q.trim(), 15).await?;
+    remember_hits(&app.pool, &hits).await;
+    Ok(Json(hits))
+}
+
+/// Cache what a search showed us. Deliberately infallible from the caller's
+/// side: remembering is a side benefit of a query the user asked for, so a
+/// cache write that fails must not turn their working search into an error.
+/// It's logged, not swallowed silently — a cache that quietly never writes
+/// would look exactly like one that's working.
+async fn remember_hits(pool: &sqlx::MySqlPool, hits: &[asda::AsdaHit]) {
+    let listings: Vec<shop_cache::CachedListing> = hits
+        .iter()
+        .map(shop_cache::CachedListing::from_asda)
+        .collect();
+    if let Err(e) = shop_cache::remember(pool, &listings).await {
+        tracing::warn!(
+            "shop_cache: failed to remember {} asda hits: {e:#}",
+            listings.len()
+        );
+    }
 }
 
 /// GET /api/products?q= → catalog name/brand substring search (the product
@@ -295,6 +320,99 @@ pub async fn product_detail(
         listings,
         prices,
         facts,
+    }))
+}
+
+/// The answer to "does this shop carry this product?".
+#[derive(serde::Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct ShopFind {
+    /// The barcode-confirmed listing, or `None` for "we looked and this shop
+    /// doesn't carry this barcode" — never "we gave up early".
+    pub hit: Option<asda::AsdaHit>,
+    /// Whether this came from memory rather than a fresh shop query. The UI says
+    /// so: an answer we already had and one we just paid for are different
+    /// things, and hiding which is which makes the cache unfalsifiable.
+    pub from_cache: bool,
+}
+
+/// A remembered listing, shaped as a search hit.
+///
+/// Price and dietary flags are deliberately absent rather than stale: the cache
+/// keeps identity (this barcode is this CIN), which doesn't rot, and not the
+/// figures that do. Attaching re-fetches those from the shop for real, so the
+/// only thing this has to be good enough for is letting you confirm it's the
+/// right product.
+fn cached_as_hit(c: shop_cache::CachedListing) -> asda::AsdaHit {
+    asda::AsdaHit {
+        external_id: c.external_id,
+        name: c.name.unwrap_or_default(),
+        brand: c.brand,
+        barcode: c.barcode,
+        quantity_label: c.quantity_label,
+        price_label: None,
+        price: None,
+        image_url: c.image_url,
+        dietary: vec![],
+    }
+}
+
+/// GET /api/products/id/{id}/find/{source} → does this shop carry this product's
+/// barcode?
+///
+/// Memory first, shop second. A hit in `shop_listings` answers with no outbound
+/// traffic at all; only a miss asks the shop, and that query's whole result is
+/// remembered on the way back, so the cache fills as a side effect of use and
+/// lookups tend toward zero queries.
+///
+/// Identity is always the barcode, never the name: Asda's relevance order is no
+/// evidence about which product this is (a name search for a balsamic ranked a
+/// raspberry glaze above it). So a `None` here means every hit was checked and
+/// none carried this EAN — a real, if unwelcome, answer.
+pub async fn find_at_shop(
+    State(app): State<AppState>,
+    AuthUser(_user): AuthUser,
+    Path((id, source)): Path<(u64, String)>,
+) -> Result<Json<ShopFind>, AppError> {
+    // Waitrose can't be reached from here — its bot-wall needs the Android app's
+    // WebView, so the phone does that lookup and hands the results back to be
+    // remembered. Rejecting it is honest; pretending to search it is not.
+    if source != "asda" {
+        return Err(AppError::BadRequest(format!(
+            "{source} can't be searched from the server"
+        )));
+    }
+    let product = repo::get_by_id(&app.pool, id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let Some(barcode) = product.barcode.clone() else {
+        return Err(AppError::BadRequest(
+            "this product has no barcode to match on".to_string(),
+        ));
+    };
+
+    if let Some(cached) = shop_cache::find_by_barcode(&app.pool, &source, &barcode).await? {
+        return Ok(Json(ShopFind {
+            hit: Some(cached_as_hit(cached)),
+            from_cache: true,
+        }));
+    }
+
+    let Some(query) = product
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|q| !q.is_empty())
+    else {
+        return Err(AppError::BadRequest(
+            "this product has no name to search by".to_string(),
+        ));
+    };
+    let hits = asda::search(&app.http, query, 15).await?;
+    remember_hits(&app.pool, &hits).await;
+    Ok(Json(ShopFind {
+        hit: asda::match_barcode(hits, &barcode),
+        from_cache: false,
     }))
 }
 

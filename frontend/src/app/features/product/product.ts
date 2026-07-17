@@ -43,20 +43,6 @@ interface DietaryChip {
  *  barcode — a real answer, not an error. */
 type ShopLookup = 'idle' | 'searching' | 'found' | 'none' | 'error';
 
-/** The one hit that IS this product, or null.
- *
- *  Identity is the barcode, never the name: neither Asda nor Waitrose supports
- *  barcode→product lookup, so we can only reach a shop by NAME search — and a
- *  name search for "Asda ES Balsamic Modena" ranks a *raspberry* glaze above
- *  the product itself. Every hit carries its EAN, so we ignore the shop's
- *  relevance order entirely and take the one whose barcode matches. A hit that
- *  merely reads alike is a DIFFERENT product and must never be attached — the
- *  same precision-over-recall rule the visit matcher follows.
- *
- *  Pure, so the rule is tested without a network. */
-export function eanMatch(hits: AsdaHit[], barcode: string): AsdaHit | null {
-  return hits.find((h) => h.barcode != null && h.barcode === barcode) ?? null;
-}
 
 /** A listing's identity — what joins a price to the listing that quoted it, and
  *  what keys a row. `(source, external_id)` is the listing's unique key. */
@@ -175,6 +161,10 @@ export class ProductPage {
 
   readonly shopLookup = signal<ShopLookup>('idle');
   readonly shopMatch = signal<AsdaHit | null>(null);
+  /** Whether the match came from what we already knew rather than a fresh
+   *  query. Shown, not hidden: a cache you can't see is a cache you can't
+   *  catch being wrong. */
+  readonly fromCache = signal(false);
   readonly attaching = signal(false);
 
   /** Only offer the lookup when it can give a truthful answer: we need a barcode
@@ -185,19 +175,20 @@ export class ProductPage {
     return !d.listings.some((l) => l.source === 'asda');
   });
 
-  /** Search Asda by name, then keep only a barcode-confirmed hit. */
+  /** Ask whether Asda carries this barcode. The backend checks what past shop
+   *  queries already taught it before searching, so this often costs Asda
+   *  nothing; either way it matches on the EAN and hands back only a confirmed
+   *  hit. */
   findAtAsda(): void {
-    const d = this.detail();
-    const barcode = d?.product.barcode;
-    const query = d?.product.name?.trim();
-    if (!barcode || !query) return;
+    if (!this.canFindAtAsda()) return;
     this.shopLookup.set('searching');
     this.shopMatch.set(null);
-    this.api.searchAsda(query).subscribe({
-      next: (hits) => {
-        const match = eanMatch(hits, barcode);
-        this.shopMatch.set(match);
-        this.shopLookup.set(match ? 'found' : 'none');
+    this.fromCache.set(false);
+    this.api.findAtShop(this.id(), 'asda').subscribe({
+      next: (found) => {
+        this.shopMatch.set(found.hit);
+        this.fromCache.set(found.from_cache);
+        this.shopLookup.set(found.hit ? 'found' : 'none');
       },
       error: () => this.shopLookup.set('error'),
     });

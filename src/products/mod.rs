@@ -6,5 +6,6 @@ pub mod nutrition;
 pub mod off;
 pub mod prices;
 pub mod repo;
+pub mod shop_cache;
 pub mod source;
 pub mod types;

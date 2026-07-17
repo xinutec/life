@@ -4,8 +4,8 @@ import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { LifeApi } from '../../life-api';
-import { AsdaHit, ProductDetail } from '../../models';
-import { ProductPage, eanMatch } from './product';
+import { AsdaHit, ProductDetail, ShopFind } from '../../models';
+import { ProductPage } from './product';
 
 const DETAIL: ProductDetail = {
   product: {
@@ -73,46 +73,17 @@ const hit = (over: Partial<AsdaHit>): AsdaHit => ({
   ...over,
 });
 
-describe('eanMatch', () => {
-  // Asda's real answer for "Asda ES Balsamic Modena" — the product's own Open
-  // Food Facts name. Asda ranks a RASPBERRY glaze first and the actual product
-  // fourth, which is exactly why relevance order can't be trusted.
-  const asdaHits = [
-    hit({ external_id: '2266257', barcode: '5050854946264', name: 'Glaze with Balsamic Vinegar of Modena 250ml' }),
-    hit({ external_id: '9020293', barcode: '5063089281598', name: 'Raspberry Glaze with Balsamic Vinegar of Modena' }),
-    hit({ external_id: '1554788', barcode: '27595466', name: 'Balsamic Vinegar of Modena 250ml' }),
-    hit({ external_id: '9020290', barcode: '5063089281581', name: 'Extra Special Balsamic Vinegar of Modena 250ml', price_label: '£8.00' }),
-  ];
-
-  it('takes the barcode match, not the shop’s top hit', () => {
-    const match = eanMatch(asdaHits, '5063089281581');
-    expect(match?.external_id).toBe('9020290');
-    expect(match?.name).toBe('Extra Special Balsamic Vinegar of Modena 250ml');
-  });
-
-  it('refuses look-alikes: no barcode match means no match at all', () => {
-    // A Spanish gourmet olive oil against Asda's own-brand/Filippo Berio oils —
-    // same words, different products. Linking them would invent a fact.
-    const oils = [
-      hit({ barcode: '5057172338665', name: 'Extra Virgin Olive Oil 1 Litre' }),
-      hit({ barcode: '8002210500204', name: 'Filippo Berio Extra Virgin Olive Oil 500ml' }),
-    ];
-    expect(eanMatch(oils, '8410660200013')).toBeNull();
-  });
-
-  it('never matches a barcodeless hit', () => {
-    expect(eanMatch([hit({ barcode: null })], '5063089281581')).toBeNull();
-  });
-});
-
 describe('ProductPage', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  function setup(detail: ProductDetail = DETAIL, asdaHits: AsdaHit[] = []) {
+  function setup(
+    detail: ProductDetail = DETAIL,
+    find: ShopFind = { hit: null, from_cache: false },
+  ) {
     const api = {
       getProductDetail: vi.fn(() => of(detail)),
       productImageByIdUrl: (id: number) => `/api/products/id/${id}/image`,
-      searchAsda: vi.fn(() => of(asdaHits)),
+      findAtShop: vi.fn(() => of(find)),
       syncListing: vi.fn(() => of(detail.product)),
     };
     TestBed.configureTestingModule({
@@ -228,22 +199,23 @@ describe('ProductPage', () => {
     expect(setup(UNLISTED).page.canFindAtAsda()).toBe(true);
   });
 
-  it('finds the product Asda ranks fourth, and adds it under its own barcode', () => {
-    const asdaHits = [
-      hit({ external_id: '9020293', barcode: '5063089281598', name: 'Raspberry Glaze' }),
-      hit({
-        external_id: '9020290',
-        barcode: '5063089281581',
-        name: 'Extra Special Balsamic Vinegar of Modena 250ml',
-        price: { amount_minor: 800, currency: 'GBP', unit_amount_minor: null, unit_measure: null, region: 'EN' },
-      }),
-    ];
-    const { page, api } = setup(UNLISTED, asdaHits);
+  it('shows the confirmed match and adds it under its own barcode', () => {
+    // The backend hands back the one hit it confirmed by EAN — the client no
+    // longer sifts a result list, so there's nothing to rank here.
+    const confirmed = hit({
+      external_id: '9020290',
+      barcode: '5063089281581',
+      name: 'Extra Special Balsamic Vinegar of Modena 250ml',
+      price: { amount_minor: 800, currency: 'GBP', unit_amount_minor: null, unit_measure: null, region: 'EN' },
+    });
+    const { page, api } = setup(UNLISTED, { hit: confirmed, from_cache: false });
     page.findAtAsda();
-    // Searched by the only name we have — Open Food Facts' cryptic one.
-    expect(api.searchAsda).toHaveBeenCalledWith('Asda ES Balsamic Modena');
+    // Asks the backend about THIS product at THIS shop; it owns both the cache
+    // check and the barcode match (products::asda::match_barcode).
+    expect(api.findAtShop).toHaveBeenCalledWith(42, 'asda');
     expect(page.shopLookup()).toBe('found');
     expect(page.shopMatch()?.external_id).toBe('9020290');
+    expect(page.fromCache()).toBe(false);
 
     // Attaching hands the backend only the listing's identity — it re-fetches
     // shop-side and re-checks the barcode itself, so no facts are client-supplied.
@@ -261,19 +233,35 @@ describe('ProductPage', () => {
   });
 
   it('reports an honest "not stocked" rather than offering a look-alike', () => {
-    const { page } = setup(UNLISTED, [
-      hit({ external_id: '1', barcode: '5057172338665', name: 'Extra Virgin Olive Oil 1 Litre' }),
-    ]);
+    // No confirmed hit: the backend checked every result and none carried this
+    // EAN. That's a real answer, and it must read as one — not as an error, and
+    // never as a nearest-name suggestion.
+    const { page } = setup(UNLISTED, { hit: null, from_cache: false });
     page.findAtAsda();
     expect(page.shopLookup()).toBe('none');
     expect(page.shopMatch()).toBeNull();
+  });
+
+  it('says so when the answer came from memory rather than the shop', () => {
+    // A cache hit is still a real match, but the page shouldn't pretend it just
+    // asked Asda — and a remembered hit carries no price, by design.
+    const remembered = hit({
+      external_id: '9020290',
+      barcode: '5063089281581',
+      name: 'Extra Special Balsamic Vinegar of Modena 250ml',
+      price_label: null,
+    });
+    const { page } = setup(UNLISTED, { hit: remembered, from_cache: true });
+    page.findAtAsda();
+    expect(page.shopLookup()).toBe('found');
+    expect(page.fromCache()).toBe(true);
   });
 
   it('distinguishes a failed search from an empty one', () => {
     const api = {
       getProductDetail: vi.fn(() => of(UNLISTED)),
       productImageByIdUrl: () => '',
-      searchAsda: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 0 }))),
+      findAtShop: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 0 }))),
     };
     TestBed.configureTestingModule({
       imports: [ProductPage],

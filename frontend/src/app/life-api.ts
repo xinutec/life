@@ -14,6 +14,7 @@ import {
   ProductDetail,
   Recipe,
   RecipeIngredient,
+  ShopFind,
   ShoppingItem,
   TrashEntry,
   TrashKind,
@@ -91,6 +92,15 @@ export class LifeApi {
    *  it works in the browser too. */
   searchAsda(q: string): Observable<AsdaHit[]> {
     return this.http.get<AsdaHit[]>('/api/products/shop/asda', { params: { q } });
+  }
+  /** Does this shop carry this product's barcode? The backend answers from its
+   *  own memory of past shop queries when it can, so a repeat lookup costs the
+   *  shop nothing; only a miss goes out to search. Matching is by barcode
+   *  server-side — a shop's relevance ranking is not evidence of identity. */
+  findAtShop(id: number, source: string): Observable<ShopFind> {
+    return this.http.get<ShopFind>(
+      `/api/products/id/${id}/find/${encodeURIComponent(source)}`,
+    );
   }
   /** URL of the cached product image (use directly as <img src>). Pass a
    *  `version` after a replace to bust the browser/service-worker cache. */

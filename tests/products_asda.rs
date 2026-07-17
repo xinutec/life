@@ -181,3 +181,76 @@ fn empty_results_yield_no_hits() {
             .is_empty()
     );
 }
+
+// --- match_barcode: which hit IS this product ---
+//
+// Ported from the frontend's `eanMatch` when the lookup moved server-side (the
+// backend now answers "does Asda carry this barcode?" so it can check its own
+// memory first). The rule is unchanged and so are these cases.
+
+fn hit(external_id: &str, barcode: Option<&str>, name: &str) -> asda::AsdaHit {
+    asda::AsdaHit {
+        external_id: external_id.to_string(),
+        name: name.to_string(),
+        brand: None,
+        barcode: barcode.map(str::to_string),
+        quantity_label: None,
+        price_label: None,
+        price: None,
+        image_url: None,
+        dietary: vec![],
+    }
+}
+
+#[test]
+fn takes_the_barcode_match_not_the_shops_top_hit() {
+    // Asda's real answer for "Asda ES Balsamic Modena" — the product's own Open
+    // Food Facts name. Asda ranks a RASPBERRY glaze second and the actual
+    // product LAST, which is exactly why relevance order can't be trusted.
+    let hits = vec![
+        hit(
+            "2266257",
+            Some("5050854946264"),
+            "Glaze with Balsamic Vinegar of Modena 250ml",
+        ),
+        hit(
+            "9020293",
+            Some("5063089281598"),
+            "Raspberry Glaze with Balsamic Vinegar of Modena",
+        ),
+        hit(
+            "1554788",
+            Some("27595466"),
+            "Balsamic Vinegar of Modena 250ml",
+        ),
+        hit(
+            "9020290",
+            Some("5063089281581"),
+            "Extra Special Balsamic Vinegar of Modena 250ml",
+        ),
+    ];
+    let m = asda::match_barcode(hits, "5063089281581").expect("the barcode match");
+    assert_eq!(m.external_id, "9020290");
+    assert_eq!(m.name, "Extra Special Balsamic Vinegar of Modena 250ml");
+}
+
+#[test]
+fn refuses_look_alikes_no_barcode_match_means_no_match_at_all() {
+    // A Spanish gourmet olive oil against Asda's own-brand/Filippo Berio oils —
+    // same words, different products. Linking them would invent a fact.
+    let oils = vec![
+        hit("1", Some("5057172338665"), "Extra Virgin Olive Oil 1 Litre"),
+        hit(
+            "2",
+            Some("8002210500204"),
+            "Filippo Berio Extra Virgin Olive Oil 500ml",
+        ),
+    ];
+    assert!(asda::match_barcode(oils, "8410660200013").is_none());
+}
+
+#[test]
+fn never_matches_a_barcodeless_hit() {
+    let hits = vec![hit("1", None, "Something")];
+    assert!(asda::match_barcode(hits, "5063089281581").is_none());
+}
