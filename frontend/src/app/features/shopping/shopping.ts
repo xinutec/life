@@ -5,9 +5,12 @@ import { MatButtonModule } from "@angular/material/button";
 import { MatCheckboxModule } from "@angular/material/checkbox";
 import { MatIconModule } from "@angular/material/icon";
 import { MatListModule } from "@angular/material/list";
+import { MatMenuModule } from "@angular/material/menu";
+import { Router } from "@angular/router";
 import { catchError, forkJoin, map, of, tap } from "rxjs";
 
 import { Feedback } from "../../shared/feedback";
+import { isNotFound } from "../../shared/api-error";
 import { ListState } from "../../shared/list-state";
 import { LifeApi } from "../../life-api";
 import { ProductThumb } from "../../product-thumb";
@@ -24,6 +27,7 @@ import { ShoppingItemSheet } from "./shopping-item-sheet";
     MatIconModule,
     MatButtonModule,
     MatCheckboxModule,
+    MatMenuModule,
     ProductThumb,
     ListState,
   ],
@@ -33,6 +37,7 @@ export class Shopping {
   private api = inject(LifeApi);
   private sheet = inject(MatBottomSheet);
   private feedback = inject(Feedback);
+  private router = inject(Router);
 
   // Local-first: the list is the live RxDB query — instant, offline, reactive.
   readonly items = toSignal(this.store.items$, {
@@ -53,9 +58,34 @@ export class Shopping {
     this.sheet.open(ShoppingItemSheet);
   }
 
-  /** Tap a row title: the same sheet, pre-filled. */
+  /** Open the item's edit sheet, pre-filled (from the row's ⋮ menu). */
   edit(it: ShoppingDoc): void {
     this.sheet.open(ShoppingItemSheet, { data: { ulid: it.ulid } });
+  }
+
+  /** Tap a row: open the product's detail page — the "bigger picture, all the
+   *  info" view. A linked row goes straight there; a barcode-only row is looked
+   *  up first; a row that's neither (a free-text jotting) has nothing to show,
+   *  so it falls back to editing the entry. */
+  view(it: ShoppingDoc): void {
+    if (it.product_id != null) {
+      void this.router.navigate(["/product", it.product_id]);
+      return;
+    }
+    const barcode = it.barcode?.trim();
+    if (!barcode) {
+      this.edit(it);
+      return;
+    }
+    this.api.lookupProduct(barcode).subscribe({
+      next: (p) => void this.router.navigate(["/product", p.id]),
+      error: (e: unknown) =>
+        this.feedback.error(
+          isNotFound(e)
+            ? `No product found for ${barcode}.`
+            : "Lookup failed — are you online?",
+        ),
+    });
   }
 
   toggle(it: ShoppingDoc): void {

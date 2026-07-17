@@ -25,9 +25,9 @@
         class="row-title tappable"
         role="button"
         tabindex="0"
-        (click)="edit(it)"
-        (keydown.enter)="edit(it)"
-        (keydown.space)="edit(it); $event.preventDefault()"
+        (click)="view(it)"
+        (keydown.enter)="view(it)"
+        (keydown.space)="view(it); $event.preventDefault()"
       >
         @if (it.barcode || it.product_id) {
           <app-product-thumb
@@ -41,12 +41,33 @@
       @if (label(it)) {
         <span matListItemLine [class.done]="it.done">{{ label(it) }}</span>
       }
-      <button matListItemMeta mat-icon-button (click)="remove(it)" aria-label="Remove">
-        <mat-icon>delete</mat-icon>
+      <button
+        matListItemMeta
+        mat-icon-button
+        [matMenuTriggerFor]="rowMenu"
+        [matMenuTriggerData]="{ it }"
+        aria-label="More actions"
+      >
+        <mat-icon>more_vert</mat-icon>
       </button>
     </mat-list-item>
   }
 </mat-list>
+
+<!-- One menu, reused per row via context — Edit and Remove tuck here so the row
+     tap is free to open the product's detail page. -->
+<mat-menu #rowMenu>
+  <ng-template matMenuContent let-it="it">
+    <button mat-menu-item (click)="edit(it)">
+      <mat-icon>edit</mat-icon>
+      <span>Edit</span>
+    </button>
+    <button mat-menu-item (click)="remove(it)">
+      <mat-icon>delete</mat-icon>
+      <span>Remove</span>
+    </button>
+  </ng-template>
+</mat-menu>
 
 @if (doneCount() > 0) {
   <div class="bought-actions">

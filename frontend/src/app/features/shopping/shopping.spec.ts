@@ -1,6 +1,8 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
+import { HttpErrorResponse } from '@angular/common/http';
+import { Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -38,19 +40,56 @@ function setup(items: ShoppingDoc[], failIds: number[] = []) {
       failIds.includes(id) ? throwError(() => new Error('offline')) : of(void 0),
     ),
     restoreTrash: vi.fn(() => of(void 0)),
+    lookupProduct: vi.fn((barcode: string) => of({ id: 900, barcode })),
   };
   const feedback = { notify: vi.fn(), error: vi.fn(), undo: vi.fn() };
+  const sheet = { open: vi.fn() };
+  const router = { navigate: vi.fn(() => Promise.resolve(true)) };
   TestBed.configureTestingModule({
     providers: [
       Shopping,
       { provide: ShoppingStore, useValue: store },
       { provide: LifeApi, useValue: api },
       { provide: Feedback, useValue: feedback },
-      { provide: MatBottomSheet, useValue: { open: vi.fn() } },
+      { provide: MatBottomSheet, useValue: sheet },
+      { provide: Router, useValue: router },
     ],
   });
-  return { c: TestBed.inject(Shopping), store, api, feedback };
+  return { c: TestBed.inject(Shopping), store, api, feedback, sheet, router };
 }
+
+describe('Shopping row tap → detail', () => {
+  it('opens the product page directly for a linked row', () => {
+    const { c, router, api } = setup([doc({ product_id: 42 })]);
+    c.view(doc({ product_id: 42 }));
+    expect(router.navigate).toHaveBeenCalledWith(['/product', 42]);
+    expect(api.lookupProduct).not.toHaveBeenCalled(); // no lookup needed
+  });
+
+  it('resolves a barcode-only row to its product first', () => {
+    const { c, router, api } = setup([]);
+    c.view(doc({ product_id: null, barcode: '5000000000123' }));
+    expect(api.lookupProduct).toHaveBeenCalledWith('5000000000123');
+    expect(router.navigate).toHaveBeenCalledWith(['/product', 900]);
+  });
+
+  it('falls back to editing a free-text row that has no product to show', () => {
+    const { c, router, sheet } = setup([]);
+    c.view(doc({ product_id: null, barcode: null }));
+    expect(router.navigate).not.toHaveBeenCalled();
+    expect(sheet.open).toHaveBeenCalled(); // the edit sheet
+  });
+
+  it('reports an honest miss when a barcode resolves to nothing', () => {
+    const { c, router, feedback, api } = setup([]);
+    api.lookupProduct.mockReturnValueOnce(
+      throwError(() => new HttpErrorResponse({ status: 404 })),
+    );
+    c.view(doc({ product_id: null, barcode: '5000000000999' }));
+    expect(router.navigate).not.toHaveBeenCalled();
+    expect(feedback.error).toHaveBeenCalledWith('No product found for 5000000000999.');
+  });
+});
 
 describe('Shopping buyDone', () => {
   it('converts every checked, synced row and summarises the win', () => {
