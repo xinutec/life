@@ -106,6 +106,23 @@ async fn mutations_also_require_auth() {
 }
 
 #[tokio::test]
+async fn telemetry_is_not_an_open_log_write() {
+    // The client activity trace lands in the server log, so an UNauthenticated
+    // caller must not be able to POST to it — otherwise it's an anonymous
+    // log-injection endpoint. A valid batch shape, no cookie → 401, not 204.
+    let req = axum::http::Request::post("/api/telemetry")
+        .header("content-type", "application/json")
+        .body(Body::from(r#"[{"kind":"nav","path":"/today","at":1}]"#))
+        .unwrap();
+    let (status, body) = send(req).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert!(
+        body.contains("\"error\"") && body.contains("not authenticated"),
+        "body was {body:?}"
+    );
+}
+
+#[tokio::test]
 async fn dev_login_is_absent_without_dev_login_user() {
     // The route is only mounted when DEV_LOGIN_USER is set; here it isn't, so
     // it falls through to 404 (no static_dir either).

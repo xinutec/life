@@ -16,6 +16,7 @@ import {
   RecipeIngredient,
   ShopFind,
   ShoppingItem,
+  TelemetryEvent,
   TrashEntry,
   TrashKind,
 } from './models';
@@ -101,6 +102,12 @@ export class LifeApi {
     return this.http.get<ShopFind>(
       `/api/products/id/${id}/find/${encodeURIComponent(source)}`,
     );
+  }
+  /** Fold a batch of client activity events (navigations, taps) into the backend
+   *  log stream. Best-effort telemetry — see `Telemetry`; callers ignore the
+   *  result. */
+  sendTelemetry(events: TelemetryEvent[]): Observable<void> {
+    return this.http.post<void>('/api/telemetry', events);
   }
   /** URL of the cached product image (use directly as <img src>). Pass a
    *  `version` after a replace to bust the browser/service-worker cache. */

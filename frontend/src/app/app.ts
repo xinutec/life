@@ -17,6 +17,7 @@ import { ScannerDialog } from './features/scanner/scanner-dialog';
 import { LifeApi } from './life-api';
 import { Me } from './models';
 import { SwUpdates } from './sw-updates';
+import { Telemetry } from './telemetry';
 import { AuthState } from './sync/auth-state';
 import { SyncStatus } from './sync/sync-status';
 
@@ -68,6 +69,7 @@ function cacheMe(m: Me | null): void {
 })
 export class App {
   private api = inject(LifeApi);
+  private telemetry = inject(Telemetry);
   private swUpdates = inject(SwUpdates);
   private auth = inject(AuthState);
   private dialog = inject(MatDialog);
@@ -129,6 +131,7 @@ export class App {
     });
 
     this.swUpdates.start();
+    this.telemetry.init();
     this.beginRefresh();
     this.api.me().subscribe({
       next: (m) => {

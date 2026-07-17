@@ -8,6 +8,7 @@ pub mod products;
 pub mod recipes;
 pub mod shopping;
 pub mod sync;
+pub mod telemetry;
 pub mod todo;
 pub mod trash;
 
@@ -75,6 +76,7 @@ pub fn router(state: AppState) -> Router {
             "/sync/wellbeing",
             get(sync::pull_wellbeing).post(sync::push_wellbeing),
         )
+        .route("/telemetry", post(telemetry::record))
         .route("/conflicts", get(conflicts::list).post(conflicts::create))
         .route("/conflicts/{id}/resolve", post(conflicts::resolve))
         .route("/trash", get(trash::list))
