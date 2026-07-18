@@ -313,6 +313,13 @@ through something that resets the NC session.
           WebView returns the raw blob (frontend fetches, backend parses); an in-app
           "Get full details from Asda" action (bridge-gated) posts it. Installed
           Pixel 9 APK v0.5 already allowlists asda.com — no APK rebuild.
+      - **F2b — keep every fetched payload verbatim** (2026-07-18, migration 0034):
+        anything we fetch, we store as-is so we never fetch it twice (and can
+        re-derive from it if the parser improves) — combining is a separate step.
+        `product_documents(product_id, source, kind, body, fetched_at)`; `/facts`
+        stores Asda's raw page blob (kind='page') before parsing. `ProductDetail.
+        documents` lets the page show "Refresh Asda's details · stored {ago}" once
+        held. (OFF's raw payload — the same store's next use — is not archived yet.)
       - **8e (next): facts reconciliation UI + picture.** Facts now merge silently
         (retailer nutrition wins, allergens union); surface where Asda and OFF
         DISAGREE through the approve grammar. Picture needs image
