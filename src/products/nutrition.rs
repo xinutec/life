@@ -164,6 +164,74 @@ pub fn merge_dietary(claims: Vec<DietaryFlag>) -> Vec<DietaryFlag> {
         .collect()
 }
 
+/// Merge several sources' nutrition panels into the one to show.
+///
+/// Panels aren't blendable — averaging two sources' "fat per 100g" would invent a
+/// number neither reported (false precision). So we pick ONE panel whole, by
+/// source precedence (see products::source — retailers' manufacturer-grade data
+/// over the crowd's), and show it verbatim. Where sources genuinely differ, the
+/// reconciliation UI surfaces it; this is only the default display pick.
+///
+/// Input is `(source, panel)` pairs in any order; a source not in the precedence
+/// list sorts last. Pure — the unit under test.
+pub fn merge_nutrition(panels: Vec<(String, Nutrition)>) -> Option<Nutrition> {
+    panels
+        .into_iter()
+        .min_by_key(|(source, _)| fact_rank(source))
+        .map(|(_, n)| n)
+}
+
+/// Merge several sources' ingredient texts into the one to show: the
+/// highest-precedence source's, whole (same reasoning as `merge_nutrition` — you
+/// don't splice two ingredient lists together). Pure.
+pub fn merge_ingredients(texts: Vec<(String, String)>) -> Option<String> {
+    texts
+        .into_iter()
+        .filter(|(_, t)| !t.trim().is_empty())
+        .min_by_key(|(source, _)| fact_rank(source))
+        .map(|(_, t)| t)
+}
+
+/// Merge several sources' allergen claims into one set.
+///
+/// Allergens are safety-critical, so this is a UNION, never a pick: an allergen
+/// one source declares is kept even if another source is silent about it
+/// (absence is not a "free from" — the same reason the dietary merge never reads
+/// a missing flag as "no"). Where two sources name the same allergen with
+/// different presence, the more severe wins: `contains` beats `may_contain`.
+///
+/// Input is `(source, allergen)` pairs; the result has one entry per allergen,
+/// sorted. Pure — the unit under test.
+pub fn merge_allergens(claims: Vec<(String, Allergen)>) -> Vec<Allergen> {
+    let mut by_name: BTreeMap<String, &'static str> = BTreeMap::new();
+    for (_, a) in &claims {
+        let severe = a.presence == "contains";
+        by_name
+            .entry(a.allergen.clone())
+            .and_modify(|p| {
+                if severe {
+                    *p = "contains";
+                }
+            })
+            .or_insert(if severe { "contains" } else { "may_contain" });
+    }
+    by_name
+        .into_iter()
+        .filter(|(name, _)| !name.is_empty())
+        .map(|(allergen, presence)| Allergen {
+            allergen,
+            presence: presence.to_string(),
+        })
+        .collect()
+}
+
+/// Rank of a fact source (lower wins), reusing the canonical-name precedence so
+/// facts follow the same "retailer over crowd" order. An unlisted source sorts
+/// last, so it only ever fills a gap.
+fn fact_rank(source: &str) -> usize {
+    crate::products::source::name_rank(source).unwrap_or(usize::MAX)
+}
+
 /// A numeric OFF value, whether it arrived as a JSON number or a numeric string
 /// (OFF is inconsistent). `None` for anything non-numeric.
 fn as_f64(v: &Value) -> Option<f64> {

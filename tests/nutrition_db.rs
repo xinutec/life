@@ -276,3 +276,128 @@ async fn two_sources_dietary_claims_coexist_and_merge() {
         "and OFF dropping its own claim leaves Asda's standing"
     );
 }
+
+#[tokio::test]
+async fn two_sources_nutrition_allergens_ingredients_coexist_and_merge() {
+    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
+        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping multi-source facts test");
+        return;
+    };
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    let barcode = "5000000000655";
+    sqlx::query("DELETE FROM products WHERE barcode = ?")
+        .bind(barcode)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let product = repo::upsert_external(
+        &pool,
+        "off",
+        barcode,
+        Some(barcode),
+        &repo::ListingFields {
+            raw_name: Some("Oat Drink"),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    // OFF: a crowd panel + ingredients, and milk only as a trace.
+    repo::store_facts(
+        &pool,
+        product.id,
+        &ProductFacts {
+            nutrition: Some(Nutrition {
+                salt_g: Some(0.1),
+                ..nutrition()
+            }),
+            ingredients: Some("crowd-entered ingredients".into()),
+            allergens: vec![Allergen {
+                allergen: "milk".into(),
+                presence: "may_contain".into(),
+            }],
+            dietary: vec![],
+        },
+        "off",
+    )
+    .await
+    .unwrap();
+
+    // Asda (Brandbank): its own panel + ingredients, milk declared, soya added.
+    repo::store_facts(
+        &pool,
+        product.id,
+        &ProductFacts {
+            nutrition: Some(Nutrition {
+                salt_g: Some(0.9),
+                ..nutrition()
+            }),
+            ingredients: Some("Water, Oats 10%".into()),
+            allergens: vec![
+                Allergen {
+                    allergen: "milk".into(),
+                    presence: "contains".into(),
+                },
+                Allergen {
+                    allergen: "soya".into(),
+                    presence: "contains".into(),
+                },
+            ],
+            dietary: vec![],
+        },
+        "asda",
+    )
+    .await
+    .unwrap();
+
+    let facts = repo::facts_for(&pool, product.id).await.unwrap();
+    // Nutrition + ingredients: the retailer's panel wins whole (not blended).
+    assert_eq!(
+        facts.nutrition.unwrap().salt_g,
+        Some(0.9),
+        "Asda's panel is shown, not OFF's or an average"
+    );
+    assert_eq!(facts.ingredients.as_deref(), Some("Water, Oats 10%"));
+    // Allergens union, most-severe presence winning.
+    assert_eq!(
+        facts
+            .allergens
+            .iter()
+            .map(|a| (a.allergen.as_str(), a.presence.as_str()))
+            .collect::<Vec<_>>(),
+        vec![("milk", "contains"), ("soya", "contains")],
+        "milk upgraded to 'contains'; soya kept though OFF was silent"
+    );
+
+    // OFF re-lookup restates only OFF's rows — Asda's facts survive.
+    repo::store_facts(
+        &pool,
+        product.id,
+        &ProductFacts {
+            nutrition: Some(Nutrition {
+                salt_g: Some(0.1),
+                ..nutrition()
+            }),
+            ingredients: Some("crowd-entered ingredients v2".into()),
+            allergens: vec![],
+            dietary: vec![],
+        },
+        "off",
+    )
+    .await
+    .unwrap();
+    let facts = repo::facts_for(&pool, product.id).await.unwrap();
+    assert_eq!(
+        facts.nutrition.unwrap().salt_g,
+        Some(0.9),
+        "Asda's panel still wins after an OFF re-lookup"
+    );
+    assert_eq!(facts.ingredients.as_deref(), Some("Water, Oats 10%"));
+    assert!(
+        facts.allergens.iter().any(|a| a.allergen == "soya"),
+        "Asda's soya allergen survives OFF clearing its own"
+    );
+}

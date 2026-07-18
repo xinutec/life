@@ -2,7 +2,10 @@
 //! `RawFacts::parse` half of the OFF lookup, exercised without any network by
 //! deserializing captured-shape OFF product JSON.
 
-use life::products::nutrition::{DietaryFlag, RawFacts, merge_dietary};
+use life::products::nutrition::{
+    Allergen, DietaryFlag, Nutrition, RawFacts, merge_allergens, merge_dietary, merge_ingredients,
+    merge_nutrition,
+};
 
 fn parse(value: serde_json::Value) -> life::products::nutrition::ProductFacts {
     serde_json::from_value::<RawFacts>(value)
@@ -233,4 +236,122 @@ fn a_single_source_passes_straight_through() {
         ]
     );
     assert!(merged(&[]).is_empty());
+}
+
+// --- merge_nutrition / merge_ingredients: pick one source by precedence ---
+
+/// A minimal panel tagged by its salt figure, so tests can tell which source's
+/// panel was chosen.
+fn panel(salt: f64) -> Nutrition {
+    Nutrition {
+        basis: "100g".to_string(),
+        serving_size: None,
+        energy_kj: None,
+        energy_kcal: None,
+        fat_g: None,
+        saturates_g: None,
+        carbohydrate_g: None,
+        sugars_g: None,
+        fibre_g: None,
+        protein_g: None,
+        salt_g: Some(salt),
+        extra: std::collections::BTreeMap::new(),
+    }
+}
+
+#[test]
+fn nutrition_prefers_the_retailer_over_the_crowd() {
+    // Asda (Brandbank, manufacturer-grade) outranks OFF (crowd) — whole panel, not
+    // a blend of the two.
+    let chosen = merge_nutrition(vec![
+        ("off".to_string(), panel(1.0)),
+        ("asda".to_string(), panel(2.0)),
+    ])
+    .unwrap();
+    assert_eq!(chosen.salt_g, Some(2.0), "Asda's panel wins");
+}
+
+#[test]
+fn nutrition_of_one_source_is_that_source() {
+    assert_eq!(
+        merge_nutrition(vec![("off".to_string(), panel(1.0))])
+            .unwrap()
+            .salt_g,
+        Some(1.0)
+    );
+    assert!(merge_nutrition(vec![]).is_none());
+}
+
+#[test]
+fn ingredients_prefer_the_retailer_and_skip_empties() {
+    assert_eq!(
+        merge_ingredients(vec![
+            ("off".to_string(), "crowd text".to_string()),
+            ("asda".to_string(), "Water, Oats 10%".to_string()),
+        ]),
+        Some("Water, Oats 10%".to_string()),
+    );
+    // A source that stored a blank contributes nothing.
+    assert_eq!(
+        merge_ingredients(vec![
+            ("asda".to_string(), "   ".to_string()),
+            ("off".to_string(), "crowd text".to_string()),
+        ]),
+        Some("crowd text".to_string()),
+    );
+    assert_eq!(merge_ingredients(vec![]), None);
+}
+
+// --- merge_allergens: union across sources, most-severe presence wins ---
+
+fn allergen(name: &str, presence: &str) -> Allergen {
+    Allergen {
+        allergen: name.to_string(),
+        presence: presence.to_string(),
+    }
+}
+
+fn allergens_merged(claims: &[(&str, &str, &str)]) -> Vec<(String, String)> {
+    merge_allergens(
+        claims
+            .iter()
+            .map(|(src, name, pres)| (src.to_string(), allergen(name, pres)))
+            .collect(),
+    )
+    .into_iter()
+    .map(|a| (a.allergen, a.presence))
+    .collect()
+}
+
+#[test]
+fn allergens_union_every_source_never_dropping_one() {
+    // OFF names milk, Asda names soya — a shopper must see both. Absence from one
+    // source is not a "free from".
+    assert_eq!(
+        allergens_merged(&[("off", "milk", "contains"), ("asda", "soya", "contains"),]),
+        [
+            ("milk".to_string(), "contains".to_string()),
+            ("soya".to_string(), "contains".to_string()),
+        ]
+    );
+}
+
+#[test]
+fn a_declared_allergen_beats_a_mere_trace() {
+    // One source declares milk as an ingredient, another only as a trace: the
+    // firmer, more dangerous claim wins.
+    assert_eq!(
+        allergens_merged(&[("off", "milk", "may_contain"), ("asda", "milk", "contains"),]),
+        [("milk".to_string(), "contains".to_string())]
+    );
+    // Order of sources doesn't change the outcome.
+    assert_eq!(
+        allergens_merged(&[("asda", "milk", "contains"), ("off", "milk", "may_contain"),]),
+        [("milk".to_string(), "contains".to_string())]
+    );
+}
+
+#[test]
+fn allergens_empty_is_empty() {
+    assert!(allergens_merged(&[]).is_empty());
 }
