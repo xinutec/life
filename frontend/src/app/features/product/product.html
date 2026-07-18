@@ -241,7 +241,8 @@
   }
 
   <!-- Asda's search API carries no facts; its product page does, behind a
-       bot-wall. In the app, pull them through the hidden WebView. -->
+       bot-wall. In the app, pull them through the hidden WebView. Once fetched we
+       keep the page's raw blob, so this becomes a refresh, not a re-fetch. -->
   @if (canGetAsdaFacts()) {
     <button
       mat-stroked-button
@@ -250,8 +251,17 @@
       [disabled]="fetchingFacts()"
     >
       <mat-icon>{{ fetchingFacts() ? 'hourglass_empty' : 'menu_book' }}</mat-icon>
-      {{ fetchingFacts() ? 'Reading Asda’s page…' : 'Get full details from Asda' }}
+      @if (fetchingFacts()) {
+        Reading Asda’s page…
+      } @else if (asdaFactsDoc()) {
+        Refresh Asda’s details
+      } @else {
+        Get full details from Asda
+      }
     </button>
+    @if (asdaFactsAge(); as age) {
+      <p class="fine asda-facts-age">Asda details stored {{ age }}.</p>
+    }
   }
 
   @if (nutrientRows().length) {

@@ -60,6 +60,7 @@ const DETAIL: ProductDetail = {
     ],
   },
   reconciliation: { fields: [] },
+  documents: [],
 };
 
 const hit = (over: Partial<AsdaHit>): AsdaHit => ({
@@ -493,5 +494,21 @@ describe('ProductPage', () => {
       blob: '{"calculatedNutrition":[]}',
     });
     expect(page.fetchingFacts()).toBe(false);
+  });
+
+  it('reads as a refresh, with when, once the Asda page is already stored', () => {
+    const withDoc = {
+      ...DETAIL,
+      documents: [{ source: 'asda', kind: 'page', fetched_at: Date.now(), bytes: 1200 }],
+    };
+    const { fixture, page } = setup(withDoc, undefined, {
+      available: true,
+      fetchFacts: vi.fn(),
+    });
+    expect(page.asdaFactsDoc()).toBeTruthy();
+    expect(page.asdaFactsAge()).toBe('today');
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.asda-facts')?.textContent).toContain('Refresh');
+    expect(el.querySelector('.asda-facts-age')?.textContent).toContain('stored today');
   });
 });

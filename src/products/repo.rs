@@ -13,7 +13,7 @@ use super::nutrition::{
 };
 use super::prices::{PriceInput, ShopPrice};
 use super::source;
-use super::types::{Candidate, FieldDivergence, Product};
+use super::types::{Candidate, FieldDivergence, Product, SourceDocument};
 
 #[derive(sqlx::FromRow)]
 struct MetaRow {
@@ -733,6 +733,79 @@ pub async fn replace_dietary(
         .await?;
     }
     Ok(())
+}
+
+/// Keep a fetched source payload verbatim (product_documents, 0034), so we never
+/// fetch it twice and can re-derive from it later. Keyed by (product, source,
+/// kind); re-fetching the same kind overwrites and re-stamps `fetched_at`.
+pub async fn upsert_document(
+    pool: &MySqlPool,
+    product_id: u64,
+    source: &str,
+    kind: &str,
+    body: &str,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO product_documents (product_id, source, kind, body) VALUES (?, ?, ?, ?) \
+         ON DUPLICATE KEY UPDATE body = VALUES(body), fetched_at = CURRENT_TIMESTAMP",
+    )
+    .bind(product_id)
+    .bind(source)
+    .bind(kind)
+    .bind(body)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// The raw payload we hold for (product, source, kind), if any — for re-parsing
+/// without another fetch.
+pub async fn get_document(
+    pool: &MySqlPool,
+    product_id: u64,
+    source: &str,
+    kind: &str,
+) -> Result<Option<String>> {
+    let row: Option<(String,)> = sqlx::query_as(
+        "SELECT body FROM product_documents WHERE product_id = ? AND source = ? AND kind = ?",
+    )
+    .bind(product_id)
+    .bind(source)
+    .bind(kind)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|(b,)| b))
+}
+
+#[derive(sqlx::FromRow)]
+struct DocRow {
+    source: String,
+    kind: String,
+    fetched_at: i64,
+    bytes: i64,
+}
+
+/// Metadata for every raw payload held for a product (not the bodies) — what the
+/// product detail advertises so the client needn't re-fetch what we already have.
+pub async fn documents_for(pool: &MySqlPool, product_id: u64) -> Result<Vec<SourceDocument>> {
+    let rows: Vec<DocRow> = sqlx::query_as(
+        "SELECT source, kind, \
+         CAST(UNIX_TIMESTAMP(fetched_at) * 1000 AS SIGNED) AS fetched_at, \
+         CAST(LENGTH(body) AS SIGNED) AS bytes \
+         FROM product_documents WHERE product_id = ? ORDER BY source, kind",
+    )
+    .bind(product_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| SourceDocument {
+            source: r.source,
+            kind: r.kind,
+            fetched_at: r.fetched_at,
+            bytes: r.bytes,
+        })
+        .collect())
 }
 
 /// Persist a product's full fact set from one source, each part restated. Skips

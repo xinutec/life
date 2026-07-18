@@ -4,6 +4,7 @@ import type { ProductFacts } from "./ProductFacts";
 import type { ProductListing } from "./ProductListing";
 import type { ProductReconciliation } from "./ProductReconciliation";
 import type { ShopPrice } from "./ShopPrice";
+import type { SourceDocument } from "./SourceDocument";
 
 /**
  * Everything the product page shows, in one fetch —
@@ -22,4 +23,9 @@ prices: Array<ShopPrice>, facts: ProductFacts,
  * Where the sources disagree with the canonical row and you haven't decided
  * yet — the diff to approve. Empty when everything agrees or is settled.
  */
-reconciliation: ProductReconciliation, };
+reconciliation: ProductReconciliation, 
+/**
+ * Raw source payloads we've fetched and kept (see SourceDocument) — so the
+ * UI knows what's already stored and needn't re-fetch it.
+ */
+documents: Array<SourceDocument>, };

@@ -147,6 +147,7 @@ const PRODUCT_DETAIL = {
     ],
   },
   reconciliation: { fields: [] },
+  documents: [],
 };
 
 /** A product Open Food Facts knows under a cryptic crowd name, that no shop
@@ -162,6 +163,7 @@ const UNLISTED_DETAIL = {
   prices: [],
   facts: { nutrition: null, ingredients: null, allergens: [], dietary: [] },
   reconciliation: { fields: [] },
+  documents: [],
 };
 
 /** Asda's real answer for that crowd name: the product itself ranks LAST,

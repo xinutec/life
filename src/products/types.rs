@@ -45,6 +45,23 @@ pub struct ProductListing {
     pub raw_name: Option<String>,
 }
 
+/// A raw payload we fetched from a source and kept verbatim (product_documents,
+/// 0034) — metadata only, so the UI can show what's already held (and when) and
+/// avoid re-fetching. The body itself is read on demand, not shipped here.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct SourceDocument {
+    pub source: String,
+    /// Which fetch it was ('page' = Asda's Brandbank product-page blob).
+    pub kind: String,
+    /// When we fetched it (epoch millis).
+    #[ts(type = "number")]
+    pub fetched_at: i64,
+    /// Size of the stored payload, bytes — a hint that we hold it, not the body.
+    #[ts(type = "number")]
+    pub bytes: i64,
+}
+
 /// One source's value for a field that disagrees with the canonical product —
 /// a choice you can adopt.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
@@ -96,4 +113,7 @@ pub struct ProductDetail {
     /// Where the sources disagree with the canonical row and you haven't decided
     /// yet — the diff to approve. Empty when everything agrees or is settled.
     pub reconciliation: ProductReconciliation,
+    /// Raw source payloads we've fetched and kept (see SourceDocument) — so the
+    /// UI knows what's already stored and needn't re-fetch it.
+    pub documents: Vec<SourceDocument>,
 }

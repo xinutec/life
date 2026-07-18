@@ -312,11 +312,12 @@ pub async fn product_detail(
 /// the re-read detail.
 async fn build_detail(pool: &sqlx::MySqlPool, id: u64) -> Result<ProductDetail, AppError> {
     let product = repo::get_by_id(pool, id).await?.ok_or(AppError::NotFound)?;
-    let (listings, prices, facts, decisions) = tokio::try_join!(
+    let (listings, prices, facts, decisions, documents) = tokio::try_join!(
         repo::listings_for(pool, id),
         repo::latest_prices(pool, id),
         repo::facts_for(pool, id),
         repo::field_decisions(pool, id),
+        repo::documents_for(pool, id),
     )?;
     // The diff to approve, computed from the sources vs the canonical row before
     // the listings are flattened for display.
@@ -341,6 +342,7 @@ async fn build_detail(pool: &sqlx::MySqlPool, id: u64) -> Result<ProductDetail, 
         prices,
         facts,
         reconciliation,
+        documents,
     })
 }
 
@@ -635,14 +637,19 @@ pub async fn submit_facts(
             "that page's barcode doesn't match this product".into(),
         ));
     }
+    // Keep the page's payload verbatim FIRST — so we hold it even if parsing finds
+    // nothing (or a better parser wants it later), and never have to drive the
+    // WebView through Cloudflare again for the same product.
+    repo::upsert_document(&app.pool, id, "asda", "page", &body.blob).await?;
     let facts = brandbank::parse(&body.blob).map_err(|e| AppError::BadRequest(e.to_string()))?;
     repo::store_facts(&app.pool, id, &facts, "asda").await?;
     tracing::info!(
         product = id,
+        bytes = body.blob.len(),
         nutrition = facts.nutrition.is_some(),
         allergens = facts.allergens.len(),
         dietary = facts.dietary.len(),
-        "asda page facts stored"
+        "asda page fetched + stored"
     );
     build_detail(&app.pool, id).await.map(Json)
 }

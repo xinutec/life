@@ -408,6 +408,19 @@ export class ProductPage {
   /** Only inside the app, and only once an Asda listing exists to enrich. */
   readonly canGetAsdaFacts = computed(() => this.shops.available && !!this.asdaListing());
 
+  /** The Asda page blob we've already fetched and stored, if any — so the action
+   *  reads as a refresh (with when) rather than a first fetch, and viewing the
+   *  product never re-fetches what we hold. */
+  readonly asdaFactsDoc = computed(() =>
+    this.detail()?.documents.find((d) => d.source === 'asda' && d.kind === 'page'),
+  );
+
+  /** "stored today / 3 days ago" for the held Asda page blob. */
+  readonly asdaFactsAge = computed(() => {
+    const doc = this.asdaFactsDoc();
+    return doc ? ago(doc.fetched_at) : null;
+  });
+
   /** Pull Asda's product-page facts through the WebView and store them. The blob
    *  goes to the server untouched; the server parses and barcode-gates it. */
   getAsdaFacts(): void {
