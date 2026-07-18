@@ -9,7 +9,7 @@ use serde::Deserialize;
 
 use crate::error::AppError;
 use crate::products::prices::PriceInput;
-use crate::products::types::{Product, ProductDetail, ProductListing};
+use crate::products::types::{Product, ProductDetail, ProductListing, ProductReconciliation};
 use crate::products::{asda, off, repo, shop_cache, source};
 use crate::session::AuthUser;
 use crate::state::AppState;
@@ -304,14 +304,25 @@ pub async fn product_detail(
     AuthUser(_user): AuthUser,
     Path(id): Path<u64>,
 ) -> Result<Json<ProductDetail>, AppError> {
-    let product = repo::get_by_id(&app.pool, id)
-        .await?
-        .ok_or(AppError::NotFound)?;
-    let (listings, prices, facts) = tokio::try_join!(
-        repo::listings_for(&app.pool, id),
-        repo::latest_prices(&app.pool, id),
-        repo::facts_for(&app.pool, id),
+    Ok(Json(build_detail(&app.pool, id).await?))
+}
+
+/// Assemble the product-page aggregate for a product id (404 if it doesn't
+/// exist). Shared by the detail GET and the reconcile POST, which answers with
+/// the re-read detail.
+async fn build_detail(pool: &sqlx::MySqlPool, id: u64) -> Result<ProductDetail, AppError> {
+    let product = repo::get_by_id(pool, id).await?.ok_or(AppError::NotFound)?;
+    let (listings, prices, facts, decisions) = tokio::try_join!(
+        repo::listings_for(pool, id),
+        repo::latest_prices(pool, id),
+        repo::facts_for(pool, id),
+        repo::field_decisions(pool, id),
     )?;
+    // The diff to approve, computed from the sources vs the canonical row before
+    // the listings are flattened for display.
+    let reconciliation = ProductReconciliation {
+        fields: repo::divergences(&product, &listings, &decisions),
+    };
     let listings = listings
         .into_iter()
         .map(|l| ProductListing {
@@ -324,12 +335,54 @@ pub async fn product_detail(
             raw_name: l.raw_name,
         })
         .collect();
-    Ok(Json(ProductDetail {
+    Ok(ProductDetail {
         product,
         listings,
         prices,
         facts,
-    }))
+        reconciliation,
+    })
+}
+
+/// One field's decision, as the reconcile UI sends it: adopt a source's value
+/// (`choice` = source id) or keep the current one (`choice` = "keep").
+#[derive(serde::Deserialize)]
+pub struct ReconcileChoice {
+    pub field: String,
+    pub choice: String,
+}
+
+/// POST /api/products/id/{id}/reconcile → settle field disagreements between the
+/// product's sources and its canonical row. Each decision either adopts a
+/// source's value or keeps the current one; either way the divergence is marked
+/// settled so it won't resurface until a source's value changes. Returns the
+/// re-read product detail (with the divergence list now updated).
+pub async fn reconcile(
+    State(app): State<AppState>,
+    AuthUser(_user): AuthUser,
+    Path(id): Path<u64>,
+    Json(body): Json<Vec<ReconcileChoice>>,
+) -> Result<Json<ProductDetail>, AppError> {
+    // 404 before touching anything if the product doesn't exist.
+    if repo::get_by_id(&app.pool, id).await?.is_none() {
+        return Err(AppError::NotFound);
+    }
+    let choices: Vec<repo::FieldChoice> = body
+        .into_iter()
+        .map(|c| repo::FieldChoice {
+            field: c.field,
+            choice: c.choice,
+        })
+        .collect();
+    repo::reconcile(&app.pool, id, &choices)
+        .await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
+    tracing::info!(
+        product = id,
+        decisions = choices.len(),
+        "product reconciled"
+    );
+    Ok(Json(build_detail(&app.pool, id).await?))
 }
 
 /// The answer to "does this shop carry this product?".

@@ -58,6 +58,7 @@ const DETAIL: ProductDetail = {
       { flag: 'palm_oil_free', value: 'maybe' },
     ],
   },
+  reconciliation: { fields: [] },
 };
 
 const hit = (over: Partial<AsdaHit>): AsdaHit => ({

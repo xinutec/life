@@ -45,6 +45,43 @@ pub struct ProductListing {
     pub raw_name: Option<String>,
 }
 
+/// One source's value for a field that disagrees with the canonical product —
+/// a choice you can adopt.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct Candidate {
+    /// The source offering this value ('off', 'asda', 'waitrose', …).
+    pub source: String,
+    /// The source's value for the field, as a display string.
+    pub value: String,
+}
+
+/// A field where at least one source disagrees with the canonical product and no
+/// decision has settled it yet.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct FieldDivergence {
+    /// The canonical field: 'name' | 'brand' | 'quantity_label'.
+    pub field: String,
+    /// Human label for the field ('Name', 'Brand', 'Pack size').
+    pub label: String,
+    /// The current canonical value, or None when the product has none.
+    pub current: Option<String>,
+    /// Each source whose value differs from the current one — the choices to
+    /// adopt, one per source (two sources may agree on the same value).
+    pub candidates: Vec<Candidate>,
+}
+
+/// What a product's sources disagree about, for you to approve — empty when
+/// there is nothing to review. Computed live from the listings vs the canonical
+/// row, minus anything already decided (see repo's field decisions), so it never
+/// goes stale.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct ProductReconciliation {
+    pub fields: Vec<FieldDivergence>,
+}
+
 /// Everything the product page shows, in one fetch —
 /// GET /api/products/id/{id}.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
@@ -56,4 +93,7 @@ pub struct ProductDetail {
     /// Latest price per shop, cheapest first.
     pub prices: Vec<ShopPrice>,
     pub facts: ProductFacts,
+    /// Where the sources disagree with the canonical row and you haven't decided
+    /// yet — the diff to approve. Empty when everything agrees or is settled.
+    pub reconciliation: ProductReconciliation,
 }

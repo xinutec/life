@@ -2,6 +2,7 @@
 import type { Product } from "./Product";
 import type { ProductFacts } from "./ProductFacts";
 import type { ProductListing } from "./ProductListing";
+import type { ProductReconciliation } from "./ProductReconciliation";
 import type { ShopPrice } from "./ShopPrice";
 
 /**
@@ -16,4 +17,9 @@ listings: Array<ProductListing>,
 /**
  * Latest price per shop, cheapest first.
  */
-prices: Array<ShopPrice>, facts: ProductFacts, };
+prices: Array<ShopPrice>, facts: ProductFacts, 
+/**
+ * Where the sources disagree with the canonical row and you haven't decided
+ * yet — the diff to approve. Empty when everything agrees or is settled.
+ */
+reconciliation: ProductReconciliation, };

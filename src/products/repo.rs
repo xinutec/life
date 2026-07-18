@@ -1,6 +1,6 @@
 //! Persistence for the product cache.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use anyhow::Result;
 use chrono::NaiveDateTime;
@@ -10,7 +10,7 @@ use sqlx::types::Json;
 use super::nutrition::{Allergen, DietaryFlag, Nutrition, ProductFacts, merge_dietary};
 use super::prices::{PriceInput, ShopPrice};
 use super::source;
-use super::types::Product;
+use super::types::{Candidate, FieldDivergence, Product};
 
 #[derive(sqlx::FromRow)]
 struct MetaRow {
@@ -269,6 +269,222 @@ pub async fn listing_id(pool: &MySqlPool, source: &str, external_id: &str) -> Re
             .fetch_optional(pool)
             .await?;
     Ok(row.map(|(id,)| id))
+}
+
+// --- Reconciliation: source values vs the canonical row ---
+//
+// Each source's account of a product lives on its listing (0030). The canonical
+// `products` row holds one blessed value per field. Where a listing disagrees
+// with the canonical value AND the disagreement hasn't been settled, that's a
+// divergence to surface for approval. Divergences are computed live (no stored
+// "pending" state to rot); a decision records the exact value set it settled, so
+// it stays quiet until a source's value actually changes (0031).
+
+/// A canonical scalar field reconciliation covers: how to read its current value
+/// off the product and its offered value off a listing.
+struct ReconciledField {
+    field: &'static str,
+    label: &'static str,
+    current: fn(&Product) -> Option<String>,
+    offered: fn(&Listing) -> Option<String>,
+}
+
+/// The fields with a single canonical value that a source can disagree about.
+/// (Picture and the facts — dietary/allergens/nutrition — reconcile through
+/// their own mechanisms; see the reconciliation plan.)
+const RECONCILED_FIELDS: &[ReconciledField] = &[
+    ReconciledField {
+        field: "name",
+        label: "Name",
+        current: |p| p.name.clone(),
+        offered: |l| l.raw_name.clone(),
+    },
+    ReconciledField {
+        field: "brand",
+        label: "Brand",
+        current: |p| p.brand.clone(),
+        offered: |l| l.brand.clone(),
+    },
+    ReconciledField {
+        field: "quantity_label",
+        label: "Pack size",
+        current: |p| p.quantity_label.clone(),
+        offered: |l| l.quantity_label.clone(),
+    },
+];
+
+/// "keep" as a reconcile choice: leave the canonical value, just settle the
+/// divergence.
+pub const KEEP: &str = "keep";
+
+fn trimmed(s: Option<String>) -> Option<String> {
+    s.map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+}
+
+/// The distinct values on the table for a field — the canonical value plus every
+/// listing's — sorted. Stored with a decision as its suppression key: while this
+/// set is unchanged the divergence stays settled; any change re-surfaces it.
+fn value_set(spec: &ReconciledField, product: &Product, listings: &[Listing]) -> Vec<String> {
+    let mut set = BTreeSet::new();
+    if let Some(v) = trimmed((spec.current)(product)) {
+        set.insert(v);
+    }
+    for l in listings {
+        if let Some(v) = trimmed((spec.offered)(l)) {
+            set.insert(v);
+        }
+    }
+    set.into_iter().collect()
+}
+
+/// field → the value set that was on the table when it was last decided.
+pub type DecisionMap = HashMap<String, Vec<String>>;
+
+/// The decisions settled for a product's fields.
+pub async fn field_decisions(pool: &MySqlPool, product_id: u64) -> Result<DecisionMap> {
+    let rows: Vec<(String, Json<Vec<String>>)> = sqlx::query_as(
+        "SELECT field, seen_values FROM product_field_decisions WHERE product_id = ?",
+    )
+    .bind(product_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|(f, v)| (f, v.0)).collect())
+}
+
+/// Where the sources disagree with the canonical row and it isn't already
+/// settled. Pure — the I/O (listings, decisions) is fetched by the caller, so
+/// the rule is unit-testable without a database.
+pub fn divergences(
+    product: &Product,
+    listings: &[Listing],
+    decisions: &DecisionMap,
+) -> Vec<FieldDivergence> {
+    let mut out = Vec::new();
+    for spec in RECONCILED_FIELDS {
+        let current = trimmed((spec.current)(product));
+        let candidates: Vec<Candidate> = listings
+            .iter()
+            .filter_map(|l| {
+                let value = trimmed((spec.offered)(l))?;
+                (current.as_deref() != Some(value.as_str())).then(|| Candidate {
+                    source: l.source.clone(),
+                    value,
+                })
+            })
+            .collect();
+        if candidates.is_empty() {
+            continue;
+        }
+        // Settled if the exact value set on the table matches what was decided.
+        let set = value_set(spec, product, listings);
+        if decisions.get(spec.field) == Some(&set) {
+            continue;
+        }
+        out.push(FieldDivergence {
+            field: spec.field.to_string(),
+            label: spec.label.to_string(),
+            current,
+            candidates,
+        });
+    }
+    out
+}
+
+/// One field's decision from the reconcile UI: adopt a source's value (`choice`
+/// is the source id) or keep the current canonical value (`choice` == `KEEP`).
+#[derive(Debug, Clone)]
+pub struct FieldChoice {
+    pub field: String,
+    pub choice: String,
+}
+
+/// Apply reconcile decisions: adopt the chosen source's value onto the canonical
+/// row (or keep the current one), then record the settled value set so the
+/// divergence stays quiet until a source's value changes.
+pub async fn reconcile(pool: &MySqlPool, product_id: u64, choices: &[FieldChoice]) -> Result<()> {
+    let listings = listings_for(pool, product_id).await?;
+    for c in choices {
+        let Some(spec) = RECONCILED_FIELDS.iter().find(|s| s.field == c.field) else {
+            anyhow::bail!("unknown reconcilable field: {}", c.field);
+        };
+        if c.choice != KEEP {
+            let value = listings
+                .iter()
+                .find(|l| l.source == c.choice)
+                .and_then(|l| trimmed((spec.offered)(l)));
+            let Some(value) = value else {
+                anyhow::bail!("source {} offers no {} to adopt", c.choice, c.field);
+            };
+            set_canonical_field(pool, product_id, spec.field, &value, &c.choice).await?;
+        }
+        // Recompute the set AFTER applying so the decision reflects the settled
+        // state (the adopted value is now the canonical one).
+        let product = get_by_id(pool, product_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("no such product: {product_id}"))?;
+        let set = value_set(spec, &product, &listings);
+        upsert_decision(pool, product_id, spec.field, &set).await?;
+    }
+    Ok(())
+}
+
+/// Set one canonical scalar field to an adopted value. Only the reconcilable
+/// fields are settable here — the column name is never taken from user input.
+async fn set_canonical_field(
+    pool: &MySqlPool,
+    product_id: u64,
+    field: &str,
+    value: &str,
+    source: &str,
+) -> Result<()> {
+    match field {
+        // Name carries provenance (name_source); brand/quantity_label don't have
+        // a provenance column, so adopting just sets the value.
+        "name" => {
+            sqlx::query("UPDATE products SET name = ?, name_source = ? WHERE id = ?")
+                .bind(value)
+                .bind(source)
+                .bind(product_id)
+                .execute(pool)
+                .await?;
+        }
+        "brand" => {
+            sqlx::query("UPDATE products SET brand = ? WHERE id = ?")
+                .bind(value)
+                .bind(product_id)
+                .execute(pool)
+                .await?;
+        }
+        "quantity_label" => {
+            sqlx::query("UPDATE products SET quantity_label = ? WHERE id = ?")
+                .bind(value)
+                .bind(product_id)
+                .execute(pool)
+                .await?;
+        }
+        other => anyhow::bail!("field {other} is not settable by reconcile"),
+    }
+    Ok(())
+}
+
+async fn upsert_decision(
+    pool: &MySqlPool,
+    product_id: u64,
+    field: &str,
+    set: &[String],
+) -> Result<()> {
+    let json = serde_json::to_string(set)?;
+    sqlx::query(
+        "INSERT INTO product_field_decisions (product_id, field, seen_values) \
+         VALUES (?, ?, ?) \
+         ON DUPLICATE KEY UPDATE seen_values = VALUES(seen_values), decided_at = CURRENT_TIMESTAMP",
+    )
+    .bind(product_id)
+    .bind(field)
+    .bind(json)
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 /// Append a price observation to a listing's history. Prices are a time series —
