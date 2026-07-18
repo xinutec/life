@@ -454,9 +454,10 @@ async fn set_canonical_field(
     value: &str,
     source: &str,
 ) -> Result<()> {
+    // Each reconcilable scalar carries a provenance column (`*_source`): the
+    // adopted source's id, or `user` for our own correction. `user` there is
+    // what a later source refresh checks before touching the value.
     match field {
-        // Name carries provenance (name_source); brand/quantity_label don't have
-        // a provenance column, so adopting just sets the value.
         "name" => {
             sqlx::query("UPDATE products SET name = ?, name_source = ? WHERE id = ?")
                 .bind(value)
@@ -466,18 +467,22 @@ async fn set_canonical_field(
                 .await?;
         }
         "brand" => {
-            sqlx::query("UPDATE products SET brand = ? WHERE id = ?")
+            sqlx::query("UPDATE products SET brand = ?, brand_source = ? WHERE id = ?")
                 .bind(value)
+                .bind(source)
                 .bind(product_id)
                 .execute(pool)
                 .await?;
         }
         "quantity_label" => {
-            sqlx::query("UPDATE products SET quantity_label = ? WHERE id = ?")
-                .bind(value)
-                .bind(product_id)
-                .execute(pool)
-                .await?;
+            sqlx::query(
+                "UPDATE products SET quantity_label = ?, quantity_label_source = ? WHERE id = ?",
+            )
+            .bind(value)
+            .bind(source)
+            .bind(product_id)
+            .execute(pool)
+            .await?;
         }
         other => anyhow::bail!("field {other} is not settable by reconcile"),
     }
@@ -860,26 +865,39 @@ pub async fn upsert_external(
     } else if let Some(id) = listing_product_id(pool, source, external_id).await? {
         // A barcodeless product has a single owning source, so a re-import may
         // refresh its canonical name/brand (nothing else lists it to diverge) —
-        // EXCEPT a name we've made our own, which a source refresh must never
-        // clobber.
-        let user_named: Option<(i64,)> =
-            sqlx::query_as("SELECT (name_source = 'user') FROM products WHERE id = ?")
-                .bind(id)
-                .fetch_optional(pool)
-                .await?;
-        if user_named.is_some_and(|(u,)| u != 0) {
-            sqlx::query("UPDATE products SET brand = ? WHERE id = ?")
-                .bind(brand)
-                .bind(id)
-                .execute(pool)
-                .await?;
-        } else {
-            sqlx::query("UPDATE products SET name = ?, brand = ? WHERE id = ?")
-                .bind(name)
-                .bind(brand)
-                .bind(id)
-                .execute(pool)
-                .await?;
+        // EXCEPT a value we've made our own, which a source refresh must never
+        // clobber. Name and brand are guarded independently by their provenance.
+        // `<=>` (null-safe equality) so an unset provenance reads as 0, not NULL.
+        let (name_user, brand_user): (i64, i64) = sqlx::query_as(
+            "SELECT (name_source <=> 'user'), (brand_source <=> 'user') FROM products WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_one(pool)
+        .await?;
+        match (name_user != 0, brand_user != 0) {
+            (true, true) => {}
+            (true, false) => {
+                sqlx::query("UPDATE products SET brand = ? WHERE id = ?")
+                    .bind(brand)
+                    .bind(id)
+                    .execute(pool)
+                    .await?;
+            }
+            (false, true) => {
+                sqlx::query("UPDATE products SET name = ? WHERE id = ?")
+                    .bind(name)
+                    .bind(id)
+                    .execute(pool)
+                    .await?;
+            }
+            (false, false) => {
+                sqlx::query("UPDATE products SET name = ?, brand = ? WHERE id = ?")
+                    .bind(name)
+                    .bind(brand)
+                    .bind(id)
+                    .execute(pool)
+                    .await?;
+            }
         }
         id
     } else {

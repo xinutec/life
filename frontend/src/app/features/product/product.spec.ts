@@ -429,4 +429,36 @@ describe('ProductPage', () => {
     page.saveName();
     expect(api.reconcile).not.toHaveBeenCalled();
   });
+
+  it('lets you type our own brand + pack — the shop-casing fix ("250ML" → "250ml")', () => {
+    const { api, page } = setup();
+    page.startEditDetails();
+    expect(page.brandDraft()).toBe('Quaker'); // prefilled from current
+    expect(page.packDraft()).toBe('22x27G');
+    page.brandDraft.set('  Oatly  ');
+    page.packDraft.set('  250ml  ');
+    page.saveDetails();
+    expect(api.reconcile).toHaveBeenCalledWith(42, [
+      { field: 'brand', choice: 'user', value: 'Oatly' }, // trimmed
+      { field: 'quantity_label', choice: 'user', value: '250ml' },
+    ]);
+  });
+
+  it('only sends the field you actually changed', () => {
+    const { api, page } = setup();
+    page.startEditDetails();
+    page.packDraft.set('250ml'); // brand left as-is
+    page.saveDetails();
+    expect(api.reconcile).toHaveBeenCalledWith(42, [
+      { field: 'quantity_label', choice: 'user', value: '250ml' },
+    ]);
+  });
+
+  it('changes nothing when neither detail was touched', () => {
+    const { api, page } = setup();
+    page.startEditDetails();
+    page.saveDetails();
+    expect(api.reconcile).not.toHaveBeenCalled();
+    expect(page.editingDetails()).toBe(false); // just closes
+  });
 });

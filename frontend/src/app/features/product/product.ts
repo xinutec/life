@@ -282,6 +282,62 @@ export class ProductPage {
     });
   }
 
+  // --- Our own brand + pack size: hand corrections, same as the name ---
+  //
+  // The pack size is where this started: a shop's own casing ("250ML") that no
+  // source disagrees with, so the picker can't fix it — only our own layer can.
+  // Brand rides along for the same reason.
+
+  readonly editingDetails = signal(false);
+  readonly brandDraft = signal('');
+  readonly packDraft = signal('');
+
+  startEditDetails(): void {
+    const p = this.detail()?.product;
+    this.brandDraft.set(p?.brand ?? '');
+    this.packDraft.set(p?.quantity_label ?? '');
+    this.editingDetails.set(true);
+  }
+
+  cancelEditDetails(): void {
+    this.editingDetails.set(false);
+  }
+
+  /** Save our own brand/pack — `user`-owned values (like the name) that outrank
+   *  the sources and survive a refresh. Only fields you actually changed to a
+   *  non-empty value are sent; an unchanged or emptied field is left alone (this
+   *  path corrects, it doesn't clear). Nothing changed → just close. */
+  saveDetails(): void {
+    if (this.reconciling()) return;
+    const p = this.detail()?.product;
+    const decisions: { field: string; choice: string; value: string }[] = [];
+    const brand = this.brandDraft().trim();
+    if (brand && brand !== (p?.brand ?? '')) {
+      decisions.push({ field: 'brand', choice: 'user', value: brand });
+    }
+    const pack = this.packDraft().trim();
+    if (pack && pack !== (p?.quantity_label ?? '')) {
+      decisions.push({ field: 'quantity_label', choice: 'user', value: pack });
+    }
+    if (!decisions.length) {
+      this.editingDetails.set(false);
+      return;
+    }
+    this.reconciling.set(true);
+    this.api.reconcile(this.id(), decisions).subscribe({
+      next: (d) => {
+        this.reconciling.set(false);
+        this.editingDetails.set(false);
+        this.detail.set(d);
+        this.feedback.notify('Updated the product details.');
+      },
+      error: (e: unknown) => {
+        this.reconciling.set(false);
+        this.feedback.error(`Could not update the product${onlineHint(e)}`);
+      },
+    });
+  }
+
   // --- Reconciliation: approve where the sources disagree with the product ---
 
   /** The "keep the current value" choice — mirrors the backend's KEEP. */

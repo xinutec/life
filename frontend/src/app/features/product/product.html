@@ -52,8 +52,48 @@
       </button>
     </div>
   }
-  @if (subtitle()) {
-    <p class="subtitle">{{ subtitle() }}</p>
+  <!-- Brand · pack size — editable the same way as the name, for the shop's own
+       casing no source disagrees with ("250ML" → "250ml"). -->
+  @if (editingDetails()) {
+    <div class="detail-edit">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Brand</mat-label>
+        <input
+          matInput
+          #bi
+          [value]="brandDraft()"
+          (input)="brandDraft.set(bi.value)"
+          (keyup.enter)="saveDetails()"
+          (keyup.escape)="cancelEditDetails()"
+        />
+      </mat-form-field>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Pack size</mat-label>
+        <input
+          matInput
+          #pi
+          [value]="packDraft()"
+          (input)="packDraft.set(pi.value)"
+          (keyup.enter)="saveDetails()"
+          (keyup.escape)="cancelEditDetails()"
+        />
+      </mat-form-field>
+      <div class="detail-edit-actions">
+        <button mat-icon-button (click)="saveDetails()" [disabled]="reconciling()" aria-label="Save details">
+          <mat-icon>check</mat-icon>
+        </button>
+        <button mat-icon-button (click)="cancelEditDetails()" aria-label="Cancel">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+    </div>
+  } @else {
+    <div class="subtitle-row">
+      <p class="subtitle">{{ subtitle() || 'No brand or pack size' }}</p>
+      <button mat-icon-button (click)="startEditDetails()" aria-label="Edit brand and pack size">
+        <mat-icon>edit</mat-icon>
+      </button>
+    </div>
   }
 
   @if (dietary().length) {

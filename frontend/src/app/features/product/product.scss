@@ -49,9 +49,45 @@
   overflow-wrap: anywhere;
 }
 
+// Brand · pack size on one line with its edit button, matching the name row.
+.subtitle-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+
+  .subtitle {
+    flex: 1;
+    min-width: 0;
+  }
+
+  button {
+    flex: none;
+  }
+}
+
 .subtitle {
   margin: 0.25rem 0 0;
   color: var(--mat-sys-on-surface-variant);
+}
+
+// The two-field brand/pack editor: inputs stacked, actions beside the pack input
+// on wider space, wrapping below on narrow phones.
+.detail-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  margin-top: 0.25rem;
+
+  mat-form-field {
+    flex: 1 1 8rem;
+    min-width: 0;
+  }
+
+  .detail-edit-actions {
+    flex: none;
+    display: flex;
+  }
 }
 
 h3 {

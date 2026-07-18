@@ -329,6 +329,189 @@ async fn our_own_name_wins_over_every_source_and_survives_a_refresh() {
 }
 
 #[tokio::test]
+async fn our_own_brand_and_pack_win_over_sources_and_survive_a_refresh() {
+    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
+        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping our-own-brand/pack DB test");
+        return;
+    };
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    let barcode = "5000000000790";
+    let asda_ext = "ourdetails-asda";
+    sqlx::query("DELETE FROM products WHERE barcode = ?")
+        .bind(barcode)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM product_listings WHERE external_id = ?")
+        .bind(asda_ext)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // Asda seeds the canonical row with its own casing — "250ML", the very thing
+    // that started this: no other source disagrees, so only our layer can fix it.
+    let p = repo::upsert_external(
+        &pool,
+        "asda",
+        asda_ext,
+        Some(barcode),
+        &repo::ListingFields {
+            raw_name: Some("Some Oat Drink"),
+            brand: Some("asda brand"),
+            quantity_label: Some("250ML"),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    // Type our own brand + pack — no source offered these values.
+    repo::reconcile(
+        &pool,
+        p.id,
+        &[
+            repo::FieldChoice {
+                field: "brand".into(),
+                choice: repo::USER.into(),
+                value: Some("Oatly".into()),
+            },
+            repo::FieldChoice {
+                field: "quantity_label".into(),
+                choice: repo::USER.into(),
+                value: Some("250ml".into()),
+            },
+        ],
+    )
+    .await
+    .unwrap();
+
+    let after = repo::get_by_id(&pool, p.id).await.unwrap().unwrap();
+    assert_eq!(after.brand.as_deref(), Some("Oatly"), "our own brand");
+    assert_eq!(
+        after.quantity_label.as_deref(),
+        Some("250ml"),
+        "our own pack size"
+    );
+
+    // Our own values settle their divergences even though Asda still says
+    // otherwise on its listing.
+    let listings = repo::listings_for(&pool, p.id).await.unwrap();
+    let decisions = repo::field_decisions(&pool, p.id).await.unwrap();
+    assert!(
+        repo::divergences(&after, &listings, &decisions)
+            .iter()
+            .all(|d| d.field != "brand" && d.field != "quantity_label"),
+        "our own brand/pack settle their divergences"
+    );
+
+    // Asda's listing keeps its honest casing.
+    let asda = listings.iter().find(|l| l.source == "asda").unwrap();
+    assert_eq!(asda.quantity_label.as_deref(), Some("250ML"));
+    assert_eq!(asda.brand.as_deref(), Some("asda brand"));
+
+    // A refresh from Asda (barcoded → find_or_create leaves canonical untouched)
+    // must not clobber our own brand/pack.
+    repo::upsert_external(
+        &pool,
+        "asda",
+        asda_ext,
+        Some(barcode),
+        &repo::ListingFields {
+            raw_name: Some("Some Oat Drink"),
+            brand: Some("asda brand"),
+            quantity_label: Some("250ML"),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    let after = repo::get_by_id(&pool, p.id).await.unwrap().unwrap();
+    assert_eq!(
+        after.brand.as_deref(),
+        Some("Oatly"),
+        "brand survived refresh"
+    );
+    assert_eq!(
+        after.quantity_label.as_deref(),
+        Some("250ml"),
+        "pack survived refresh"
+    );
+}
+
+#[tokio::test]
+async fn a_barcodeless_source_refresh_keeps_our_own_brand() {
+    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
+        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping barcodeless-brand-override DB test");
+        return;
+    };
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    let ext = "ourtest-bl-brand";
+    sqlx::query("DELETE FROM products WHERE external_id = ?")
+        .bind(ext)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // A barcodeless product whose single owner refreshes name + brand on re-import.
+    let p = repo::upsert_external(
+        &pool,
+        "waitrose",
+        ext,
+        None,
+        &repo::ListingFields {
+            raw_name: Some("Shop Name"),
+            brand: Some("Shop Brand"),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    // Make the brand our own, but leave the name to the source.
+    repo::reconcile(
+        &pool,
+        p.id,
+        &[repo::FieldChoice {
+            field: "brand".into(),
+            choice: repo::USER.into(),
+            value: Some("Our Brand".into()),
+        }],
+    )
+    .await
+    .unwrap();
+
+    // Re-import with a fresh shop name AND brand: the name refreshes (not ours),
+    // the brand is protected (ours).
+    let after = repo::upsert_external(
+        &pool,
+        "waitrose",
+        ext,
+        None,
+        &repo::ListingFields {
+            raw_name: Some("Shop Name v2"),
+            brand: Some("Shop Brand v2"),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        after.brand.as_deref(),
+        Some("Our Brand"),
+        "a barcodeless refresh must not clobber our own brand"
+    );
+    assert_eq!(
+        after.name.as_deref(),
+        Some("Shop Name v2"),
+        "the un-owned name still refreshes from the source"
+    );
+}
+
+#[tokio::test]
 async fn a_barcodeless_source_refresh_keeps_our_own_name() {
     let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
         eprintln!("LIFE_TEST_DATABASE_URL unset — skipping barcodeless-override DB test");

@@ -280,7 +280,22 @@ through something that resets the NC session.
         source's value or keeps the current, per field. The product page shows a
         "Shops disagree" panel with a radio per field (default keep) and one
         Apply — the 250ML-vs-250ml case surfaced instead of guessed.
-      - **8b (next): picture + facts reconciliation.** Picture needs image
+      - **8b — our own editable name** (2026-07-18): reconcile accepts
+        `choice='user'` + a typed value → sets the canonical name with
+        `name_source='user'`, which outranks every source, settles the divergence,
+        and is never auto-overwritten (guarded on the barcodeless re-import path
+        too). Product page has a pencil-edit on the name. Built for "Oalty": Asda's
+        catalogue literally has the typo, OFF has a crowd title, so NO source spells
+        "Oatly" — the source-only picker couldn't fix it; our own layer can. The
+        shops keep their own honest spelling on their listings.
+      - **8c — our own editable brand + pack size** (2026-07-18): the same `user`
+        mechanism for the other two reconcilable scalars. **Migration 0032** adds
+        `brand_source` / `quantity_label_source` (mirroring `name_source`), so a
+        typed brand/pack survives a source refresh. Product page has a pencil-edit
+        on the subtitle (both fields in one inline form; only changed fields are
+        sent). This closes the original observation — "Asda · 250ML" was the shop's
+        own casing no source disagreed with, so only our layer could fix it.
+      - **8d (next): picture + facts reconciliation.** Picture needs image
         provenance to diff honestly (a listing's image_url vs the canonical
         bytes); dietary/allergens/nutrition need a user-authoritative layer over
         the existing safe merge (disagreement → "maybe"), and an Asda
