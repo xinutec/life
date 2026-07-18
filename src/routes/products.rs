@@ -121,6 +121,9 @@ pub async fn lookup(
             brand: found.brand.as_deref(),
             quantity_label: found.quantity.as_deref(),
             image_url: found.image_url.as_deref(),
+            // OFF's whole response verbatim — the same lossless capture the Asda
+            // search hit gets, so nothing OFF sent is dropped.
+            raw_json: Some(&found.raw),
             ..Default::default()
         },
     )

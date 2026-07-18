@@ -20,6 +20,10 @@ pub struct OffProduct {
     /// Nutrition panel, ingredients, allergens, dietary flags parsed from the
     /// same response (see products::nutrition).
     pub facts: ProductFacts,
+    /// OFF's response body verbatim — kept on the product's `off` listing
+    /// (raw_json) so nothing OFF sent is lost and we needn't re-fetch to recover
+    /// a field we don't model yet.
+    pub raw: String,
 }
 
 #[derive(Deserialize)]
@@ -147,7 +151,9 @@ pub async fn fetch(http: &reqwest::Client, barcode: &str) -> Result<Option<OffPr
     if !res.status().is_success() {
         return Ok(None);
     }
-    let env: Envelope = res.json().await.context("parsing OFF response")?;
+    // Read the body as text so we can keep it verbatim, then parse from it.
+    let body = res.text().await.context("reading OFF response")?;
+    let env: Envelope = serde_json::from_str(&body).context("parsing OFF response")?;
     if env.status != 1 {
         return Ok(None);
     }
@@ -160,6 +166,7 @@ pub async fn fetch(http: &reqwest::Client, barcode: &str) -> Result<Option<OffPr
         quantity: non_empty(p.quantity),
         image_url: non_empty(p.image_front_url),
         facts: p.facts.parse(),
+        raw: body,
     }))
 }
 
