@@ -240,6 +240,20 @@
     }
   }
 
+  <!-- Asda's search API carries no facts; its product page does, behind a
+       bot-wall. In the app, pull them through the hidden WebView. -->
+  @if (canGetAsdaFacts()) {
+    <button
+      mat-stroked-button
+      class="asda-facts"
+      (click)="getAsdaFacts()"
+      [disabled]="fetchingFacts()"
+    >
+      <mat-icon>{{ fetchingFacts() ? 'hourglass_empty' : 'menu_book' }}</mat-icon>
+      {{ fetchingFacts() ? 'Reading Asda’s page…' : 'Get full details from Asda' }}
+    </button>
+  }
+
   @if (nutrientRows().length) {
     <h3>Nutrition <span class="basis">per {{ basis() }}</span></h3>
     <table class="nutrition">

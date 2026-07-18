@@ -12,6 +12,8 @@ import { assertNever, classifyApiError, onlineHint } from '../../shared/api-erro
 import { Feedback } from '../../shared/feedback';
 import { ListState } from '../../shared/list-state';
 import { sourceLabel } from '../../shared/sources';
+import { Shops } from '../../shop';
+import { ASDA_FACTS } from '../../shops/asda';
 
 /** One "where to buy" line: a shop that lists the product, with its current
  *  price (when one has been observed) and a deep link to its product page.
@@ -102,6 +104,7 @@ export class ProductPage {
   private api = inject(LifeApi);
   private location = inject(Location);
   private feedback = inject(Feedback);
+  private shops = inject(Shops);
 
   readonly detail = signal<ProductDetail | null>(null);
   readonly loading = signal(true);
@@ -386,6 +389,52 @@ export class ProductPage {
         this.feedback.error(`Could not update the product${onlineHint(e)}`);
       },
     });
+  }
+
+  // --- Asda's full details (nutrition/ingredients/allergens from its page) ---
+  //
+  // The Asda SEARCH API carries no facts; they live on the product page, behind
+  // Cloudflare. The hidden WebView (Android app only) fetches the raw blob; the
+  // server parses it. Offered only when the bridge is present AND we already have
+  // an Asda listing whose barcode this product was confirmed against.
+
+  readonly fetchingFacts = signal(false);
+
+  /** The product's Asda listing, if any — its CIN is the page to fetch. */
+  private readonly asdaListing = computed(() =>
+    this.detail()?.listings.find((l) => l.source === 'asda'),
+  );
+
+  /** Only inside the app, and only once an Asda listing exists to enrich. */
+  readonly canGetAsdaFacts = computed(() => this.shops.available && !!this.asdaListing());
+
+  /** Pull Asda's product-page facts through the WebView and store them. The blob
+   *  goes to the server untouched; the server parses and barcode-gates it. */
+  getAsdaFacts(): void {
+    const listing = this.asdaListing();
+    if (!listing || this.fetchingFacts()) return;
+    this.fetchingFacts.set(true);
+    this.shops
+      .fetchFacts(ASDA_FACTS, listing.external_id)
+      .then((f) =>
+        this.api.submitFacts(this.id(), { source: 'asda', ean: f.ean, blob: f.blob }).subscribe({
+          next: (d) => {
+            this.fetchingFacts.set(false);
+            this.detail.set(d);
+            this.feedback.notify('Added Asda’s full details.');
+          },
+          error: (e: unknown) => {
+            this.fetchingFacts.set(false);
+            this.feedback.error(`Could not save Asda’s details${onlineHint(e)}`);
+          },
+        }),
+      )
+      .catch((e: unknown) => {
+        this.fetchingFacts.set(false);
+        this.feedback.error(
+          `Could not read Asda’s page: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      });
   }
 
   readonly imageUrl = computed(() => {

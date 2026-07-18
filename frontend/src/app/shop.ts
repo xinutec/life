@@ -19,6 +19,27 @@ export interface ShopCandidate {
   image_url: string;
 }
 
+/** Raw product-page content a shop's WebView returns for the SERVER to parse:
+ *  facts the shop's API doesn't carry (Asda's Brandbank nutrition/ingredients/
+ *  allergens/dietary). The client never interprets it — it only ferries the blob
+ *  past the bot-wall. */
+export interface ShopFacts {
+  /** The page's own barcode (Asda's c_EAN_GTIN) — the backend's identity guard. */
+  ean: string;
+  /** The raw product-content blob (Asda's c_BRANDBANK_JSON), parsed server-side. */
+  blob: string;
+}
+
+/** A shop whose product PAGE carries facts its search API doesn't, readable only
+ *  through the hidden WebView (the page is behind a bot-wall). Kept separate from
+ *  ShopProvider: Asda's search/import already run server-side (see products::asda),
+ *  so its WebView role is facts alone. */
+export interface FactsProvider {
+  readonly id: string; // matches products.source ('asda')
+  /** Load this product's page and return its raw facts blob for the server. */
+  facts(externalId: string): { url: string; js: string };
+}
+
 /**
  * Everything shop-specific — URLs, consent handling, result extraction — lives in
  * a provider, in the web app, so adding a shop (Asda) needs no APK change. Each
@@ -43,7 +64,7 @@ interface Bridge {
 }
 
 type BridgeResult =
-  | { ok: true; product?: ShopProduct; candidates?: ShopCandidate[] }
+  | { ok: true; product?: ShopProduct; candidates?: ShopCandidate[]; facts?: ShopFacts }
   | { ok: false; error: string };
 
 interface BridgeWindow extends Window {
@@ -98,6 +119,16 @@ export class Shops {
     return this.request((id) => this.bridge!.run(url, js, id)).then((r) => {
       if (!r.product) throw new Error('no product returned');
       return r.product;
+    });
+  }
+
+  /** Fetch a product page's raw facts blob through the WebView, for the server to
+   *  parse. Only meaningful for a shop whose page is bot-walled (Asda). */
+  fetchFacts(provider: FactsProvider, externalId: string): Promise<ShopFacts> {
+    const { url, js } = provider.facts(externalId);
+    return this.request((id) => this.bridge!.run(url, js, id)).then((r) => {
+      if (!r.facts) throw new Error('no facts returned');
+      return r.facts;
     });
   }
 

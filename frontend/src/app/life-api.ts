@@ -165,6 +165,17 @@ export class LifeApi {
   ): Observable<ProductDetail> {
     return this.http.post<ProductDetail>(`/api/products/id/${id}/reconcile`, decisions);
   }
+  /** Store facts a shop's product PAGE carries but its API doesn't — Asda's
+   *  Brandbank nutrition/ingredients/allergens/dietary, fetched by the hidden
+   *  WebView (the page is bot-walled) and parsed server-side. `ean` is the page's
+   *  own barcode; the backend rejects a blob whose barcode isn't this product's.
+   *  Returns the re-read detail. */
+  submitFacts(
+    id: number,
+    body: { source: string; ean: string; blob: string },
+  ): Observable<ProductDetail> {
+    return this.http.post<ProductDetail>(`/api/products/id/${id}/facts`, body);
+  }
   /** URL of a catalog image addressed by product id — for barcodeless shop
    *  products, which have no /products/{barcode}/image URL. */
   productImageByIdUrl(id: number, version?: number): string {

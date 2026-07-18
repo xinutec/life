@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { LifeApi } from '../../life-api';
 import { AsdaHit, ProductDetail, ShopFind } from '../../models';
+import { Shops } from '../../shop';
 import { ProductPage } from './product';
 
 const DETAIL: ProductDetail = {
@@ -80,6 +81,7 @@ describe('ProductPage', () => {
   function setup(
     detail: ProductDetail = DETAIL,
     find: ShopFind = { hit: null, from_cache: false },
+    shops: Partial<Shops> = { available: false },
   ) {
     const api = {
       getProductDetail: vi.fn(() => of(detail)),
@@ -88,10 +90,14 @@ describe('ProductPage', () => {
       syncListing: vi.fn(() => of(detail.product)),
       // Answers with the same detail but no divergences left (the settled state).
       reconcile: vi.fn(() => of({ ...detail, reconciliation: { fields: [] } })),
+      submitFacts: vi.fn(() => of({ ...detail, reconciliation: { fields: [] } })),
     };
     TestBed.configureTestingModule({
       imports: [ProductPage],
-      providers: [{ provide: LifeApi, useValue: api }],
+      providers: [
+        { provide: LifeApi, useValue: api },
+        { provide: Shops, useValue: shops },
+      ],
     });
     const fixture = TestBed.createComponent(ProductPage);
     fixture.componentRef.setInput('id', '42');
@@ -460,5 +466,32 @@ describe('ProductPage', () => {
     page.saveDetails();
     expect(api.reconcile).not.toHaveBeenCalled();
     expect(page.editingDetails()).toBe(false); // just closes
+  });
+
+  it('hides the Asda full-details action outside the app (no shop bridge)', () => {
+    const { fixture, page } = setup(); // shops.available === false by default
+    expect(page.canGetAsdaFacts()).toBe(false); // even though DETAIL has an Asda listing
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.asda-facts')).toBeNull();
+  });
+
+  it('offers Asda full details in the app and stores the fetched blob', async () => {
+    const fetchFacts = vi.fn(() =>
+      Promise.resolve({ ean: '5000328042732', blob: '{"calculatedNutrition":[]}' }),
+    );
+    const { api, page } = setup(DETAIL, undefined, { available: true, fetchFacts });
+
+    expect(page.canGetAsdaFacts()).toBe(true);
+    page.getAsdaFacts();
+    await new Promise((r) => setTimeout(r)); // flush the fetch → submit chain
+
+    // Fetched by the product's own Asda listing (CIN 9346702), parsed server-side.
+    expect(fetchFacts).toHaveBeenCalledWith(expect.objectContaining({ id: 'asda' }), '9346702');
+    expect(api.submitFacts).toHaveBeenCalledWith(42, {
+      source: 'asda',
+      ean: '5000328042732',
+      blob: '{"calculatedNutrition":[]}',
+    });
+    expect(page.fetchingFacts()).toBe(false);
   });
 });

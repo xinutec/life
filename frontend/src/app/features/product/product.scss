@@ -248,6 +248,13 @@ h3 {
   }
 }
 
+// "Get full details from Asda" — a quiet enrichment action, full-width so it
+// reads as a section step rather than a primary call to action.
+.asda-facts {
+  margin-top: 1rem;
+  width: 100%;
+}
+
 .nutrition {
   width: 100%;
   border-collapse: collapse;
