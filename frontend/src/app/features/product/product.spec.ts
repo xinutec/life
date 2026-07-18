@@ -18,6 +18,7 @@ const DETAIL: ProductDetail = {
     source: 'off',
     external_id: '5000328042732',
     name_source: 'asda',
+    image_source: 'off',
     has_image: true,
   },
   listings: [
@@ -452,6 +453,38 @@ describe('ProductPage', () => {
       { field: 'nutrition', choice: 'off' },
       { field: 'ingredients', choice: 'keep' },
     ]);
+  });
+
+  it('renders the picture divergence as thumbnails and adopts a source picture', () => {
+    const withPicture: ProductDetail = {
+      ...DETAIL,
+      reconciliation: {
+        fields: [
+          {
+            field: 'picture',
+            label: 'Picture',
+            current: 'off', // provenance of the picture we hold
+            candidates: [{ source: 'asda', value: 'https://asda.example/x.jpg' }],
+          },
+        ],
+      },
+    };
+    const { fixture, api, page } = setup(withPicture);
+    const el = fixture.nativeElement as HTMLElement;
+    const panel = el.querySelector('.reconcile');
+    expect(panel?.textContent).toContain('Picture');
+    // Two thumbnails: the current one we hold (keep option) and Asda's candidate.
+    // The candidate is shown as an image, never as raw URL text.
+    const srcs = [...(panel?.querySelectorAll('.pic-thumb') ?? [])].map(
+      (i) => (i as HTMLImageElement).src,
+    );
+    expect(srcs).toContain('https://asda.example/x.jpg');
+    expect(srcs.some((s) => s.includes('/api/products/id/42/image'))).toBe(true);
+    expect(panel?.textContent).not.toContain('https://asda.example/x.jpg');
+    // Adopt Asda's picture.
+    page.setChoice('picture', 'asda');
+    page.applyReconcile();
+    expect(api.reconcile).toHaveBeenCalledWith(42, [{ field: 'picture', choice: 'asda' }]);
   });
 
   it('surfaces per-source provenance where safety-critical facts disagree', () => {

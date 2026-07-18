@@ -35,6 +35,7 @@ const product = (over: Partial<Product>): Product => ({
   source: 'off',
   external_id: null,
   name_source: 'off',
+  image_source: null,
   has_image: false,
   ...over,
 });

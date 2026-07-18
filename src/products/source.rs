@@ -38,6 +38,18 @@ pub fn importable(id: &str) -> Option<&'static Source> {
     IMPORTABLE.iter().copied().find(|s| s.id == id)
 }
 
+/// Allowed image-host suffixes for a source's picture, for the SSRF guard, or
+/// `None` if the source carries no adoptable picture. Covers every source whose
+/// image can be adopted in picture reconciliation — including Open Food Facts,
+/// which imports through its own path (not the generic import registry) but whose
+/// image is still an adoptable candidate.
+pub fn image_hosts(source: &str) -> Option<&'static [&'static str]> {
+    match source {
+        "off" => Some(&["openfoodfacts.org"]),
+        other => importable(other).map(|s| s.image_hosts),
+    }
+}
+
 /// The public product-page URL for a listing, derived from its identity alone —
 /// no slug needed (probed 2026-07-16: Asda's PDP is slugless and the old
 /// groceries.asda.com host just 301s to it; Waitrose redirects any slug to the

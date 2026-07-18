@@ -341,9 +341,20 @@ through something that resets the NC session.
         merge (union / tri-state) and instead get read-only per-source PROVENANCE
         on the product page ("Sources differ": who declared which allergen, whose
         vegan claim is which). `ProductDetail.facts_by_source` carries it.
-      - **8f (later): picture reconciliation.** Needs image provenance to diff a
-        listing's image_url against the canonical bytes; adopting one re-fetches
-        through the SSRF-gated path. Independent of the facts work.
+      - **8f (DONE 2026-07-18): picture reconciliation.** The canonical image is
+        bytes we hold; a listing offers only a URL — so there's nothing to
+        value-compare. Reconciled by PROVENANCE instead: `products.image_source`
+        (migration 0036, mirrors name_source) records which source our picture came
+        from, and a listing from a DIFFERENT source that offers its own image is a
+        candidate to adopt (`repo::picture_divergence`, pure). Adopting re-fetches
+        the chosen source's picture through the same SSRF-gated, no-redirect fetch
+        the import path uses (handled in the reconcile route, since it's I/O, then
+        `set_image_provenance`); keeping just settles it (`settle_picture`, reusing
+        `product_field_decisions` keyed on "picture"). A hand-uploaded picture is
+        `image_source='user'` and never nagged. The product page renders the choice
+        as THUMBNAILS (the current one beside each source's), not URL text. Tests:
+        `tests/picture_reconcile.rs` (pure + real-DB) + product.spec.ts. This
+        completes the increment-8 reconciliation roadmap.
 - [x] **Client activity trace** (2026-07-17) — the navigations and taps the
       browser sees but the API doesn't, folded into the SAME log stream as the
       per-request trace so a session reads as one timeline (`nav /product/56` →

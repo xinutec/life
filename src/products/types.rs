@@ -25,6 +25,9 @@ pub struct Product {
     /// Which source's title `name` currently is (see repo's canonical-name
     /// refresh) — provenance for display, never hand-assigned.
     pub name_source: Option<String>,
+    /// Which source the cached picture came from ('off', a shop, or 'user' for a
+    /// hand upload) — provenance for picture reconciliation. NULL when unknown.
+    pub image_source: Option<String>,
     /// True if we have a cached image. Served from /api/products/id/{id}/image
     /// (barcodeless shop products), or /api/products/{barcode}/image when barcoded.
     pub has_image: bool,

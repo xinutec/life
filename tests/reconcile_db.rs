@@ -19,6 +19,7 @@ fn product(name: &str, brand: &str, quantity: &str) -> Product {
         source: Some("off".into()),
         external_id: None,
         name_source: Some("off".into()),
+        image_source: None,
         has_image: false,
     }
 }

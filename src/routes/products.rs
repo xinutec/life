@@ -290,6 +290,7 @@ pub async fn import(
         && let Some((bytes, mime)) = off::fetch_image_from(url, src.image_hosts).await?
     {
         repo::set_image_by_id(&app.pool, product.id, &bytes, &mime).await?;
+        repo::set_image_provenance(&app.pool, product.id, &body.source).await?;
         return repo::get_by_id(&app.pool, product.id)
             .await?
             .map(Json)
@@ -329,6 +330,11 @@ async fn build_detail(pool: &sqlx::MySqlPool, id: u64) -> Result<ProductDetail, 
     let facts = repo::merge_facts(&facts_by_source, &fact_prefs);
     let mut fields = repo::divergences(&product, &listings, &decisions);
     fields.extend(repo::fact_divergences(&facts_by_source, &fact_prefs));
+    // The picture reconciles by provenance, not value (see picture_divergence):
+    // needs the raw listings (their image_url), so compute it before mapping them.
+    if let Some(pd) = repo::picture_divergence(&product, &listings, &decisions) {
+        fields.push(pd);
+    }
     let reconciliation = ProductReconciliation { fields };
     let listings = listings
         .into_iter()
@@ -380,7 +386,17 @@ pub async fn reconcile(
     if repo::get_by_id(&app.pool, id).await?.is_none() {
         return Err(AppError::NotFound);
     }
-    let choices: Vec<repo::FieldChoice> = body
+    // The picture reconciles differently: adopting it means re-fetching the
+    // source's image through the SSRF gate (an I/O concern the route owns), not a
+    // value copy. Split it out and handle it here; the rest is a plain DB reconcile.
+    let (picture, scalar): (Vec<_>, Vec<_>) = body
+        .into_iter()
+        .partition(|c| c.field == repo::PICTURE_FIELD);
+    let total = picture.len() + scalar.len();
+    for c in &picture {
+        apply_picture_choice(&app.pool, id, c).await?;
+    }
+    let choices: Vec<repo::FieldChoice> = scalar
         .into_iter()
         .map(|c| repo::FieldChoice {
             field: c.field,
@@ -391,12 +407,51 @@ pub async fn reconcile(
     repo::reconcile(&app.pool, id, &choices)
         .await
         .map_err(|e| AppError::BadRequest(e.to_string()))?;
-    tracing::info!(
-        product = id,
-        decisions = choices.len(),
-        "product reconciled"
-    );
+    tracing::info!(product = id, decisions = total, "product reconciled");
     Ok(Json(build_detail(&app.pool, id).await?))
+}
+
+/// Apply a picture reconcile choice. `keep` just settles the divergence; a source
+/// id adopts that source's picture — re-fetching its bytes through the same
+/// SSRF-gated, no-redirect fetch the import path uses, then recording the new
+/// provenance. `user` is rejected: a picture is uploaded (PUT .../image), not
+/// picked as "our own" the way a typed name is.
+async fn apply_picture_choice(
+    pool: &sqlx::MySqlPool,
+    id: u64,
+    c: &ReconcileChoice,
+) -> Result<(), AppError> {
+    if c.choice == repo::USER {
+        return Err(AppError::BadRequest(
+            "a picture is uploaded, not typed".into(),
+        ));
+    }
+    if c.choice != repo::KEEP {
+        let listings = repo::listings_for(pool, id).await?;
+        let url = listings
+            .iter()
+            .find(|l| l.source == c.choice)
+            .and_then(|l| l.image_url.as_deref())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| {
+                AppError::BadRequest(format!("source {} offers no picture to adopt", c.choice))
+            })?;
+        let hosts = source::image_hosts(&c.choice).filter(|h| !h.is_empty());
+        let Some(hosts) = hosts else {
+            return Err(AppError::BadRequest(format!(
+                "source {} carries no adoptable picture",
+                c.choice
+            )));
+        };
+        let (bytes, mime) = off::fetch_image_from(url, hosts).await?.ok_or_else(|| {
+            AppError::BadRequest("the source's picture host is not allowed".into())
+        })?;
+        repo::set_image_by_id(pool, id, &bytes, &mime).await?;
+        repo::set_image_provenance(pool, id, &c.choice).await?;
+    }
+    // Settle AFTER any change, so the recorded set reflects the new provenance.
+    repo::settle_picture(pool, id).await?;
+    Ok(())
 }
 
 /// The answer to "does this shop carry this product?".
@@ -591,6 +646,7 @@ pub async fn sync_listing(
         && let Some((bytes, mime)) = off::fetch_image_from(url, src.image_hosts).await?
     {
         repo::set_image_by_id(&app.pool, updated.id, &bytes, &mime).await?;
+        repo::set_image_provenance(&app.pool, updated.id, "asda").await?;
     }
     tracing::info!(product = updated.id, cin = %hit.external_id, flags = hit.dietary.len(), "asda listing pulled");
     repo::get_by_id(&app.pool, updated.id)

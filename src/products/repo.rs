@@ -25,6 +25,7 @@ struct MetaRow {
     quantity_label: Option<String>,
     source: Option<String>,
     name_source: Option<String>,
+    image_source: Option<String>,
     has_image: i64,
 }
 
@@ -39,6 +40,7 @@ impl From<MetaRow> for Product {
             source: r.source,
             external_id: r.external_id,
             name_source: r.name_source,
+            image_source: r.image_source,
             has_image: r.has_image != 0,
         }
     }
@@ -48,13 +50,13 @@ impl From<MetaRow> for Product {
 // hand across the getters below — sqlx 0.8 only accepts `&'static str`
 // SQL (its injection guard), so this can't be a shared runtime `format!`.
 // "SELECT id, barcode, external_id, name, brand, quantity_label, source,
-//  name_source, (image IS NOT NULL) AS has_image FROM products WHERE …"
+//  name_source, image_source, (image IS NOT NULL) AS has_image FROM products WHERE …"
 
 /// Cached metadata for a barcode (no image bytes), or None if not cached.
 pub async fn get(pool: &MySqlPool, barcode: &str) -> Result<Option<Product>> {
     let row: Option<MetaRow> = sqlx::query_as(
         "SELECT id, barcode, external_id, name, brand, quantity_label, source, \
-         name_source, (image IS NOT NULL) AS has_image FROM products WHERE barcode = ?",
+         name_source, image_source, (image IS NOT NULL) AS has_image FROM products WHERE barcode = ?",
     )
     .bind(barcode)
     .fetch_optional(pool)
@@ -73,7 +75,7 @@ pub async fn search(pool: &MySqlPool, query: &str, limit: u64) -> Result<Vec<Pro
     let pattern = format!("%{escaped}%");
     let rows: Vec<MetaRow> = sqlx::query_as(
         "SELECT id, barcode, external_id, name, brand, quantity_label, source, \
-         name_source, (image IS NOT NULL) AS has_image FROM products \
+         name_source, image_source, (image IS NOT NULL) AS has_image FROM products \
          WHERE name LIKE ? OR brand LIKE ? ORDER BY name LIMIT ?",
     )
     .bind(&pattern)
@@ -88,7 +90,7 @@ pub async fn search(pool: &MySqlPool, query: &str, limit: u64) -> Result<Vec<Pro
 pub async fn get_by_id(pool: &MySqlPool, id: u64) -> Result<Option<Product>> {
     let row: Option<MetaRow> = sqlx::query_as(
         "SELECT id, barcode, external_id, name, brand, quantity_label, source, \
-         name_source, (image IS NOT NULL) AS has_image FROM products WHERE id = ?",
+         name_source, image_source, (image IS NOT NULL) AS has_image FROM products WHERE id = ?",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -106,7 +108,7 @@ pub async fn get_by_source_external(
 ) -> Result<Option<Product>> {
     let row: Option<MetaRow> = sqlx::query_as(
         "SELECT p.id, p.barcode, p.external_id, p.name, p.brand, p.quantity_label, p.source, \
-         p.name_source, (p.image IS NOT NULL) AS has_image \
+         p.name_source, p.image_source, (p.image IS NOT NULL) AS has_image \
          FROM products p JOIN product_listings l ON l.product_id = p.id \
          WHERE l.source = ? AND l.external_id = ?",
     )
@@ -398,6 +400,96 @@ pub fn divergences(
         });
     }
     out
+}
+
+/// The reconcile field id for the picture. Its divergence is provenance-based,
+/// not value-based (see `picture_divergence`), and adopting it re-fetches bytes
+/// through the SSRF gate in the route layer — so it lives outside RECONCILED_FIELDS.
+pub const PICTURE_FIELD: &str = "picture";
+
+/// The suppression key for a picture decision: the current image's provenance
+/// plus every offered picture URL. Any change (a new source picture, or the
+/// canonical picture's source changing) alters the set and re-surfaces the
+/// divergence; while it's unchanged the decision keeps it settled.
+fn picture_value_set(product: &Product, listings: &[Listing]) -> Vec<String> {
+    let mut set = BTreeSet::new();
+    // The current holder, marked so it can't collide with a URL and so adopting a
+    // different source (which changes provenance) re-keys the decision.
+    set.insert(format!(
+        "@{}",
+        product.image_source.as_deref().unwrap_or("")
+    ));
+    for l in listings {
+        if let Some(url) = trimmed(l.image_url.clone()) {
+            set.insert(url);
+        }
+    }
+    set.into_iter().collect()
+}
+
+/// The picture disagreement, if any. The canonical image is bytes and a listing
+/// offers a URL, so there's nothing to value-compare; instead a listing from a
+/// source OTHER than the one our picture came from is a candidate — "this shop
+/// has its own picture you could adopt". A hand-uploaded picture (`image_source`
+/// == `user`) is ours and never nagged. Pure — I/O is the caller's.
+pub fn picture_divergence(
+    product: &Product,
+    listings: &[Listing],
+    decisions: &DecisionMap,
+) -> Option<FieldDivergence> {
+    if product.image_source.as_deref() == Some(USER) {
+        return None;
+    }
+    let current_src = product.image_source.as_deref();
+    let candidates: Vec<Candidate> = listings
+        .iter()
+        .filter_map(|l| {
+            let url = trimmed(l.image_url.clone())?;
+            (Some(l.source.as_str()) != current_src).then(|| Candidate {
+                source: l.source.clone(),
+                value: url,
+            })
+        })
+        .collect();
+    if candidates.is_empty() {
+        return None;
+    }
+    let set = picture_value_set(product, listings);
+    if decisions.get(PICTURE_FIELD) == Some(&set) {
+        return None;
+    }
+    Some(FieldDivergence {
+        field: PICTURE_FIELD.to_string(),
+        label: "Picture".to_string(),
+        // The source we currently hold a picture from (if any) — the frontend
+        // shows the actual thumbnail; this is the provenance behind it.
+        current: product
+            .has_image
+            .then(|| current_src.unwrap_or("").to_string()),
+        candidates,
+    })
+}
+
+/// Record the picture bytes' provenance (which source it came from, or `user`).
+pub async fn set_image_provenance(pool: &MySqlPool, product_id: u64, source: &str) -> Result<()> {
+    sqlx::query("UPDATE products SET image_source = ? WHERE id = ?")
+        .bind(source)
+        .bind(product_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Settle the picture divergence: record the value set as it stands NOW (after any
+/// adoption has changed the bytes' provenance), so it stays quiet until a source's
+/// picture — or ours — changes. Call after applying the picture choice.
+pub async fn settle_picture(pool: &MySqlPool, product_id: u64) -> Result<()> {
+    let product = get_by_id(pool, product_id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("no such product: {product_id}"))?;
+    let listings = listings_for(pool, product_id).await?;
+    let set = picture_value_set(&product, &listings);
+    upsert_decision(pool, product_id, PICTURE_FIELD, &set).await
 }
 
 /// One field's decision from the reconcile UI: adopt a source's value (`choice`
@@ -1257,13 +1349,16 @@ pub async fn get_image(pool: &MySqlPool, barcode: &str) -> Result<Option<(Vec<u8
 /// they are. Creates a bare catalog row if the barcode was never looked up (so
 /// you can give an image to a product OFF has never heard of); `source='user'`
 /// marks a hand-uploaded image, but only on insert — a later OFF metadata
-/// refresh keeps its own `source`. The unique `barcode` key drives the upsert.
+/// refresh keeps its own `source`. `image_source='user'` is set on every write:
+/// a hand upload is ours, so picture reconciliation never nags to replace it. The
+/// unique `barcode` key drives the upsert.
 pub async fn set_image(pool: &MySqlPool, barcode: &str, bytes: &[u8], mime: &str) -> Result<()> {
     sqlx::query(
-        "INSERT INTO products (barcode, image, image_mime, source) \
-         VALUES (?, ?, ?, 'user') \
+        "INSERT INTO products (barcode, image, image_mime, source, image_source) \
+         VALUES (?, ?, ?, 'user', 'user') \
          ON DUPLICATE KEY UPDATE image = VALUES(image), \
-         image_mime = VALUES(image_mime), fetched_at = CURRENT_TIMESTAMP",
+         image_mime = VALUES(image_mime), image_source = 'user', \
+         fetched_at = CURRENT_TIMESTAMP",
     )
     .bind(barcode)
     .bind(bytes)

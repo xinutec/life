@@ -266,6 +266,27 @@ h3 {
     flex-direction: column;
   }
 
+  // The picture choices show thumbnails, not text — stacked so each source's
+  // image sits on its own line beside its radio.
+  .recon-pictures {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .pic-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .pic-thumb {
+    width: 2.5rem;
+    height: 2.5rem;
+    object-fit: contain;
+    border-radius: var(--mat-sys-corner-small);
+    background: var(--mat-sys-surface-container-high);
+  }
+
   button {
     margin-top: 1rem;
   }

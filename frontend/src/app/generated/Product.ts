@@ -20,6 +20,11 @@ external_id: string | null,
  */
 name_source: string | null, 
 /**
+ * Which source the cached picture came from ('off', a shop, or 'user' for a
+ * hand upload) — provenance for picture reconciliation. NULL when unknown.
+ */
+image_source: string | null, 
+/**
  * True if we have a cached image. Served from /api/products/id/{id}/image
  * (barcodeless shop products), or /api/products/{barcode}/image when barcoded.
  */

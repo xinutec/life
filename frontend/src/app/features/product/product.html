@@ -122,20 +122,50 @@
       @for (f of reconFields(); track f.field) {
         <div class="recon-field">
           <div class="recon-label">{{ f.label }}</div>
-          <mat-radio-group
-            class="recon-options"
-            [value]="choiceFor(f.field)"
-            (change)="setChoice(f.field, $event.value)"
-          >
-            <mat-radio-button value="keep">
-              Keep@if (f.current) { : {{ f.current }} } @else { (none) }
-            </mat-radio-button>
-            @for (c of f.candidates; track c.source) {
-              <mat-radio-button [value]="c.source">
-                {{ label(c.source) }}: {{ c.value }}
+          @if (f.field === 'picture') {
+            <!-- A picture can't be shown as text: the current one is bytes we
+                 hold, each candidate is a shop's own image. Show them, don't
+                 name them. Adopting re-fetches the chosen source's picture. -->
+            <mat-radio-group
+              class="recon-pictures"
+              [value]="choiceFor(f.field)"
+              (change)="setChoice(f.field, $event.value)"
+            >
+              <mat-radio-button value="keep">
+                <span class="pic-option">
+                  @if (imageUrl(); as cur) {
+                    <img class="pic-thumb" [src]="cur" alt="" />
+                    <span>Keep current</span>
+                  } @else {
+                    <span>Keep (no picture)</span>
+                  }
+                </span>
               </mat-radio-button>
-            }
-          </mat-radio-group>
+              @for (c of f.candidates; track c.source) {
+                <mat-radio-button [value]="c.source">
+                  <span class="pic-option">
+                    <img class="pic-thumb" [src]="c.value" alt="" loading="lazy" />
+                    <span>{{ label(c.source) }}</span>
+                  </span>
+                </mat-radio-button>
+              }
+            </mat-radio-group>
+          } @else {
+            <mat-radio-group
+              class="recon-options"
+              [value]="choiceFor(f.field)"
+              (change)="setChoice(f.field, $event.value)"
+            >
+              <mat-radio-button value="keep">
+                Keep@if (f.current) { : {{ f.current }} } @else { (none) }
+              </mat-radio-button>
+              @for (c of f.candidates; track c.source) {
+                <mat-radio-button [value]="c.source">
+                  {{ label(c.source) }}: {{ c.value }}
+                </mat-radio-button>
+              }
+            </mat-radio-group>
+          }
         </div>
       }
       <button mat-flat-button (click)="applyReconcile()" [disabled]="reconciling()">Apply</button>

@@ -111,7 +111,7 @@ const TRASH = [
 const PRODUCT_DETAIL = {
   product: { id: 42, barcode: '5000328042732', name: 'Quaker Oat So Simple Original Big Pack Porridge Sachets',
     brand: 'Quaker', quantity_label: '22x27G', source: 'off', external_id: '5000328042732',
-    name_source: 'asda', has_image: false },
+    name_source: 'asda', image_source: null, has_image: false },
   listings: [
     { source: 'off', external_id: '5000328042732',
       url: 'https://world.openfoodfacts.org/product/5000328042732', raw_name: 'oat so simple' },
@@ -156,7 +156,7 @@ const PRODUCT_DETAIL = {
 const UNLISTED_DETAIL = {
   product: { id: 43, barcode: '5063089281581', name: 'Asda ES Balsamic Modena', brand: 'Asda',
     quantity_label: null, source: 'off', external_id: '5063089281581', name_source: 'off',
-    has_image: false },
+    image_source: null, has_image: false },
   listings: [
     { source: 'off', external_id: '5063089281581',
       url: 'https://world.openfoodfacts.org/product/5063089281581', raw_name: 'Asda ES Balsamic Modena' },
