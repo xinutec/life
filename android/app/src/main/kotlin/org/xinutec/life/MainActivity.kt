@@ -35,6 +35,7 @@ import org.json.JSONObject
 import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * A full-screen [WebView] onto life — the personal home-OS app, an Angular SPA
@@ -471,16 +472,30 @@ class MainActivity : Activity() {
             WebView(this).apply {
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
-                // Offscreen but attached (1×1) so JS timers/network run reliably.
-                layoutParams = FrameLayout.LayoutParams(1, 1)
+                // Full-size, not 1×1: a bot wall's JS challenge (Cloudflare) fingerprints
+                // the render — a 1×1 viewport can fail it or its clearance redirect. The
+                // view is added *behind* the visible app (index 0), so it renders like a
+                // real browser tab yet the user never sees it.
+                layoutParams =
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    )
+                settings.useWideViewPort = true
+                settings.loadWithOverviewMode = true
+                // Drop the WebView tells from the UA ("; wv" and "Version/4.0") so it
+                // reads as ordinary mobile Chrome — bot walls treat WebViews harshly.
+                settings.userAgentString =
+                    settings.userAgentString.replace("; wv", "").replace("Version/4.0 ", "")
             }
         // A shop SPA's session/consent flow leans on third-party cookies, which a
         // WebView blocks by default.
         CookieManager.getInstance().setAcceptThirdPartyCookies(hidden, true)
         shopWeb = hidden
-        root.addView(hidden)
+        root.addView(hidden, 0)
 
         val settled = AtomicBoolean(false)
+        val retries = AtomicInteger(0)
         val finish = { payload: String ->
             if (settled.compareAndSet(false, true)) {
                 resolveShop(requestId, payload)
@@ -506,6 +521,22 @@ class MainActivity : Activity() {
             }
         hidden.webViewClient =
             object : WebViewClient() {
+                // A main-frame redirect to a non-http(s) scheme (an app deep link like
+                // intent://, market://) would otherwise surface as a fatal main-frame
+                // load error. Swallow those (there's nothing to open here) and log,
+                // rather than killing the whole fetch on a stray redirect.
+                override fun shouldOverrideUrlLoading(
+                    view: WebView,
+                    request: WebResourceRequest,
+                ): Boolean {
+                    val scheme = request.url.scheme
+                    if (scheme != "https" && scheme != "http") {
+                        Log.d("life-shop", "blocked non-http redirect: ${request.url}")
+                        return true
+                    }
+                    return false
+                }
+
                 // Patch fetch/XHR early, before the SPA fires its authed calls, so
                 // we catch any Bearer token it attaches.
                 override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
@@ -521,7 +552,41 @@ class MainActivity : Activity() {
                     request: WebResourceRequest,
                     error: android.webkit.WebResourceError,
                 ) {
-                    if (request.isForMainFrame) finish("""{"ok":false,"error":"load failed"}""")
+                    Log.d(
+                        "life-shop",
+                        "onReceivedError main=${request.isForMainFrame} " +
+                            "code=${error.errorCode} desc=${error.description} url=${request.url}",
+                    )
+                    if (!request.isForMainFrame) return
+                    // The first fetch after a cold start can hit a transient DNS miss
+                    // (ERR_NAME_NOT_RESOLVED): Chromium's resolver isn't ready until a
+                    // few seconds after the process starts (the VPN advertises no DNS,
+                    // so it has to fall back to the underlying network). It recovers on
+                    // its own, so re-load on a fixed cadence until it does — the page is
+                    // server-rendered, so a successful load extracts immediately. Bounded
+                    // by SHOP_TIMEOUT_MS overall and MAX_SHOP_RETRIES here.
+                    if (retries.getAndIncrement() < MAX_SHOP_RETRIES) {
+                        Log.d("life-shop", "retrying main-frame load, attempt ${retries.get()}")
+                        view.postDelayed({ if (!settled.get()) view.loadUrl(url) }, SHOP_RETRY_MS)
+                        return
+                    }
+                    finish("""{"ok":false,"error":"load failed"}""")
+                }
+
+                // A bot wall answering 403/503 arrives here, not onReceivedError. Log
+                // it (with the challenge status) so a wall is distinguishable from a
+                // network failure; don't finish — the challenge page may still resolve.
+                override fun onReceivedHttpError(
+                    view: WebView,
+                    request: WebResourceRequest,
+                    errorResponse: android.webkit.WebResourceResponse,
+                ) {
+                    if (request.isForMainFrame) {
+                        Log.d(
+                            "life-shop",
+                            "onReceivedHttpError status=${errorResponse.statusCode} url=${request.url}",
+                        )
+                    }
                 }
             }
         // Safety net: never leave the web app's promise hanging.
@@ -722,7 +787,12 @@ class MainActivity : Activity() {
         private val SHOP_HOSTS = setOf("waitrose.com", "asda.com")
 
         // Give up on a shop lookup after this long (bot-wall + SPA boot + fetch).
-        private const val SHOP_TIMEOUT_MS = 20_000L
+        private const val SHOP_TIMEOUT_MS = 45_000L
+
+        // Cold-start DNS can be unavailable for several seconds; re-load on this cadence
+        // until it settles (see onReceivedError).
+        private const val SHOP_RETRY_MS = 2_000L
+        private const val MAX_SHOP_RETRIES = 8
 
         // Injected at document start in the hidden shop view: patch fetch/XHR to
         // capture whatever Bearer token the SPA attaches to its own API calls, into

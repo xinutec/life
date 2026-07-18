@@ -35,7 +35,7 @@ const FACTS_JS = `
     return null;
   }
   try {
-    // Up to ~18s (under the native 20s bridge timeout), 500ms apart.
+    // Up to ~18s (under the native 45s bridge timeout), 500ms apart.
     for (var i = 0; i < 36; i++) {
       var facts = extract();
       if (facts) { AndroidShop.result(JSON.stringify({ ok: true, facts: facts })); return; }
