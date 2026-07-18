@@ -295,9 +295,27 @@ through something that resets the NC session.
         on the subtitle (both fields in one inline form; only changed fields are
         sent). This closes the original observation — "Asda · 250ML" was the shop's
         own casing no source disagreed with, so only our layer could fix it.
-      - **8d (next): picture + facts reconciliation.** Picture needs image
-        provenance to diff honestly (a listing's image_url vs the canonical
-        bytes); dietary/allergens/nutrition need a user-authoritative layer over
+      - **8d — Asda page facts (nutrition/ingredients/allergens/dietary)** (2026-07-18):
+        Asda's SEARCH API carries no facts; they live on the product page behind
+        Cloudflare (probed: a plain server fetch is 403'd — "Just a moment…"),
+        readable only through the Android app's hidden WebView. Shipped in three:
+        - **F1 (migration 0033)**: nutrition/allergens/ingredients become
+          per-source (like 0028's dietary), so Asda's and OFF's coexist. Merge on
+          read: nutrition/ingredients pick by source precedence, allergens UNION
+          (most-severe presence wins — an allergen one source declares is never
+          dropped), dietary the existing tri-state merge.
+        - **F2 (`brandbank.rs` + `POST /products/id/{id}/facts`)**: parse Asda's
+          `c_BRANDBANK_JSON` blob server-side → ProductFacts; barcode-gated (the
+          page's `c_EAN_GTIN` must match the product), then `store_facts(…,'asda')`.
+          Brandbank `false` booleans are NOT read as firm "no" (same caution as the
+          search tags) — only `true` → a 'yes' flag.
+        - **F3 (`shops/asda.ts` FactsProvider + product-page button)**: the hidden
+          WebView returns the raw blob (frontend fetches, backend parses); an in-app
+          "Get full details from Asda" action (bridge-gated) posts it. Installed
+          Pixel 9 APK v0.5 already allowlists asda.com — no APK rebuild.
+      - **8e (next): facts reconciliation UI + picture.** Facts now merge silently
+        (retailer nutrition wins, allergens union); surface where Asda and OFF
+        DISAGREE through the approve grammar. Picture needs image
         the existing safe merge (disagreement → "maybe"), and an Asda
         product-page fetch (its search API carries no facts) before there's a
         second source to diff against.
