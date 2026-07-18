@@ -315,18 +315,21 @@ pub async fn product_detail(
 /// the re-read detail.
 async fn build_detail(pool: &sqlx::MySqlPool, id: u64) -> Result<ProductDetail, AppError> {
     let product = repo::get_by_id(pool, id).await?.ok_or(AppError::NotFound)?;
-    let (listings, prices, facts, decisions, documents) = tokio::try_join!(
+    let (listings, prices, facts_by_source, fact_prefs, decisions, documents) = tokio::try_join!(
         repo::listings_for(pool, id),
         repo::latest_prices(pool, id),
-        repo::facts_for(pool, id),
+        repo::facts_by_source(pool, id),
+        repo::fact_source_prefs(pool, id),
         repo::field_decisions(pool, id),
         repo::documents_for(pool, id),
     )?;
-    // The diff to approve, computed from the sources vs the canonical row before
-    // the listings are flattened for display.
-    let reconciliation = ProductReconciliation {
-        fields: repo::divergences(&product, &listings, &decisions),
-    };
+    // Merge the per-source facts to the one shown (honouring any source pick), and
+    // build the diff to approve — the scalar disagreements plus the source-picked
+    // facts (nutrition, ingredients) that genuinely differ.
+    let facts = repo::merge_facts(&facts_by_source, &fact_prefs);
+    let mut fields = repo::divergences(&product, &listings, &decisions);
+    fields.extend(repo::fact_divergences(&facts_by_source, &fact_prefs));
+    let reconciliation = ProductReconciliation { fields };
     let listings = listings
         .into_iter()
         .map(|l| ProductListing {
@@ -344,6 +347,7 @@ async fn build_detail(pool: &sqlx::MySqlPool, id: u64) -> Result<ProductDetail, 
         listings,
         prices,
         facts,
+        facts_by_source,
         reconciliation,
         documents,
     })

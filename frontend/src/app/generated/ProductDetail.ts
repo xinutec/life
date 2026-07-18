@@ -5,6 +5,7 @@ import type { ProductListing } from "./ProductListing";
 import type { ProductReconciliation } from "./ProductReconciliation";
 import type { ShopPrice } from "./ShopPrice";
 import type { SourceDocument } from "./SourceDocument";
+import type { SourceFacts } from "./SourceFacts";
 
 /**
  * Everything the product page shows, in one fetch —
@@ -20,8 +21,14 @@ listings: Array<ProductListing>,
  */
 prices: Array<ShopPrice>, facts: ProductFacts, 
 /**
+ * Each source's own facts, for provenance (who declared which allergen, whose
+ * nutrition panel is which). Oldest-ranked source order.
+ */
+facts_by_source: Array<SourceFacts>, 
+/**
  * Where the sources disagree with the canonical row and you haven't decided
  * yet — the diff to approve. Empty when everything agrees or is settled.
+ * Includes the facts that reconcile by source-pick (nutrition, ingredients).
  */
 reconciliation: ProductReconciliation, 
 /**

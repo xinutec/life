@@ -8,12 +8,12 @@ use sqlx::MySqlPool;
 use sqlx::types::Json;
 
 use super::nutrition::{
-    Allergen, DietaryFlag, Nutrition, ProductFacts, merge_allergens, merge_dietary,
-    merge_ingredients, merge_nutrition,
+    Allergen, DietaryFlag, Nutrition, ProductFacts, fact_rank, merge_allergens, merge_dietary,
+    merge_ingredients, merge_nutrition, summarize_nutrition,
 };
 use super::prices::{PriceInput, ShopPrice};
 use super::source;
-use super::types::{Candidate, FieldDivergence, Product, SourceDocument};
+use super::types::{Candidate, FieldDivergence, Product, SourceDocument, SourceFacts};
 
 #[derive(sqlx::FromRow)]
 struct MetaRow {
@@ -417,6 +417,12 @@ pub struct FieldChoice {
 pub async fn reconcile(pool: &MySqlPool, product_id: u64, choices: &[FieldChoice]) -> Result<()> {
     let listings = listings_for(pool, product_id).await?;
     for c in choices {
+        // Nutrition and ingredients settle by recording which source to trust
+        // (0035), not by writing the canonical row — handle them and move on.
+        if PICKED_FACTS.iter().any(|(f, _)| *f == c.field) {
+            reconcile_fact(pool, product_id, c).await?;
+            continue;
+        }
         let Some(spec) = RECONCILED_FIELDS.iter().find(|s| s.field == c.field) else {
             anyhow::bail!("unknown reconcilable field: {}", c.field);
         };
@@ -445,6 +451,58 @@ pub async fn reconcile(pool: &MySqlPool, product_id: u64, choices: &[FieldChoice
         let set = value_set(spec, &product, &listings);
         upsert_decision(pool, product_id, spec.field, &set).await?;
     }
+    Ok(())
+}
+
+/// Settle a picked fact (nutrition / ingredients): record which source to trust.
+/// `KEEP` records the current precedence winner (so the divergence stays quiet);
+/// a source id records that source, if it actually offers the fact. `USER` is
+/// rejected — these facts are chosen among sources, never typed by hand (unlike
+/// the scalar fields), so we never invent a nutrition panel or ingredient list.
+async fn reconcile_fact(pool: &MySqlPool, product_id: u64, c: &FieldChoice) -> Result<()> {
+    if c.choice == USER {
+        anyhow::bail!("{} is chosen by source, not typed", c.field);
+    }
+    let by_source = facts_by_source(pool, product_id).await?;
+    let source = if c.choice == KEEP {
+        // by_source is precedence-ordered; the first source that has this fact is
+        // the current pick.
+        by_source
+            .iter()
+            .find(|s| fact_display(&c.field, &s.facts).is_some())
+            .map(|s| s.source.clone())
+            .ok_or_else(|| anyhow::anyhow!("no source offers {} to keep", c.field))?
+    } else {
+        let has = by_source
+            .iter()
+            .find(|s| s.source == c.choice)
+            .and_then(|s| fact_display(&c.field, &s.facts))
+            .is_some();
+        if !has {
+            anyhow::bail!("source {} offers no {} to adopt", c.choice, c.field);
+        }
+        c.choice.clone()
+    };
+    upsert_fact_source(pool, product_id, &c.field, &source).await
+}
+
+/// Record (or change) the source picked to trust for a fact kind (0035).
+async fn upsert_fact_source(
+    pool: &MySqlPool,
+    product_id: u64,
+    kind: &str,
+    source: &str,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO product_fact_sources (product_id, kind, source) \
+         VALUES (?, ?, ?) \
+         ON DUPLICATE KEY UPDATE source = VALUES(source), decided_at = CURRENT_TIMESTAMP",
+    )
+    .bind(product_id)
+    .bind(kind)
+    .bind(source)
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
@@ -831,7 +889,16 @@ pub async fn store_facts(
 /// Read back everything we know about a product beyond its identity. Feeds
 /// the product detail (GET /api/products/id/{id}) — the rich product page.
 pub async fn facts_for(pool: &MySqlPool, product_id: u64) -> Result<ProductFacts> {
-    // Every source's panel, merged to one for display (see merge_nutrition).
+    let by_source = facts_by_source(pool, product_id).await?;
+    let prefs = fact_source_prefs(pool, product_id).await?;
+    Ok(merge_facts(&by_source, &prefs))
+}
+
+/// Every source's own account of a product's facts, one `SourceFacts` per source
+/// that has any. This is the raw material both for the merged display
+/// (`merge_facts`) and for provenance/divergence — fetched once, reasoned over
+/// purely. Sources are returned in precedence order (retailer before crowd).
+pub async fn facts_by_source(pool: &MySqlPool, product_id: u64) -> Result<Vec<SourceFacts>> {
     let nrows: Vec<NutritionRow> = sqlx::query_as(
         "SELECT source, basis, serving_size, energy_kj, energy_kcal, fat_g, saturates_g, \
          carbohydrate_g, sugars_g, fibre_g, protein_g, salt_g, extra \
@@ -840,75 +907,202 @@ pub async fn facts_for(pool: &MySqlPool, product_id: u64) -> Result<ProductFacts
     .bind(product_id)
     .fetch_all(pool)
     .await?;
-    let nutrition = merge_nutrition(
-        nrows
-            .into_iter()
-            .map(|r| {
-                (
-                    r.source,
-                    Nutrition {
-                        basis: r.basis,
-                        serving_size: r.serving_size,
-                        energy_kj: r.energy_kj,
-                        energy_kcal: r.energy_kcal,
-                        fat_g: r.fat_g,
-                        saturates_g: r.saturates_g,
-                        carbohydrate_g: r.carbohydrate_g,
-                        sugars_g: r.sugars_g,
-                        fibre_g: r.fibre_g,
-                        protein_g: r.protein_g,
-                        salt_g: r.salt_g,
-                        extra: r.extra.map(|j| j.0).unwrap_or_default(),
-                    },
-                )
-            })
-            .collect(),
-    );
-
-    // Every source's ingredients block, one picked by precedence (0033).
     let ing_rows: Vec<(String, String)> =
         sqlx::query_as("SELECT source, text FROM product_ingredients WHERE product_id = ?")
             .bind(product_id)
             .fetch_all(pool)
             .await?;
-    let ingredients = merge_ingredients(ing_rows);
-
-    // Every source's allergens, unioned (safety — never drop one a source declares).
-    let allergens: Vec<(String, String, String)> = sqlx::query_as(
+    let allergen_rows: Vec<(String, String, String)> = sqlx::query_as(
         "SELECT source, allergen, presence FROM product_allergens WHERE product_id = ? \
          ORDER BY allergen",
     )
     .bind(product_id)
     .fetch_all(pool)
     .await?;
-    let allergens = merge_allergens(
-        allergens
-            .into_iter()
-            .map(|(source, allergen, presence)| (source, Allergen { allergen, presence }))
-            .collect(),
-    );
-
-    // Every source's claims for this product, reconciled into one answer per
-    // flag by the domain rule (see nutrition::merge_dietary).
-    let claims: Vec<(String, String)> = sqlx::query_as(
-        "SELECT flag, value FROM product_dietary_flags WHERE product_id = ? ORDER BY flag, source",
+    let dietary_rows: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT source, flag, value FROM product_dietary_flags WHERE product_id = ? \
+         ORDER BY flag",
     )
     .bind(product_id)
     .fetch_all(pool)
     .await?;
-    let dietary = merge_dietary(
-        claims
-            .into_iter()
-            .map(|(flag, value)| DietaryFlag { flag, value })
+
+    // Group every table's rows by source into one ProductFacts each.
+    let mut by_source: BTreeMap<String, ProductFacts> = BTreeMap::new();
+    let blank = || ProductFacts {
+        nutrition: None,
+        ingredients: None,
+        allergens: Vec::new(),
+        dietary: Vec::new(),
+    };
+    for r in nrows {
+        by_source
+            .entry(r.source.clone())
+            .or_insert_with(blank)
+            .nutrition = Some(Nutrition {
+            basis: r.basis,
+            serving_size: r.serving_size,
+            energy_kj: r.energy_kj,
+            energy_kcal: r.energy_kcal,
+            fat_g: r.fat_g,
+            saturates_g: r.saturates_g,
+            carbohydrate_g: r.carbohydrate_g,
+            sugars_g: r.sugars_g,
+            fibre_g: r.fibre_g,
+            protein_g: r.protein_g,
+            salt_g: r.salt_g,
+            extra: r.extra.map(|j| j.0).unwrap_or_default(),
+        });
+    }
+    for (source, text) in ing_rows {
+        by_source.entry(source).or_insert_with(blank).ingredients = Some(text);
+    }
+    for (source, allergen, presence) in allergen_rows {
+        by_source
+            .entry(source)
+            .or_insert_with(blank)
+            .allergens
+            .push(Allergen { allergen, presence });
+    }
+    for (source, flag, value) in dietary_rows {
+        by_source
+            .entry(source)
+            .or_insert_with(blank)
+            .dietary
+            .push(DietaryFlag { flag, value });
+    }
+
+    let mut out: Vec<SourceFacts> = by_source
+        .into_iter()
+        .map(|(source, facts)| SourceFacts { source, facts })
+        .collect();
+    // Precedence order, so the UI lists the trusted source first.
+    out.sort_by_key(|s| (fact_rank(&s.source), s.source.clone()));
+    Ok(out)
+}
+
+/// kind ('nutrition' | 'ingredients') → the source picked to trust for it (0035).
+pub type FactSourceMap = HashMap<String, String>;
+
+/// The fact-source picks recorded for a product (empty if none — precedence then
+/// decides the merge).
+pub async fn fact_source_prefs(pool: &MySqlPool, product_id: u64) -> Result<FactSourceMap> {
+    let rows: Vec<(String, String)> =
+        sqlx::query_as("SELECT kind, source FROM product_fact_sources WHERE product_id = ?")
+            .bind(product_id)
+            .fetch_all(pool)
+            .await?;
+    Ok(rows.into_iter().collect())
+}
+
+/// The whole-value facts that reconcile by picking one source (not by merge):
+/// nutrition and ingredients. Allergens and dietary are excluded on purpose —
+/// they're safety-critical and merge by union / tri-state.
+pub const PICKED_FACTS: &[(&str, &str)] =
+    &[("nutrition", "Nutrition"), ("ingredients", "Ingredients")];
+
+/// Combine every source's facts into the one answer to display, honouring any
+/// recorded source pick (0035). Nutrition and ingredients take one source's value
+/// whole — the pick if set and present, else by precedence; allergens union and
+/// dietary tri-state exactly as before (safety — a pick never applies). Pure.
+pub fn merge_facts(by_source: &[SourceFacts], prefs: &FactSourceMap) -> ProductFacts {
+    let panels: Vec<(String, Nutrition)> = by_source
+        .iter()
+        .filter_map(|s| s.facts.nutrition.clone().map(|n| (s.source.clone(), n)))
+        .collect();
+    let nutrition = pick_source(&panels, prefs.get("nutrition"))
+        .cloned()
+        .or_else(|| merge_nutrition(panels.clone()));
+
+    let texts: Vec<(String, String)> = by_source
+        .iter()
+        .filter_map(|s| s.facts.ingredients.clone().map(|t| (s.source.clone(), t)))
+        .collect();
+    let ingredients = pick_source(&texts, prefs.get("ingredients"))
+        .cloned()
+        .or_else(|| merge_ingredients(texts.clone()));
+
+    let allergens = merge_allergens(
+        by_source
+            .iter()
+            .flat_map(|s| {
+                s.facts
+                    .allergens
+                    .iter()
+                    .map(|a| (s.source.clone(), a.clone()))
+            })
             .collect(),
     );
-
-    Ok(ProductFacts {
+    let dietary = merge_dietary(
+        by_source
+            .iter()
+            .flat_map(|s| s.facts.dietary.iter().cloned())
+            .collect(),
+    );
+    ProductFacts {
         nutrition,
         ingredients,
         allergens,
         dietary,
-    })
+    }
+}
+
+/// The value from the picked source, if that pick is set and that source actually
+/// has a value here. `None` falls the caller back to precedence.
+fn pick_source<'a, T>(values: &'a [(String, T)], pref: Option<&String>) -> Option<&'a T> {
+    let want = pref?;
+    values.iter().find(|(src, _)| src == want).map(|(_, v)| v)
+}
+
+/// Facts that reconcile by source-pick and where the sources genuinely disagree,
+/// as `FieldDivergence`s to fold into the same approve grammar as the scalar
+/// fields. A pick already recorded (in `prefs`) settles it. Pure — the unit under
+/// test.
+pub fn fact_divergences(by_source: &[SourceFacts], prefs: &FactSourceMap) -> Vec<FieldDivergence> {
+    let mut out = Vec::new();
+    for (field, label) in PICKED_FACTS {
+        // Once a source is picked for this fact, the divergence is settled.
+        if prefs.contains_key(*field) {
+            continue;
+        }
+        // Each source's display value for this fact, in precedence order.
+        let offered: Vec<(String, String)> = by_source
+            .iter()
+            .filter_map(|s| fact_display(field, &s.facts).map(|v| (s.source.clone(), v)))
+            .collect();
+        // Only a real disagreement (≥2 distinct values) is worth approving.
+        let distinct: BTreeSet<&str> = offered.iter().map(|(_, v)| v.as_str()).collect();
+        if distinct.len() < 2 {
+            continue;
+        }
+        // The current pick is the precedence winner (offered is already ranked).
+        let current = offered.first().map(|(_, v)| v.clone());
+        let candidates: Vec<Candidate> = offered
+            .into_iter()
+            .filter(|(_, v)| current.as_deref() != Some(v.as_str()))
+            .map(|(source, value)| Candidate { source, value })
+            .collect();
+        out.push(FieldDivergence {
+            field: field.to_string(),
+            label: label.to_string(),
+            current,
+            candidates,
+        });
+    }
+    out
+}
+
+/// One source's display string for a picked fact, or `None` if it has none.
+fn fact_display(field: &str, facts: &ProductFacts) -> Option<String> {
+    match field {
+        "nutrition" => facts.nutrition.as_ref().map(summarize_nutrition),
+        "ingredients" => facts
+            .ingredients
+            .as_ref()
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty()),
+        _ => None,
+    }
 }
 
 /// Find the canonical product for `barcode`, creating a bare one if absent. On a

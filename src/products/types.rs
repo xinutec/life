@@ -78,7 +78,8 @@ pub struct Candidate {
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct FieldDivergence {
-    /// The canonical field: 'name' | 'brand' | 'quantity_label'.
+    /// The field: a canonical scalar ('name' | 'brand' | 'quantity_label') or a
+    /// source-picked fact ('nutrition' | 'ingredients').
     pub field: String,
     /// Human label for the field ('Name', 'Brand', 'Pack size').
     pub label: String,
@@ -99,6 +100,19 @@ pub struct ProductReconciliation {
     pub fields: Vec<FieldDivergence>,
 }
 
+/// One source's own account of the facts — its nutrition panel, ingredients,
+/// allergens, and dietary claims, exactly as that source gave them. The product
+/// page shows these side by side as provenance: for the safety-critical facts
+/// (allergens, dietary) it's how you see *who* declared what, since those merge
+/// by union / tri-state and are never reduced to a single-source pick.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct SourceFacts {
+    /// The source these facts came from ('off', 'asda', 'waitrose', …).
+    pub source: String,
+    pub facts: ProductFacts,
+}
+
 /// Everything the product page shows, in one fetch —
 /// GET /api/products/id/{id}.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
@@ -110,8 +124,12 @@ pub struct ProductDetail {
     /// Latest price per shop, cheapest first.
     pub prices: Vec<ShopPrice>,
     pub facts: ProductFacts,
+    /// Each source's own facts, for provenance (who declared which allergen, whose
+    /// nutrition panel is which). Oldest-ranked source order.
+    pub facts_by_source: Vec<SourceFacts>,
     /// Where the sources disagree with the canonical row and you haven't decided
     /// yet — the diff to approve. Empty when everything agrees or is settled.
+    /// Includes the facts that reconcile by source-pick (nutrition, ingredients).
     pub reconciliation: ProductReconciliation,
     /// Raw source payloads we've fetched and kept (see SourceDocument) — so the
     /// UI knows what's already stored and needn't re-fetch it.

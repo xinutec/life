@@ -146,6 +146,7 @@ const PRODUCT_DETAIL = {
       { flag: 'vegetarian', value: 'yes' },
     ],
   },
+  facts_by_source: [],
   reconciliation: { fields: [] },
   documents: [],
 };
@@ -162,6 +163,7 @@ const UNLISTED_DETAIL = {
   ],
   prices: [],
   facts: { nutrition: null, ingredients: null, allergens: [], dietary: [] },
+  facts_by_source: [],
   reconciliation: { fields: [] },
   documents: [],
 };

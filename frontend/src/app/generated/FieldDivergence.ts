@@ -7,7 +7,8 @@ import type { Candidate } from "./Candidate";
  */
 export type FieldDivergence = { 
 /**
- * The canonical field: 'name' | 'brand' | 'quantity_label'.
+ * The field: a canonical scalar ('name' | 'brand' | 'quantity_label') or a
+ * source-picked fact ('nutrition' | 'ingredients').
  */
 field: string, 
 /**

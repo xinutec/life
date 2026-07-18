@@ -228,8 +228,46 @@ pub fn merge_allergens(claims: Vec<(String, Allergen)>) -> Vec<Allergen> {
 /// Rank of a fact source (lower wins), reusing the canonical-name precedence so
 /// facts follow the same "retailer over crowd" order. An unlisted source sorts
 /// last, so it only ever fills a gap.
-fn fact_rank(source: &str) -> usize {
+pub fn fact_rank(source: &str) -> usize {
     crate::products::source::name_rank(source).unwrap_or(usize::MAX)
+}
+
+/// A one-line summary of a nutrition panel — the headline figures, per basis —
+/// used as the display value when the panel is a reconcile candidate (you don't
+/// diff a whole table in a radio row). Whatever figures a source declares; energy
+/// leads, then the macros it has.
+pub fn summarize_nutrition(n: &Nutrition) -> String {
+    let mut parts = Vec::new();
+    if let Some(kcal) = n.energy_kcal {
+        parts.push(format!("{} kcal", trim_num(kcal)));
+    } else if let Some(kj) = n.energy_kj {
+        parts.push(format!("{} kJ", trim_num(kj)));
+    }
+    for (label, value) in [
+        ("fat", n.fat_g),
+        ("sugars", n.sugars_g),
+        ("protein", n.protein_g),
+        ("salt", n.salt_g),
+    ] {
+        if let Some(v) = value {
+            parts.push(format!("{label} {}g", trim_num(v)));
+        }
+    }
+    let head = if parts.is_empty() {
+        "panel".to_string()
+    } else {
+        parts.join(" · ")
+    };
+    format!("{head} (per {})", n.basis)
+}
+
+/// Format a nutrition figure without a trailing ".0" (so 3.0 → "3", 3.4 → "3.4").
+fn trim_num(v: f64) -> String {
+    if v.fract() == 0.0 {
+        format!("{}", v as i64)
+    } else {
+        format!("{v}")
+    }
 }
 
 /// A numeric OFF value, whether it arrived as a JSON number or a numeric string

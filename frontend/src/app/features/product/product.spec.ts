@@ -59,6 +59,7 @@ const DETAIL: ProductDetail = {
       { flag: 'palm_oil_free', value: 'maybe' },
     ],
   },
+  facts_by_source: [],
   reconciliation: { fields: [] },
   documents: [],
 };
@@ -415,6 +416,41 @@ describe('ProductPage', () => {
     expect(api.reconcile).toHaveBeenCalledWith(42, [
       { field: 'brand', choice: 'keep' },
       { field: 'quantity_label', choice: 'keep' },
+    ]);
+  });
+
+  it('surfaces source-picked facts (nutrition, ingredients) through the same grammar', () => {
+    const withFacts: ProductDetail = {
+      ...DETAIL,
+      reconciliation: {
+        fields: [
+          {
+            field: 'nutrition',
+            label: 'Nutrition',
+            current: '61 kcal · fat 3g (per 100ml)',
+            candidates: [{ source: 'off', value: '59 kcal · fat 2.9g (per 100ml)' }],
+          },
+          {
+            field: 'ingredients',
+            label: 'Ingredients',
+            current: 'Water, Oats 10%',
+            candidates: [{ source: 'off', value: 'Oat base (water, oats)' }],
+          },
+        ],
+      },
+    };
+    const { fixture, api, page } = setup(withFacts);
+    const el = fixture.nativeElement as HTMLElement;
+    const panel = el.querySelector('.reconcile');
+    expect(panel?.textContent).toContain('Nutrition');
+    expect(panel?.textContent).toContain('Ingredients');
+    expect(page.reconFields().length).toBe(2);
+    // Pick OFF's nutrition; leave ingredients on keep.
+    page.setChoice('nutrition', 'off');
+    page.applyReconcile();
+    expect(api.reconcile).toHaveBeenCalledWith(42, [
+      { field: 'nutrition', choice: 'off' },
+      { field: 'ingredients', choice: 'keep' },
     ]);
   });
 
