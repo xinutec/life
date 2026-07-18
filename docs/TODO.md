@@ -319,7 +319,9 @@ through something that resets the NC session.
         `product_documents(product_id, source, kind, body, fetched_at)`; `/facts`
         stores Asda's raw page blob (kind='page') before parsing. `ProductDetail.
         documents` lets the page show "Refresh Asda's details · stored {ago}" once
-        held. (OFF's raw payload — the same store's next use — is not archived yet.)
+        held. **F2c** then closed the last gap: OFF's response is kept verbatim on
+        its own `off` listing's raw_json, so every fetch we make is now archived
+        (Asda search + OFF → listing raw_json; Asda page → product_documents).
       - **8e (next): facts reconciliation UI + picture.** Facts now merge silently
         (retailer nutrition wins, allergens union); surface where Asda and OFF
         DISAGREE through the approve grammar. Picture needs image
