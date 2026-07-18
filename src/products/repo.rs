@@ -317,6 +317,13 @@ const RECONCILED_FIELDS: &[ReconciledField] = &[
 /// divergence.
 pub const KEEP: &str = "keep";
 
+/// "user" as a reconcile choice: our own value, typed by hand — not any source's.
+/// It becomes the canonical value with provenance `user`, and (being non-empty)
+/// is never auto-overwritten afterward. The one deliberate exception to
+/// "reconcile only picks among sources": when every source is wrong (a shop's
+/// typo), our own layer is how the product still reads correctly.
+pub const USER: &str = "user";
+
 fn trimmed(s: Option<String>) -> Option<String> {
     s.map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
 }
@@ -391,15 +398,18 @@ pub fn divergences(
 }
 
 /// One field's decision from the reconcile UI: adopt a source's value (`choice`
-/// is the source id) or keep the current canonical value (`choice` == `KEEP`).
+/// is the source id), keep the current canonical value (`choice` == `KEEP`), or
+/// set our own typed value (`choice` == `USER`, with `value` supplied).
 #[derive(Debug, Clone)]
 pub struct FieldChoice {
     pub field: String,
     pub choice: String,
+    /// The typed value, required when `choice == USER`, ignored otherwise.
+    pub value: Option<String>,
 }
 
-/// Apply reconcile decisions: adopt the chosen source's value onto the canonical
-/// row (or keep the current one), then record the settled value set so the
+/// Apply reconcile decisions: set the canonical row from the chosen source, our
+/// own typed value, or leave it (keep); then record the settled value set so the
 /// divergence stays quiet until a source's value changes.
 pub async fn reconcile(pool: &MySqlPool, product_id: u64, choices: &[FieldChoice]) -> Result<()> {
     let listings = listings_for(pool, product_id).await?;
@@ -407,7 +417,14 @@ pub async fn reconcile(pool: &MySqlPool, product_id: u64, choices: &[FieldChoice
         let Some(spec) = RECONCILED_FIELDS.iter().find(|s| s.field == c.field) else {
             anyhow::bail!("unknown reconcilable field: {}", c.field);
         };
-        if c.choice != KEEP {
+        if c.choice == USER {
+            // Our own value: taken from the request, not a listing.
+            let value = c.value.as_deref().map(str::trim).filter(|v| !v.is_empty());
+            let Some(value) = value else {
+                anyhow::bail!("choosing our own {} needs a value", c.field);
+            };
+            set_canonical_field(pool, product_id, spec.field, value, USER).await?;
+        } else if c.choice != KEEP {
             let value = listings
                 .iter()
                 .find(|l| l.source == c.choice)
@@ -842,13 +859,28 @@ pub async fn upsert_external(
         find_or_create_by_barcode(pool, bc, name, brand, source).await?
     } else if let Some(id) = listing_product_id(pool, source, external_id).await? {
         // A barcodeless product has a single owning source, so a re-import may
-        // refresh its canonical name/brand (nothing else lists it to diverge).
-        sqlx::query("UPDATE products SET name = ?, brand = ? WHERE id = ?")
-            .bind(name)
-            .bind(brand)
-            .bind(id)
-            .execute(pool)
-            .await?;
+        // refresh its canonical name/brand (nothing else lists it to diverge) —
+        // EXCEPT a name we've made our own, which a source refresh must never
+        // clobber.
+        let user_named: Option<(i64,)> =
+            sqlx::query_as("SELECT (name_source = 'user') FROM products WHERE id = ?")
+                .bind(id)
+                .fetch_optional(pool)
+                .await?;
+        if user_named.is_some_and(|(u,)| u != 0) {
+            sqlx::query("UPDATE products SET brand = ? WHERE id = ?")
+                .bind(brand)
+                .bind(id)
+                .execute(pool)
+                .await?;
+        } else {
+            sqlx::query("UPDATE products SET name = ?, brand = ? WHERE id = ?")
+                .bind(name)
+                .bind(brand)
+                .bind(id)
+                .execute(pool)
+                .await?;
+        }
         id
     } else {
         // First sighting of a barcodeless product → a fresh canonical row. The

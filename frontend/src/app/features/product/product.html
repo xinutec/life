@@ -16,7 +16,42 @@
   @if (imageUrl(); as img) {
     <img class="hero" [src]="img" alt="" />
   }
-  <h2 class="name">{{ d.product.name || 'Unnamed product' }}</h2>
+  <!-- Our own name — editable. When every shop is wrong (a typo like "Oalty"),
+       this is how the product still reads right; the shops keep their own
+       spelling on their listings. -->
+  @if (editingName()) {
+    <div class="name-row">
+      <mat-form-field class="name-edit" appearance="outline" subscriptSizing="dynamic">
+        <input
+          matInput
+          #ni
+          [value]="nameDraft()"
+          (input)="nameDraft.set(ni.value)"
+          (keyup.enter)="saveName()"
+          (keyup.escape)="cancelEditName()"
+          aria-label="Product name"
+        />
+      </mat-form-field>
+      <button
+        mat-icon-button
+        (click)="saveName()"
+        [disabled]="reconciling() || !nameDraft().trim()"
+        aria-label="Save name"
+      >
+        <mat-icon>check</mat-icon>
+      </button>
+      <button mat-icon-button (click)="cancelEditName()" aria-label="Cancel">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+  } @else {
+    <div class="name-row">
+      <h2 class="name">{{ d.product.name || 'Unnamed product' }}</h2>
+      <button mat-icon-button (click)="startEditName()" aria-label="Edit name">
+        <mat-icon>edit</mat-icon>
+      </button>
+    </div>
+  }
   @if (subtitle()) {
     <p class="subtitle">{{ subtitle() }}</p>
   }

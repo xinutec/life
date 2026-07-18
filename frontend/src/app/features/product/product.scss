@@ -21,6 +21,28 @@
   border-radius: 0.75rem;
 }
 
+// The name and its edit control on one line; the edit button stays put while
+// the name takes the remaining width.
+.name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+
+  .name {
+    flex: 1;
+    min-width: 0;
+  }
+
+  button {
+    flex: none;
+  }
+
+  .name-edit {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
 .name {
   margin: 0;
   font: var(--mat-sys-headline-small);

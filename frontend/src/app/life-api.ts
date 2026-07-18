@@ -155,12 +155,13 @@ export class LifeApi {
     return this.http.get<ProductDetail>(`/api/products/id/${id}`);
   }
   /** Settle where the product's sources disagree with its canonical row: each
-   *  decision adopts a source's value ({field, choice: source}) or keeps the
-   *  current one ({field, choice: 'keep'}). Returns the re-read detail with the
+   *  decision adopts a source's value ({field, choice: source}), keeps the
+   *  current one ({field, choice: 'keep'}), or sets our own typed value
+   *  ({field, choice: 'user', value}). Returns the re-read detail with the
    *  divergence list updated. */
   reconcile(
     id: number,
-    decisions: { field: string; choice: string }[],
+    decisions: { field: string; choice: string; value?: string }[],
   ): Observable<ProductDetail> {
     return this.http.post<ProductDetail>(`/api/products/id/${id}/reconcile`, decisions);
   }

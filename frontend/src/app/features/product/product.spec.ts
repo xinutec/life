@@ -410,4 +410,23 @@ describe('ProductPage', () => {
       { field: 'quantity_label', choice: 'keep' },
     ]);
   });
+
+  it('lets you type our own name — a user-owned correction when every shop is wrong', () => {
+    const { api, page } = setup();
+    page.startEditName();
+    expect(page.nameDraft()).toBe('Quaker Oat So Simple Original'); // prefilled from current
+    page.nameDraft.set('  Oatly Barista  ');
+    page.saveName();
+    expect(api.reconcile).toHaveBeenCalledWith(42, [
+      { field: 'name', choice: 'user', value: 'Oatly Barista' }, // trimmed
+    ]);
+  });
+
+  it('won’t save an empty name', () => {
+    const { api, page } = setup();
+    page.startEditName();
+    page.nameDraft.set('   ');
+    page.saveName();
+    expect(api.reconcile).not.toHaveBeenCalled();
+  });
 });

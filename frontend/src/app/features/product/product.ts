@@ -1,7 +1,9 @@
 import { Location } from '@angular/common';
 import { Component, computed, effect, inject, input, numberAttribute, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
+import { MatInputModule } from '@angular/material/input';
 import { MatRadioModule } from '@angular/material/radio';
 
 import { LifeApi } from '../../life-api';
@@ -82,7 +84,14 @@ function ago(epochMs: number): string {
   selector: 'app-product-page',
   templateUrl: './product.html',
   styleUrl: './product.scss',
-  imports: [MatButtonModule, MatIconModule, MatRadioModule, ListState],
+  imports: [
+    MatButtonModule,
+    MatFormFieldModule,
+    MatIconModule,
+    MatInputModule,
+    MatRadioModule,
+    ListState,
+  ],
 })
 export class ProductPage {
   /** The routed product id. Route params arrive as strings (see
@@ -236,6 +245,41 @@ export class ProductPage {
 
   back(): void {
     this.location.back();
+  }
+
+  // --- Our own name: a hand correction when every source is wrong ---
+
+  readonly editingName = signal(false);
+  readonly nameDraft = signal('');
+
+  startEditName(): void {
+    this.nameDraft.set(this.detail()?.product.name ?? '');
+    this.editingName.set(true);
+  }
+
+  cancelEditName(): void {
+    this.editingName.set(false);
+  }
+
+  /** Save our own name — a `user`-owned value that outranks every source and is
+   *  never auto-overwritten. Routed through reconcile so it settles the name
+   *  divergence in the same step (the shops still keep their own spelling). */
+  saveName(): void {
+    const value = this.nameDraft().trim();
+    if (!value || this.reconciling()) return;
+    this.reconciling.set(true);
+    this.api.reconcile(this.id(), [{ field: 'name', choice: 'user', value }]).subscribe({
+      next: (d) => {
+        this.reconciling.set(false);
+        this.editingName.set(false);
+        this.detail.set(d);
+        this.feedback.notify('Renamed.');
+      },
+      error: (e: unknown) => {
+        this.reconciling.set(false);
+        this.feedback.error(`Could not rename${onlineHint(e)}`);
+      },
+    });
   }
 
   // --- Reconciliation: approve where the sources disagree with the product ---

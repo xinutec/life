@@ -345,11 +345,15 @@ async fn build_detail(pool: &sqlx::MySqlPool, id: u64) -> Result<ProductDetail, 
 }
 
 /// One field's decision, as the reconcile UI sends it: adopt a source's value
-/// (`choice` = source id) or keep the current one (`choice` = "keep").
+/// (`choice` = source id), keep the current one (`choice` = "keep"), or set our
+/// own typed value (`choice` = "user", with `value`).
 #[derive(serde::Deserialize)]
 pub struct ReconcileChoice {
     pub field: String,
     pub choice: String,
+    /// The typed value, when `choice` == "user".
+    #[serde(default)]
+    pub value: Option<String>,
 }
 
 /// POST /api/products/id/{id}/reconcile → settle field disagreements between the
@@ -372,6 +376,7 @@ pub async fn reconcile(
         .map(|c| repo::FieldChoice {
             field: c.field,
             choice: c.choice,
+            value: c.value,
         })
         .collect();
     repo::reconcile(&app.pool, id, &choices)

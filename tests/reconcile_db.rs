@@ -162,14 +162,17 @@ async fn reconcile_adopts_keeps_and_settles_against_the_db() {
             repo::FieldChoice {
                 field: "brand".into(),
                 choice: "asda".into(),
+                value: None,
             },
             repo::FieldChoice {
                 field: "quantity_label".into(),
                 choice: "asda".into(),
+                value: None,
             },
             repo::FieldChoice {
                 field: "name".into(),
                 choice: repo::KEEP.into(),
+                value: None,
             },
         ],
     )
@@ -215,5 +218,187 @@ async fn reconcile_adopts_keeps_and_settles_against_the_db() {
         fields,
         vec!["brand"],
         "only the changed field re-surfaces; kept/adopted stay quiet"
+    );
+}
+
+#[tokio::test]
+async fn our_own_name_wins_over_every_source_and_survives_a_refresh() {
+    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
+        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping our-own-name DB test");
+        return;
+    };
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    let barcode = "5000000000789";
+    let (off_ext, asda_ext) = ("ourtest-off", "ourtest-asda");
+    sqlx::query("DELETE FROM products WHERE barcode = ?")
+        .bind(barcode)
+        .execute(&pool)
+        .await
+        .unwrap();
+    for ext in [off_ext, asda_ext] {
+        sqlx::query("DELETE FROM product_listings WHERE external_id = ?")
+            .bind(ext)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+
+    // Both sources spell it wrong: OFF a crowd title, Asda a genuine typo.
+    repo::upsert_external(
+        &pool,
+        "off",
+        off_ext,
+        Some(barcode),
+        &repo::ListingFields {
+            raw_name: Some("the original oat-ly barista"),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    let p = repo::upsert_external(
+        &pool,
+        "asda",
+        asda_ext,
+        Some(barcode),
+        &repo::ListingFields {
+            raw_name: Some("Oalty Oat Drink Barista Edition 1L"),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    // Neither source offers the right name, so we type our own.
+    repo::reconcile(
+        &pool,
+        p.id,
+        &[repo::FieldChoice {
+            field: "name".into(),
+            choice: repo::USER.into(),
+            value: Some("Oatly Barista Edition 1L".into()),
+        }],
+    )
+    .await
+    .unwrap();
+
+    let after = repo::get_by_id(&pool, p.id).await.unwrap().unwrap();
+    assert_eq!(after.name.as_deref(), Some("Oatly Barista Edition 1L"));
+    assert_eq!(after.name_source.as_deref(), Some("user"), "marked our own");
+
+    // Our own name settled the divergence — no nagging even though both shops
+    // still disagree.
+    let listings = repo::listings_for(&pool, p.id).await.unwrap();
+    let decisions = repo::field_decisions(&pool, p.id).await.unwrap();
+    assert!(
+        repo::divergences(&after, &listings, &decisions)
+            .iter()
+            .all(|d| d.field != "name"),
+        "our own name settles the name divergence"
+    );
+
+    // The shops' honest spellings are untouched — we corrected our layer, not theirs.
+    let asda = listings.iter().find(|l| l.source == "asda").unwrap();
+    assert_eq!(
+        asda.raw_name.as_deref(),
+        Some("Oalty Oat Drink Barista Edition 1L"),
+        "Asda's listing still stores Asda's spelling, faithfully"
+    );
+
+    // Re-pulling a shop must never clobber our own name.
+    repo::upsert_external(
+        &pool,
+        "asda",
+        asda_ext,
+        Some(barcode),
+        &repo::ListingFields {
+            raw_name: Some("Oalty Oat Drink Barista Edition 1L"),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    let after = repo::get_by_id(&pool, p.id).await.unwrap().unwrap();
+    assert_eq!(
+        after.name.as_deref(),
+        Some("Oatly Barista Edition 1L"),
+        "a source refresh keeps our own name"
+    );
+}
+
+#[tokio::test]
+async fn a_barcodeless_source_refresh_keeps_our_own_name() {
+    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
+        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping barcodeless-override DB test");
+        return;
+    };
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    let ext = "ourtest-bl-1";
+    sqlx::query("DELETE FROM products WHERE external_id = ?")
+        .bind(ext)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // A barcodeless shop product (Waitrose by lineNumber) — the branch that
+    // refreshes a single owner's name on re-import.
+    let p = repo::upsert_external(
+        &pool,
+        "waitrose",
+        ext,
+        None,
+        &repo::ListingFields {
+            raw_name: Some("Shop Spelling"),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    repo::reconcile(
+        &pool,
+        p.id,
+        &[repo::FieldChoice {
+            field: "name".into(),
+            choice: repo::USER.into(),
+            value: Some("Our Corrected Name".into()),
+        }],
+    )
+    .await
+    .unwrap();
+
+    // Re-import the same barcodeless source with a fresh shop name: normally it
+    // refreshes the single owner's name, but our own name is protected.
+    let after = repo::upsert_external(
+        &pool,
+        "waitrose",
+        ext,
+        None,
+        &repo::ListingFields {
+            raw_name: Some("Shop Spelling v2"),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        after.name.as_deref(),
+        Some("Our Corrected Name"),
+        "a barcodeless refresh must not clobber our own name"
+    );
+    // And the shop's own line still tracks the shop's latest spelling.
+    let listings = repo::listings_for(&pool, p.id).await.unwrap();
+    assert_eq!(
+        listings
+            .iter()
+            .find(|l| l.source == "waitrose")
+            .unwrap()
+            .raw_name
+            .as_deref(),
+        Some("Shop Spelling v2"),
     );
 }
