@@ -7,7 +7,9 @@ use std::collections::BTreeMap;
 
 use life::db;
 use life::products::nutrition::{Allergen, DietaryFlag, Nutrition, ProductFacts};
-use life::products::repo;
+use life::products::{brandbank, repo};
+
+const OALTY_BRANDBANK: &str = include_str!("fixtures/asda_brandbank_oalty.json");
 
 fn nutrition() -> Nutrition {
     Nutrition {
@@ -399,5 +401,62 @@ async fn two_sources_nutrition_allergens_ingredients_coexist_and_merge() {
     assert!(
         facts.allergens.iter().any(|a| a.allergen == "soya"),
         "Asda's soya allergen survives OFF clearing its own"
+    );
+}
+
+#[tokio::test]
+async fn real_brandbank_facts_parse_store_and_read_back() {
+    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
+        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping Brandbank end-to-end test");
+        return;
+    };
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    let barcode = "7394376616228"; // the real Oalty EAN from the fixture
+    sqlx::query("DELETE FROM products WHERE barcode = ?")
+        .bind(barcode)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let product = repo::upsert_external(
+        &pool,
+        "asda",
+        "6163443",
+        Some(barcode),
+        &repo::ListingFields {
+            raw_name: Some("Oalty Oat Drink Barista Edition 1L Long Life"),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    // The whole chain the endpoint runs: parse the page blob, store as 'asda'.
+    let facts = brandbank::parse(OALTY_BRANDBANK).expect("parse Brandbank");
+    repo::store_facts(&pool, product.id, &facts, "asda")
+        .await
+        .unwrap();
+
+    let read = repo::facts_for(&pool, product.id).await.unwrap();
+    let n = read.nutrition.expect("panel");
+    assert_eq!(n.basis, "100ml");
+    assert_eq!(n.energy_kj, Some(257.0));
+    assert_eq!(n.salt_g, Some(0.1));
+    assert!(
+        read.ingredients
+            .as_deref()
+            .unwrap()
+            .starts_with("Water, Oats 10%")
+    );
+    assert!(
+        read.allergens.iter().any(|a| a.allergen == "oats"),
+        "Oats declared"
+    );
+    let vegan = read.dietary.iter().find(|d| d.flag == "vegan");
+    assert_eq!(vegan.map(|d| d.value.as_str()), Some("yes"));
+    assert!(
+        read.dietary.iter().any(|d| d.flag == "milk_free"),
+        "free-from booleans became dietary flags"
     );
 }

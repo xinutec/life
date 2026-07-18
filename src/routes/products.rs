@@ -10,7 +10,7 @@ use serde::Deserialize;
 use crate::error::AppError;
 use crate::products::prices::PriceInput;
 use crate::products::types::{Product, ProductDetail, ProductListing, ProductReconciliation};
-use crate::products::{asda, off, repo, shop_cache, source};
+use crate::products::{asda, brandbank, off, repo, shop_cache, source};
 use crate::session::AuthUser;
 use crate::state::AppState;
 
@@ -588,6 +588,63 @@ pub async fn sync_listing(
         .await?
         .map(Json)
         .ok_or(AppError::NotFound)
+}
+
+#[derive(serde::Deserialize)]
+pub struct SubmitFacts {
+    /// Registered source id — 'asda' today.
+    pub source: String,
+    /// The EAN the fetched page reported (Asda's `c_EAN_GTIN`), for the identity
+    /// guard — this must be THIS product's barcode.
+    pub ean: String,
+    /// The source's raw product-content blob (Asda's `c_BRANDBANK_JSON`), parsed
+    /// server-side. The client never asserts the facts themselves.
+    pub blob: String,
+}
+
+/// POST /api/products/id/{id}/facts → store facts a shop's product PAGE carries
+/// but its API doesn't: Asda's Brandbank nutrition, ingredients, allergens and
+/// dietary claims. The page sits behind Cloudflare, so a server fetch can't reach
+/// it (unlike `sync_listing`'s Algolia call); the client's hidden WebView fetches
+/// the raw blob and posts it here, and the SERVER parses it — the client asserts
+/// the raw page content, never the interpreted facts. Gated on the page's own EAN
+/// matching this product, the same identity discipline `sync_listing` enforces by
+/// barcode, so a mistaken or malicious caller can't staple another product's facts
+/// on. Returns the refreshed detail.
+pub async fn submit_facts(
+    State(app): State<AppState>,
+    AuthUser(_user): AuthUser,
+    Path(id): Path<u64>,
+    Json(body): Json<SubmitFacts>,
+) -> Result<Json<ProductDetail>, AppError> {
+    if body.source != "asda" {
+        return Err(AppError::BadRequest(format!(
+            "no facts parser for source {}",
+            body.source
+        )));
+    }
+    let product = repo::get_by_id(&app.pool, id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    // The page's barcode is what makes its facts THIS product's. Enforce it here
+    // so the WebView can't (by mistake or otherwise) post a different product's
+    // page onto this one.
+    let ean = body.ean.trim();
+    if ean.is_empty() || product.barcode.as_deref() != Some(ean) {
+        return Err(AppError::BadRequest(
+            "that page's barcode doesn't match this product".into(),
+        ));
+    }
+    let facts = brandbank::parse(&body.blob).map_err(|e| AppError::BadRequest(e.to_string()))?;
+    repo::store_facts(&app.pool, id, &facts, "asda").await?;
+    tracing::info!(
+        product = id,
+        nutrition = facts.nutrition.is_some(),
+        allergens = facts.allergens.len(),
+        dietary = facts.dietary.len(),
+        "asda page facts stored"
+    );
+    build_detail(&app.pool, id).await.map(Json)
 }
 
 /// GET /api/products/id/{id}/image → cached image bytes for a catalog row by id.

@@ -86,6 +86,7 @@ pub fn router(state: AppState) -> Router {
         .route("/products/import", post(products::import))
         .route("/products/id/{id}", get(products::product_detail))
         .route("/products/id/{id}/listings", post(products::sync_listing))
+        .route("/products/id/{id}/facts", post(products::submit_facts))
         .route("/products/id/{id}/reconcile", post(products::reconcile))
         .route(
             "/products/id/{id}/find/{source}",

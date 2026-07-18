@@ -156,7 +156,7 @@ async fn unknown_api_path_is_a_json_404_even_with_the_spa_mounted() {
     // "signed out" instead of an honest 404.
     let dir = spa_dir("api404");
     let state = state_with_static(Some(dir.to_string_lossy().into_owned()));
-    let req = Request::get("/api/products/id/1/facts") // a route that once existed
+    let req = Request::get("/api/products/id/1/no-such-endpoint") // a route that doesn't exist
         .body(Body::empty())
         .unwrap();
     let (status, body, content_type) = send_to(state, req).await;
