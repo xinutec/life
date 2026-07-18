@@ -224,6 +224,38 @@ describe('ProductPage', () => {
     expect(page.shopLookup()).toBe('idle'); // panel resets; the page reloads
   });
 
+  it('previews the match — picture and pack details — before you commit to Add', () => {
+    // "See it first": the found panel renders Asda's own picture and a
+    // brand·size subtitle from the hit itself, so the shopper can size up the
+    // product without importing it. Straight from the shop URL — no DB write.
+    const confirmed = hit({
+      external_id: '9020290',
+      name: 'Extra Special Balsamic Vinegar of Modena 250ml',
+      brand: 'Asda Extra Special',
+      quantity_label: '250ml',
+      image_url: 'https://s7g10.scene7.com/is/image/asda/9020290?$ProdList$',
+    });
+    const { fixture, page } = setup(UNLISTED, { hit: confirmed, from_cache: false });
+    page.findAtAsda();
+    expect(page.hitSubtitle(confirmed)).toBe('Asda Extra Special · 250ml');
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    const img = el.querySelector<HTMLImageElement>('.match-img');
+    expect(img?.getAttribute('src')).toBe(confirmed.image_url);
+    expect(el.querySelector('.match')?.textContent).toContain('250ml');
+  });
+
+  it('falls back to the verified tick when a match has no picture', () => {
+    const confirmed = hit({ external_id: '7', name: 'Pictureless thing', image_url: null });
+    const { fixture, page } = setup(UNLISTED, { hit: confirmed, from_cache: false });
+    page.findAtAsda();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.match-img')).toBeNull();
+    expect(el.querySelector('.match .ok')).not.toBeNull();
+    expect(page.hitSubtitle(confirmed)).toBe(''); // nothing to size up, so nothing shown
+  });
+
   it('refreshes a shop row only when asked, by the listing it names', () => {
     const { page, api } = setup();
     const asda = page.buyRows().find((r) => r.label === 'Asda')!;

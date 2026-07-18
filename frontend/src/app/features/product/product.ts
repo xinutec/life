@@ -194,6 +194,13 @@ export class ProductPage {
     });
   }
 
+  /** "Brand · 400G" for a shop hit we haven't imported yet — the same subtitle
+   *  shape as the product page, from whatever the shop handed back. Lets you
+   *  size up the match before committing to Add. */
+  hitSubtitle(hit: AsdaHit): string {
+    return [hit.brand, hit.quantity_label].filter((s) => !!s).join(' · ');
+  }
+
   /** Attach the barcode-confirmed hit. The backend re-fetches it shop-side and
    *  re-checks the barcode itself, so the match this screen made is a
    *  convenience, not something the server takes on trust. */

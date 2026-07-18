@@ -84,11 +84,20 @@
           }
           @case ('found') {
             @if (shopMatch(); as hit) {
-              <!-- Barcode-confirmed: same EAN, so this IS the product. -->
+              <!-- See it before you add it: Asda's own picture and pack details,
+                   shown straight from the shop — nothing is written to our DB
+                   until you tap Add. Barcode-confirmed, so this IS the product. -->
               <div class="match">
-                <mat-icon class="ok">verified</mat-icon>
+                @if (hit.image_url) {
+                  <img class="match-img" [src]="hit.image_url" alt="" loading="lazy" />
+                } @else {
+                  <mat-icon class="ok">verified</mat-icon>
+                }
                 <span class="match-name">
                   {{ hit.name }}
+                  @if (hitSubtitle(hit); as sub) {
+                    <span class="fine">{{ sub }}</span>
+                  }
                   <!-- A remembered hit has no price: the cache keeps identity,
                        which doesn't rot, not figures, which do. Adding it
                        fetches the real price from Asda. -->
