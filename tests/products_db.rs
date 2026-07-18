@@ -163,9 +163,11 @@ async fn external_import_against_real_db() {
         source,
         ext,
         None, // no EAN — keyed by the shop's external id
-        Some("Cravendale Semi-Skimmed Milk"),
-        Some("Cravendale"),
-        None, // no deep link yet
+        &repo::ListingFields {
+            raw_name: Some("Cravendale Semi-Skimmed Milk"),
+            brand: Some("Cravendale"),
+            ..Default::default()
+        },
     )
     .await
     .unwrap();
@@ -211,9 +213,10 @@ async fn external_import_against_real_db() {
         source,
         ext,
         None,
-        Some("Cravendale Whole Milk"),
-        None,
-        None,
+        &repo::ListingFields {
+            raw_name: Some("Cravendale Whole Milk"),
+            ..Default::default()
+        },
     )
     .await
     .unwrap();

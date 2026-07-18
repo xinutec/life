@@ -109,22 +109,28 @@ pub async fn lookup(
         .await?
         .ok_or(AppError::NotFound)?;
     // Record the 'off' listing so this product joins the source model (its
-    // barcode is Open Food Facts' own id for it).
+    // barcode is Open Food Facts' own id for it), carrying OFF's own account of
+    // the product so it stands as a candidate in any later reconciliation.
     repo::upsert_listing(
         &app.pool,
         product.id,
         "off",
         &barcode,
-        None,
-        found.name.as_deref(),
+        &repo::ListingFields {
+            raw_name: found.name.as_deref(),
+            brand: found.brand.as_deref(),
+            quantity_label: found.quantity.as_deref(),
+            image_url: found.image_url.as_deref(),
+            ..Default::default()
+        },
     )
     .await?;
     // Store the nutrition/ingredients/allergens/dietary facts from the same OFF
     // response, attached to the canonical product.
     repo::store_facts(&app.pool, product.id, &found.facts, "off").await?;
-    // The upsert restated OFF's crowd name; give the preferred source (a
-    // retailer listing, if the product has one) the last word, and answer with
-    // the settled row.
+    // Seed the canonical name from the best-ranked source if the product had
+    // none yet (fill-if-empty). It never switches an existing name: a source
+    // that disagrees is surfaced as a divergence to approve, not applied here.
     repo::refresh_canonical_name(&app.pool, product.id).await?;
     repo::get_by_id(&app.pool, product.id)
         .await?
@@ -255,9 +261,12 @@ pub async fn import(
         &body.source,
         ext,
         barcode,
-        Some(name),
-        brand,
-        None,
+        &repo::ListingFields {
+            raw_name: Some(name),
+            brand,
+            image_url: body.image_url.as_deref().filter(|s| !s.is_empty()),
+            ..Default::default()
+        },
     )
     .await?;
     tracing::info!(source = %body.source, external_id = %ext, ?barcode, name, "product imported");
@@ -354,6 +363,9 @@ fn cached_as_hit(c: shop_cache::CachedListing) -> asda::AsdaHit {
         price: None,
         image_url: c.image_url,
         dietary: vec![],
+        // A remembered hit is identity only; the full record is re-fetched on
+        // attach (`fetch_by_id`), which is what carries `raw` to storage.
+        raw: None,
     }
 }
 
@@ -465,14 +477,23 @@ pub async fn sync_listing(
             "that listing's barcode doesn't match this product".into(),
         ));
     }
+    // Store Asda's whole account of the product on its own listing line: the
+    // structured fields plus the untouched record (`raw_json`), so nothing Asda
+    // sent is lost and every field can stand as a candidate in reconciliation.
+    let raw_json = hit.raw.as_ref().and_then(|v| serde_json::to_string(v).ok());
     let updated = repo::upsert_external(
         &app.pool,
         "asda",
         &hit.external_id,
         hit.barcode.as_deref(),
-        Some(&hit.name),
-        hit.brand.as_deref(),
-        None,
+        &repo::ListingFields {
+            raw_name: Some(&hit.name),
+            brand: hit.brand.as_deref(),
+            quantity_label: hit.quantity_label.as_deref(),
+            image_url: hit.image_url.as_deref(),
+            raw_json: raw_json.as_deref(),
+            ..Default::default()
+        },
     )
     .await?;
     // Pack size only if we have none: OFF's quantity is the product's own, while

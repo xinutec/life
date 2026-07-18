@@ -80,18 +80,25 @@ fn lifestyle_tags_become_dietary_flags() {
         .iter()
         .map(|d| (d.flag.as_str(), d.value.as_str()))
         .collect();
-    // Only the claimed tags we have a slug for. NoNuts/LowSalt/LowFat have no
-    // slug in our vocabulary yet and are dropped rather than invented; Halal,
-    // Kosher and NoGluten are 0 — not claimed — so they assert nothing.
+    // The claimed diet/free-from tags we map: Vegan, Vegetarian, NoLactose,
+    // NoNuts. Halal, Kosher and NoGluten are 0 — not claimed — so they assert
+    // nothing. LowSalt/LowFat are nutrition CLAIMS, not a dietary yes/no, so
+    // they're kept only in raw_json (below), never promoted to a flag.
     assert_eq!(
         flags,
         vec![
             ("vegan", "yes"),
             ("vegetarian", "yes"),
-            ("lactose_free", "yes")
+            ("lactose_free", "yes"),
+            ("nut_free", "yes"),
         ]
     );
     assert_eq!(hits[0].quantity_label.as_deref(), Some("330ML"));
+    // Lossless: the whole hit is kept verbatim, including the tags we didn't
+    // promote to flags (LowSalt/LowFat) — nothing Asda sent is dropped.
+    let raw = hits[0].raw.as_ref().expect("raw record kept");
+    assert_eq!(raw["NUTRITIONAL_INFO"]["LowSalt"], 1);
+    assert_eq!(raw["NUTRITIONAL_INFO"]["LowFat"], 1);
 }
 
 #[test]
@@ -199,6 +206,7 @@ fn hit(external_id: &str, barcode: Option<&str>, name: &str) -> asda::AsdaHit {
         price: None,
         image_url: None,
         dietary: vec![],
+        raw: None,
     }
 }
 

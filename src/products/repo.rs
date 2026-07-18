@@ -114,20 +114,25 @@ pub async fn get_by_source_external(
     Ok(row.map(Product::from))
 }
 
-/// One source's listing of a canonical product.
+/// One source's listing of a canonical product — the source's own account of it.
+/// `raw_json` is deliberately NOT selected here (it can be large; read it on the
+/// paths that need the full record).
 #[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
 pub struct Listing {
     pub source: String,
     pub external_id: String,
     pub url: Option<String>,
     pub raw_name: Option<String>,
+    pub brand: Option<String>,
+    pub quantity_label: Option<String>,
+    pub image_url: Option<String>,
 }
 
 /// Every source that lists a canonical product, oldest first.
 pub async fn listings_for(pool: &MySqlPool, product_id: u64) -> Result<Vec<Listing>> {
     let rows = sqlx::query_as::<_, Listing>(
-        "SELECT source, external_id, url, raw_name FROM product_listings \
-         WHERE product_id = ? ORDER BY created_at, id",
+        "SELECT source, external_id, url, raw_name, brand, quantity_label, image_url \
+         FROM product_listings WHERE product_id = ? ORDER BY created_at, id",
     )
     .bind(product_id)
     .fetch_all(pool)
@@ -135,46 +140,85 @@ pub async fn listings_for(pool: &MySqlPool, product_id: u64) -> Result<Vec<Listi
     Ok(rows)
 }
 
-/// Attach (or refresh) a listing for (source, external_id) onto `product_id`.
-/// Keyed on (source, external_id): re-importing the same source id updates the
-/// same listing in place (and can re-point it if products were merged).
+/// Everything a source told us about a product, for its own listing line. Used
+/// both when a source first lists a product and when a later pull refreshes it.
+/// A source's line is its own account — never merged with another source's — so
+/// a re-pull overwrites this source's fields with the fresh values.
+#[derive(Debug, Default, Clone)]
+pub struct ListingFields<'a> {
+    /// The source's title, verbatim (the canonical display name is chosen among
+    /// sources separately; see `refresh_canonical_name`).
+    pub raw_name: Option<&'a str>,
+    pub brand: Option<&'a str>,
+    pub quantity_label: Option<&'a str>,
+    /// Deep link to the source's product page.
+    pub url: Option<&'a str>,
+    /// The source's image on its own CDN (a URL, not bytes).
+    pub image_url: Option<&'a str>,
+    /// The source's ENTIRE record, serialized verbatim — the lossless backstop
+    /// for anything the columns above don't model.
+    pub raw_json: Option<&'a str>,
+}
+
+/// Attach (or refresh) a listing for (source, external_id) onto `product_id`,
+/// storing the source's whole account of the product. Keyed on
+/// (source, external_id): re-importing the same source id updates the same
+/// listing in place (and can re-point it if products were merged). A source's
+/// line is its own — never shared with another source — so a re-pull overwrites
+/// this source's fields wholesale rather than COALESCE-ing them.
 pub async fn upsert_listing(
     pool: &MySqlPool,
     product_id: u64,
     source: &str,
     external_id: &str,
-    url: Option<&str>,
-    raw_name: Option<&str>,
+    fields: &ListingFields<'_>,
 ) -> Result<()> {
     sqlx::query(
-        "INSERT INTO product_listings (product_id, source, external_id, url, raw_name) \
-         VALUES (?, ?, ?, ?, ?) \
+        "INSERT INTO product_listings \
+         (product_id, source, external_id, url, raw_name, brand, quantity_label, image_url, raw_json) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) \
          ON DUPLICATE KEY UPDATE product_id = VALUES(product_id), url = VALUES(url), \
-         raw_name = VALUES(raw_name), last_seen_at = CURRENT_TIMESTAMP",
+         raw_name = VALUES(raw_name), brand = VALUES(brand), \
+         quantity_label = VALUES(quantity_label), image_url = VALUES(image_url), \
+         raw_json = VALUES(raw_json), last_seen_at = CURRENT_TIMESTAMP",
     )
     .bind(product_id)
     .bind(source)
     .bind(external_id)
-    .bind(url)
-    .bind(raw_name)
+    .bind(fields.url)
+    .bind(fields.raw_name)
+    .bind(fields.brand)
+    .bind(fields.quantity_label)
+    .bind(fields.image_url)
+    .bind(fields.raw_json)
     .execute(pool)
     .await?;
     Ok(())
 }
 
-/// Recompute the canonical display name from the product's listings: the
-/// highest-preference source (see source::name_rank) with a non-blank raw name
-/// wins — deterministically, so a re-import can never flip the name on recency,
-/// only on source quality. Ties within a source go to its oldest listing
-/// (listings_for order). No ranked candidate → the row is left untouched, so a
-/// product named by an unranked path keeps its name.
+/// Fill the canonical display name from the product's listings, but only when it
+/// has none yet: the highest-preference source (see source::name_rank) with a
+/// non-blank raw name seeds it. Ties within a source go to its oldest listing
+/// (listings_for order).
 ///
-/// Other paths do write `name` first — `upsert_external` seeds it for a
-/// barcodeless product, `upsert` restates OFF's crowd name on a cache fill —
-/// so this must run LAST on any path that touches a listing, and have the final
-/// say. That ordering is what keeps a retailer's title from being clobbered by
-/// a later Open Food Facts lookup of the same barcode.
+/// Fill-if-empty, never silent-overwrite: once a product has a name, a later
+/// source with a different (or "better") title does NOT flip it — that
+/// disagreement is surfaced as a divergence to approve, not applied behind your
+/// back. A blank canonical name (whitespace only, or genuinely empty) counts as
+/// unset. Callers still run this LAST on a listing-touching path so a
+/// freshly-created product gets seeded from the best source present.
 pub async fn refresh_canonical_name(pool: &MySqlPool, product_id: u64) -> Result<()> {
+    let current: Option<(Option<String>,)> =
+        sqlx::query_as("SELECT name FROM products WHERE id = ?")
+            .bind(product_id)
+            .fetch_optional(pool)
+            .await?;
+    let has_name = current
+        .and_then(|(n,)| n)
+        .is_some_and(|n| !n.trim().is_empty());
+    if has_name {
+        return Ok(());
+    }
     let listings = listings_for(pool, product_id).await?;
     let best = listings
         .iter()
@@ -571,15 +615,18 @@ pub async fn upsert_external(
     source: &str,
     external_id: &str,
     barcode: Option<&str>,
-    name: Option<&str>,
-    brand: Option<&str>,
-    url: Option<&str>,
+    fields: &ListingFields<'_>,
 ) -> Result<Product> {
+    // The source's own name/brand seed the canonical row (fill-if-empty for the
+    // barcoded case; the sole authority for a barcodeless one) and are also kept
+    // verbatim on the listing.
+    let name = fields.raw_name;
+    let brand = fields.brand;
     let product_id = if let Some(bc) = barcode {
         find_or_create_by_barcode(pool, bc, name, brand, source).await?
     } else if let Some(id) = listing_product_id(pool, source, external_id).await? {
         // A barcodeless product has a single owning source, so a re-import may
-        // refresh its canonical name/brand (unlike the shared barcoded case).
+        // refresh its canonical name/brand (nothing else lists it to diverge).
         sqlx::query("UPDATE products SET name = ?, brand = ? WHERE id = ?")
             .bind(name)
             .bind(brand)
@@ -604,7 +651,7 @@ pub async fn upsert_external(
         .await?
         .last_insert_id()
     };
-    upsert_listing(pool, product_id, source, external_id, url, name).await?;
+    upsert_listing(pool, product_id, source, external_id, fields).await?;
     refresh_canonical_name(pool, product_id).await?;
     get_by_id(pool, product_id)
         .await?

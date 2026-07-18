@@ -26,7 +26,7 @@ fn deep_links_derive_from_listing_identity() {
 }
 
 #[tokio::test]
-async fn canonical_name_prefers_retailers_over_crowd_names() {
+async fn canonical_name_is_sticky_a_new_source_does_not_silently_switch_it() {
     let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
         eprintln!("LIFE_TEST_DATABASE_URL unset — skipping canonical-name DB test");
         return;
@@ -48,15 +48,17 @@ async fn canonical_name_prefers_retailers_over_crowd_names() {
             .unwrap();
     }
 
-    // Open Food Facts sees the barcode first: its crowd name is all we have.
+    // Open Food Facts sees the barcode first: its crowd name seeds the empty
+    // canonical name (fill-if-empty).
     let p = repo::upsert_external(
         &pool,
         "off",
         barcode,
         Some(barcode),
-        Some("quaker oats porridge oats 500 g value pack"),
-        None,
-        None,
+        &repo::ListingFields {
+            raw_name: Some("quaker oats porridge oats 500 g value pack"),
+            ..Default::default()
+        },
     )
     .await
     .unwrap();
@@ -66,62 +68,62 @@ async fn canonical_name_prefers_retailers_over_crowd_names() {
     );
     assert_eq!(p.name_source.as_deref(), Some("off"));
 
-    // A retailer listing arrives: its curated title takes over the canonical name.
+    // A retailer listing arrives with a cleaner title. It does NOT silently take
+    // over the canonical name — no source overwrites another behind your back.
+    // The retailer's name is captured on its own listing as a candidate to
+    // approve (that reconciliation is a later increment), and the canonical name
+    // stays exactly what it was.
     let p = repo::upsert_external(
         &pool,
         "asda",
         "dettest-asda-1",
         Some(barcode),
-        Some("Quaker Porridge Oats 500g"),
-        Some("Quaker"),
-        None,
+        &repo::ListingFields {
+            raw_name: Some("Quaker Porridge Oats 500g"),
+            brand: Some("Quaker"),
+            ..Default::default()
+        },
     )
     .await
     .unwrap();
-    assert_eq!(p.name.as_deref(), Some("Quaker Porridge Oats 500g"));
-    assert_eq!(p.name_source.as_deref(), Some("asda"));
+    assert_eq!(
+        p.name.as_deref(),
+        Some("quaker oats porridge oats 500 g value pack"),
+        "a new source must not silently replace the canonical name"
+    );
+    assert_eq!(p.name_source.as_deref(), Some("off"));
 
-    // Waitrose outranks Asda in the preference order.
-    let p = repo::upsert_external(
-        &pool,
-        "waitrose",
-        "dettest-wr-1",
-        Some(barcode),
-        Some("Waitrose Porridge Oats"),
-        None,
-        None,
-    )
-    .await
-    .unwrap();
-    assert_eq!(p.name.as_deref(), Some("Waitrose Porridge Oats"));
-    assert_eq!(p.name_source.as_deref(), Some("waitrose"));
+    // Both the crowd title and the retailer's cleaner title are on record, each
+    // on its own line — the raw material a diff-and-approve reconciliation needs.
+    let listings = repo::listings_for(&pool, p.id).await.unwrap();
+    let by_source = |s: &str| {
+        listings
+            .iter()
+            .find(|l| l.source == s)
+            .and_then(|l| l.raw_name.clone())
+    };
+    assert_eq!(
+        by_source("off").as_deref(),
+        Some("quaker oats porridge oats 500 g value pack")
+    );
+    assert_eq!(
+        by_source("asda").as_deref(),
+        Some("Quaker Porridge Oats 500g")
+    );
 
-    // Preference is by rank, never recency: an OFF re-import updates the off
-    // listing's raw name but cannot reclaim the canonical name.
-    let p = repo::upsert_external(
-        &pool,
-        "off",
-        barcode,
-        Some(barcode),
-        Some("renamed crowd entry"),
-        None,
-        None,
-    )
-    .await
-    .unwrap();
-    assert_eq!(p.name.as_deref(), Some("Waitrose Porridge Oats"));
-    assert_eq!(p.name_source.as_deref(), Some("waitrose"));
-
-    // The OFF lookup path re-caches via repo::upsert, which restates OFF's crowd
-    // name on the row; the refresh that follows it (see the lookup route) must
-    // put the preferred name back.
-    repo::upsert(&pool, barcode, Some("crowd name again"), None, None, None)
+    // A genuinely empty canonical name IS seeded from the best-ranked source
+    // present — fill-if-empty still fills.
+    sqlx::query("UPDATE products SET name = NULL, name_source = NULL WHERE id = ?")
+        .bind(p.id)
+        .execute(&pool)
         .await
         .unwrap();
     repo::refresh_canonical_name(&pool, p.id).await.unwrap();
-    let healed = repo::get_by_id(&pool, p.id).await.unwrap().unwrap();
-    assert_eq!(healed.name.as_deref(), Some("Waitrose Porridge Oats"));
-    assert_eq!(healed.name_source.as_deref(), Some("waitrose"));
+    let seeded = repo::get_by_id(&pool, p.id).await.unwrap().unwrap();
+    assert!(
+        seeded.name.is_some(),
+        "an empty canonical name is filled from a listing"
+    );
 }
 
 #[tokio::test]
@@ -147,9 +149,10 @@ async fn unranked_sources_keep_their_own_name() {
         "somefutureshop",
         ext,
         None,
-        Some("Future Thing"),
-        None,
-        None,
+        &repo::ListingFields {
+            raw_name: Some("Future Thing"),
+            ..Default::default()
+        },
     )
     .await
     .unwrap();

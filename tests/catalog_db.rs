@@ -116,9 +116,11 @@ async fn item_links_to_barcodeless_shop_product_by_id() {
         "waitrose",
         external_id,
         None, // barcodeless shop product
-        Some("Waitrose Cheddar"),
-        Some("Waitrose"),
-        None, // no deep link yet
+        &prod::ListingFields {
+            raw_name: Some("Waitrose Cheddar"),
+            brand: Some("Waitrose"),
+            ..Default::default()
+        },
     )
     .await
     .unwrap();

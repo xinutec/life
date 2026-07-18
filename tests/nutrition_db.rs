@@ -47,9 +47,10 @@ async fn store_and_read_facts_then_replace_on_relookup() {
         "off",
         barcode,
         Some(barcode),
-        Some("Porridge Oats"),
-        None,
-        None,
+        &repo::ListingFields {
+            raw_name: Some("Porridge Oats"),
+            ..Default::default()
+        },
     )
     .await
     .unwrap();
@@ -176,9 +177,10 @@ async fn two_sources_dietary_claims_coexist_and_merge() {
         "off",
         barcode,
         Some(barcode),
-        Some("Oat Drink"),
-        None,
-        None,
+        &repo::ListingFields {
+            raw_name: Some("Oat Drink"),
+            ..Default::default()
+        },
     )
     .await
     .unwrap();

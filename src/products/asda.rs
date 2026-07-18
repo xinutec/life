@@ -61,6 +61,13 @@ pub struct AsdaHit {
     /// Asda's own lifestyle tags for this product (vegan, gluten-free, …), as
     /// dietary flags. Only ever assertions — see `LIFESTYLE_FLAGS`.
     pub dietary: Vec<DietaryFlag>,
+    /// Asda's ENTIRE record for this hit, verbatim — the lossless backstop that
+    /// the structured fields above are extracted from. Kept off the wire
+    /// (`serde(skip)`) and off the TS bindings (`ts(skip)`): it's for storing on
+    /// the listing, not for the picker to render.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub raw: Option<serde_json::Value>,
 }
 
 // --- Algolia wire shapes (only the fields we use) ---
@@ -72,8 +79,11 @@ struct AlgoliaResponse {
 
 #[derive(Deserialize)]
 struct AlgoliaResult {
+    // Kept as raw JSON values: each hit is both decoded into `RawHit` (for the
+    // fields we model) AND stored verbatim (the lossless record), so a field we
+    // don't parse yet is never lost.
     #[serde(default)]
-    hits: Vec<RawHit>,
+    hits: Vec<serde_json::Value>,
 }
 
 #[derive(Deserialize)]
@@ -98,12 +108,13 @@ struct RawHit {
     nutritional_info: std::collections::BTreeMap<String, i64>,
 }
 
-/// Asda's lifestyle tag → our dietary flag slug. Only tags with a meaning in our
-/// own vocabulary (see products::nutrition) are mapped, so the two sources'
-/// flags line up and merge instead of sitting alongside as near-duplicates.
-/// Asda's remaining tags are nutrition *claims* (LowSalt, HighFibre, …) and
-/// free-from ones we have no slug for yet (NoNuts, NoEgg, …) — deliberately
-/// unmapped rather than invented.
+/// Asda's lifestyle tag → our dietary flag slug. We map the diet/lifestyle and
+/// free-from tags — a genuine dietary restriction, and (for free-from) safety-
+/// relevant — so the two sources' flags line up and merge instead of sitting
+/// alongside as near-duplicates. Asda's remaining tags are nutrition *claims*
+/// (LowSalt, LowFat, HighFibre, …): marketing about quantity, not a dietary
+/// yes/no, so they'd only clutter the dietary chips — left in `raw_json` rather
+/// than promoted to a flag. Nothing is lost: the full record is stored verbatim.
 const LIFESTYLE_FLAGS: &[(&str, &str)] = &[
     ("Vegan", "vegan"),
     ("Vegetarian", "vegetarian"),
@@ -111,6 +122,11 @@ const LIFESTYLE_FLAGS: &[(&str, &str)] = &[
     ("Kosher", "kosher"),
     ("NoGluten", "gluten_free"),
     ("NoLactose", "lactose_free"),
+    ("NoNuts", "nut_free"),
+    ("NoMilk", "milk_free"),
+    ("NoEgg", "egg_free"),
+    ("NoSoya", "soya_free"),
+    ("Organic", "organic"),
 ];
 
 /// Asda's lifestyle tags as dietary flags.
@@ -189,13 +205,20 @@ pub fn parse_hits(body: &str) -> Result<Vec<AsdaHit>> {
         .results
         .into_iter()
         .flat_map(|r| r.hits)
-        .filter_map(normalize)
+        .filter_map(|value| {
+            // A hit that can't even be decoded into the fields we model can't be
+            // identified or imported, so it's dropped — same fate as one missing
+            // its CIN/name below.
+            let raw: RawHit = serde_json::from_value(value.clone()).ok()?;
+            normalize(raw, value)
+        })
         .collect())
 }
 
 /// Turn one raw Algolia hit into an `AsdaHit`, or `None` if it lacks the
-/// identity we need (a CIN and a name).
-fn normalize(raw: RawHit) -> Option<AsdaHit> {
+/// identity we need (a CIN and a name). `raw_value` is the same hit untouched,
+/// carried onto the `AsdaHit` as the lossless record.
+fn normalize(raw: RawHit, raw_value: serde_json::Value) -> Option<AsdaHit> {
     let external_id = non_empty(raw.cin.or(raw.object_id))?;
     // Import validates external_id as [A-Za-z0-9_-]{1,64}; a CIN is digits, but
     // guard here too so a weird id never reaches the import route.
@@ -228,6 +251,7 @@ fn normalize(raw: RawHit) -> Option<AsdaHit> {
         price,
         image_url,
         dietary: lifestyle_flags(&raw.nutritional_info),
+        raw: Some(raw_value),
     })
 }
 

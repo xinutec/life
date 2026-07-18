@@ -48,9 +48,10 @@ async fn latest_price_per_shop_cheapest_first_with_history() {
         "asda",
         asda_id,
         Some(barcode),
-        Some("Milk"),
-        None,
-        None,
+        &repo::ListingFields {
+            raw_name: Some("Milk"),
+            ..Default::default()
+        },
     )
     .await
     .unwrap();
@@ -59,9 +60,10 @@ async fn latest_price_per_shop_cheapest_first_with_history() {
         "waitrose",
         wr_id,
         Some(barcode),
-        Some("Milk"),
-        None,
-        None,
+        &repo::ListingFields {
+            raw_name: Some("Milk"),
+            ..Default::default()
+        },
     )
     .await
     .unwrap();
@@ -151,9 +153,10 @@ async fn a_shop_listing_a_product_twice_collapses_to_its_cheapest() {
         "asda",
         cin_a,
         Some(barcode),
-        Some("Butter"),
-        None,
-        None,
+        &repo::ListingFields {
+            raw_name: Some("Butter"),
+            ..Default::default()
+        },
     )
     .await
     .unwrap();
@@ -162,9 +165,10 @@ async fn a_shop_listing_a_product_twice_collapses_to_its_cheapest() {
         "asda",
         cin_b,
         Some(barcode),
-        Some("Butter"),
-        None,
-        None,
+        &repo::ListingFields {
+            raw_name: Some("Butter"),
+            ..Default::default()
+        },
     )
     .await
     .unwrap();

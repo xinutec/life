@@ -34,32 +34,61 @@ async fn two_sources_one_barcode_become_one_product_two_listings() {
             .unwrap();
     }
 
-    // Asda imports the product, carrying its EAN (Asda's IMAGE_ID).
+    // Asda imports the product, carrying its EAN (Asda's IMAGE_ID) and its whole
+    // record (brand, pack, image URL, raw payload) on its own listing line.
     let a = repo::upsert_external(
         &pool,
         "asda",
         asda_cin,
         Some(barcode),
-        Some("Lurpak Spreadable 400g"),
-        Some("Lurpak"),
-        None,
+        &repo::ListingFields {
+            raw_name: Some("Lurpak Spreadable 400g"),
+            brand: Some("Lurpak"),
+            quantity_label: Some("400G"),
+            image_url: Some("https://asdagroceries.scene7.com/is/image/x?$ProdList$"),
+            raw_json: Some(r#"{"CIN":"7690049","PACK_SIZE":"400G"}"#),
+            ..Default::default()
+        },
     )
     .await
     .unwrap();
     assert_eq!(a.barcode.as_deref(), Some(barcode));
 
-    // Waitrose imports the SAME physical product (same EAN) under its own id.
+    // The listing kept Asda's own account, structured fields and all.
+    let asda_listing = repo::listings_for(&pool, a.id)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|l| l.source == "asda")
+        .expect("asda listing");
+    assert_eq!(asda_listing.brand.as_deref(), Some("Lurpak"));
+    assert_eq!(asda_listing.quantity_label.as_deref(), Some("400G"));
+    assert!(asda_listing.image_url.is_some());
+
+    // Waitrose imports the SAME physical product (same EAN) under its own id,
+    // with a DIFFERENT name.
     let w = repo::upsert_external(
         &pool,
         "waitrose",
         wr_ln,
         Some(barcode),
-        Some("Lurpak Spreadable"),
-        Some("Lurpak"),
-        None,
+        &repo::ListingFields {
+            raw_name: Some("Lurpak Spreadable"),
+            brand: Some("Lurpak"),
+            ..Default::default()
+        },
     )
     .await
     .unwrap();
+
+    // Fill-if-empty, never silent-overwrite: the canonical name stays what the
+    // first source seeded it to; Waitrose's differing name does NOT clobber it
+    // (it becomes a divergence to approve, not an automatic switch).
+    assert_eq!(
+        w.name.as_deref(),
+        Some("Lurpak Spreadable 400g"),
+        "a second source's differing name must not overwrite the canonical name"
+    );
 
     // One canonical product, reached from either shop's id.
     assert_eq!(a.id, w.id, "same barcode → same canonical product");
@@ -97,9 +126,11 @@ async fn two_sources_one_barcode_become_one_product_two_listings() {
         "asda",
         asda_cin,
         Some(barcode),
-        Some("Lurpak Slightly Salted Spreadable 400g"),
-        Some("Lurpak"),
-        None,
+        &repo::ListingFields {
+            raw_name: Some("Lurpak Slightly Salted Spreadable 400g"),
+            brand: Some("Lurpak"),
+            ..Default::default()
+        },
     )
     .await
     .unwrap();
@@ -129,10 +160,14 @@ async fn barcodeless_sources_stay_separate_products() {
 
     // Two barcodeless Waitrose products are distinct catalog rows (nothing to
     // reconcile them on), each with its single listing.
-    let p1 = repo::upsert_external(&pool, "waitrose", e1, None, Some("Thing A"), None, None)
+    let name_only = |n| repo::ListingFields {
+        raw_name: Some(n),
+        ..Default::default()
+    };
+    let p1 = repo::upsert_external(&pool, "waitrose", e1, None, &name_only("Thing A"))
         .await
         .unwrap();
-    let p2 = repo::upsert_external(&pool, "waitrose", e2, None, Some("Thing B"), None, None)
+    let p2 = repo::upsert_external(&pool, "waitrose", e2, None, &name_only("Thing B"))
         .await
         .unwrap();
 
@@ -140,8 +175,9 @@ async fn barcodeless_sources_stay_separate_products() {
     assert!(p1.barcode.is_none());
     assert_eq!(repo::listings_for(&pool, p1.id).await.unwrap().len(), 1);
 
-    // Re-import of a barcodeless product refreshes its single-source name.
-    let p1b = repo::upsert_external(&pool, "waitrose", e1, None, Some("Thing A v2"), None, None)
+    // Re-import of a barcodeless product refreshes its single-source name: it's
+    // the sole authority, so nothing can diverge from it.
+    let p1b = repo::upsert_external(&pool, "waitrose", e1, None, &name_only("Thing A v2"))
         .await
         .unwrap();
     assert_eq!(p1b.id, p1.id);
