@@ -322,18 +322,25 @@ through something that resets the NC session.
         held. **F2c** then closed the last gap: OFF's response is kept verbatim on
         its own `off` listing's raw_json, so every fetch we make is now archived
         (Asda search + OFF → listing raw_json; Asda page → product_documents).
-      - **On-device check (not yet done):** the Asda WebView facts fetch has NOT
-        been exercised live — open a product in the app → "Get full details from
-        Asda"; first tap may hit Cloudflare's JS challenge, the WebView clears it
-        and a retry lands. The installed Pixel 9 APK (v0.5, 2026-07-13) already
-        allowlists asda.com, so no rebuild is needed. F4 below is best designed
-        against the real two-source data this produces.
-      - **8e/F4 (next): facts reconciliation UI.** Facts now merge SILENTLY on read
-        (retailer nutrition/ingredients win by precedence; allergens union; dietary
-        tri-state). The next step — the "combine" the user deferred — is to surface
-        where Asda and OFF DISAGREE through the same approve grammar the scalar
-        fields use (`divergences`/reconcile), so a real conflict is a choice, not a
-        silent pick. Design it once real Asda+OFF facts exist on a product.
+      - **On-device check (DONE 2026-07-18):** the Asda WebView facts fetch is
+        exercised live and reliable on the Pixel 9 — real Brandbank facts fetched,
+        parsed, and stored (a 17KB page doc + per-source nutrition/allergens/
+        ingredients). Two APK fixes were needed to pass Cloudflare (render the
+        hidden WebView full-size behind the app, not 1×1; present a real
+        mobile-Chrome UA) plus a retry on transient load errors — MainActivity.kt,
+        commit 91f9e6b. GOTCHA: it was flaky until a `DNS = 1.1.1.1` line was added
+        to the phone's WireGuard `[Interface]` — the DNS-less split-tunnel VPN left
+        the WebView resolver with no nameserver (`ERR_NAME_NOT_RESOLVED`). See
+        docs/shop-enrichment or the memory note.
+      - **8e/F4 (DONE 2026-07-18): facts reconciliation.** Facts no longer merge
+        silently. Nutrition + ingredients (whole-value, non-safety) reconcile by
+        SOURCE-PICK through the same approve grammar as the scalar fields: a
+        divergence surfaces when sources differ, and the pick is recorded in
+        `product_fact_sources` (0035) so the merge honours it and it stays settled.
+        Allergens + dietary (safety-critical) are NOT pickable — they keep the safe
+        merge (union / tri-state) and instead get read-only per-source PROVENANCE
+        on the product page ("Sources differ": who declared which allergen, whose
+        vegan claim is which). `ProductDetail.facts_by_source` carries it.
       - **8f (later): picture reconciliation.** Needs image provenance to diff a
         listing's image_url against the canonical bytes; adopting one re-fetches
         through the SSRF-gated path. Independent of the facts work.

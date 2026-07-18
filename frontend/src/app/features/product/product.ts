@@ -44,6 +44,14 @@ interface DietaryChip {
   value: 'yes' | 'no' | 'maybe';
 }
 
+/** One safety-critical fact the sources disagree about, with each source's own
+ *  word for it — shown as provenance (the safe merge still governs what's
+ *  displayed above; this is so you can see the disagreement and check the label). */
+interface FactConflict {
+  label: string;
+  perSource: { source: string; value: string }[];
+}
+
 /** How the shop lookup is going. `none` = searched, nothing carried this
  *  barcode — a real answer, not an error. */
 type ShopLookup = 'idle' | 'searching' | 'found' | 'none' | 'error';
@@ -564,4 +572,49 @@ export class ProductPage {
         value: f.value as DietaryChip['value'],
       })) ?? [],
   );
+
+  /** The safety-critical facts (allergens, dietary) where the sources disagree —
+   *  surfaced as provenance. These never reconcile to a single-source pick (an
+   *  allergen any source flags is kept; a disputed diet claim shows "maybe"), so
+   *  the honest thing is to show who said what and send you to the label. Empty
+   *  unless there are two+ sources that actually differ. */
+  readonly factProvenance = computed<FactConflict[]>(() => {
+    const bySrc = this.detail()?.facts_by_source ?? [];
+    if (bySrc.length < 2) return [];
+    const out: FactConflict[] = [];
+
+    // Dietary flags asserted with different values across sources.
+    const flags = new Set<string>();
+    for (const s of bySrc) for (const f of s.facts.dietary) flags.add(f.flag);
+    for (const flag of [...flags].sort()) {
+      const per = bySrc
+        .map((s) => ({
+          source: s.source,
+          value: s.facts.dietary.find((f) => f.flag === flag)?.value,
+        }))
+        .filter((x): x is { source: string; value: string } => !!x.value);
+      if (new Set(per.map((x) => x.value)).size > 1) {
+        out.push({
+          label: humanize(flag),
+          perSource: per.map((x) => ({ source: this.label(x.source), value: x.value })),
+        });
+      }
+    }
+
+    // Allergens where the sources disagree — including one being silent, which
+    // is safety-relevant (silence is not a "free from").
+    const names = new Set<string>();
+    for (const s of bySrc) for (const a of s.facts.allergens) names.add(a.allergen);
+    for (const name of [...names].sort()) {
+      const per = bySrc.map((s) => {
+        const a = s.facts.allergens.find((x) => x.allergen === name);
+        const value = a ? (a.presence === 'contains' ? 'contains' : 'may contain') : 'not listed';
+        return { source: this.label(s.source), value };
+      });
+      if (new Set(per.map((x) => x.value)).size > 1) {
+        out.push({ label: `Allergen: ${humanize(name)}`, perSource: per });
+      }
+    }
+    return out;
+  });
 }

@@ -180,6 +180,29 @@ h3 {
   font: var(--mat-sys-body-small);
 }
 
+// Per-source provenance for the safety-critical facts, shown only where the
+// sources disagree (see factProvenance). Read-only — the safe merge governs.
+.provenance {
+  margin-top: 1.25rem;
+
+  .prov-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+
+  .prov-label {
+    font: var(--mat-sys-label-large);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .chips {
+    margin-top: 0;
+  }
+}
+
 // "Find at Asda" and whatever the lookup came back with.
 .shop-lookup {
   margin-top: 0.25rem;

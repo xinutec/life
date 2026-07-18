@@ -298,6 +298,27 @@
     </div>
   }
 
+  @if (factProvenance().length) {
+    <section class="provenance">
+      <h3>Sources differ</h3>
+      <p class="fine">
+        What each source says. The safe reading is shown above — an allergen any
+        source flags is kept, and a disputed diet claim reads “maybe”. Check the
+        pack if it matters.
+      </p>
+      @for (c of factProvenance(); track c.label) {
+        <div class="prov-row">
+          <span class="prov-label">{{ c.label }}</span>
+          <span class="chips">
+            @for (p of c.perSource; track p.source) {
+              <span class="chip">{{ p.source }}: {{ p.value }}</span>
+            }
+          </span>
+        </div>
+      }
+    </section>
+  }
+
   @if (offUrl(); as url) {
     <p class="attribution">
       Food data:

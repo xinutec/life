@@ -454,6 +454,67 @@ describe('ProductPage', () => {
     ]);
   });
 
+  it('surfaces per-source provenance where safety-critical facts disagree', () => {
+    const withProv: ProductDetail = {
+      ...DETAIL,
+      facts_by_source: [
+        {
+          source: 'asda',
+          facts: {
+            nutrition: null,
+            ingredients: null,
+            allergens: [{ allergen: 'milk', presence: 'contains' }],
+            dietary: [{ flag: 'vegan', value: 'no' }],
+          },
+        },
+        {
+          source: 'off',
+          facts: {
+            nutrition: null,
+            ingredients: null,
+            allergens: [],
+            dietary: [{ flag: 'vegan', value: 'maybe' }],
+          },
+        },
+      ],
+    };
+    const { fixture, page } = setup(withProv);
+    const prov = page.factProvenance();
+    // Vegan differs (no vs maybe); milk is declared by Asda only.
+    expect(prov.some((c) => c.label === 'Vegan')).toBe(true);
+    expect(prov.some((c) => c.label.startsWith('Allergen: Milk'))).toBe(true);
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.provenance')?.textContent).toContain('Sources differ');
+  });
+
+  it('shows no provenance when the sources agree', () => {
+    const agree: ProductDetail = {
+      ...DETAIL,
+      facts_by_source: [
+        {
+          source: 'asda',
+          facts: {
+            nutrition: null,
+            ingredients: null,
+            allergens: [{ allergen: 'milk', presence: 'contains' }],
+            dietary: [{ flag: 'vegan', value: 'no' }],
+          },
+        },
+        {
+          source: 'off',
+          facts: {
+            nutrition: null,
+            ingredients: null,
+            allergens: [{ allergen: 'milk', presence: 'contains' }],
+            dietary: [{ flag: 'vegan', value: 'no' }],
+          },
+        },
+      ],
+    };
+    const { page } = setup(agree);
+    expect(page.factProvenance()).toEqual([]);
+  });
+
   it('lets you type our own name — a user-owned correction when every shop is wrong', () => {
     const { api, page } = setup();
     page.startEditName();
