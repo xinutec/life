@@ -2,6 +2,7 @@ import { Location } from '@angular/common';
 import { Component, computed, effect, inject, input, numberAttribute, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatRadioModule } from '@angular/material/radio';
 
 import { LifeApi } from '../../life-api';
 import { AsdaHit, ProductDetail, ProductListing } from '../../models';
@@ -81,7 +82,7 @@ function ago(epochMs: number): string {
   selector: 'app-product-page',
   templateUrl: './product.html',
   styleUrl: './product.scss',
-  imports: [MatButtonModule, MatIconModule, ListState],
+  imports: [MatButtonModule, MatIconModule, MatRadioModule, ListState],
 })
 export class ProductPage {
   /** The routed product id. Route params arrive as strings (see
@@ -235,6 +236,56 @@ export class ProductPage {
 
   back(): void {
     this.location.back();
+  }
+
+  // --- Reconciliation: approve where the sources disagree with the product ---
+
+  /** The "keep the current value" choice — mirrors the backend's KEEP. */
+  static readonly KEEP = 'keep';
+
+  /** Fields where a source disagrees with the canonical product and you haven't
+   *  decided yet. Empty (so the section is hidden) when everything agrees. */
+  readonly reconFields = computed(() => this.detail()?.reconciliation.fields ?? []);
+
+  /** Your per-field pick, keyed by field. Absent → "keep" (the safe default:
+   *  nothing changes unless you choose a source). */
+  readonly choices = signal<Record<string, string>>({});
+  readonly reconciling = signal(false);
+
+  choiceFor(field: string): string {
+    return this.choices()[field] ?? ProductPage.KEEP;
+  }
+
+  setChoice(field: string, choice: string): void {
+    this.choices.update((c) => ({ ...c, [field]: choice }));
+  }
+
+  /** A source id → its display name, for the candidate labels. */
+  label(source: string): string {
+    return sourceLabel(source);
+  }
+
+  /** Settle every shown difference at once: each field is either adopted from a
+   *  source or kept as-is (the default). Sending a decision for all of them —
+   *  including the kept ones — is what marks the review done, so it won't nag
+   *  again until a source's value actually changes. */
+  applyReconcile(): void {
+    const fields = this.reconFields();
+    if (!fields.length || this.reconciling()) return;
+    const decisions = fields.map((f) => ({ field: f.field, choice: this.choiceFor(f.field) }));
+    this.reconciling.set(true);
+    this.api.reconcile(this.id(), decisions).subscribe({
+      next: (d) => {
+        this.reconciling.set(false);
+        this.choices.set({});
+        this.detail.set(d);
+        this.feedback.notify('Updated the product details.');
+      },
+      error: (e: unknown) => {
+        this.reconciling.set(false);
+        this.feedback.error(`Could not update the product${onlineHint(e)}`);
+      },
+    });
   }
 
   readonly imageUrl = computed(() => {

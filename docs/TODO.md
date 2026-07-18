@@ -252,6 +252,40 @@ through something that resets the NC session.
         barcode, so it fetches candidates until one matches — uncapped, cache
         first, app-only. The cache + `find` endpoint are already shop-agnostic;
         7b wires the bridge into `shop_cache::remember` and a Waitrose provider.
+- [x] **Product data model, increment 8 — store the whole record; reconcile the
+      canonical row by approval** (2026-07-18) — a source's account of a product
+      used to be flattened onto the canonical row (silently overwriting name/brand,
+      silently ignoring pack/image) with most of its payload dropped at parse time.
+      Now each source keeps its whole record on its own line, and the canonical
+      row is a curated choice you approve.
+      - **Migration 0030** — `product_listings` gains `brand`, `quantity_label`,
+        `image_url`, and `raw_json` (the source's ENTIRE record, verbatim), so a
+        field we don't model yet is kept rather than lost. `asda.rs` carries the
+        untouched hit JSON onto `AsdaHit.raw` (off-wire, off the TS bindings) and
+        maps the free-from lifestyle tags too (nut/milk/egg/soya-free, organic);
+        nutrition CLAIMS (LowSalt/LowFat/HighFibre) stay in `raw_json`, not
+        promoted to dietary flags. Asda's SEARCH payload carries no per-100g
+        nutrition / allergens / ingredients (confirmed against the captured
+        fixture), so among facts only dietary has two sources today.
+      - **Fill-if-empty, never silent-overwrite**: `refresh_canonical_name` only
+        seeds an empty name; a differing source becomes a divergence, not an
+        automatic switch.
+      - **Migration 0031 — `product_field_decisions`**: a divergence is computed
+        LIVE (listing value vs canonical), so there's no pending-changes table to
+        rot. A decision records the exact value SET it settled, so it re-surfaces
+        only when a source's value actually changes — the conflict-log resolve
+        idea, keyed by (product, field).
+      - **`POST /api/products/id/{id}/reconcile`** — `divergences()` (pure, over
+        name/brand/quantity_label) rides on `ProductDetail`; reconcile adopts a
+        source's value or keeps the current, per field. The product page shows a
+        "Shops disagree" panel with a radio per field (default keep) and one
+        Apply — the 250ML-vs-250ml case surfaced instead of guessed.
+      - **8b (next): picture + facts reconciliation.** Picture needs image
+        provenance to diff honestly (a listing's image_url vs the canonical
+        bytes); dietary/allergens/nutrition need a user-authoritative layer over
+        the existing safe merge (disagreement → "maybe"), and an Asda
+        product-page fetch (its search API carries no facts) before there's a
+        second source to diff against.
 - [x] **Client activity trace** (2026-07-17) — the navigations and taps the
       browser sees but the API doesn't, folded into the SAME log stream as the
       per-request trace so a session reads as one timeline (`nav /product/56` →

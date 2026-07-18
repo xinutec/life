@@ -86,6 +86,8 @@ describe('ProductPage', () => {
       productImageByIdUrl: (id: number) => `/api/products/id/${id}/image`,
       findAtShop: vi.fn(() => of(find)),
       syncListing: vi.fn(() => of(detail.product)),
+      // Answers with the same detail but no divergences left (the settled state).
+      reconcile: vi.fn(() => of({ ...detail, reconciliation: { fields: [] } })),
     };
     TestBed.configureTestingModule({
       imports: [ProductPage],
@@ -346,5 +348,66 @@ describe('ProductPage', () => {
     expect(api.getProductDetail).not.toHaveBeenCalled();
     expect(page.error()).toBe(true);
     expect(page.errorText()).toBe('That product link isn’t valid.');
+  });
+
+  // --- Reconciliation (approve where sources disagree) ---
+
+  const DIVERGENT: ProductDetail = {
+    ...DETAIL,
+    reconciliation: {
+      fields: [
+        {
+          field: 'brand',
+          label: 'Brand',
+          current: 'OFF Brand',
+          candidates: [{ source: 'asda', value: 'Asda Brand' }],
+        },
+        {
+          field: 'quantity_label',
+          label: 'Pack size',
+          current: '250ML',
+          candidates: [{ source: 'asda', value: '250ml' }],
+        },
+      ],
+    },
+  };
+
+  it('shows nothing to review when the sources agree', () => {
+    const { fixture } = setup(); // DETAIL has an empty reconciliation
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.reconcile')).toBeNull();
+  });
+
+  it('surfaces each disagreeing field with the current value and each source’s', () => {
+    const { fixture, page } = setup(DIVERGENT);
+    const el = fixture.nativeElement as HTMLElement;
+    const panel = el.querySelector('.reconcile');
+    expect(panel).not.toBeNull();
+    expect(panel?.textContent).toContain('Brand');
+    // Both the pack-size disagreement (the real 250ML vs 250ml case) and its
+    // candidate are on offer.
+    expect(panel?.textContent).toContain('250ML');
+    expect(panel?.textContent).toContain('250ml');
+    expect(page.reconFields().length).toBe(2);
+  });
+
+  it('applies a per-field decision: adopt one, keep the other', () => {
+    const { api, page } = setup(DIVERGENT);
+    page.setChoice('brand', 'asda'); // adopt Asda's brand
+    // quantity_label left untouched → defaults to keep
+    page.applyReconcile();
+    expect(api.reconcile).toHaveBeenCalledWith(42, [
+      { field: 'brand', choice: 'asda' },
+      { field: 'quantity_label', choice: 'keep' },
+    ]);
+  });
+
+  it('defaults every field to keep, so applying without a pick changes nothing', () => {
+    const { api, page } = setup(DIVERGENT);
+    page.applyReconcile();
+    expect(api.reconcile).toHaveBeenCalledWith(42, [
+      { field: 'brand', choice: 'keep' },
+      { field: 'quantity_label', choice: 'keep' },
+    ]);
   });
 });

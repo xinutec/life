@@ -34,6 +34,39 @@
     </div>
   }
 
+  <!-- Where the shops disagree with what we hold. Nothing here changes the
+       product until you Apply; every field defaults to "keep", so silence keeps
+       what you have. Approve all, or just the ones you trust. -->
+  @if (reconFields().length) {
+    <section class="reconcile">
+      <h3>Shops disagree on some details</h3>
+      <p class="fine">
+        Pick which to trust. Nothing changes until you apply — anything left on
+        “keep” stays as it is.
+      </p>
+      @for (f of reconFields(); track f.field) {
+        <div class="recon-field">
+          <div class="recon-label">{{ f.label }}</div>
+          <mat-radio-group
+            class="recon-options"
+            [value]="choiceFor(f.field)"
+            (change)="setChoice(f.field, $event.value)"
+          >
+            <mat-radio-button value="keep">
+              Keep@if (f.current) { : {{ f.current }} } @else { (none) }
+            </mat-radio-button>
+            @for (c of f.candidates; track c.source) {
+              <mat-radio-button [value]="c.source">
+                {{ label(c.source) }}: {{ c.value }}
+              </mat-radio-button>
+            }
+          </mat-radio-group>
+        </div>
+      }
+      <button mat-flat-button (click)="applyReconcile()" [disabled]="reconciling()">Apply</button>
+    </section>
+  }
+
   @if (buyRows().length || canFindAtAsda()) {
     <h3>Where to buy</h3>
     <div class="buy">

@@ -146,6 +146,7 @@ const PRODUCT_DETAIL = {
       { flag: 'vegetarian', value: 'yes' },
     ],
   },
+  reconciliation: { fields: [] },
 };
 
 /** A product Open Food Facts knows under a cryptic crowd name, that no shop
@@ -160,6 +161,7 @@ const UNLISTED_DETAIL = {
   ],
   prices: [],
   facts: { nutrition: null, ingredients: null, allergens: [], dietary: [] },
+  reconciliation: { fields: [] },
 };
 
 /** Asda's real answer for that crowd name: the product itself ranks LAST,
@@ -446,6 +448,44 @@ test('product page — the Asda match reads cleanly @ phone width', async ({ pag
   // ranks last. That rule is enforced (and tested) server-side now.
   await page.getByText('Extra Special Balsamic Vinegar of Modena').waitFor();
   await page.getByText('same barcode', { exact: false }).waitFor();
+  await expectNoTextOverlaps(page, testInfo, 'app-product-page');
+  await expectNoHorizontalOverflow(page, testInfo);
+});
+
+test('product page — the reconcile panel lays out cleanly @ phone width', async ({ page }, testInfo) => {
+  await mockApi(page);
+  // A product whose sources disagree — a long product name is the worst case for
+  // the stacked radio options.
+  await page.route('**/api/products/id/44', (r) =>
+    r.fulfill({
+      json: {
+        ...UNLISTED_DETAIL,
+        product: { ...UNLISTED_DETAIL.product, id: 44 },
+        reconciliation: {
+          fields: [
+            {
+              field: 'name',
+              label: 'Name',
+              current: 'Asda ES Balsamic Modena',
+              candidates: [
+                { source: 'asda', value: 'Extra Special Balsamic Vinegar of Modena 250ml' },
+              ],
+            },
+            {
+              field: 'quantity_label',
+              label: 'Pack size',
+              current: '250ML',
+              candidates: [{ source: 'asda', value: '250ml' }],
+            },
+          ],
+        },
+      },
+    }),
+  );
+  await page.goto('/product/44');
+  await page.getByText('Shops disagree on some details').waitFor();
+  await page.getByText('Pack size').waitFor();
+  await page.getByRole('button', { name: 'Apply' }).waitFor();
   await expectNoTextOverlaps(page, testInfo, 'app-product-page');
   await expectNoHorizontalOverflow(page, testInfo);
 });

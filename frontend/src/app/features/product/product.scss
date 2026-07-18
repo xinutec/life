@@ -156,6 +156,40 @@ h3 {
   }
 }
 
+// The diff-and-approve panel: shown only when a source disagrees with the
+// canonical product. A quiet outlined card so it reads as a task to settle, not
+// an error.
+.reconcile {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem 1rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--mat-sys-corner-medium);
+
+  h3 {
+    margin-top: 0.25rem;
+  }
+
+  .recon-field {
+    margin-top: 0.75rem;
+  }
+
+  .recon-label {
+    font: var(--mat-sys-label-large);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  // Stack the choices: values can be long (a full product name), so a row of
+  // radios would wrap badly.
+  .recon-options {
+    display: flex;
+    flex-direction: column;
+  }
+
+  button {
+    margin-top: 1rem;
+  }
+}
+
 .nutrition {
   width: 100%;
   border-collapse: collapse;

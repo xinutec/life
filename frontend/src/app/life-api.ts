@@ -154,6 +154,16 @@ export class LifeApi {
   getProductDetail(id: number): Observable<ProductDetail> {
     return this.http.get<ProductDetail>(`/api/products/id/${id}`);
   }
+  /** Settle where the product's sources disagree with its canonical row: each
+   *  decision adopts a source's value ({field, choice: source}) or keeps the
+   *  current one ({field, choice: 'keep'}). Returns the re-read detail with the
+   *  divergence list updated. */
+  reconcile(
+    id: number,
+    decisions: { field: string; choice: string }[],
+  ): Observable<ProductDetail> {
+    return this.http.post<ProductDetail>(`/api/products/id/${id}/reconcile`, decisions);
+  }
   /** URL of a catalog image addressed by product id — for barcodeless shop
    *  products, which have no /products/{barcode}/image URL. */
   productImageByIdUrl(id: number, version?: number): string {
