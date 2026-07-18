@@ -322,12 +322,21 @@ through something that resets the NC session.
         held. **F2c** then closed the last gap: OFF's response is kept verbatim on
         its own `off` listing's raw_json, so every fetch we make is now archived
         (Asda search + OFF → listing raw_json; Asda page → product_documents).
-      - **8e (next): facts reconciliation UI + picture.** Facts now merge silently
-        (retailer nutrition wins, allergens union); surface where Asda and OFF
-        DISAGREE through the approve grammar. Picture needs image
-        the existing safe merge (disagreement → "maybe"), and an Asda
-        product-page fetch (its search API carries no facts) before there's a
-        second source to diff against.
+      - **On-device check (not yet done):** the Asda WebView facts fetch has NOT
+        been exercised live — open a product in the app → "Get full details from
+        Asda"; first tap may hit Cloudflare's JS challenge, the WebView clears it
+        and a retry lands. The installed Pixel 9 APK (v0.5, 2026-07-13) already
+        allowlists asda.com, so no rebuild is needed. F4 below is best designed
+        against the real two-source data this produces.
+      - **8e/F4 (next): facts reconciliation UI.** Facts now merge SILENTLY on read
+        (retailer nutrition/ingredients win by precedence; allergens union; dietary
+        tri-state). The next step — the "combine" the user deferred — is to surface
+        where Asda and OFF DISAGREE through the same approve grammar the scalar
+        fields use (`divergences`/reconcile), so a real conflict is a choice, not a
+        silent pick. Design it once real Asda+OFF facts exist on a product.
+      - **8f (later): picture reconciliation.** Needs image provenance to diff a
+        listing's image_url against the canonical bytes; adopting one re-fetches
+        through the SSRF-gated path. Independent of the facts work.
 - [x] **Client activity trace** (2026-07-17) — the navigations and taps the
       browser sees but the API doesn't, folded into the SAME log stream as the
       per-request trace so a session reads as one timeline (`nav /product/56` →
