@@ -66,16 +66,17 @@ recovery — the user must clear cookies for the NC host by hand. Fixing that pr
 means fixing it upstream in Nextcloud, or having Life's `/login` route bounce
 through something that resets the NC session.
 
-## Backup — deliberately NOT yet (wait for Pippijn's go)
+## Backup — DONE (nightly restic)
 
-- [ ] **Back up the Life DB** — **DO NOT set this up yet.** It matters *after*
-  the system is developed and the DB schema is **stable**; while migrations are
-  still being added, a backup is premature. Pippijn will say when to start —
-  don't start, offer to start, or flag it as overdue before then.
-  When the time comes: scheduled `mysqldump` of the `life` DB on isis (ns
-  `life`, deploy `life-db`, PVC `life-db-pvc`) folded into the Mac-mini
-  **restic** set (`xinutec-infra/mac-mini/hm-agents.nix`, daily 05:00). Until
-  then the PVC is the only copy — that's an accepted, temporary state. (overview §6)
+- [x] **Back up the Life DB** — the `life-db` pod is dumped nightly and
+  off-sited. `nixos-config/machines/odin/backup-prepare.sh` runs
+  `mariadb-dump --single-transaction --all-databases` inside the `life-db` pod
+  (via `crictl`), verifies the trailer (`Dump completed`), zstd-compresses, and
+  rsyncs it into odin's restic staging; odin's `restic-backups-cluster` timer
+  (02:30 UTC) snapshots it and the Mac mini pulls an off-site copy
+  (`restic copy`). Not the Mac-mini `hm-agents.nix` path the old note guessed —
+  it landed on odin alongside the other cluster DBs. Restore: pull the snapshot,
+  `zstd -d`, feed to `mariadb`. (overview §6)
 
 ## Shipped
 
