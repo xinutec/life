@@ -3,6 +3,9 @@ package org.xinutec.life
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.AlarmManager
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.ActivityNotFoundException
 import android.content.ClipboardManager
 import android.content.Context
@@ -11,6 +14,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.util.Base64
 import android.util.Log
@@ -163,6 +167,12 @@ class MainActivity : Activity() {
                 // can't) to fetch product data, supplying the shop-specific URLs +
                 // extractor JS. See ShopBridge — nothing shop-specific lives here.
                 addJavascriptInterface(ShopBridge(), "ShopBridge")
+                // Reminders: the web app schedules device-local notifications
+                // (e.g. the daily wellbeing check-in nudge) at a wall-clock time,
+                // fired by AlarmManager → ReminderReceiver even when the app is
+                // closed. Generic — nothing wellbeing-specific lives here; the web
+                // app owns the "when", the copy, and the deep-link target.
+                addJavascriptInterface(ReminderBridge(), "ReminderBridge")
                 // Keep life (and its Nextcloud login hop) inside this WebView;
                 // hand every other origin to the real browser. A chromeless view
                 // has no URL bar, so an external link opening in-place would look
@@ -332,8 +342,32 @@ class MainActivity : Activity() {
             WindowInsetsCompat.CONSUMED
         }
         setContentView(root)
-        // Reopen where we left off; the hardcoded URL is only the first-run default.
-        web.loadUrl(prefs.getString(KEY_LAST_URL, null) ?: LIFE_URL)
+        // A notification tap launches us with a deep-link target; honour it over the
+        // reopen-where-you-left-off default. Otherwise reopen the last in-app page
+        // (the hardcoded URL is only the first-run default).
+        web.loadUrl(
+            reminderTargetUrl(intent) ?: prefs.getString(KEY_LAST_URL, null) ?: LIFE_URL,
+        )
+    }
+
+    // A notification tapped while we're already running arrives here (SINGLE_TOP),
+    // not through a fresh onCreate — navigate the live WebView to its target.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        reminderTargetUrl(intent)?.let { web.loadUrl(it) }
+    }
+
+    /** The in-app URL a reminder's notification wants opened, or null if this intent
+     *  carries none. Confined to the life app: a relative path is resolved against
+     *  [LIFE_URL], and an absolute URL is honoured only if it's already an app URL —
+     *  a reminder can never point the WebView off-origin. */
+    private fun reminderTargetUrl(intent: Intent?): String? {
+        val raw = intent?.getStringExtra(EXTRA_OPEN_URL)?.trim().orEmpty()
+        if (raw.isEmpty()) return null
+        if (raw.startsWith(LIFE_URL)) return raw
+        if ("://" in raw) return null // an off-origin absolute URL — refuse it
+        return LIFE_URL.trimEnd('/') + "/" + raw.trimStart('/')
     }
 
     // `configChanges` keeps the Activity across rotation, so this only fires on a
@@ -743,9 +777,83 @@ class MainActivity : Activity() {
         return Color.rgb(r.toInt(), g.toInt(), b.toInt())
     }
 
+    /**
+     * Bridge for the web app's reminders: schedule a device-local notification to
+     * fire at a wall-clock time, or cancel one. Generic over `id` — a stable string
+     * key the web app owns (e.g. "wellbeing-daily"); re-scheduling the same id
+     * overwrites its pending alarm, so the web app re-arms idempotently on each open.
+     * Alarms survive the app being closed but not a reboot — the web app re-arms
+     * after one. Nothing wellbeing-specific lives here.
+     */
+    inner class ReminderBridge {
+        @JavascriptInterface fun available(): Boolean = true
+
+        /** Fire notification [title]/[body] at [whenMs] (epoch ms); tapping it opens
+         *  the app at [url] (a path or an app URL). Re-scheduling [id] replaces it. */
+        @JavascriptInterface
+        fun schedule(id: String, whenMs: Double, title: String, body: String, url: String?) {
+            ReminderReceiver.ensureChannel(this@MainActivity)
+            ensureNotificationsAllowed()
+            val intent =
+                Intent(this@MainActivity, ReminderReceiver::class.java).apply {
+                    putExtra(ReminderReceiver.EXTRA_ID, id)
+                    putExtra(ReminderReceiver.EXTRA_TITLE, title)
+                    putExtra(ReminderReceiver.EXTRA_BODY, body)
+                    if (url != null) putExtra(ReminderReceiver.EXTRA_URL, url)
+                }
+            val am = getSystemService(AlarmManager::class.java)
+            val at = whenMs.toLong()
+            // Exact where allowed (USE_EXACT_ALARM is auto-granted for this sideloaded
+            // app); fall back to an inexact idle-tolerant alarm if a future OS/policy
+            // revokes it — a reminder should be late, never lost.
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || am.canScheduleExactAlarms()) {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, broadcastFor(id, intent))
+            } else {
+                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, broadcastFor(id, intent))
+            }
+        }
+
+        /** Cancel a pending reminder and dismiss any notification it already posted. */
+        @JavascriptInterface
+        fun cancel(id: String) {
+            val intent = Intent(this@MainActivity, ReminderReceiver::class.java)
+            getSystemService(AlarmManager::class.java).cancel(broadcastFor(id, intent))
+            getSystemService(NotificationManager::class.java).cancel(id.hashCode())
+        }
+    }
+
+    /** A PendingIntent addressing the reminder receiver, keyed by the reminder id so a
+     *  re-schedule updates in place and a cancel matches (extras don't affect match). */
+    private fun broadcastFor(id: String, intent: Intent): PendingIntent =
+        PendingIntent.getBroadcast(
+            this,
+            id.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+    /** Ask for POST_NOTIFICATIONS (Android 13+) the first time a reminder is set, so
+     *  the prompt is tied to turning a reminder on. Best-effort: the alarm is armed
+     *  regardless; a declined grant just means the notification is suppressed. */
+    private fun ensureNotificationsAllowed() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        runOnUiThread {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIF_REQ)
+        }
+    }
+
     companion object {
         private const val CAMERA_REQ = 1
         private const val FILE_REQ = 2
+        private const val NOTIF_REQ = 3
+
+        /** Intent extra: the in-app URL/path a tapped reminder should open. */
+        const val EXTRA_OPEN_URL = "open_url"
 
         // Skip pasting anything larger than the backend's 5 MiB image cap.
         private const val MAX_PASTE_BYTES = 5 * 1024 * 1024

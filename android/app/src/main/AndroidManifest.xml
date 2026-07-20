@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- dev-lint: android-webview (held identical to dev-lint's canonical WebView manifest) -->
+<!-- dev-lint: android-webview allow=application/receiver (reminder alarm receiver — the web app schedules device-local notifications) -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
@@ -7,6 +7,14 @@
          installs on camera-less devices. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+    <!-- Reminders: the web app schedules device-local notifications (e.g. the
+         daily wellbeing-check-in nudge) via window.ReminderBridge. POST_NOTIFICATIONS
+         is the Android 13+ runtime grant; USE_EXACT_ALARM lets an alarm fire at a
+         wall-clock time (auto-granted — this app is sideloaded, not on Play, so the
+         SCHEDULE_EXACT_ALARM settings dance isn't needed). No RECEIVE_BOOT_COMPLETED:
+         alarms are re-armed by the web app on each open, not persisted across reboot. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <application
         android:allowBackup="false"
@@ -26,5 +34,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Receives the AlarmManager broadcast at a scheduled reminder time and
+             posts the notification, so a reminder fires even when the app process
+             is gone. Not exported: only our own PendingIntent triggers it. -->
+        <receiver
+            android:name=".ReminderReceiver"
+            android:exported="false" />
     </application>
 </manifest>

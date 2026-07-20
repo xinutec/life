@@ -18,6 +18,7 @@ import { LifeApi } from './life-api';
 import { Me } from './models';
 import { SwUpdates } from './sw-updates';
 import { Telemetry } from './telemetry';
+import { WellbeingReminder } from './shared/wellbeing-reminder';
 import { AuthState } from './sync/auth-state';
 import { SyncStatus } from './sync/sync-status';
 
@@ -71,6 +72,7 @@ export class App {
   private api = inject(LifeApi);
   private telemetry = inject(Telemetry);
   private swUpdates = inject(SwUpdates);
+  private wellbeingReminder = inject(WellbeingReminder);
   private auth = inject(AuthState);
   private dialog = inject(MatDialog);
   private feedback = inject(Feedback);
@@ -132,6 +134,10 @@ export class App {
 
     this.swUpdates.start();
     this.telemetry.init();
+    // Re-arm the daily wellbeing reminder from local check-ins on every open (a
+    // no-op outside the Android app). Independent of the /api/me result — it reads
+    // the offline store, so it works before (or without) the session confirming.
+    this.wellbeingReminder.init();
     this.beginRefresh();
     this.api.me().subscribe({
       next: (m) => {

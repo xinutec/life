@@ -29,3 +29,62 @@
     </button>
   </mat-card-actions>
 </mat-card>
+
+<mat-card class="reminder-card">
+  <mat-card-header>
+    <mat-card-title>Wellbeing reminders</mat-card-title>
+    <mat-card-subtitle>Daily nudges to check in — each fires only if you haven’t.</mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-content>
+    @for (rule of rules(); track rule.id) {
+      <div class="reminder-rule">
+        <mat-form-field appearance="outline" class="time-field">
+          <mat-label>At</mat-label>
+          <input
+            #timeInput
+            matInput
+            type="time"
+            [value]="rule.time"
+            (change)="setRuleTime(rule.id, timeInput.value)"
+          />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="gap-field">
+          <mat-label>If no check-in for</mat-label>
+          <input
+            #gapInput
+            matInput
+            type="number"
+            min="1"
+            max="24"
+            [value]="rule.quietHours"
+            (change)="setRuleQuietHours(rule.id, +gapInput.value)"
+          />
+          <span matTextSuffix>h</span>
+        </mat-form-field>
+        <button
+          mat-icon-button
+          class="danger"
+          aria-label="Remove reminder"
+          (click)="removeRule(rule.id)"
+        >
+          <mat-icon>delete</mat-icon>
+        </button>
+      </div>
+    } @empty {
+      <p class="hint">No reminders yet. Add one to be nudged when you haven’t checked in.</p>
+    }
+
+    @if (!reminderAvailable) {
+      <p class="hint">
+        Reminders fire in the Life Android app. You can set them up here; they take effect
+        there.
+      </p>
+    }
+  </mat-card-content>
+  <mat-card-actions align="end">
+    <button mat-stroked-button (click)="addRule()">
+      <mat-icon>add</mat-icon>
+      Add reminder
+    </button>
+  </mat-card-actions>
+</mat-card>

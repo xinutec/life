@@ -370,6 +370,31 @@ through something that resets the NC session.
       Labels are verbatim — `labelFor` strips `mat-icon`/`[aria-hidden]` text so a
       Material icon's ligature doesn't prefix every button. Read a session with
       `kubectl -n life logs deploy/life-app | grep client-event`.
+- [x] **Wellbeing check-in reminders** (2026-07-20) — device-local Android
+      notifications that nudge you to check in. A **generic native bridge**
+      (`window.ReminderBridge`: `available`/`schedule`/`cancel`, mirroring
+      `ShopBridge`) fires an `AlarmManager` exact alarm → a manifest
+      `ReminderReceiver` posts the notification even with the app closed; a tap
+      deep-links the WebView to the target route (`/today`). Permissions
+      `POST_NOTIFICATIONS` (Android 13+ runtime, requested when a reminder is first
+      set) + `USE_EXACT_ALARM` (auto-granted — the app is sideloaded, so no
+      exact-alarm settings dance); the `<receiver>` rides a dev-lint manifest
+      waiver (`allow=application/receiver`). No boot receiver: the "simple" model —
+      the web app **re-arms on every open** (subscribing to the wellbeing store),
+      so an alarm survives the app closing but is re-armed after a reboot.
+      - **Driver**: `WellbeingReminder` (`shared/wellbeing-reminder.ts`) holds a
+        device-local list of rules (`{ time, quietHours }`, localStorage
+        `life.reminder.wellbeing`), each armed as its own alarm keyed by a stable
+        id. `nextFireForRule` (pure, tested) fires at the next occurrence of the
+        rule's time that's both in the future AND at least `quietHours` past the
+        last check-in — so "remind me at 9am if I haven't logged in 3h, and at 6pm
+        if not in 6h" is two rules. Because the only way to check in is in the app
+        (which re-arms), a same-day check-in pushes the rule to the next day with no
+        server round-trip. Configurable in **Settings** (add/remove rows; time +
+        "if no check-in for N h"); the editor shows in a browser but notes reminders
+        fire in the Android app (the bridge is absent). No APK-manifest permission
+        change reaches the other WebView apps — permissions are a per-app dev-lint
+        slot.
 - [x] 3D house renders the real `scenes/house.json` (perimeter walls + furniture)
 - [x] Mobile-first UI (bottom tabs ↔ side rail), management forms, NC avatar
 - [x] Deployed: isis k3s, CI/CD (`xinutec/life`), DNS, TLS, live login
