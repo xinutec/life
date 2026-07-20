@@ -171,6 +171,8 @@ h3 {
   --emo-bad: #4fa07e;
   // dev-lint: allow-hardcoded-color feelings-wheel family palette — fixed categorical identity
   --emo-surprised: #9c74ce;
+  // dev-lint: allow-hardcoded-color feelings-wheel family palette — fixed categorical identity
+  --emo-neutral: #9aa0a6;
   --emo-unknown: var(--mat-sys-outline);
 }
 .emo {
@@ -221,6 +223,9 @@ h3 {
 }
 .emo-surprised {
   --c: var(--emo-surprised);
+}
+.emo-neutral {
+  --c: var(--emo-neutral);
 }
 .emo-unknown {
   --c: var(--emo-unknown);

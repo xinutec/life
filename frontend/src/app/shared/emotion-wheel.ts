@@ -599,6 +599,31 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
       },
     ],
   },
+  {
+    // The other seven are all *emotion* families, so a flat, neither-up-nor-down day
+    // had nowhere to go but under Sad (Empty/Low) — which files a neutral mood as a
+    // low one and tints it accordingly. Neutral is its own family precisely so that
+    // an "a bit nothing" day stops being recorded, and coloured, as sadness. Its hue
+    // is a plain grey: the absence of a pull, not a muted version of one.
+    name: 'Neutral',
+    color: 'neutral',
+    desc: 'Neither up nor down — level, flat, or unbothered.',
+    groups: [
+      {
+        name: 'Flat',
+        desc: 'Level and even; nothing is pulling you either way.',
+        leaves: [
+          { name: 'Meh', desc: 'A bit nothing; you could take it or leave it.' },
+          {
+            // Not Calm (a warm, settled contentment) — this claims no warmth, only
+            // that nothing is swinging you. "Emotionally stable today" lands here.
+            name: 'Even',
+            desc: 'On an even keel — steady, and not swinging either way.',
+          },
+        ],
+      },
+    ],
+  },
 ];
 
 /** Anything a check-in can record: a secondary group or one of its leaves,

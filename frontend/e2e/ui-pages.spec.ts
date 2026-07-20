@@ -528,7 +528,7 @@ test('emotion picker — full mosaic + sticky header: lays out cleanly @ phone w
   await page.getByRole('button', { name: /^Done/ }).waitFor();
   // Every family is on screen at once — no expanding needed. Words from the first
   // and last families must both be present.
-  await expect(page.locator('.family')).toHaveCount(7);
+  await expect(page.locator('.family')).toHaveCount(8);
   await page.getByRole('button', { name: 'Add Curious' }).waitFor();
   await page.getByRole('button', { name: 'Add Energetic' }).waitFor();
   // The selected-set footer is opaque and sticky; vocabulary text scrolling
