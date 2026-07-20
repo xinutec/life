@@ -179,6 +179,28 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
           { name: 'Inspired', desc: 'Moved and uplifted to act or create.' },
         ],
       },
+      {
+        // Happy could say you feel respected or valued — regard pointed *at* you —
+        // but had no word for the regard you feel *toward* someone else.
+        name: 'Admiring',
+        desc: 'Warm regard for someone, or something, you find excellent.',
+        leaves: [
+          { name: 'Impressed', desc: 'Struck by how well someone did something.' },
+          { name: 'Respectful', desc: 'Holding someone in high regard for who they are.' },
+        ],
+      },
+      {
+        // The wheel named the ache of what's absent (Sad › Longing) and plain
+        // arousal, but not the everyday pull toward a thing you want. Its warmth is
+        // provisional — craving can grip and temptation can trouble — so it sits at
+        // the edge of Happy rather than its centre.
+        name: 'Desiring',
+        desc: 'Pulled toward something you want.',
+        leaves: [
+          { name: 'Craving', desc: 'A strong, bodily wanting for something in particular.' },
+          { name: 'Tempted', desc: "Drawn to something you're not sure you should have." },
+        ],
+      },
     ],
   },
   {
@@ -274,6 +296,17 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             name: 'Heartbroken',
             desc: 'A loss that hurts in the body; something in you has broken.',
           },
+        ],
+      },
+      {
+        // Distinct from Lonely (no one is near) and Fearful › Rejected (someone
+        // pushed you out): this is not-fitting when neither is true — the room is
+        // full and welcoming and you are still out of step with it.
+        name: 'Alienated',
+        desc: 'Out of step with where you are — not belonging, even among people.',
+        leaves: [
+          { name: 'Estranged', desc: 'Grown apart from people you were once close to.' },
+          { name: 'Out of place', desc: "You don't fit here, though no one has shut you out." },
         ],
       },
     ],
@@ -417,6 +450,13 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             name: 'Frozen',
             desc: "Fear has stopped you; you can't make yourself do the thing.",
           },
+          {
+            // Scared topped out at Frightened, so an ordinary fright and an
+            // out-of-control spike had to share one word.
+            name: 'Panicked',
+            desc: 'Fear spiking past control; your body has hit the alarm.',
+          },
+          { name: 'Terrified', desc: 'Gripped by total fear; the threat feels absolute.' },
         ],
       },
       {
