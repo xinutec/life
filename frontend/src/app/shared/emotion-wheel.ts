@@ -149,18 +149,24 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         ],
       },
       {
-        // Warmth pointed at someone else. The wheel could say you feel loved and
-        // that you feel your own grief, but had no word for aching on another's
-        // behalf — so it went under a group of its own rather than being filed as
-        // a shade of Peaceful.
+        // Warmth pointed at someone else, at either pole of their life: aching on
+        // their behalf when they hurt, and glad on their behalf when they thrive.
+        // The wheel had words for feeling loved and for your own grief, but none
+        // for warmth carried *for another person* — so it earns a group of its own.
         name: 'Caring',
-        desc: "Warm concern turned toward someone else's hurt.",
+        desc: 'Warmth turned toward someone else — moved by their hurt, or glad at their good.',
         leaves: [
           {
             name: 'Compassionate',
             desc: "Moved by someone else's suffering, and wanting to ease it.",
           },
           { name: 'Tender', desc: 'Gentle and soft toward someone who is hurting.' },
+          {
+            // Not pride (you claim no part in it) and not admiration (esteem for
+            // their quality): simply glad they exist and that it went well for them.
+            name: 'Happy for them',
+            desc: "Glad at someone else's good fortune or success, purely for their sake.",
+          },
         ],
       },
       {
