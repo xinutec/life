@@ -1,5 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -25,9 +25,16 @@ import {
 export interface EmotionPickerData {
   /** The emotions already on the entry (qualified tokens, or legacy bare words). */
   selected: string[];
-  /** The check-in note, if any — used to fetch Claude's suggested feelings. */
+  /** Which check-in this is — the key its suggestions are remembered under. */
+  ulid: string;
+  /** The check-in note, if any — what the suggested feelings are read from. */
   note?: string;
 }
+
+/** How often to ask again while a suggestion is being computed. Frequent enough
+ *  that the answer appears while you are still looking at the wheel, cheap enough
+ *  to leave running: the request is a cache lookup until the answer lands. */
+const POLL_MS = 2000;
 
 /** Browse and search the feelings wheel to add/remove emotions on a check-in.
  *
@@ -62,6 +69,7 @@ export class EmotionPicker {
   private ref = inject<MatDialogRef<EmotionPicker, string[] | undefined>>(MatDialogRef);
   private data = inject<EmotionPickerData>(MAT_DIALOG_DATA);
   private api = inject(LifeApi);
+  private destroyRef = inject(DestroyRef);
 
   readonly wheel = EMOTION_WHEEL;
   readonly query = signal('');
@@ -73,32 +81,86 @@ export class EmotionPicker {
   readonly count = computed(() => this.selected().size);
   readonly selectedList = computed(() => [...this.selected()]);
 
-  // Claude's suggestions from the note, shown at the head of the mosaic. Pure
-  // enhancement: they arrive a beat after the picker opens, and if the note is
-  // empty or the call fails (offline, no API key) the picker is unchanged.
-  readonly suggesting = signal(false);
+  // Feelings read from the note by a small local model, shown at the head of the
+  // mosaic. Pure enhancement: with no model running, none of this appears and the
+  // picker is exactly the wheel it was.
+  //
+  // Suggestions are remembered per check-in, so a note you have opened before is
+  // answered from the cache and they are simply *there*. Change the note and the
+  // previous set stays on screen — labelled as belonging to the older wording —
+  // rather than blanking out while the new one is worked out: they are usually
+  // still close, and an empty space would be a worse answer than a slightly old one.
   readonly suggestions = signal<readonly EmotionNode[]>([]);
+  /** The shown suggestions were read from an earlier wording of the note. */
+  readonly stale = signal(false);
+  /** A model is working on the current wording right now — never merely "we asked". */
+  readonly thinking = signal(false);
+  /** Seconds it has been working, anchored to the server's clock so closing and
+   *  reopening the picker doesn't restart it. */
+  readonly thinkingSecs = signal(0);
+
+  private poll?: ReturnType<typeof setTimeout>;
+  private tick?: ReturnType<typeof setInterval>;
+  // What was already chosen when the picker opened. Frozen deliberately: the
+  // server leaves these out so they don't take up suggestion slots, and sending
+  // the *live* selection would make a word vanish from the list two seconds
+  // after you tapped it — it stays, with a tick, until the picker is reopened.
+  private readonly alreadyAtOpen = [...this.selected()];
 
   constructor() {
+    this.destroyRef.onDestroy(() => this.stopWaiting());
+    if ((this.data.note ?? '').trim()) this.refresh();
+  }
+
+  /** Ask what is known about this note, and keep asking while something better is
+   *  being computed. The request is cheap on the server — a lookup, plus queueing
+   *  the work the first time — so polling costs little and stops the moment the
+   *  answer lands. */
+  private refresh(): void {
     const note = (this.data.note ?? '').trim();
-    if (!note) return;
     // The candidates are the whole wheel — sending them keeps the server's ranking
     // in lockstep with exactly what the user can pick, with no second copy to drift.
     const candidates = EMOTION_NODES.map((n) => ({ token: n.token, desc: n.desc }));
-    const already = [...this.selected()];
-    this.suggesting.set(true);
     this.api
-      .suggestEmotions({ note, candidates, already })
-      .pipe(takeUntilDestroyed())
+      .suggestEmotions({ ulid: this.data.ulid, note, candidates, already: this.alreadyAtOpen })
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (r) => {
-          this.suggestions.set(
-            (r?.suggestions ?? []).map(emotionNode).filter((n): n is EmotionNode => !!n),
-          );
-          this.suggesting.set(false);
+          const nodes = (r?.suggestions ?? [])
+            .map(emotionNode)
+            .filter((n): n is EmotionNode => !!n);
+          // Only ever replace what's on screen with something: a fresh empty answer
+          // is real ("nothing in the wheel fits") and replaces; an empty answer
+          // while still thinking is just "not yet" and must not wipe the old set.
+          if (nodes.length || !r.pending) this.suggestions.set(nodes);
+          this.stale.set(r.stale);
+          this.thinking.set(r.pending);
+          this.thinkingSecs.set(r.thinkingSecs ?? 0);
+          if (r.pending) this.keepWaiting();
+          else this.stopWaiting();
         },
-        error: () => this.suggesting.set(false),
+        // Offline, or the server had nothing to say. Leave whatever is on screen
+        // and stop claiming anything is happening.
+        error: () => {
+          this.thinking.set(false);
+          this.stopWaiting();
+        },
       });
+  }
+
+  /** Poll for the answer, and count the seconds in between so the elapsed time
+   *  moves smoothly rather than jumping with each request. */
+  private keepWaiting(): void {
+    this.stopWaiting();
+    this.poll = setTimeout(() => this.refresh(), POLL_MS);
+    this.tick = setInterval(() => this.thinkingSecs.update((s) => s + 1), 1000);
+  }
+
+  private stopWaiting(): void {
+    clearTimeout(this.poll);
+    clearInterval(this.tick);
+    this.poll = undefined;
+    this.tick = undefined;
   }
 
   /** The qualified token for a node — group or leaf — under a given core. */

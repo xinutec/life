@@ -9,16 +9,35 @@ import { EMOTION_WHEEL } from '../../shared/emotion-wheel';
 import { EmotionPicker } from './emotion-picker';
 
 describe('EmotionPicker', () => {
-  function setup(selected: string[], opts: { note?: string; suggestions?: string[] } = {}) {
+  function setup(
+    selected: string[],
+    opts: {
+      note?: string;
+      suggestions?: string[];
+      stale?: boolean;
+      pending?: boolean;
+      thinkingSecs?: number;
+    } = {},
+  ) {
     const ref = { close: vi.fn() };
     const suggestEmotions = vi.fn<
       (body: SuggestEmotionsRequest) => Observable<SuggestEmotionsResponse>
-    >(() => of({ suggestions: opts.suggestions ?? [] }));
+    >(() =>
+      of({
+        suggestions: opts.suggestions ?? [],
+        stale: opts.stale ?? false,
+        pending: opts.pending ?? false,
+        thinkingSecs: opts.thinkingSecs ?? null,
+      }),
+    );
     TestBed.configureTestingModule({
       imports: [EmotionPicker],
       providers: [
         { provide: MatDialogRef, useValue: ref },
-        { provide: MAT_DIALOG_DATA, useValue: { selected, note: opts.note } },
+        {
+          provide: MAT_DIALOG_DATA,
+          useValue: { selected, ulid: '01J0EMOTIONPICKERSPEC0000', note: opts.note },
+        },
         { provide: LifeApi, useValue: { suggestEmotions } },
       ],
     });
@@ -131,13 +150,15 @@ describe('EmotionPicker', () => {
       note: 'A tough day, feeling down',
       suggestions: ['Sad/Low', 'Sad/Empty'],
     });
-    // The whole wheel was offered as candidates, the note passed through.
+    // The whole wheel was offered as candidates, the note and the check-in it
+    // belongs to passed through (the latter is the cache key).
     expect(suggestEmotions).toHaveBeenCalledOnce();
     const body = suggestEmotions.mock.calls[0][0];
     expect(body.note).toBe('A tough day, feeling down');
+    expect(body.ulid).toBe('01J0EMOTIONPICKERSPEC0000');
     expect(body.candidates.length).toBeGreaterThan(100);
     // Returned tokens resolve to full nodes (name + colour) for rendering.
-    expect(c.suggesting()).toBe(false);
+    expect(c.thinking()).toBe(false);
     expect(c.suggestions().map((n) => n.token)).toEqual(['Sad/Low', 'Sad/Empty']);
     expect(c.suggestions()[0].name).toBe('Low');
   });
@@ -150,7 +171,32 @@ describe('EmotionPicker', () => {
   it('does not call the suggest API when there is no note', () => {
     const { c, suggestEmotions } = setup(['Angry/Numb']);
     expect(suggestEmotions).not.toHaveBeenCalled();
-    expect(c.suggesting()).toBe(false);
+    expect(c.thinking()).toBe(false);
     expect(c.suggestions()).toEqual([]);
+  });
+
+  it('keeps the previous wording\u2019s suggestions on screen while rereading', () => {
+    const { c, fixture } = setup([], {
+      note: 'reworded',
+      suggestions: ['Sad/Low'],
+      stale: true,
+      pending: true,
+      thinkingSecs: 7,
+    });
+    // Shown, marked as belonging to the earlier note, with the server's clock.
+    expect(c.suggestions().map((n) => n.token)).toEqual(['Sad/Low']);
+    expect(c.stale()).toBe(true);
+    expect(c.thinking()).toBe(true);
+    expect(c.thinkingSecs()).toBe(7);
+    fixture.destroy(); // stops the poll this test started
+  });
+
+  it('does not claim to be thinking when nothing is computing', () => {
+    // No worker running: the server says so, and the picker stays silent rather
+    // than showing a spinner nothing is behind.
+    const { c, fixture } = setup([], { note: 'a note', suggestions: [] });
+    expect(c.thinking()).toBe(false);
+    expect(c.suggestions()).toEqual([]);
+    fixture.destroy();
   });
 });

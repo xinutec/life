@@ -35,8 +35,7 @@ fn state_with_static(static_dir: Option<String>) -> AppState {
         static_dir,
         dev_login_user: None,
         house_scene: "scenes/house.json".into(),
-        emotion_model_url: None,
-        emotion_model: "qwen2.5:3b".into(),
+        emotion_worker_token: None,
     };
     let http = reqwest::Client::new();
     AppState::new(pool, cfg, http)

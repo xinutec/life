@@ -35,14 +35,13 @@ pub struct Config {
     /// Path to the house geometry scene (served at GET /api/house).
     pub house_scene: String,
 
-    /// Base URL of an Ollama-compatible model server for emotion suggestions
-    /// (e.g. `http://mac.lan:11434`). OPTIONAL and best-effort: when unset — or
-    /// when the server is unreachable — `/api/wellbeing/suggest-emotions` returns
-    /// no suggestions (a 200, not an error) and the picker uses the plain wheel.
-    /// The note text goes only to this server, so it stays on your own hardware.
-    pub emotion_model_url: Option<String>,
-    /// Model name to request from that server.
-    pub emotion_model: String,
+    /// Shared secret the emotion-suggestion worker authenticates with. The worker
+    /// runs on the Mac and *dials in* (the Mac is a one-way VPN peer, so the pod
+    /// cannot dial it); this is the only credential on that channel, and it is a
+    /// bearer token rather than a session because the worker is not a browser.
+    /// OPTIONAL: unset means no worker channel exists, the queue is never drained,
+    /// and the picker quietly shows the plain wheel.
+    pub emotion_worker_token: Option<String>,
 }
 
 fn env(key: &str) -> Result<String> {
@@ -74,8 +73,7 @@ impl Config {
             static_dir: std::env::var("STATIC_DIR").ok(),
             dev_login_user: std::env::var("DEV_LOGIN_USER").ok(),
             house_scene: env_or("HOUSE_SCENE", "scenes/house.json"),
-            emotion_model_url: std::env::var("EMOTION_MODEL_URL").ok(),
-            emotion_model: env_or("EMOTION_MODEL", "mlx-community/Qwen2.5-7B-Instruct-4bit"),
+            emotion_worker_token: std::env::var("EMOTION_WORKER_TOKEN").ok(),
         })
     }
 }

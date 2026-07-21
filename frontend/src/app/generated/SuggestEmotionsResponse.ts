@@ -2,6 +2,24 @@
 
 /**
  * Response: suggested tokens, most-fitting first, each guaranteed to be one of
- * the request's candidates and not already chosen.
+ * the request's candidates and not already chosen — plus enough state for the
+ * picker to be honest about where they came from.
  */
-export type SuggestEmotionsResponse = { suggestions: Array<string>, };
+export type SuggestEmotionsResponse = { suggestions: Array<string>, 
+/**
+ * These were computed from an EARLIER wording of the note. Worth showing —
+ * they're usually still close — but only if labelled as such.
+ */
+stale: boolean, 
+/**
+ * A generation for the current wording is outstanding, so a better answer is
+ * coming. False when nothing is running, including when no worker exists at
+ * all: the picker must never claim to be thinking when nothing is.
+ */
+pending: boolean, 
+/**
+ * Seconds since that generation was queued, for "thinking for 12s". Counted
+ * from the queue, not from this request, so it survives closing and
+ * reopening the picker. Present only while `pending`.
+ */
+thinkingSecs: number | null, };

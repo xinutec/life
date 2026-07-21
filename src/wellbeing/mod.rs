@@ -5,3 +5,4 @@
 
 pub mod repo;
 pub mod suggest;
+pub mod suggest_store;

@@ -11,62 +11,104 @@ use crate::error::AppError;
 use crate::session::AuthUser;
 use crate::state::AppState;
 use crate::wellbeing::suggest::{self, SuggestEmotionsRequest, SuggestEmotionsResponse};
+use crate::wellbeing::suggest_store;
 
-/// Rank the app's feelings against a check-in note so the picker can offer the
-/// best matches first, personalised with a few-shot of the user's own past
-/// taggings.
+/// What the picker should show for this note, and whether a better answer is on
+/// its way.
 ///
-/// Best-effort throughout: with no model server configured, an empty note, no
-/// candidates, or a server that's slow/down/unreachable, it returns
-/// `{ suggestions: [] }` — a 200, not an error — so the picker falls back to the
-/// plain wheel and the spinner clears. Every returned token is validated against
-/// the request's own candidate list, so a hallucinated feeling can't reach the UI.
+/// The reply is assembled from what is already known, never by waiting on a
+/// model: generation happens on the Mac, out of band (see `suggest_store`). So
+/// there are three honest answers, and this returns whichever applies:
+///
+/// - suggestions computed from exactly this wording — show them;
+/// - suggestions computed from an earlier wording — show them marked `stale`,
+///   because a note usually only drifts, and something close beats a blank space
+///   while the new set is worked out;
+/// - nothing yet — show nothing.
+///
+/// `pending` is set only when a worker has actually been seen recently. A picker
+/// that claimed to be thinking with no model behind it would be lying, which is
+/// worse than offering no suggestions at all.
 pub async fn suggest_emotions(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
     Json(body): Json<SuggestEmotionsRequest>,
 ) -> Result<Json<SuggestEmotionsResponse>, AppError> {
-    let empty = || {
+    let nothing = || {
         Ok(Json(SuggestEmotionsResponse {
             suggestions: vec![],
+            stale: false,
+            pending: false,
+            thinking_secs: None,
         }))
     };
 
     let note = body.note.trim();
-    // Return instantly when the feature is off, so no spinner ever flashes.
-    let Some(base_url) = app.cfg.emotion_model_url.as_deref() else {
-        return empty();
-    };
-    if note.is_empty() || body.candidates.is_empty() {
-        return empty();
+    if note.is_empty() || body.candidates.is_empty() || body.ulid.is_empty() {
+        return nothing();
     }
 
-    // Few-shot: teach the model THIS user's own calibration from their history.
-    // A failed fetch just means a generic (unpersonalised) prompt, not an error.
-    let examples = suggest::fetch_examples(&app.pool, &user.user_id, suggest::MAX_EXAMPLES)
-        .await
-        .unwrap_or_default();
+    let hash = suggest::note_hash(note);
+    let cached = suggest_store::cached(&app.pool, &user.user_id, &body.ulid).await?;
+    let fresh = cached.as_ref().is_some_and(|c| c.note_hash == hash);
 
-    // A model that's slow, down, or unreachable must never fail the picker.
-    let raw = match suggest::request_suggestions(
-        &app.http,
-        base_url,
-        &app.cfg.emotion_model,
-        note,
-        &body.candidates,
-        &examples,
-    )
-    .await
+    // Display-time filtering: the cache holds every valid token, and which of them
+    // are worth offering depends on what is selected right now.
+    let valid: HashSet<&str> = body.candidates.iter().map(|c| c.token.as_str()).collect();
+    let already: HashSet<&str> = body.already.iter().map(|s| s.as_str()).collect();
+    let suggestions = suggest::filter_suggestions(
+        cached.map(|c| c.tokens).unwrap_or_default(),
+        &valid,
+        &already,
+        suggest::MAX_SUGGESTIONS,
+    );
+
+    if fresh {
+        return Ok(Json(SuggestEmotionsResponse {
+            suggestions,
+            stale: false,
+            pending: false,
+            thinking_secs: None,
+        }));
+    }
+
+    // Queue the work even with no worker listening: the note is written now, and
+    // whenever the Mac next wakes up the answer will be waiting the next time this
+    // check-in is opened. Only the *promise* of an answer depends on a live worker.
+    //
+    // The picker asks again every couple of seconds while it waits, so the common
+    // case here is "already queued" — check that first and build nothing.
+    let queued = match suggest_store::pending_for(&app.pool, &user.user_id, &body.ulid, &hash)
+        .await?
     {
-        Ok(raw) => raw,
-        Err(e) => {
-            tracing::info!("emotion suggestions unavailable: {e:#}");
-            return empty();
+        Some(queued) => queued,
+        None => {
+            let examples = suggest::fetch_examples(&app.pool, &user.user_id, suggest::MAX_EXAMPLES)
+                .await
+                .unwrap_or_default();
+            let prompt = suggest::build_prompt(&body.candidates, &examples, note);
+            let tokens: Vec<String> = body.candidates.iter().map(|c| c.token.clone()).collect();
+            let queued = suggest_store::enqueue(
+                &app.pool,
+                &user.user_id,
+                &body.ulid,
+                &hash,
+                &prompt,
+                &tokens,
+            )
+            .await?;
+            // Wake a worker already holding a poll open, so the note is picked up
+            // now rather than at its next look.
+            app.notify_job_queued();
+            queued
         }
     };
 
-    let valid: HashSet<&str> = body.candidates.iter().map(|c| c.token.as_str()).collect();
-    let already: HashSet<&str> = body.already.iter().map(|s| s.as_str()).collect();
-    let suggestions = suggest::filter_suggestions(raw, &valid, &already, suggest::MAX_SUGGESTIONS);
-    Ok(Json(SuggestEmotionsResponse { suggestions }))
+    let pending = app.worker_alive();
+    Ok(Json(SuggestEmotionsResponse {
+        stale: !suggestions.is_empty(),
+        suggestions,
+        pending,
+        thinking_secs: pending.then_some(u32::try_from(queued.thinking_secs).unwrap_or(u32::MAX)),
+    }))
 }

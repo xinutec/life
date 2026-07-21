@@ -1,42 +1,50 @@
-//! Emotion-suggestion parsing + validation, exercised without a model. The
-//! fixtures are the shape of a real OpenAI-compatible chat-completions response
-//! (mlx_lm.server / Ollama `/v1`).
+//! Emotion-suggestion parsing + validation, exercised without a model. What the
+//! worker posts back is the model's raw text, so these fixtures are the shapes a
+//! small local model actually replies with — the JSON it was asked for, the same
+//! JSON in a code fence, and prose when it decided not to cooperate.
 
 use std::collections::HashSet;
 
-use life::wellbeing::suggest::{filter_suggestions, parse_chat_tokens};
-
-/// The ranked list arrives as JSON inside `choices[0].message.content`.
-const CHAT_RESPONSE: &str = r#"{
-  "id": "chatcmpl-1",
-  "object": "chat.completion",
-  "model": "mlx-community/Qwen2.5-7B-Instruct-4bit",
-  "choices": [
-    { "index": 0, "message": { "role": "assistant", "content": "{\"tokens\": [\"Sad/Low\", \"Sad/Empty\", \"Happy/Calm\"]}" } }
-  ]
-}"#;
+use life::wellbeing::suggest::{filter_suggestions, note_hash, parse_tokens};
 
 #[test]
-fn parses_tokens_from_message_content() {
-    let tokens = parse_chat_tokens(CHAT_RESPONSE).expect("parse");
+fn parses_the_ranked_tokens_it_was_asked_for() {
+    let tokens = parse_tokens(r#"{"tokens": ["Sad/Low", "Sad/Empty", "Happy/Calm"]}"#);
     assert_eq!(tokens, vec!["Sad/Low", "Sad/Empty", "Happy/Calm"]);
 }
 
 #[test]
-fn content_that_isnt_the_expected_json_yields_no_tokens() {
-    // The model replied in prose instead of the JSON we asked for: no suggestions,
-    // not an error.
-    let prose =
-        r#"{ "choices": [ { "message": { "content": "I'm not sure which feelings fit." } } ] }"#;
+fn parses_tokens_wrapped_in_a_code_fence() {
+    // Instruction-tuned models fence JSON by reflex, however plainly you ask them
+    // not to. Unwrapping it is cheaper than losing the answer.
+    let fenced = "```json\n{\"tokens\": [\"Sad/Low\"]}\n```";
+    assert_eq!(parse_tokens(fenced), vec!["Sad/Low"]);
+}
+
+#[test]
+fn prose_instead_of_json_yields_no_tokens() {
+    // The model replied in prose: no suggestions, and nothing to report — "I
+    // couldn't find any" is a legitimate answer, not a failure.
     assert_eq!(
-        parse_chat_tokens(prose).expect("parse"),
+        parse_tokens("I'm not sure which feelings fit."),
         Vec::<String>::new()
     );
 }
 
 #[test]
-fn malformed_json_is_an_error_not_a_silent_empty() {
-    assert!(parse_chat_tokens("not json").is_err());
+fn json_without_a_tokens_field_yields_no_tokens() {
+    assert_eq!(
+        parse_tokens(r#"{"feelings": ["Sad/Low"]}"#),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn the_note_hash_ignores_surrounding_whitespace() {
+    // Reopening the picker after a stray trailing space must read as the same
+    // wording, or it would throw away a perfectly good cached answer.
+    assert_eq!(note_hash("  a hard morning\n"), note_hash("a hard morning"));
+    assert_ne!(note_hash("a hard morning"), note_hash("a hard afternoon"));
 }
 
 fn set<'a>(items: &'a [&'a str]) -> HashSet<&'a str> {

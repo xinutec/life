@@ -83,36 +83,40 @@
         <p class="empty">No feelings match “{{ query() }}”.</p>
       }
     } @else {
-      @if (suggesting() || suggestions().length) {
-        <section class="suggested">
+      <!-- Only ever shown when there is something to show, or something genuinely
+           being computed — never a placeholder for a model that isn't there. -->
+      @if (thinking() || suggestions().length) {
+        <section class="suggested" [class.waiting]="thinking()">
           <h2 class="suggested-h">
             <mat-icon>auto_awesome</mat-icon>
             Suggested from your note
+            @if (thinking()) {
+              <span class="elapsed">reading · {{ thinkingSecs() }}s</span>
+            }
           </h2>
-          @if (suggesting()) {
-            <p class="suggesting">Reading your note…</p>
-          } @else {
-            <div class="results">
-              @for (s of suggestions(); track s.token) {
-                <button
-                  type="button"
-                  class="result emo-{{ s.color }}"
-                  [class.on]="isSelected(s.token)"
-                  [attr.aria-pressed]="isSelected(s.token)"
-                  (click)="toggle(s.token)"
-                >
-                  <span class="head">
-                    @if (isSelected(s.token)) {
-                      <mat-icon>check</mat-icon>
-                    }
-                    <span class="name">{{ s.name }}</span>
-                    <span class="path">{{ path(s) }}</span>
-                  </span>
-                  <span class="desc">{{ s.desc }}</span>
-                </button>
-              }
-            </div>
+          @if (stale() && suggestions().length) {
+            <p class="from-earlier">From your note before this edit — rereading it now.</p>
           }
+          <div class="results">
+            @for (s of suggestions(); track s.token) {
+              <button
+                type="button"
+                class="result emo-{{ s.color }}"
+                [class.on]="isSelected(s.token)"
+                [attr.aria-pressed]="isSelected(s.token)"
+                (click)="toggle(s.token)"
+              >
+                <span class="head">
+                  @if (isSelected(s.token)) {
+                    <mat-icon>check</mat-icon>
+                  }
+                  <span class="name">{{ s.name }}</span>
+                  <span class="path">{{ path(s) }}</span>
+                </span>
+                <span class="desc">{{ s.desc }}</span>
+              </button>
+            }
+          </div>
         </section>
       }
 

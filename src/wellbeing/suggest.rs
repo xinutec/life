@@ -2,27 +2,30 @@
 //! from the app's own vocabulary best fit what was written, and return them ranked
 //! so the picker can offer them first.
 //!
-//! The model is a small, self-hosted, Ollama-compatible server (e.g. on the Mac) —
-//! nothing leaves your hardware. It's fed two things: the vocabulary (the
-//! candidate list, sent by the picker so there's no second copy to drift) and a
-//! **few-shot of your own past taggings**, which teaches it your personal
-//! calibration — that you reach for *Low* not *Grief*, *Flat* for a neutral day,
-//! and so on. In an offline eval on held-out check-ins, that personalisation
-//! roughly doubled agreement with what you actually picked.
+//! The model runs on the Mac and nothing leaves your hardware — but the Mac is a
+//! one-way WireGuard peer, so the fleet may not dial it. Generation therefore
+//! happens through a queue the Mac *polls*: this module builds a self-contained
+//! prompt, [`store`](super::suggest_store) parks it as a job, and the worker posts
+//! the model's answer back. The pod only ever accepts connections.
+//!
+//! The prompt is fed two things: the vocabulary (the candidate list, sent by the
+//! picker so there's no second copy to drift) and a **few-shot of your own past
+//! taggings**, which teaches it your personal calibration — that you reach for
+//! *Low* not *Grief*, *Flat* for a neutral day, and so on. In an offline eval on
+//! held-out check-ins, that personalisation roughly doubled agreement with what
+//! you actually picked.
 //!
 //! Every token the model returns is validated against the candidate set in
 //! [`filter_suggestions`]; anything not in the list is dropped, so a hallucinated
-//! feeling can never reach the picker. The whole thing is best-effort: a slow,
-//! down, or unset server just yields no suggestions (see the route handler).
+//! feeling can never reach the picker. The whole thing is best-effort: with no
+//! worker running, the picker simply shows the plain wheel.
 //!
-//! The network call is split from the prompt-building and parsing so the latter
-//! are unit-tested without a model.
+//! Prompt-building and parsing are pure, so they are unit-tested without a model.
 
-use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use sqlx::MySqlPool;
 use std::collections::HashSet;
-use std::time::Duration;
 use ts_rs::TS;
 
 /// Most recent past taggings to few-shot. Enough to teach a style; bounded so the
@@ -30,16 +33,20 @@ use ts_rs::TS;
 pub const MAX_EXAMPLES: u32 = 80;
 /// The most suggestions to surface — a short, glanceable head of the list.
 pub const MAX_SUGGESTIONS: usize = 6;
-/// Hard cap on the whole call: a reachable model answers in ~1-3s; anything longer
-/// (a slow or half-up server) is abandoned so the picker's spinner never hangs.
-const TIMEOUT: Duration = Duration::from_secs(10);
+/// How many to keep in the cache. More than are shown, because the ones already
+/// chosen are dropped at display time: caching exactly six would mean a check-in
+/// where you'd picked three of them showed only three.
+pub const MAX_CACHED: usize = 12;
 
-/// Request from the picker: the note, the whole feelings vocabulary as candidates,
-/// and the tokens already chosen.
+/// Request from the picker: which check-in this is, the note, the whole feelings
+/// vocabulary as candidates, and the tokens already chosen.
 #[derive(Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct SuggestEmotionsRequest {
+    /// The check-in being edited — the cache key, so reopening the picker on an
+    /// unchanged note costs a lookup rather than a fresh generation.
+    pub ulid: String,
     pub note: String,
     pub candidates: Vec<EmotionCandidate>,
     #[serde(default)]
@@ -56,12 +63,24 @@ pub struct EmotionCandidate {
 }
 
 /// Response: suggested tokens, most-fitting first, each guaranteed to be one of
-/// the request's candidates and not already chosen.
+/// the request's candidates and not already chosen — plus enough state for the
+/// picker to be honest about where they came from.
 #[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct SuggestEmotionsResponse {
     pub suggestions: Vec<String>,
+    /// These were computed from an EARLIER wording of the note. Worth showing —
+    /// they're usually still close — but only if labelled as such.
+    pub stale: bool,
+    /// A generation for the current wording is outstanding, so a better answer is
+    /// coming. False when nothing is running, including when no worker exists at
+    /// all: the picker must never claim to be thinking when nothing is.
+    pub pending: bool,
+    /// Seconds since that generation was queued, for "thinking for 12s". Counted
+    /// from the queue, not from this request, so it survives closing and
+    /// reopening the picker. Present only while `pending`.
+    pub thinking_secs: Option<u32>,
 }
 
 /// One past tagging, for the few-shot: what was written, and what was chosen.
@@ -77,8 +96,8 @@ Only choose feelings that are really there: returning few, or none, is correct �
 Never invent a feeling; every token you return must be copied exactly from the list.";
 
 /// The system turn: instructions, the candidate menu, then (if any) the user's own
-/// past taggings as few-shot. The whole thing is fixed between check-ins, so an
-/// Ollama-compatible server can cache its KV prefix and only re-read the note.
+/// past taggings as few-shot. The whole thing is fixed between check-ins, so the
+/// worker's model can cache its KV prefix and only re-read the note.
 pub fn build_system(candidates: &[EmotionCandidate], examples: &[EmotionExample]) -> String {
     let mut s = String::from(SYSTEM_INSTRUCTIONS);
     s.push_str("\n\nFeelings to choose from (token — meaning):\n");
@@ -105,11 +124,33 @@ pub fn build_system(candidates: &[EmotionCandidate], examples: &[EmotionExample]
     s
 }
 
-fn build_user(note: &str) -> String {
+/// The user turn: the note, and the shape of the answer.
+pub fn build_user(note: &str) -> String {
     format!(
         "Note:\n{note}\n\nReturn JSON {{\"tokens\": [up to {MAX_SUGGESTIONS} tokens copied exactly \
          from the list, most-fitting first]}}."
     )
+}
+
+/// The whole prompt as the worker receives it — self-contained, so the worker
+/// needs no database and no copy of the vocabulary.
+pub fn build_prompt(
+    candidates: &[EmotionCandidate],
+    examples: &[EmotionExample],
+    note: &str,
+) -> serde_json::Value {
+    serde_json::json!({
+        "system": build_system(candidates, examples),
+        "user": build_user(note),
+    })
+}
+
+/// Identify a note by content. Comparing hashes rather than text keeps the
+/// cache row small and makes "is this still the wording those came from?" a
+/// fixed-cost check. Whitespace-trimmed, so re-opening after a stray space does
+/// not look like an edit.
+pub fn note_hash(note: &str) -> String {
+    hex::encode(Sha256::digest(note.trim().as_bytes()))
 }
 
 /// Fetch the user's own labelled check-ins (note + chosen feelings) for the
@@ -139,70 +180,31 @@ pub async fn fetch_examples(
         .collect())
 }
 
-/// Ask the model to rank the candidates for this note. Returns the raw tokens it
-/// chose, still *unvalidated* — the caller filters them against the vocabulary.
-pub async fn request_suggestions(
-    http: &reqwest::Client,
-    base_url: &str,
-    model: &str,
-    note: &str,
-    candidates: &[EmotionCandidate],
-    examples: &[EmotionExample],
-) -> Result<Vec<String>> {
-    let body = serde_json::json!({
-        "model": model,
-        "temperature": 0,
-        "max_tokens": 128,
-        "messages": [
-            { "role": "system", "content": build_system(candidates, examples) },
-            { "role": "user", "content": build_user(note) },
-        ],
-    });
-
-    // OpenAI-compatible chat completions — spoken by mlx_lm.server (the Mac,
-    // reusing the Qwen the recall stack already runs) and by Ollama's /v1 alike.
-    let url = format!("{}/v1/chat/completions", base_url.trim_end_matches('/'));
-    let resp = http
-        .post(&url)
-        .timeout(TIMEOUT)
-        .json(&body)
-        .send()
-        .await
-        .context("emotion model request failed")?;
-    if !resp.status().is_success() {
-        anyhow::bail!("emotion model returned HTTP {}", resp.status());
-    }
-    let text = resp.text().await.context("emotion model read failed")?;
-    parse_chat_tokens(&text)
-}
-
-/// Pull the ranked tokens out of an OpenAI-compatible chat-completions response,
-/// whose `choices[0].message.content` is itself the JSON `{"tokens": [...]}` we
-/// asked for. Pure, so it is tested against captured JSON. Content that isn't the
-/// expected shape yields no tokens rather than erroring — the model simply gave us
-/// nothing usable.
-pub fn parse_chat_tokens(response_json: &str) -> Result<Vec<String>> {
-    let v: serde_json::Value =
-        serde_json::from_str(response_json).context("emotion model response is not JSON")?;
-    let content = v
-        .get("choices")
-        .and_then(|c| c.get(0))
-        .and_then(|c| c.get("message"))
-        .and_then(|m| m.get("content"))
-        .and_then(|c| c.as_str())
-        .context("emotion model response has no choices[0].message.content")?;
-    let Ok(inner) = serde_json::from_str::<serde_json::Value>(content) else {
-        return Ok(Vec::new());
+/// Pull the ranked tokens out of what the model wrote — the JSON `{"tokens": [...]}`
+/// it was asked for. Pure, so it is tested against captured output. Anything that
+/// isn't that shape yields no tokens rather than an error: the model simply gave us
+/// nothing usable, which is a legitimate (if disappointing) answer, not a failure
+/// worth surfacing.
+pub fn parse_tokens(content: &str) -> Vec<String> {
+    // Models sometimes wrap JSON in a ```json fence despite being asked not to.
+    let trimmed = content.trim();
+    let body = trimmed
+        .strip_prefix("```json")
+        .or_else(|| trimmed.strip_prefix("```"))
+        .and_then(|s| s.rsplit_once("```"))
+        .map(|(head, _)| head)
+        .unwrap_or(trimmed);
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(body.trim()) else {
+        return Vec::new();
     };
-    Ok(inner
-        .get("tokens")
+    v.get("tokens")
         .and_then(|t| t.as_array())
         .map(|arr| {
             arr.iter()
                 .filter_map(|t| t.as_str().map(str::to_owned))
                 .collect()
         })
-        .unwrap_or_default())
+        .unwrap_or_default()
 }
 
 /// Keep only real, not-already-chosen suggestions, de-duplicated in the model's

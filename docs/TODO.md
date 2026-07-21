@@ -447,6 +447,22 @@ through something that resets the NC session.
 - [x] **Frontend test runner** — vitest via `ng test` (43 specs as of
       2026-07-02: sw-updates, conflict merge, trash/conflicts screens, todo
       graph, stores, settings, shopping scan).
+- [~] **Emotion suggestions in the feelings picker** — a small local model reads
+      the check-in note and offers the feelings that fit, at the head of the
+      wheel. Personalised: the prompt carries the last 80 of your own labelled
+      check-ins as few-shot, which roughly doubled agreement with your real
+      picks in an offline eval on held-out entries (13% → 25% on a 3B, 50% on
+      Qwen2.5-7B-4bit). Suggestions are cached per check-in (`emotion_suggestions`,
+      migration 0037) so an unchanged note answers from a lookup; edit the note
+      and the previous set stays on screen, labelled, while the new one runs.
+      **Generation is Mac-initiated** (`emotion_jobs` + `/api/emotion-worker/*`,
+      `tools/emotion_worker.py`): the model is Apple-Silicon MLX on the Mac, and
+      the fleet may not open connections toward it (one-way WireGuard peer), so
+      the worker polls for work and posts answers back. The picker only claims to
+      be thinking when a worker has actually been seen — no spinner in front of a
+      model that isn't there. REMAINING: run the worker on the Mac (launchd agent
+      in `deploy/hm-agents.nix`, needs `~/.config/life/worker.env` + the matching
+      `EMOTION_WORKER_TOKEN` in `life-secret`).
 
 ## Backlog
 

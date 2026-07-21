@@ -196,8 +196,9 @@ async function mockApi(page: Page): Promise<void> {
     r.request().method() === 'GET' ? r.fulfill({ json: [] }) : r.fulfill({ status: 204, body: '' }),
   );
   await page.route('**/api/me', (r) => r.fulfill({ json: ME }));
+  // No worker in a test run: nothing suggested, nothing pretending to think.
   await page.route('**/api/wellbeing/suggest-emotions', (r) =>
-    r.fulfill({ json: { suggestions: [] } }),
+    r.fulfill({ json: { suggestions: [], stale: false, pending: false, thinkingSecs: null } }),
   );
   await page.route('**/api/items*', (r) => r.fulfill({ json: ITEMS }));
   await page.route('**/api/locations*', (r) => r.fulfill({ json: LOCATIONS }));

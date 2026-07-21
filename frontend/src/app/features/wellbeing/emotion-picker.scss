@@ -165,8 +165,8 @@ header {
   white-space: normal;
 }
 
-// Claude's picks for the note, at the head of the mosaic — the same row grammar
-// as search results, under a quiet heading, above the full wheel.
+// The model's picks for the note, at the head of the mosaic — the same row
+// grammar as search results, under a quiet heading, above the full wheel.
 .suggested {
   margin-bottom: 0.9rem;
 
@@ -185,10 +185,27 @@ header {
       font-size: 18px;
     }
   }
-  .suggesting {
-    margin: 0.25rem 0 0.5rem;
+
+  // The elapsed count sits in the heading rather than replacing the list: it is
+  // a status, and the words underneath stay usable the whole time it runs.
+  .elapsed {
+    margin-left: auto;
+    font: var(--mat-sys-label-small);
+    font-variant-numeric: tabular-nums; // so the seconds don't jitter the row
+    font-weight: 400;
+    opacity: 0.75;
+  }
+
+  .from-earlier {
+    margin: -0.3rem 0 0.5rem;
     color: var(--mat-sys-on-surface-variant);
-    font: var(--mat-sys-body-medium);
+    font: var(--mat-sys-body-small);
+  }
+
+  // Suggestions computed from the previous wording read as provisional, not as
+  // an answer to what is written now.
+  &.waiting .results {
+    opacity: 0.62;
   }
 }
 

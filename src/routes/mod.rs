@@ -3,6 +3,7 @@
 pub mod api;
 pub mod auth;
 pub mod conflicts;
+pub mod emotion_worker;
 pub mod inventory;
 pub mod products;
 pub mod recipes;
@@ -81,6 +82,11 @@ pub fn router(state: AppState) -> Router {
             "/wellbeing/suggest-emotions",
             post(wellbeing::suggest_emotions),
         )
+        // The Mac's suggestion worker dials IN here — it holds the model, and the
+        // fleet may not open connections toward it. Bearer token, not a session:
+        // it is a daemon acting for nobody.
+        .route("/emotion-worker/next", get(emotion_worker::next))
+        .route("/emotion-worker/{id}/result", post(emotion_worker::result))
         .route("/telemetry", post(telemetry::record))
         .route("/conflicts", get(conflicts::list).post(conflicts::create))
         .route("/conflicts/{id}/resolve", post(conflicts::resolve))

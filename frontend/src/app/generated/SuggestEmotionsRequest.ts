@@ -2,7 +2,12 @@
 import type { EmotionCandidate } from "./EmotionCandidate";
 
 /**
- * Request from the picker: the note, the whole feelings vocabulary as candidates,
- * and the tokens already chosen.
+ * Request from the picker: which check-in this is, the note, the whole feelings
+ * vocabulary as candidates, and the tokens already chosen.
  */
-export type SuggestEmotionsRequest = { note: string, candidates: Array<EmotionCandidate>, already: Array<string>, };
+export type SuggestEmotionsRequest = { 
+/**
+ * The check-in being edited — the cache key, so reopening the picker on an
+ * unchanged note costs a lookup rather than a fresh generation.
+ */
+ulid: string, note: string, candidates: Array<EmotionCandidate>, already: Array<string>, };
