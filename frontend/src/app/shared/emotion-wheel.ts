@@ -179,10 +179,28 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
       },
       {
         name: 'Optimistic',
-        desc: 'Expecting things to turn out well.',
+        // Broadened past "expecting good" to include the work of getting there:
+        // Hopeful has arrived, Reaching is still on the way — the commoner state on
+        // a hard day, and the wheel jumped straight from Discouraged to Hopeful.
+        desc: 'Turned toward a better outcome — expecting it, or working your way toward it.',
         leaves: [
           { name: 'Hopeful', desc: 'Expecting good things and looking forward.' },
           { name: 'Inspired', desc: 'Moved and uplifted to act or create.' },
+          {
+            name: 'Reaching',
+            desc: "Working toward a better feeling you haven't reached yet — trying, on the days it doesn't come on its own.",
+          },
+        ],
+      },
+      {
+        // The wheel could name the void — Sad › Empty, "hollow and without feeling
+        // or meaning" — but not its opposite. It knew the absence of a point and had
+        // no word for the presence of one.
+        name: 'Meaningful',
+        desc: 'A sense that this has a point — that what you do, or endure, matters.',
+        leaves: [
+          { name: 'Purposeful', desc: "You have a direction; there's something you're for." },
+          { name: 'Useful', desc: 'Your being here makes a difference to something beyond you.' },
         ],
       },
       {
