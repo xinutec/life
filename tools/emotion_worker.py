@@ -20,7 +20,7 @@ Environment:
   LIFE_URL              base URL of the life server (default https://life.xinutec.org)
   EMOTION_WORKER_TOKEN  shared secret; must match the server's (required)
   EMOTION_MODEL         MLX model id (default mlx-community/Qwen2.5-7B-Instruct-4bit)
-  EMOTION_IDLE_UNLOAD   seconds of quiet before the model is released (default 900)
+  EMOTION_IDLE_UNLOAD   seconds of quiet before the model is released (default 300)
 
 Needs an interpreter with `mlx-lm` installed. On this Mac that is recall's venv,
 which already has both the library and this model cached:
@@ -80,9 +80,11 @@ def post_result(base: str, token: str, job_id: int, *, content: str | None, erro
 class Model:
     """The MLX model, loaded on demand and released when it goes unused.
 
-    Loading costs a few seconds off a warm page cache — paid on the first note
-    after a quiet spell, and invisible in practice because suggestions are
-    cached: nobody waits on this to read the check-in they just wrote.
+    Five minutes of quiet is enough to let go of ~4.3 GB. Loading it back costs a
+    few seconds off a warm page cache — paid on the first note after a lull, and
+    invisible in practice because suggestions are cached: nobody sits waiting on
+    this to read a check-in they just wrote. Holding the weights longer would buy
+    speed nobody is waiting for, at recall's expense.
     """
 
     def __init__(self, name: str, idle_unload: float) -> None:
@@ -170,7 +172,7 @@ def main() -> int:
     base = os.environ.get("LIFE_URL", "https://life.xinutec.org").rstrip("/")
     model = Model(
         os.environ.get("EMOTION_MODEL", DEFAULT_MODEL),
-        float(os.environ.get("EMOTION_IDLE_UNLOAD", "900")),
+        float(os.environ.get("EMOTION_IDLE_UNLOAD", "300")),
     )
     LOG.info("polling %s for emotion jobs", base)
     run(base, token, model)
