@@ -36,6 +36,9 @@ export type { ConflictEntry } from './generated/ConflictEntry';
 export type { ConflictKind } from './generated/ConflictKind';
 export type { TrashEntry } from './generated/TrashEntry';
 export type { TrashKind } from './generated/TrashKind';
+export type { SuggestEmotionsRequest } from './generated/SuggestEmotionsRequest';
+export type { SuggestEmotionsResponse } from './generated/SuggestEmotionsResponse';
+export type { EmotionCandidate } from './generated/EmotionCandidate';
 
 import type { ItemCategory as ItemCategoryT } from './generated/ItemCategory';
 

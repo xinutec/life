@@ -4,3 +4,4 @@
 //! trash-restore path (the one deliberate undelete; sync pushes are set-only).
 
 pub mod repo;
+pub mod suggest;

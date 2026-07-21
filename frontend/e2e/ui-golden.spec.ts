@@ -53,6 +53,9 @@ async function mockApi(page: Page): Promise<void> {
     r.request().method() === 'GET' ? r.fulfill({ json: [] }) : r.fulfill({ status: 204, body: '' }),
   );
   await page.route('**/api/me', (r) => r.fulfill({ json: ME }));
+  await page.route('**/api/wellbeing/suggest-emotions', (r) =>
+    r.fulfill({ json: { suggestions: [] } }),
+  );
   const sync = (docs: typeof TODO[]) => (r: Parameters<Parameters<Page['route']>[1]>[0]) => {
     if (r.request().method() === 'POST') return r.fulfill({ json: [] });
     const since = Number(new URL(r.request().url()).searchParams.get('since') ?? '0');

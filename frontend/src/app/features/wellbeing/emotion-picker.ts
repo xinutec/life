@@ -1,5 +1,6 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
@@ -7,13 +8,16 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 
+import { LifeApi } from '../../life-api';
 import {
+  EMOTION_NODES,
   EMOTION_WHEEL,
   EmotionCore,
   EmotionNode,
   emotionColor,
   emotionDesc,
   emotionLabel,
+  emotionNode,
   emotionToken,
   searchEmotions,
 } from '../../shared/emotion-wheel';
@@ -21,6 +25,8 @@ import {
 export interface EmotionPickerData {
   /** The emotions already on the entry (qualified tokens, or legacy bare words). */
   selected: string[];
+  /** The check-in note, if any — used to fetch Claude's suggested feelings. */
+  note?: string;
 }
 
 /** Browse and search the feelings wheel to add/remove emotions on a check-in.
@@ -55,6 +61,7 @@ export interface EmotionPickerData {
 export class EmotionPicker {
   private ref = inject<MatDialogRef<EmotionPicker, string[] | undefined>>(MatDialogRef);
   private data = inject<EmotionPickerData>(MAT_DIALOG_DATA);
+  private api = inject(LifeApi);
 
   readonly wheel = EMOTION_WHEEL;
   readonly query = signal('');
@@ -65,6 +72,34 @@ export class EmotionPicker {
   readonly results = computed(() => searchEmotions(this.query()));
   readonly count = computed(() => this.selected().size);
   readonly selectedList = computed(() => [...this.selected()]);
+
+  // Claude's suggestions from the note, shown at the head of the mosaic. Pure
+  // enhancement: they arrive a beat after the picker opens, and if the note is
+  // empty or the call fails (offline, no API key) the picker is unchanged.
+  readonly suggesting = signal(false);
+  readonly suggestions = signal<readonly EmotionNode[]>([]);
+
+  constructor() {
+    const note = (this.data.note ?? '').trim();
+    if (!note) return;
+    // The candidates are the whole wheel — sending them keeps the server's ranking
+    // in lockstep with exactly what the user can pick, with no second copy to drift.
+    const candidates = EMOTION_NODES.map((n) => ({ token: n.token, desc: n.desc }));
+    const already = [...this.selected()];
+    this.suggesting.set(true);
+    this.api
+      .suggestEmotions({ note, candidates, already })
+      .pipe(takeUntilDestroyed())
+      .subscribe({
+        next: (r) => {
+          this.suggestions.set(
+            (r?.suggestions ?? []).map(emotionNode).filter((n): n is EmotionNode => !!n),
+          );
+          this.suggesting.set(false);
+        },
+        error: () => this.suggesting.set(false),
+      });
+  }
 
   /** The qualified token for a node — group or leaf — under a given core. */
   tokenOf(core: EmotionCore, name: string): string {

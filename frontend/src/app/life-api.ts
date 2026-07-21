@@ -16,6 +16,8 @@ import {
   RecipeIngredient,
   ShopFind,
   ShoppingItem,
+  SuggestEmotionsRequest,
+  SuggestEmotionsResponse,
   TelemetryEvent,
   TrashEntry,
   TrashKind,
@@ -32,6 +34,13 @@ export class LifeApi {
   }
   logout(): Observable<unknown> {
     return this.http.post('/logout', {});
+  }
+
+  /** Ask the backend to rank feelings against a check-in note (Claude, online-only).
+   *  Best-effort: with no API key or offline it resolves to an empty list, so the
+   *  picker degrades to the plain wheel. */
+  suggestEmotions(body: SuggestEmotionsRequest): Observable<SuggestEmotionsResponse> {
+    return this.http.post<SuggestEmotionsResponse>('/api/wellbeing/suggest-emotions', body);
   }
 
   locations(): Observable<Loc[]> {

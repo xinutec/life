@@ -142,7 +142,7 @@ export class WellbeingEntry implements OnDestroy {
    *  the new selection (Cancel returns undefined and leaves it untouched). */
   editEmotions(): void {
     const ref = this.dialog.open(EmotionPicker, {
-      data: { selected: [...(this.entry()?.emotions ?? [])] },
+      data: { selected: [...(this.entry()?.emotions ?? [])], note: this.note() },
       panelClass: 'emotion-pane',
       width: '100%',
       maxWidth: '100vw',

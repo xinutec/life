@@ -1,22 +1,29 @@
 import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { Observable, of } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 
+import { LifeApi } from '../../life-api';
+import type { SuggestEmotionsRequest, SuggestEmotionsResponse } from '../../models';
 import { EMOTION_WHEEL } from '../../shared/emotion-wheel';
 import { EmotionPicker } from './emotion-picker';
 
 describe('EmotionPicker', () => {
-  function setup(selected: string[]) {
+  function setup(selected: string[], opts: { note?: string; suggestions?: string[] } = {}) {
     const ref = { close: vi.fn() };
+    const suggestEmotions = vi.fn<
+      (body: SuggestEmotionsRequest) => Observable<SuggestEmotionsResponse>
+    >(() => of({ suggestions: opts.suggestions ?? [] }));
     TestBed.configureTestingModule({
       imports: [EmotionPicker],
       providers: [
         { provide: MatDialogRef, useValue: ref },
-        { provide: MAT_DIALOG_DATA, useValue: { selected } },
+        { provide: MAT_DIALOG_DATA, useValue: { selected, note: opts.note } },
+        { provide: LifeApi, useValue: { suggestEmotions } },
       ],
     });
     const fixture = TestBed.createComponent(EmotionPicker);
-    return { c: fixture.componentInstance, fixture, ref };
+    return { c: fixture.componentInstance, fixture, ref, suggestEmotions };
   }
 
   it('seeds from a token selection', () => {
@@ -117,5 +124,33 @@ describe('EmotionPicker', () => {
 
     c.cancel();
     expect(ref.close).toHaveBeenLastCalledWith(undefined);
+  });
+
+  it('asks for suggestions when opened with a note, and resolves the nodes', () => {
+    const { c, suggestEmotions } = setup([], {
+      note: 'A tough day, feeling down',
+      suggestions: ['Sad/Low', 'Sad/Empty'],
+    });
+    // The whole wheel was offered as candidates, the note passed through.
+    expect(suggestEmotions).toHaveBeenCalledOnce();
+    const body = suggestEmotions.mock.calls[0][0];
+    expect(body.note).toBe('A tough day, feeling down');
+    expect(body.candidates.length).toBeGreaterThan(100);
+    // Returned tokens resolve to full nodes (name + colour) for rendering.
+    expect(c.suggesting()).toBe(false);
+    expect(c.suggestions().map((n) => n.token)).toEqual(['Sad/Low', 'Sad/Empty']);
+    expect(c.suggestions()[0].name).toBe('Low');
+  });
+
+  it('drops a suggested token the vocabulary no longer knows', () => {
+    const { c } = setup([], { note: 'x', suggestions: ['Sad/Low', 'Sad/Retired-word'] });
+    expect(c.suggestions().map((n) => n.token)).toEqual(['Sad/Low']);
+  });
+
+  it('does not call the suggest API when there is no note', () => {
+    const { c, suggestEmotions } = setup(['Angry/Numb']);
+    expect(suggestEmotions).not.toHaveBeenCalled();
+    expect(c.suggesting()).toBe(false);
+    expect(c.suggestions()).toEqual([]);
   });
 });

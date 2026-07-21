@@ -11,6 +11,7 @@ pub mod sync;
 pub mod telemetry;
 pub mod todo;
 pub mod trash;
+pub mod wellbeing;
 
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
@@ -75,6 +76,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/sync/wellbeing",
             get(sync::pull_wellbeing).post(sync::push_wellbeing),
+        )
+        .route(
+            "/wellbeing/suggest-emotions",
+            post(wellbeing::suggest_emotions),
         )
         .route("/telemetry", post(telemetry::record))
         .route("/conflicts", get(conflicts::list).post(conflicts::create))
