@@ -1,16 +1,19 @@
 //! Emotion-suggestion parsing + validation, exercised without a model. The
-//! fixtures are the shape of a real Ollama `/api/chat` response.
+//! fixtures are the shape of a real OpenAI-compatible chat-completions response
+//! (mlx_lm.server / Ollama `/v1`).
 
 use std::collections::HashSet;
 
 use life::wellbeing::suggest::{filter_suggestions, parse_chat_tokens};
 
-/// Ollama returns the ranked list as JSON inside `message.content` (we asked for
-/// `format: json`).
+/// The ranked list arrives as JSON inside `choices[0].message.content`.
 const CHAT_RESPONSE: &str = r#"{
-  "model": "qwen2.5:3b",
-  "message": { "role": "assistant", "content": "{\"tokens\": [\"Sad/Low\", \"Sad/Empty\", \"Happy/Calm\"]}" },
-  "done": true
+  "id": "chatcmpl-1",
+  "object": "chat.completion",
+  "model": "mlx-community/Qwen2.5-7B-Instruct-4bit",
+  "choices": [
+    { "index": 0, "message": { "role": "assistant", "content": "{\"tokens\": [\"Sad/Low\", \"Sad/Empty\", \"Happy/Calm\"]}" } }
+  ]
 }"#;
 
 #[test]
@@ -23,7 +26,8 @@ fn parses_tokens_from_message_content() {
 fn content_that_isnt_the_expected_json_yields_no_tokens() {
     // The model replied in prose instead of the JSON we asked for: no suggestions,
     // not an error.
-    let prose = r#"{ "message": { "content": "I'm not sure which feelings fit." }, "done": true }"#;
+    let prose =
+        r#"{ "choices": [ { "message": { "content": "I'm not sure which feelings fit." } } ] }"#;
     assert_eq!(
         parse_chat_tokens(prose).expect("parse"),
         Vec::<String>::new()

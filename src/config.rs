@@ -75,7 +75,7 @@ impl Config {
             dev_login_user: std::env::var("DEV_LOGIN_USER").ok(),
             house_scene: env_or("HOUSE_SCENE", "scenes/house.json"),
             emotion_model_url: std::env::var("EMOTION_MODEL_URL").ok(),
-            emotion_model: env_or("EMOTION_MODEL", "qwen2.5:3b"),
+            emotion_model: env_or("EMOTION_MODEL", "mlx-community/Qwen2.5-7B-Instruct-4bit"),
         })
     }
 }

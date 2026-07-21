@@ -25,9 +25,6 @@ use std::collections::HashSet;
 use std::time::Duration;
 use ts_rs::TS;
 
-/// Context window to request — must hold the candidate list + few-shot + note.
-/// Ollama defaults to 2048, which silently truncates our prompt.
-const NUM_CTX: u32 = 8192;
 /// Most recent past taggings to few-shot. Enough to teach a style; bounded so the
 /// prompt stays a fixed, cacheable size as history grows.
 pub const MAX_EXAMPLES: u32 = 80;
@@ -154,17 +151,17 @@ pub async fn request_suggestions(
 ) -> Result<Vec<String>> {
     let body = serde_json::json!({
         "model": model,
-        "stream": false,
-        "format": "json",
-        "keep_alive": -1,
-        "options": { "temperature": 0, "num_predict": 128, "num_ctx": NUM_CTX },
+        "temperature": 0,
+        "max_tokens": 128,
         "messages": [
             { "role": "system", "content": build_system(candidates, examples) },
             { "role": "user", "content": build_user(note) },
         ],
     });
 
-    let url = format!("{}/api/chat", base_url.trim_end_matches('/'));
+    // OpenAI-compatible chat completions — spoken by mlx_lm.server (the Mac,
+    // reusing the Qwen the recall stack already runs) and by Ollama's /v1 alike.
+    let url = format!("{}/v1/chat/completions", base_url.trim_end_matches('/'));
     let resp = http
         .post(&url)
         .timeout(TIMEOUT)
@@ -179,18 +176,21 @@ pub async fn request_suggestions(
     parse_chat_tokens(&text)
 }
 
-/// Pull the ranked tokens out of an Ollama `/api/chat` response, whose
-/// `message.content` is itself the JSON `{"tokens": [...]}` we asked for. Pure, so
-/// it is tested against captured JSON. Content that isn't the expected shape yields
-/// no tokens rather than erroring — the model simply gave us nothing usable.
+/// Pull the ranked tokens out of an OpenAI-compatible chat-completions response,
+/// whose `choices[0].message.content` is itself the JSON `{"tokens": [...]}` we
+/// asked for. Pure, so it is tested against captured JSON. Content that isn't the
+/// expected shape yields no tokens rather than erroring — the model simply gave us
+/// nothing usable.
 pub fn parse_chat_tokens(response_json: &str) -> Result<Vec<String>> {
     let v: serde_json::Value =
         serde_json::from_str(response_json).context("emotion model response is not JSON")?;
     let content = v
-        .get("message")
+        .get("choices")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("message"))
         .and_then(|m| m.get("content"))
         .and_then(|c| c.as_str())
-        .context("emotion model response has no message.content")?;
+        .context("emotion model response has no choices[0].message.content")?;
     let Ok(inner) = serde_json::from_str::<serde_json::Value>(content) else {
         return Ok(Vec::new());
     };
