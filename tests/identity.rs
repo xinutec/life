@@ -15,7 +15,8 @@ fn cfg() -> Config {
         static_dir: None,
         dev_login_user: None,
         house_scene: "scenes/house.json".into(),
-        anthropic_api_key: None,
+        emotion_model_url: None,
+        emotion_model: "qwen2.5:3b".into(),
     }
 }
 

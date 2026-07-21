@@ -1,50 +1,38 @@
-//! Emotion-suggestion parsing + validation, exercised without the network. The
-//! `tokens` fixture is the shape of a real Anthropic Messages response to a forced
-//! `record_suggestions` tool call.
+//! Emotion-suggestion parsing + validation, exercised without a model. The
+//! fixtures are the shape of a real Ollama `/api/chat` response.
 
 use std::collections::HashSet;
 
-use life::wellbeing::suggest::{filter_suggestions, parse_tool_tokens};
+use life::wellbeing::suggest::{filter_suggestions, parse_chat_tokens};
 
-/// A forced-tool-call response: `content` carries a single `tool_use` block whose
-/// `input.tokens` is the ranked list. (Real responses also prefix an optional text
-/// block; include one to prove we scan past it.)
-const TOOL_RESPONSE: &str = r#"{
-  "id": "msg_01",
-  "type": "message",
-  "role": "assistant",
-  "content": [
-    { "type": "text", "text": "Here are the fitting feelings." },
-    {
-      "type": "tool_use",
-      "id": "toolu_01",
-      "name": "record_suggestions",
-      "input": { "tokens": ["Sad/Low", "Neutral/Flat", "Happy/Calm"] }
-    }
-  ],
-  "stop_reason": "tool_use"
+/// Ollama returns the ranked list as JSON inside `message.content` (we asked for
+/// `format: json`).
+const CHAT_RESPONSE: &str = r#"{
+  "model": "qwen2.5:3b",
+  "message": { "role": "assistant", "content": "{\"tokens\": [\"Sad/Low\", \"Sad/Empty\", \"Happy/Calm\"]}" },
+  "done": true
 }"#;
 
 #[test]
-fn parses_tokens_from_the_tool_call() {
-    let tokens = parse_tool_tokens(TOOL_RESPONSE).expect("parse");
-    assert_eq!(tokens, vec!["Sad/Low", "Neutral/Flat", "Happy/Calm"]);
+fn parses_tokens_from_message_content() {
+    let tokens = parse_chat_tokens(CHAT_RESPONSE).expect("parse");
+    assert_eq!(tokens, vec!["Sad/Low", "Sad/Empty", "Happy/Calm"]);
 }
 
 #[test]
-fn a_text_only_response_yields_no_tokens() {
-    // The model answered in prose instead of calling the tool: no suggestions,
+fn content_that_isnt_the_expected_json_yields_no_tokens() {
+    // The model replied in prose instead of the JSON we asked for: no suggestions,
     // not an error.
-    let text_only = r#"{ "content": [ { "type": "text", "text": "I'm not sure." } ] }"#;
+    let prose = r#"{ "message": { "content": "I'm not sure which feelings fit." }, "done": true }"#;
     assert_eq!(
-        parse_tool_tokens(text_only).expect("parse"),
+        parse_chat_tokens(prose).expect("parse"),
         Vec::<String>::new()
     );
 }
 
 #[test]
 fn malformed_json_is_an_error_not_a_silent_empty() {
-    assert!(parse_tool_tokens("not json").is_err());
+    assert!(parse_chat_tokens("not json").is_err());
 }
 
 fn set<'a>(items: &'a [&'a str]) -> HashSet<&'a str> {

@@ -3,18 +3,6 @@ import type { EmotionCandidate } from "./EmotionCandidate";
 
 /**
  * Request from the picker: the note, the whole feelings vocabulary as candidates,
- * and the tokens already chosen (never re-suggested).
+ * and the tokens already chosen.
  */
-export type SuggestEmotionsRequest = { 
-/**
- * The check-in note, as typed.
- */
-note: string, 
-/**
- * Every feeling the picker can offer — token plus its gloss.
- */
-candidates: Array<EmotionCandidate>, 
-/**
- * Tokens already on the entry; excluded from the suggestions.
- */
-already: Array<string>, };
+export type SuggestEmotionsRequest = { note: string, candidates: Array<EmotionCandidate>, already: Array<string>, };

@@ -13,29 +13,57 @@ use crate::state::AppState;
 use crate::wellbeing::suggest::{self, SuggestEmotionsRequest, SuggestEmotionsResponse};
 
 /// Rank the app's feelings against a check-in note so the picker can offer the
-/// best matches first. Online-only and best-effort: with no API key configured,
-/// an empty note, or no candidates it returns `{ suggestions: [] }` — a 200, not
-/// an error — so the picker falls back to the plain wheel and never blocks on the
-/// network. Every returned token is validated against the request's own candidate
-/// list, so a hallucinated feeling can never reach the client.
+/// best matches first, personalised with a few-shot of the user's own past
+/// taggings.
+///
+/// Best-effort throughout: with no model server configured, an empty note, no
+/// candidates, or a server that's slow/down/unreachable, it returns
+/// `{ suggestions: [] }` — a 200, not an error — so the picker falls back to the
+/// plain wheel and the spinner clears. Every returned token is validated against
+/// the request's own candidate list, so a hallucinated feeling can't reach the UI.
 pub async fn suggest_emotions(
     State(app): State<AppState>,
-    AuthUser(_user): AuthUser,
+    AuthUser(user): AuthUser,
     Json(body): Json<SuggestEmotionsRequest>,
 ) -> Result<Json<SuggestEmotionsResponse>, AppError> {
-    let note = body.note.trim();
-    let Some(api_key) = app.cfg.anthropic_api_key.as_deref() else {
-        return Ok(Json(SuggestEmotionsResponse {
+    let empty = || {
+        Ok(Json(SuggestEmotionsResponse {
             suggestions: vec![],
-        }));
+        }))
+    };
+
+    let note = body.note.trim();
+    // Return instantly when the feature is off, so no spinner ever flashes.
+    let Some(base_url) = app.cfg.emotion_model_url.as_deref() else {
+        return empty();
     };
     if note.is_empty() || body.candidates.is_empty() {
-        return Ok(Json(SuggestEmotionsResponse {
-            suggestions: vec![],
-        }));
+        return empty();
     }
 
-    let raw = suggest::request_suggestions(&app.http, api_key, note, &body.candidates).await?;
+    // Few-shot: teach the model THIS user's own calibration from their history.
+    // A failed fetch just means a generic (unpersonalised) prompt, not an error.
+    let examples = suggest::fetch_examples(&app.pool, &user.user_id, suggest::MAX_EXAMPLES)
+        .await
+        .unwrap_or_default();
+
+    // A model that's slow, down, or unreachable must never fail the picker.
+    let raw = match suggest::request_suggestions(
+        &app.http,
+        base_url,
+        &app.cfg.emotion_model,
+        note,
+        &body.candidates,
+        &examples,
+    )
+    .await
+    {
+        Ok(raw) => raw,
+        Err(e) => {
+            tracing::info!("emotion suggestions unavailable: {e:#}");
+            return empty();
+        }
+    };
 
     let valid: HashSet<&str> = body.candidates.iter().map(|c| c.token.as_str()).collect();
     let already: HashSet<&str> = body.already.iter().map(|s| s.as_str()).collect();

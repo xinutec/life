@@ -35,10 +35,14 @@ pub struct Config {
     /// Path to the house geometry scene (served at GET /api/house).
     pub house_scene: String,
 
-    /// Anthropic API key for the emotion-suggestion helper. Optional: when unset,
-    /// `/api/wellbeing/suggest-emotions` returns no suggestions (a 200, not an
-    /// error), so the feelings picker degrades to the plain wheel.
-    pub anthropic_api_key: Option<String>,
+    /// Base URL of an Ollama-compatible model server for emotion suggestions
+    /// (e.g. `http://mac.lan:11434`). OPTIONAL and best-effort: when unset — or
+    /// when the server is unreachable — `/api/wellbeing/suggest-emotions` returns
+    /// no suggestions (a 200, not an error) and the picker uses the plain wheel.
+    /// The note text goes only to this server, so it stays on your own hardware.
+    pub emotion_model_url: Option<String>,
+    /// Model name to request from that server.
+    pub emotion_model: String,
 }
 
 fn env(key: &str) -> Result<String> {
@@ -70,7 +74,8 @@ impl Config {
             static_dir: std::env::var("STATIC_DIR").ok(),
             dev_login_user: std::env::var("DEV_LOGIN_USER").ok(),
             house_scene: env_or("HOUSE_SCENE", "scenes/house.json"),
-            anthropic_api_key: std::env::var("ANTHROPIC_API_KEY").ok(),
+            emotion_model_url: std::env::var("EMOTION_MODEL_URL").ok(),
+            emotion_model: env_or("EMOTION_MODEL", "qwen2.5:3b"),
         })
     }
 }
