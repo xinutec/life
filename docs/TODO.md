@@ -447,7 +447,7 @@ through something that resets the NC session.
 - [x] **Frontend test runner** — vitest via `ng test` (43 specs as of
       2026-07-02: sw-updates, conflict merge, trash/conflicts screens, todo
       graph, stores, settings, shopping scan).
-- [~] **Emotion suggestions in the feelings picker** — a small local model reads
+- [x] **Emotion suggestions in the feelings picker** — a small local model reads
       the check-in note and offers the feelings that fit, at the head of the
       wheel. Personalised: the prompt carries the last 80 of your own labelled
       check-ins as few-shot, which roughly doubled agreement with your real
@@ -460,9 +460,12 @@ through something that resets the NC session.
       the fleet may not open connections toward it (one-way WireGuard peer), so
       the worker polls for work and posts answers back. The picker only claims to
       be thinking when a worker has actually been seen — no spinner in front of a
-      model that isn't there. REMAINING: run the worker on the Mac (launchd agent
-      in `deploy/hm-agents.nix`, needs `~/.config/life/worker.env` + the matching
-      `EMOTION_WORKER_TOKEN` in `life-secret`).
+      model that isn't there. Live since 2026-07-21: `deploy/hm-agents.nix`
+      installs the agent, which reads `~/.config/life/worker.env` for the
+      `EMOTION_WORKER_TOKEN` that matches `life-secret`. The worker does not load
+      the model — recall's `llm-host` daemon holds the one copy on that Mac
+      (127.0.0.1:8092) and serves recall's summaries/Ask from it too, so the
+      machine never holds two.
 
 ## Backlog
 

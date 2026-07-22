@@ -10,9 +10,10 @@
 # peer — a compromised server must not reach the archive). So life queues the
 # work and this polls for it. See tools/emotion_worker.py.
 #
-# The interpreter is recall's venv: it already has mlx-lm and this exact model in
-# the HuggingFace cache, so there is nothing to install and nothing to download.
-# Any interpreter with mlx-lm would do.
+# The model is NOT loaded here. recall's llm-host daemon holds the one copy on
+# this Mac (127.0.0.1:8092) and this worker asks it to generate — otherwise the
+# machine would hold two 4.3 GB models while also transcribing. So the worker is
+# standard-library only; recall's venv is used simply as an interpreter.
 #
 # The token is NOT in the nix store (it would be world-readable there): the agent
 # reads ~/.config/life/worker.env, which is created out of band and holds

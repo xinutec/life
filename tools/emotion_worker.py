@@ -12,20 +12,22 @@ answer is the model's raw text. Deciding whether that text names real feelings
 is life's job, where the vocabulary is known and the check is tested — a worker
 that could widen its own answer set would be a hole in that guarantee.
 
-The model is loaded on the first job and released after a stretch of quiet, so a
-feature used a handful of times a day doesn't hold gigabytes of GPU memory all
-day next to recall's transcription.
+This worker does not load the model. The Mac holds exactly one copy of it, in
+recall's `llm-host` daemon (recall/src/recall/llmhost.py, 127.0.0.1:8092), which
+also serves recall's own summaries and Ask. Loading a second copy here would put
+two ~4.3 GB models on a machine that is also transcribing; the holder loads on
+demand, generates one request at a time, and releases the weights after five idle
+minutes. So the model shows up in this file as an HTTP call.
 
 Environment:
   LIFE_URL              base URL of the life server (default https://life.xinutec.org)
   EMOTION_WORKER_TOKEN  shared secret; must match the server's (required)
-  EMOTION_MODEL         MLX model id (default mlx-community/Qwen2.5-7B-Instruct-4bit)
-  EMOTION_IDLE_UNLOAD   seconds of quiet before the model is released (default 300)
+  EMOTION_MODEL         model id the holder should use
+  EMOTION_LLM_HOST      where the holder listens (default http://127.0.0.1:8092)
 
-Needs an interpreter with `mlx-lm` installed. On this Mac that is recall's venv,
-which already has both the library and this model cached:
+Standard library only — any python3 will run it:
 
-  ~/Code/recall/.venv/bin/python tools/emotion_worker.py
+  python3 tools/emotion_worker.py
 """
 
 from __future__ import annotations
@@ -41,15 +43,28 @@ from typing import Any
 LOG = logging.getLogger("emotion-worker")
 
 DEFAULT_MODEL = "mlx-community/Qwen2.5-7B-Instruct-4bit"
+DEFAULT_LLM_HOST = "http://127.0.0.1:8092"
 # The answer is a short JSON array of tokens. A tight bound keeps a model that
 # starts rambling from pinning the GPU.
 MAX_TOKENS = 128
 # Longer than the server's poll window, so a held-open poll is never mistaken for
 # a dead connection; short enough that a genuinely wedged one is noticed.
 POLL_TIMEOUT = 40
+# The holder may have to load the weights first (~60s cold) and it serialises
+# callers, so a request can queue behind recall's. Nobody is waiting on this.
+GENERATE_TIMEOUT = 300
 # Backoff after a network failure. The server being down is normal (deploys), not
 # an error worth spinning on.
 RETRY_SECS = 10
+
+
+class HolderDown(Exception):
+    """The llm-host could not be reached — the work is not doable right now.
+
+    Distinct from a job that genuinely failed: a failure is reported to life and
+    cached as "no suggestions for this note", which would be a lie if the only
+    problem is that a daemon is restarting. This one leaves the job queued.
+    """
 
 
 def _request(url: str, token: str, *, method: str = "GET", body: dict[str, Any] | None = None):
@@ -78,48 +93,42 @@ def post_result(base: str, token: str, job_id: int, *, content: str | None, erro
 
 
 class Model:
-    """The MLX model, loaded on demand and released when it goes unused.
+    """The model, addressed where it actually lives: recall's llm-host.
 
-    Five minutes of quiet is enough to let go of ~4.3 GB. Loading it back costs a
-    few seconds off a warm page cache — paid on the first note after a lull, and
-    invisible in practice because suggestions are cached: nobody sits waiting on
-    this to read a check-in they just wrote. Holding the weights longer would buy
-    speed nobody is waiting for, at recall's expense.
+    Nothing is cached here. The holder decides when the weights are resident and
+    when they go back, for every consumer at once — which is the only way the
+    Mac can hold one copy rather than one per interested process.
     """
 
-    def __init__(self, name: str, idle_unload: float) -> None:
+    def __init__(self, name: str, host: str) -> None:
         self.name = name
-        self.idle_unload = idle_unload
-        self._loaded: tuple[Any, Any] | None = None
-        self._last_used = 0.0
+        self.host = host.rstrip("/")
 
     def generate(self, system: str, user: str) -> str:
-        from mlx_lm import generate, load  # heavy import stays lazy
-
-        if self._loaded is None:
-            LOG.info("loading %s", self.name)
-            loaded = load(self.name)
-            self._loaded = (loaded[0], loaded[1])
-        llm, tokenizer = self._loaded
-        prompt = tokenizer.apply_chat_template(
-            [{"role": "system", "content": system}, {"role": "user", "content": user}],
-            add_generation_prompt=True,
+        body = json.dumps(
+            {
+                "prompt": user,
+                "system": system,
+                "model": self.name,
+                "max_tokens": MAX_TOKENS,
+            }
+        ).encode()
+        req = urllib.request.Request(
+            f"{self.host}/generate",
+            data=body,
+            method="POST",
+            headers={"Content-Type": "application/json"},
         )
-        self._last_used = time.monotonic()
-        text: str = generate(llm, tokenizer, prompt=prompt, max_tokens=MAX_TOKENS)
-        self._last_used = time.monotonic()
-        return text
-
-    def release_if_idle(self) -> None:
-        if self._loaded is None:
-            return
-        if time.monotonic() - self._last_used < self.idle_unload:
-            return
-        LOG.info("releasing %s after %.0fs idle", self.name, self.idle_unload)
-        self._loaded = None
-        import gc
-
-        gc.collect()
+        try:
+            with urllib.request.urlopen(req, timeout=GENERATE_TIMEOUT) as resp:
+                answer: str = json.loads(resp.read())["text"]
+        except urllib.error.HTTPError as e:
+            # The holder answered and refused: something about this job, not a
+            # daemon that is down. Report it and let the note be answered empty.
+            raise RuntimeError(f"llm-host refused the job: HTTP {e.code}") from e
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            raise HolderDown(f"no llm-host at {self.host}: {e}") from e
+        return answer
 
 
 def run(base: str, token: str, model: Model) -> None:
@@ -138,7 +147,6 @@ def run(base: str, token: str, model: Model) -> None:
             continue
 
         if job is None:
-            model.release_if_idle()
             continue
 
         job_id = job["id"]
@@ -146,6 +154,13 @@ def run(base: str, token: str, model: Model) -> None:
         started = time.monotonic()
         try:
             content = model.generate(prompt.get("system", ""), prompt.get("user", ""))
+        except HolderDown as e:
+            # Say nothing to life: an unreported job stays queued and is claimed
+            # again shortly, whereas reporting a failure would cache this note as
+            # having no feelings in it. Wait for the daemon to come back.
+            LOG.warning("job %s deferred: %s", job_id, e)
+            time.sleep(RETRY_SECS)
+            continue
         except Exception as e:  # a bad job must not take the worker down with it
             LOG.exception("job %s failed", job_id)
             _post_quietly(base, token, job_id, content=None, error=str(e))
@@ -172,9 +187,9 @@ def main() -> int:
     base = os.environ.get("LIFE_URL", "https://life.xinutec.org").rstrip("/")
     model = Model(
         os.environ.get("EMOTION_MODEL", DEFAULT_MODEL),
-        float(os.environ.get("EMOTION_IDLE_UNLOAD", "300")),
+        os.environ.get("EMOTION_LLM_HOST", DEFAULT_LLM_HOST),
     )
-    LOG.info("polling %s for emotion jobs", base)
+    LOG.info("polling %s for emotion jobs, generating via %s", base, model.host)
     run(base, token, model)
     return 0
 

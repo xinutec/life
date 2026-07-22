@@ -25,7 +25,8 @@ set -a
 . "$ENV_FILE"
 set +a
 
-# recall's venv already has mlx-lm and this model cached; any interpreter with
-# mlx-lm installed works.
+# The worker is standard-library only — it asks recall's llm-host to generate
+# rather than loading a model — so any python3 runs it. recall's venv is simply
+# the newest interpreter on this machine.
 PYTHON="${EMOTION_WORKER_PYTHON:-$HOME/Code/recall/.venv/bin/python}"
 exec "$PYTHON" tools/emotion_worker.py
