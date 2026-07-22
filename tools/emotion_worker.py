@@ -123,8 +123,13 @@ class Model:
             with urllib.request.urlopen(req, timeout=GENERATE_TIMEOUT) as resp:
                 answer: str = json.loads(resp.read())["text"]
         except urllib.error.HTTPError as e:
-            # The holder answered and refused: something about this job, not a
-            # daemon that is down. Report it and let the note be answered empty.
+            # 5xx is the holder failing, not this job being unanswerable — a bug
+            # in it (2026-07-22: a crash in its own logging) 500'd every job, and
+            # reporting those cached real notes as having no feelings in them.
+            # Defer instead, and let a retry sort it out once the holder is fixed.
+            # Only a 4xx says something about the request itself.
+            if e.code >= 500:
+                raise HolderDown(f"llm-host is failing: HTTP {e.code}") from e
             raise RuntimeError(f"llm-host refused the job: HTTP {e.code}") from e
         except (urllib.error.URLError, TimeoutError, OSError) as e:
             raise HolderDown(f"no llm-host at {self.host}: {e}") from e
