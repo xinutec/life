@@ -169,7 +169,7 @@ async fn unknown_api_path_is_a_json_404_even_with_the_spa_mounted() {
     );
     assert!(body.contains("\"error\""), "body was {body:?}");
 
-    std::fs::remove_dir_all(&dir).ok();
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[tokio::test]
@@ -188,7 +188,7 @@ async fn an_unknown_non_api_path_still_falls_back_to_the_spa() {
     );
     assert!(body.contains("<title>Life</title>"), "body was {body:?}");
 
-    std::fs::remove_dir_all(&dir).ok();
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[tokio::test]
