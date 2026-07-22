@@ -47,6 +47,13 @@
           '';
         };
     in {
+      # The emotion-suggestion worker, packaged so launchd runs a store path
+      # rather than the working tree (deploy/hm-agents.nix). Run it by hand with
+      # `nix run .#emotion-worker`.
+      packages = forAll (pkgs: {
+        emotion-worker = pkgs.callPackage ./nix/emotion-worker.nix { };
+      });
+
       devShells = nixpkgs.lib.genAttrs systems (system: {
         default = nixpkgs.legacyPackages.${system}.mkShell {
           packages = with nixpkgs.legacyPackages.${system}; [

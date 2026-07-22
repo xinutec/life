@@ -465,7 +465,9 @@ through something that resets the NC session.
       `EMOTION_WORKER_TOKEN` that matches `life-secret`. The worker does not load
       the model — recall's `llm-host` daemon holds the one copy on that Mac
       (127.0.0.1:8092) and serves recall's summaries/Ask from it too, so the
-      machine never holds two.
+      machine never holds two. Being stdlib-only, the worker is a nix package
+      (`nix/emotion-worker.nix`, `nix run .#emotion-worker`), so the agent runs a
+      store path and never the working tree.
 
 ## Backlog
 
