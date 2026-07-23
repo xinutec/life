@@ -117,7 +117,7 @@ pub fn build_system(candidates: &[EmotionCandidate], examples: &[EmotionExample]
             s.push_str("\nNote: ");
             s.push_str(&e.note.replace('\n', " "));
             s.push_str("\nFeelings: ");
-            s.push_str(&serde_json::to_string(&e.tokens).unwrap_or_else(|_| "[]".into()));
+            s.push_str(&serde_json::to_string(&e.tokens).expect("Vec<String> always serialises"));
             s.push('\n');
         }
     }

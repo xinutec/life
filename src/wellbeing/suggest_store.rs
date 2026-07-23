@@ -13,6 +13,14 @@ use sqlx::MySqlPool;
 /// mid-generation costs one window, not the note forever.
 const CLAIM_STALE_SECS: i64 = 120;
 
+/// Decode a stored JSON column into `T`. A column that fails to parse is corrupt
+/// stored data — surface it as a decode error, never default it to empty, or a
+/// bad row would read as "the user has no feelings here" and the loss would be
+/// silent.
+fn decode<T: serde::de::DeserializeOwned>(v: serde_json::Value) -> sqlx::Result<T> {
+    serde_json::from_value(v).map_err(|e| sqlx::Error::Decode(Box::new(e)))
+}
+
 /// What we already know about a check-in's feelings.
 pub struct Cached {
     /// The wording these came from — compare with the current note's hash to
@@ -44,10 +52,13 @@ pub async fn cached(pool: &MySqlPool, user_id: &str, ulid: &str) -> sqlx::Result
     .bind(ulid)
     .fetch_optional(pool)
     .await?;
-    Ok(row.map(|(note_hash, tokens)| Cached {
-        note_hash,
-        tokens: serde_json::from_value(tokens).unwrap_or_default(),
-    }))
+    match row {
+        Some((note_hash, tokens)) => Ok(Some(Cached {
+            note_hash,
+            tokens: decode(tokens)?,
+        })),
+        None => Ok(None),
+    }
 }
 
 /// How long the job for this exact wording has been waiting, if one is queued.
@@ -195,14 +206,15 @@ pub async fn job_for_completion(pool: &MySqlPool, id: u64) -> sqlx::Result<Optio
     .bind(id)
     .fetch_optional(pool)
     .await?;
-    Ok(
-        row.map(|(user_id, ulid, note_hash, candidates)| Completion {
+    match row {
+        Some((user_id, ulid, note_hash, candidates)) => Ok(Some(Completion {
             user_id,
             ulid,
             note_hash,
-            candidates: serde_json::from_value(candidates).unwrap_or_default(),
-        }),
-    )
+            candidates: decode(candidates)?,
+        })),
+        None => Ok(None),
+    }
 }
 
 /// Record an answer and retire the job.
