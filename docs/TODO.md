@@ -4,6 +4,26 @@ Living checklist for the Life app. Keep it current: tick items as they ship,
 add new ones under the right section. Architecture/rationale lives in
 `docs/design/overview.md`; this is the "what's done / what's next" tracker.
 
+## Solved 2026-07-24: the emotion picker gave up ~90s into a generation that would have succeeded
+
+**Symptom.** Add a check-in with words, open the picker; it counts to ~70–90s,
+then shows nothing — even though the answer was generated and cached a moment
+later.
+
+**Cause.** `pending` ("is a better answer coming?") was `AppState::worker_alive()`
+— a 90s poll heartbeat. The Mac worker refreshes that heartbeat only when it
+*polls*; during a 100–145s generation it is blocked on the model and cannot poll,
+so at ~90s the backend wrongly declared it dead, returned `pending: false`, and the
+picker stopped — mid-answer. `WORKER_ALIVE` was sized against a poll cycle, never a
+generation.
+
+**Fix.** `pending` now also honours a claimed, still-fresh job: a worker holding a
+claim (`taken_at` within `CLAIM_STALE_SECS`, widened 120→180s to cover the longest
+real generation) is proof it is alive and working, and it is the signal that
+survives the poll gap. `suggest_store::Queued` grew `being_worked`; the handler is
+`pending = being_worked || worker_alive()`. Real-DB regression test in
+`tests/emotion_suggest_db.rs`.
+
 ## Solved 2026-07-16: offline boot dumped a signed-in user onto the sign-in screen
 
 Recorded because the cause is a fleet-wide pattern (any app with ngsw + raw
@@ -94,6 +114,17 @@ through something that resets the NC session.
 - [x] Shopping rows carry `category` + `product_id` (2026-07-16) — the
       buy→inventory conversion uses them instead of guessing; category select
       in the Buy sheet; RxDB v1 migration + server migration 0024
+- [x] Emotion suggestions ~35–145s → ~4–5s once warm (2026-07-24) — the cost is
+      the ~5.8k-token system PREFILL, not the ~15-token decode. recall's llm-host
+      caches that prefix's KV to disk (keyed by system hash; survives the 300s
+      weight-unload, no resident RAM), so a warm request prefills only the note.
+      Made possible by freezing the few-shot at end-of-yesterday
+      (`fetch_examples … recorded_at < UTC_DATE()`) so the prompt is byte-stable
+      for a UTC day and the cache key holds; and warmed proactively — the first
+      real keystroke in a note fires `/wellbeing/warm-emotions`, which preloads
+      the model (load + build cache) while you write, so the ~60s cold load
+      overlaps the writing instead of landing on the picker. Number-only check-ins
+      don't trigger it. Cross-repo detail in memory `project_recall_llm_host`.
 - [x] Inventory→Buy bridge (2026-07-16) — cart button on inventory rows adds
       the item to the Buy list with its full identity, deduped against un-done
       rows (matchesIdentity: product link, then barcode, then name)
