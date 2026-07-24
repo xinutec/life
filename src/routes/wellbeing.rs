@@ -104,7 +104,14 @@ pub async fn suggest_emotions(
         }
     };
 
-    let pending = app.worker_alive();
+    // A better answer is genuinely coming when a worker is on it: either one has
+    // claimed this job and is generating right now — the strongest liveness signal
+    // there is, and crucially the one that survives a long generation, during which
+    // the blocked worker cannot poll and the "seen recently" clock goes stale — or
+    // no one has claimed it yet but a worker polled recently and will. Keying
+    // pending on `worker_alive()` alone made the picker give up ~90s into a
+    // generation that takes ~100-145s and would have succeeded.
+    let pending = queued.being_worked || app.worker_alive();
     Ok(Json(SuggestEmotionsResponse {
         stale: !suggestions.is_empty(),
         suggestions,

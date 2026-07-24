@@ -10,8 +10,11 @@
 use sqlx::MySqlPool;
 
 /// A stale claim is retried rather than left to rot, so a worker that dies
-/// mid-generation costs one window, not the note forever.
-const CLAIM_STALE_SECS: i64 = 120;
+/// mid-generation costs one window, not the note forever. Comfortably longer than
+/// the longest real generation (~145s), so a slow-but-alive worker is never
+/// declared dead and double-claimed while it is still producing an answer — and
+/// so a claim doubles as proof the worker is alive for that whole span.
+const CLAIM_STALE_SECS: i64 = 180;
 
 /// Decode a stored JSON column into `T`. A column that fails to parse is corrupt
 /// stored data — surface it as a decode error, never default it to empty, or a
@@ -33,6 +36,12 @@ pub struct Cached {
 pub struct Queued {
     /// Seconds since this wording was first queued.
     pub thinking_secs: i64,
+    /// A worker has claimed this job and its claim is still fresh — i.e. a worker
+    /// is generating the answer right now. This is the liveness signal that
+    /// survives a long generation: while the worker is blocked on the model it
+    /// cannot poll, so the poll-based "seen recently" clock goes stale, but the
+    /// claim it is holding proves it is alive and working.
+    pub being_worked: bool,
 }
 
 /// A job as the worker sees it: an id to report against, and a self-contained
@@ -73,17 +82,21 @@ pub async fn pending_for(
     ulid: &str,
     note_hash: &str,
 ) -> sqlx::Result<Option<Queued>> {
-    let row: Option<(i64,)> = sqlx::query_as(
-        "SELECT UNIX_TIMESTAMP(NOW()) - UNIX_TIMESTAMP(created_at) FROM emotion_jobs \
+    let row: Option<(i64, i64)> = sqlx::query_as(
+        "SELECT UNIX_TIMESTAMP(NOW()) - UNIX_TIMESTAMP(created_at), \
+                taken_at IS NOT NULL AND taken_at > NOW() - INTERVAL ? SECOND \
+         FROM emotion_jobs \
          WHERE user_id = ? AND ulid = ? AND note_hash = ?",
     )
+    .bind(CLAIM_STALE_SECS)
     .bind(user_id)
     .bind(ulid)
     .bind(note_hash)
     .fetch_optional(pool)
     .await?;
-    Ok(row.map(|(secs,)| Queued {
+    Ok(row.map(|(secs, claimed)| Queued {
         thinking_secs: secs.max(0),
+        being_worked: claimed != 0,
     }))
 }
 
@@ -142,16 +155,19 @@ pub async fn enqueue(
 
     // Age is measured by the database's clock on both ends, so it can't be skewed
     // by the pod's and the caller's clocks disagreeing.
-    let (secs,): (i64,) = sqlx::query_as(
-        "SELECT UNIX_TIMESTAMP(NOW()) - UNIX_TIMESTAMP(created_at) FROM emotion_jobs \
-         WHERE user_id = ? AND ulid = ?",
+    let (secs, claimed): (i64, i64) = sqlx::query_as(
+        "SELECT UNIX_TIMESTAMP(NOW()) - UNIX_TIMESTAMP(created_at), \
+                taken_at IS NOT NULL AND taken_at > NOW() - INTERVAL ? SECOND \
+         FROM emotion_jobs WHERE user_id = ? AND ulid = ?",
     )
+    .bind(CLAIM_STALE_SECS)
     .bind(user_id)
     .bind(ulid)
     .fetch_one(pool)
     .await?;
     Ok(Queued {
         thinking_secs: secs.max(0),
+        being_worked: claimed != 0,
     })
 }
 

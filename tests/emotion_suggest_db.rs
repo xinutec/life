@@ -183,3 +183,74 @@ async fn suggestion_cache_and_queue_against_real_db() {
 
     wipe(&pool, user).await;
 }
+
+/// The picker must keep waiting through a long generation. A worker blocked on the
+/// model for ~100-145s cannot poll, so the "seen recently" clock goes stale — but
+/// the claim it holds proves it is alive and working. `being_worked` is that
+/// proof, and it is what keeps `pending` true past the poll-liveness window.
+#[tokio::test]
+async fn a_claimed_job_reads_as_being_worked_until_the_claim_goes_stale() {
+    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
+        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping being-worked DB test");
+        return;
+    };
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    let user = "test-user-emotion-beingworked";
+    let ulid = "01J0000000000000000000WORK";
+    wipe(&pool, user).await;
+
+    // Queued but unclaimed: no worker is on it yet, so nothing is "being worked".
+    store::enqueue(&pool, user, ulid, "hash-a", &prompt("a"), &vocab())
+        .await
+        .unwrap();
+    let unclaimed = store::pending_for(&pool, user, ulid, "hash-a")
+        .await
+        .unwrap()
+        .expect("queued");
+    assert!(
+        !unclaimed.being_worked,
+        "a job no worker has claimed is not being worked"
+    );
+
+    // A worker claims it (taken_at set) — now it is being worked, and stays so a
+    // hundred seconds in, well past the 90s poll-liveness window, because the
+    // claim itself is the liveness signal that survives a blocked generation.
+    for ago in [0_i64, 100] {
+        sqlx::query(
+            "UPDATE emotion_jobs SET taken_at = NOW() - INTERVAL ? SECOND WHERE user_id = ?",
+        )
+        .bind(ago)
+        .bind(user)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let working = store::pending_for(&pool, user, ulid, "hash-a")
+            .await
+            .unwrap()
+            .expect("queued");
+        assert!(
+            working.being_worked,
+            "a claim {ago}s old is still a live worker on the job"
+        );
+    }
+
+    // A claim older than the stale window: the worker is presumed dead, the job is
+    // free to be reclaimed, and the picker must stop promising an answer.
+    sqlx::query("UPDATE emotion_jobs SET taken_at = NOW() - INTERVAL 200 SECOND WHERE user_id = ?")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let abandoned = store::pending_for(&pool, user, ulid, "hash-a")
+        .await
+        .unwrap()
+        .expect("queued");
+    assert!(
+        !abandoned.being_worked,
+        "a claim past the stale window no longer counts as being worked"
+    );
+
+    wipe(&pool, user).await;
+}
