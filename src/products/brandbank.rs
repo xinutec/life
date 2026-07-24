@@ -16,7 +16,7 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::nutrition::{Allergen, DietaryFlag, Nutrition, ProductFacts};
+use super::nutrition::{Allergen, Claim, DietaryFlag, Nutrition, Presence, ProductFacts};
 
 /// The Brandbank fields we consume. Unknown fields (the bulk of the blob —
 /// company address, marketing copy, packaging, …) are ignored by serde.
@@ -230,13 +230,13 @@ impl Brandbank {
             .filter_map(|a| {
                 let name = a.name_value.as_deref()?.trim();
                 let presence = match a.lookup_value.as_deref()?.to_lowercase().as_str() {
-                    "contains" => "contains",
-                    "may contain" => "may_contain",
+                    "contains" => Presence::Contains,
+                    "may contain" => Presence::MayContain,
                     _ => return None,
                 };
                 (!name.is_empty()).then(|| Allergen {
                     allergen: name.to_lowercase(),
-                    presence: presence.to_string(),
+                    presence,
                 })
             })
             .collect();
@@ -268,7 +268,7 @@ impl Brandbank {
             .filter(|(claimed, _)| *claimed)
             .map(|(_, slug)| DietaryFlag {
                 flag: slug.to_string(),
-                value: "yes".to_string(),
+                value: Claim::Yes,
             })
             .collect();
         flags.sort_by(|a, b| a.flag.cmp(&b.flag));

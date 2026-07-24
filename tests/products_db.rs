@@ -43,20 +43,34 @@ async fn product_cache_against_real_db() {
     assert_eq!(bytes, vec![1, 2, 3, 4]);
     assert_eq!(mime, "image/png");
 
-    // Re-cache without an image overwrites in place.
+    // A second OFF lookup FILLS GAPS, it does not overwrite: the cached name and
+    // image stand, because a source disagreeing with what we hold is a divergence
+    // to approve (see repo::divergences), not something to apply behind your back.
     repo::upsert(&pool, bc, Some("Test Yog 2"), None, None, None)
         .await
         .unwrap();
     let p2 = repo::get(&pool, bc).await.unwrap().expect("cached");
-    assert_eq!(p2.name.as_deref(), Some("Test Yog 2"));
-    assert!(!p2.has_image);
+    assert_eq!(p2.name.as_deref(), Some("Test Yog"), "the held name stands");
+    assert!(p2.has_image, "and so does the held image");
+
+    // A gap, though, is filled — nothing is lost by learning what we didn't know.
+    sqlx::query("UPDATE products SET brand = NULL WHERE barcode = ?")
+        .bind(bc)
+        .execute(&pool)
+        .await
+        .unwrap();
+    repo::upsert(&pool, bc, None, Some("BrandY"), None, None)
+        .await
+        .unwrap();
+    let p2b = repo::get(&pool, bc).await.unwrap().expect("cached");
+    assert_eq!(p2b.brand.as_deref(), Some("BrandY"), "an empty field fills");
 
     // A user upload replaces ONLY the image, leaving metadata untouched.
     repo::set_image(&pool, bc, &[9, 8, 7], "image/webp")
         .await
         .unwrap();
     let p3 = repo::get(&pool, bc).await.unwrap().expect("cached");
-    assert_eq!(p3.name.as_deref(), Some("Test Yog 2"), "name preserved");
+    assert_eq!(p3.name.as_deref(), Some("Test Yog"), "name preserved");
     assert!(p3.has_image);
     let (bytes, mime) = repo::get_image(&pool, bc).await.unwrap().expect("image");
     assert_eq!(bytes, vec![9, 8, 7]);

@@ -10,6 +10,8 @@
 //! small set, one field each; OFF's long tail keeps its structure in `extra`.
 
 use std::collections::BTreeMap;
+use std::fmt;
+use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -39,14 +41,87 @@ pub struct Nutrition {
     pub extra: BTreeMap<String, f64>,
 }
 
+/// How an allergen is present. The `product_allergens.presence` column has been
+/// `ENUM('contains','may_contain')` since 0027 — this is that same closed set in
+/// the type system, so a fourth spelling can't be invented at a call site, and
+/// ts-rs hands the frontend the union instead of a bare `string` it would have to
+/// re-assert.
+///
+/// **Ordered by severity** (`MayContain` < `Contains`), which is what makes
+/// `merge_allergens` a `max` rather than a hand-written comparison: "the more
+/// severe claim wins" becomes a property of the type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum Presence {
+    /// A trace: possible cross-contamination, not a declared ingredient.
+    MayContain,
+    /// A declared ingredient.
+    Contains,
+}
+
+impl fmt::Display for Presence {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Presence::MayContain => "may_contain",
+            Presence::Contains => "contains",
+        })
+    }
+}
+
+impl FromStr for Presence {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "may_contain" => Ok(Presence::MayContain),
+            "contains" => Ok(Presence::Contains),
+            other => Err(format!("unknown allergen presence {other:?}")),
+        }
+    }
+}
+
 /// One allergen and how it's present in a product.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct Allergen {
     /// OFF's canonical allergen id, language prefix stripped ("en:milk" → "milk").
     pub allergen: String,
-    /// "contains" (declared ingredient) or "may_contain" (trace).
-    pub presence: String,
+    pub presence: Presence,
+}
+
+/// What a source asserts about a dietary flag. Tri-state on purpose: `Maybe` is
+/// how a genuine disagreement (or a soft analysis) is reported, because
+/// over-claiming is the harmful direction — see `merge_dietary`. Matches the
+/// `product_dietary_flags.value` column's `ENUM('yes','no','maybe')` (0027).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum Claim {
+    Yes,
+    No,
+    Maybe,
+}
+
+impl fmt::Display for Claim {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Claim::Yes => "yes",
+            Claim::No => "no",
+            Claim::Maybe => "maybe",
+        })
+    }
+}
+
+impl FromStr for Claim {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "yes" => Ok(Claim::Yes),
+            "no" => Ok(Claim::No),
+            "maybe" => Ok(Claim::Maybe),
+            other => Err(format!("unknown dietary claim {other:?}")),
+        }
+    }
 }
 
 /// One dietary flag and its assertion.
@@ -55,8 +130,7 @@ pub struct Allergen {
 pub struct DietaryFlag {
     /// Stable slug: "vegan", "vegetarian", "gluten_free", "organic", ….
     pub flag: String,
-    /// "yes" | "no" | "maybe" — tri-state so we never over-claim.
-    pub value: String,
+    pub value: Claim,
 }
 
 /// Everything we know about a product beyond its identity — the `facts` part
@@ -141,25 +215,22 @@ const LABEL_FLAGS: &[(&str, &str)] = &[
 /// Input may hold repeated flags (one per source, in any order); the result has
 /// one entry per flag, sorted. Pure — the unit under test.
 pub fn merge_dietary(claims: Vec<DietaryFlag>) -> Vec<DietaryFlag> {
-    let mut by_flag: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut by_flag: BTreeMap<String, Vec<Claim>> = BTreeMap::new();
     for c in claims {
         by_flag.entry(c.flag).or_default().push(c.value);
     }
     by_flag
         .into_iter()
         .map(|(flag, values)| {
-            let yes = values.iter().any(|v| v == "yes");
-            let no = values.iter().any(|v| v == "no");
+            let yes = values.contains(&Claim::Yes);
+            let no = values.contains(&Claim::No);
             let value = match (yes, no) {
-                (true, true) => "maybe", // a real conflict — don't take a side
-                (true, false) => "yes",
-                (false, true) => "no",
-                (false, false) => "maybe",
+                (true, true) => Claim::Maybe, // a real conflict — don't take a side
+                (true, false) => Claim::Yes,
+                (false, true) => Claim::No,
+                (false, false) => Claim::Maybe,
             };
-            DietaryFlag {
-                flag,
-                value: value.to_string(),
-            }
+            DietaryFlag { flag, value }
         })
         .collect()
 }
@@ -203,25 +274,18 @@ pub fn merge_ingredients(texts: Vec<(String, String)>) -> Option<String> {
 /// Input is `(source, allergen)` pairs; the result has one entry per allergen,
 /// sorted. Pure — the unit under test.
 pub fn merge_allergens(claims: Vec<(String, Allergen)>) -> Vec<Allergen> {
-    let mut by_name: BTreeMap<String, &'static str> = BTreeMap::new();
+    let mut by_name: BTreeMap<String, Presence> = BTreeMap::new();
     for (_, a) in &claims {
-        let severe = a.presence == "contains";
+        // `Presence` is ordered by severity, so "the more severe wins" is a max.
         by_name
             .entry(a.allergen.clone())
-            .and_modify(|p| {
-                if severe {
-                    *p = "contains";
-                }
-            })
-            .or_insert(if severe { "contains" } else { "may_contain" });
+            .and_modify(|p| *p = (*p).max(a.presence))
+            .or_insert(a.presence);
     }
     by_name
         .into_iter()
         .filter(|(name, _)| !name.is_empty())
-        .map(|(allergen, presence)| Allergen {
-            allergen,
-            presence: presence.to_string(),
-        })
+        .map(|(allergen, presence)| Allergen { allergen, presence })
         .collect()
 }
 
@@ -364,30 +428,27 @@ impl RawFacts {
 
     fn allergens(&self) -> Vec<Allergen> {
         // "contains" wins over a "may_contain" trace of the same allergen.
-        let mut by_name: BTreeMap<String, &str> = BTreeMap::new();
+        let mut by_name: BTreeMap<String, Presence> = BTreeMap::new();
         for tag in &self.traces_tags {
-            by_name.insert(strip_lang(tag).to_string(), "may_contain");
+            by_name.insert(strip_lang(tag).to_string(), Presence::MayContain);
         }
         for tag in &self.allergens_tags {
-            by_name.insert(strip_lang(tag).to_string(), "contains");
+            by_name.insert(strip_lang(tag).to_string(), Presence::Contains);
         }
         by_name
             .into_iter()
             .filter(|(name, _)| !name.is_empty())
-            .map(|(allergen, presence)| Allergen {
-                allergen,
-                presence: presence.to_string(),
-            })
+            .map(|(allergen, presence)| Allergen { allergen, presence })
             .collect()
     }
 
     fn dietary(&self) -> Vec<DietaryFlag> {
-        let mut flags: BTreeMap<String, String> = BTreeMap::new();
+        let mut flags: BTreeMap<String, Claim> = BTreeMap::new();
         // OFF's ingredient analysis is tri-state (vegan / non-vegan / maybe-vegan;
         // same for vegetarian; palm oil has its own vocabulary).
         for tag in &self.ingredients_analysis_tags {
             if let Some((flag, value)) = analysis_flag(strip_lang(tag)) {
-                flags.insert(flag.to_string(), value.to_string());
+                flags.insert(flag.to_string(), value);
             }
         }
         // A manufacturer label is a firm claim: it asserts "yes" and overrides a
@@ -395,7 +456,7 @@ impl RawFacts {
         for tag in &self.labels_tags {
             let stripped = strip_lang(tag);
             if let Some((_, flag)) = LABEL_FLAGS.iter().find(|(label, _)| *label == stripped) {
-                flags.insert(flag.to_string(), "yes".to_string());
+                flags.insert(flag.to_string(), Claim::Yes);
             }
         }
         flags
@@ -407,17 +468,17 @@ impl RawFacts {
 
 /// Map one OFF ingredient-analysis tag (prefix already stripped) to a
 /// (flag, value) pair, or `None` when it asserts nothing (e.g. content unknown).
-fn analysis_flag(tag: &str) -> Option<(&'static str, &'static str)> {
+fn analysis_flag(tag: &str) -> Option<(&'static str, Claim)> {
     Some(match tag {
-        "vegan" => ("vegan", "yes"),
-        "non-vegan" => ("vegan", "no"),
-        "maybe-vegan" => ("vegan", "maybe"),
-        "vegetarian" => ("vegetarian", "yes"),
-        "non-vegetarian" => ("vegetarian", "no"),
-        "maybe-vegetarian" => ("vegetarian", "maybe"),
-        "palm-oil-free" => ("palm_oil_free", "yes"),
-        "palm-oil" => ("palm_oil_free", "no"),
-        "may-contain-palm-oil" => ("palm_oil_free", "maybe"),
+        "vegan" => ("vegan", Claim::Yes),
+        "non-vegan" => ("vegan", Claim::No),
+        "maybe-vegan" => ("vegan", Claim::Maybe),
+        "vegetarian" => ("vegetarian", Claim::Yes),
+        "non-vegetarian" => ("vegetarian", Claim::No),
+        "maybe-vegetarian" => ("vegetarian", Claim::Maybe),
+        "palm-oil-free" => ("palm_oil_free", Claim::Yes),
+        "palm-oil" => ("palm_oil_free", Claim::No),
+        "may-contain-palm-oil" => ("palm_oil_free", Claim::Maybe),
         _ => return None,
     })
 }

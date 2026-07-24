@@ -3,6 +3,7 @@
 //! projected to the fields the parser consumes, real values, real structure).
 
 use life::products::brandbank;
+use life::products::nutrition::{Claim, Presence};
 
 const OALTY: &str = include_str!("fixtures/asda_brandbank_oalty.json");
 
@@ -47,28 +48,28 @@ fn parses_the_real_oalty_blob() {
         facts
             .allergens
             .iter()
-            .map(|a| (a.allergen.as_str(), a.presence.as_str()))
+            .map(|a| (a.allergen.as_str(), a.presence))
             .collect::<Vec<_>>(),
-        vec![("oats", "contains")]
+        vec![("oats", Presence::Contains)]
     );
 
     // Dietary: only asserted (true) flags become 'yes'. halal/kosher/noGluten are
     // false → absent (not a firm 'no'). The free-from booleans map to our slugs.
-    let dietary: Vec<(&str, &str)> = facts
+    let dietary: Vec<(&str, Claim)> = facts
         .dietary
         .iter()
-        .map(|d| (d.flag.as_str(), d.value.as_str()))
+        .map(|d| (d.flag.as_str(), d.value))
         .collect();
     assert_eq!(
         dietary,
         vec![
-            ("egg_free", "yes"),
-            ("lactose_free", "yes"),
-            ("milk_free", "yes"),
-            ("nut_free", "yes"),
-            ("soya_free", "yes"),
-            ("vegan", "yes"),
-            ("vegetarian", "yes"),
+            ("egg_free", Claim::Yes),
+            ("lactose_free", Claim::Yes),
+            ("milk_free", Claim::Yes),
+            ("nut_free", Claim::Yes),
+            ("soya_free", Claim::Yes),
+            ("vegan", Claim::Yes),
+            ("vegetarian", Claim::Yes),
         ]
     );
     assert!(
@@ -91,9 +92,9 @@ fn a_may_contain_advice_is_a_trace_not_an_ingredient() {
         facts
             .allergens
             .iter()
-            .map(|a| (a.allergen.as_str(), a.presence.as_str()))
+            .map(|a| (a.allergen.as_str(), a.presence))
             .collect::<Vec<_>>(),
-        vec![("milk", "contains"), ("nuts", "may_contain")],
+        vec![("milk", Presence::Contains), ("nuts", Presence::MayContain)],
         "Free From is dropped; May Contain is a trace"
     );
 }

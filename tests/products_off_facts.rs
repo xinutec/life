@@ -3,8 +3,8 @@
 //! deserializing captured-shape OFF product JSON.
 
 use life::products::nutrition::{
-    Allergen, DietaryFlag, Nutrition, RawFacts, merge_allergens, merge_dietary, merge_ingredients,
-    merge_nutrition,
+    Allergen, Claim, DietaryFlag, Nutrition, Presence, RawFacts, merge_allergens, merge_dietary,
+    merge_ingredients, merge_nutrition,
 };
 
 fn parse(value: serde_json::Value) -> life::products::nutrition::ProductFacts {
@@ -63,35 +63,35 @@ fn full_panel_ingredients_allergens_and_flags() {
     );
 
     // Allergens: contains from allergens_tags, may_contain from traces, sorted.
-    let allergens: Vec<(&str, &str)> = facts
+    let allergens: Vec<(&str, Presence)> = facts
         .allergens
         .iter()
-        .map(|a| (a.allergen.as_str(), a.presence.as_str()))
+        .map(|a| (a.allergen.as_str(), a.presence))
         .collect();
     assert_eq!(
         allergens,
         vec![
-            ("gluten", "contains"),
-            ("milk", "may_contain"),
-            ("nuts", "may_contain"),
-            ("oats", "contains"),
+            ("gluten", Presence::Contains),
+            ("milk", Presence::MayContain),
+            ("nuts", Presence::MayContain),
+            ("oats", Presence::Contains),
         ]
     );
 
     // Dietary: analysis + label claims, deduped, sorted by flag.
-    let dietary: Vec<(&str, &str)> = facts
+    let dietary: Vec<(&str, Claim)> = facts
         .dietary
         .iter()
-        .map(|d| (d.flag.as_str(), d.value.as_str()))
+        .map(|d| (d.flag.as_str(), d.value))
         .collect();
     assert_eq!(
         dietary,
         vec![
-            ("gluten_free", "yes"),
-            ("organic", "yes"),
-            ("palm_oil_free", "yes"),
-            ("vegan", "yes"),
-            ("vegetarian", "yes"),
+            ("gluten_free", Claim::Yes),
+            ("organic", Claim::Yes),
+            ("palm_oil_free", Claim::Yes),
+            ("vegan", Claim::Yes),
+            ("vegetarian", Claim::Yes),
         ]
     );
 }
@@ -107,17 +107,17 @@ fn analysis_tristate_and_label_overrides_softer_guess() {
         // A firm label claim must beat OFF's "maybe" analysis for the same flag.
         "labels_tags": ["en:vegetarian"]
     }));
-    let dietary: Vec<(&str, &str)> = facts
+    let dietary: Vec<(&str, Claim)> = facts
         .dietary
         .iter()
-        .map(|d| (d.flag.as_str(), d.value.as_str()))
+        .map(|d| (d.flag.as_str(), d.value))
         .collect();
     assert_eq!(
         dietary,
         vec![
-            ("palm_oil_free", "no"),
-            ("vegan", "no"),
-            ("vegetarian", "yes"), // label 'yes' overrode 'maybe'
+            ("palm_oil_free", Claim::No),
+            ("vegan", Claim::No),
+            ("vegetarian", Claim::Yes), // label 'yes' overrode 'maybe'
         ]
     );
     // No nutriments at all → no panel.
@@ -169,15 +169,15 @@ fn a_product_with_no_facts_parses_to_nothing() {
 
 // --- merge_dietary: reconciling what several sources claim about one product ---
 
-fn claim(flag: &str, value: &str) -> DietaryFlag {
+fn claim(flag: &str, value: Claim) -> DietaryFlag {
     DietaryFlag {
         flag: flag.to_string(),
-        value: value.to_string(),
+        value,
     }
 }
 
-fn merged(claims: &[(&str, &str)]) -> Vec<(String, String)> {
-    merge_dietary(claims.iter().map(|(f, v)| claim(f, v)).collect())
+fn merged(claims: &[(&str, Claim)]) -> Vec<(String, Claim)> {
+    merge_dietary(claims.iter().map(|(f, v)| claim(f, *v)).collect())
         .into_iter()
         .map(|d| (d.flag, d.value))
         .collect()
@@ -187,20 +187,20 @@ fn merged(claims: &[(&str, &str)]) -> Vec<(String, String)> {
 fn a_firm_claim_settles_a_soft_guess() {
     // Asda tags its own product Vegan; OFF's ingredient analysis only guessed.
     assert_eq!(
-        merged(&[("vegan", "yes"), ("vegan", "maybe")]),
-        [("vegan".to_string(), "yes".to_string())]
+        merged(&[("vegan", Claim::Yes), ("vegan", Claim::Maybe)]),
+        [("vegan".to_string(), Claim::Yes)]
     );
 }
 
 #[test]
 fn sources_that_agree_just_agree() {
     assert_eq!(
-        merged(&[("gluten_free", "yes"), ("gluten_free", "yes")]),
-        [("gluten_free".to_string(), "yes".to_string())]
+        merged(&[("gluten_free", Claim::Yes), ("gluten_free", Claim::Yes)]),
+        [("gluten_free".to_string(), Claim::Yes)]
     );
     assert_eq!(
-        merged(&[("vegan", "no"), ("vegan", "no")]),
-        [("vegan".to_string(), "no".to_string())]
+        merged(&[("vegan", Claim::No), ("vegan", Claim::No)]),
+        [("vegan".to_string(), Claim::No)]
     );
 }
 
@@ -210,18 +210,22 @@ fn a_yes_against_a_no_is_never_reported_as_yes() {
     // this is vegan, while a source says it isn't, is the harmful direction.
     // Say we're unsure and let them read the label.
     assert_eq!(
-        merged(&[("vegan", "yes"), ("vegan", "no")]),
-        [("vegan".to_string(), "maybe".to_string())]
+        merged(&[("vegan", Claim::Yes), ("vegan", Claim::No)]),
+        [("vegan".to_string(), Claim::Maybe)]
     );
 }
 
 #[test]
 fn flags_stay_independent_and_sorted() {
     assert_eq!(
-        merged(&[("vegan", "yes"), ("halal", "yes"), ("vegan", "no")]),
+        merged(&[
+            ("vegan", Claim::Yes),
+            ("halal", Claim::Yes),
+            ("vegan", Claim::No)
+        ]),
         [
-            ("halal".to_string(), "yes".to_string()),
-            ("vegan".to_string(), "maybe".to_string()),
+            ("halal".to_string(), Claim::Yes),
+            ("vegan".to_string(), Claim::Maybe),
         ]
     );
 }
@@ -229,10 +233,10 @@ fn flags_stay_independent_and_sorted() {
 #[test]
 fn a_single_source_passes_straight_through() {
     assert_eq!(
-        merged(&[("vegan", "maybe"), ("organic", "yes")]),
+        merged(&[("vegan", Claim::Maybe), ("organic", Claim::Yes)]),
         [
-            ("organic".to_string(), "yes".to_string()),
-            ("vegan".to_string(), "maybe".to_string()),
+            ("organic".to_string(), Claim::Yes),
+            ("vegan".to_string(), Claim::Maybe),
         ]
     );
     assert!(merged(&[]).is_empty());
@@ -304,18 +308,18 @@ fn ingredients_prefer_the_retailer_and_skip_empties() {
 
 // --- merge_allergens: union across sources, most-severe presence wins ---
 
-fn allergen(name: &str, presence: &str) -> Allergen {
+fn allergen(name: &str, presence: Presence) -> Allergen {
     Allergen {
         allergen: name.to_string(),
-        presence: presence.to_string(),
+        presence,
     }
 }
 
-fn allergens_merged(claims: &[(&str, &str, &str)]) -> Vec<(String, String)> {
+fn allergens_merged(claims: &[(&str, &str, Presence)]) -> Vec<(String, Presence)> {
     merge_allergens(
         claims
             .iter()
-            .map(|(src, name, pres)| (src.to_string(), allergen(name, pres)))
+            .map(|(src, name, pres)| (src.to_string(), allergen(name, *pres)))
             .collect(),
     )
     .into_iter()
@@ -328,10 +332,13 @@ fn allergens_union_every_source_never_dropping_one() {
     // OFF names milk, Asda names soya — a shopper must see both. Absence from one
     // source is not a "free from".
     assert_eq!(
-        allergens_merged(&[("off", "milk", "contains"), ("asda", "soya", "contains"),]),
+        allergens_merged(&[
+            ("off", "milk", Presence::Contains),
+            ("asda", "soya", Presence::Contains),
+        ]),
         [
-            ("milk".to_string(), "contains".to_string()),
-            ("soya".to_string(), "contains".to_string()),
+            ("milk".to_string(), Presence::Contains),
+            ("soya".to_string(), Presence::Contains),
         ]
     );
 }
@@ -341,13 +348,19 @@ fn a_declared_allergen_beats_a_mere_trace() {
     // One source declares milk as an ingredient, another only as a trace: the
     // firmer, more dangerous claim wins.
     assert_eq!(
-        allergens_merged(&[("off", "milk", "may_contain"), ("asda", "milk", "contains"),]),
-        [("milk".to_string(), "contains".to_string())]
+        allergens_merged(&[
+            ("off", "milk", Presence::MayContain),
+            ("asda", "milk", Presence::Contains),
+        ]),
+        [("milk".to_string(), Presence::Contains)]
     );
     // Order of sources doesn't change the outcome.
     assert_eq!(
-        allergens_merged(&[("asda", "milk", "contains"), ("off", "milk", "may_contain"),]),
-        [("milk".to_string(), "contains".to_string())]
+        allergens_merged(&[
+            ("asda", "milk", Presence::Contains),
+            ("off", "milk", Presence::MayContain),
+        ]),
+        [("milk".to_string(), Presence::Contains)]
     );
 }
 

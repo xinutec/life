@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 
 use life::db;
-use life::products::nutrition::{Allergen, DietaryFlag, Nutrition, ProductFacts};
+use life::products::nutrition::{Allergen, Claim, DietaryFlag, Nutrition, Presence, ProductFacts};
 use life::products::{brandbank, repo};
 
 const OALTY_BRANDBANK: &str = include_str!("fixtures/asda_brandbank_oalty.json");
@@ -70,21 +70,21 @@ async fn store_and_read_facts_then_replace_on_relookup() {
         allergens: vec![
             Allergen {
                 allergen: "gluten".into(),
-                presence: "contains".into(),
+                presence: Presence::Contains,
             },
             Allergen {
                 allergen: "nuts".into(),
-                presence: "may_contain".into(),
+                presence: Presence::MayContain,
             },
         ],
         dietary: vec![
             DietaryFlag {
                 flag: "vegan".into(),
-                value: "yes".into(),
+                value: Claim::Yes,
             },
             DietaryFlag {
                 flag: "palm_oil_free".into(),
-                value: "maybe".into(),
+                value: Claim::Maybe,
             },
         ],
     };
@@ -108,16 +108,19 @@ async fn store_and_read_facts_then_replace_on_relookup() {
     assert_eq!(
         read.allergens
             .iter()
-            .map(|a| (a.allergen.as_str(), a.presence.as_str()))
+            .map(|a| (a.allergen.as_str(), a.presence))
             .collect::<Vec<_>>(),
-        vec![("gluten", "contains"), ("nuts", "may_contain")]
+        vec![
+            ("gluten", Presence::Contains),
+            ("nuts", Presence::MayContain)
+        ]
     );
     assert_eq!(
         read.dietary
             .iter()
-            .map(|d| (d.flag.as_str(), d.value.as_str()))
+            .map(|d| (d.flag.as_str(), d.value))
             .collect::<Vec<_>>(),
-        vec![("palm_oil_free", "maybe"), ("vegan", "yes")]
+        vec![("palm_oil_free", Claim::Maybe), ("vegan", Claim::Yes)]
     );
 
     // A re-lookup restates facts in full: the old allergen/flag sets are replaced,
@@ -131,7 +134,7 @@ async fn store_and_read_facts_then_replace_on_relookup() {
         allergens: vec![],
         dietary: vec![DietaryFlag {
             flag: "vegan".into(),
-            value: "yes".into(),
+            value: Claim::Yes,
         }],
     };
     repo::store_facts(&pool, product.id, &restated, "off")
@@ -194,15 +197,15 @@ async fn two_sources_dietary_claims_coexist_and_merge() {
         &[
             DietaryFlag {
                 flag: "vegan".into(),
-                value: "maybe".into(),
+                value: Claim::Maybe,
             },
             DietaryFlag {
                 flag: "palm_oil_free".into(),
-                value: "yes".into(),
+                value: Claim::Yes,
             },
             DietaryFlag {
                 flag: "vegetarian".into(),
-                value: "no".into(),
+                value: Claim::No,
             },
         ],
         "off",
@@ -217,11 +220,11 @@ async fn two_sources_dietary_claims_coexist_and_merge() {
         &[
             DietaryFlag {
                 flag: "vegan".into(),
-                value: "yes".into(),
+                value: Claim::Yes,
             },
             DietaryFlag {
                 flag: "vegetarian".into(),
-                value: "yes".into(),
+                value: Claim::Yes,
             },
         ],
         "asda",
@@ -234,22 +237,22 @@ async fn two_sources_dietary_claims_coexist_and_merge() {
             .dietary
             .iter()
             .find(|d| d.flag == flag)
-            .map(|d| d.value.clone())
+            .map(|d| d.value)
     };
     let facts = repo::facts_for(&pool, product.id).await.unwrap();
     assert_eq!(
-        read("vegan", &facts).as_deref(),
-        Some("yes"),
+        read("vegan", &facts),
+        Some(Claim::Yes),
         "a firm claim settles a maybe"
     );
     assert_eq!(
-        read("palm_oil_free", &facts).as_deref(),
-        Some("yes"),
+        read("palm_oil_free", &facts),
+        Some(Claim::Yes),
         "OFF's own claim survives"
     );
     assert_eq!(
-        read("vegetarian", &facts).as_deref(),
-        Some("maybe"),
+        read("vegetarian", &facts),
+        Some(Claim::Maybe),
         "sources disagree — say so rather than over-claim"
     );
 
@@ -260,7 +263,7 @@ async fn two_sources_dietary_claims_coexist_and_merge() {
         product.id,
         &[DietaryFlag {
             flag: "vegan".into(),
-            value: "maybe".into(),
+            value: Claim::Maybe,
         }],
         "off",
     )
@@ -268,13 +271,13 @@ async fn two_sources_dietary_claims_coexist_and_merge() {
     .unwrap();
     let facts = repo::facts_for(&pool, product.id).await.unwrap();
     assert_eq!(
-        read("vegan", &facts).as_deref(),
-        Some("yes"),
+        read("vegan", &facts),
+        Some(Claim::Yes),
         "Asda's claim survives an OFF re-lookup"
     );
     assert_eq!(
-        read("vegetarian", &facts).as_deref(),
-        Some("yes"),
+        read("vegetarian", &facts),
+        Some(Claim::Yes),
         "and OFF dropping its own claim leaves Asda's standing"
     );
 }
@@ -319,7 +322,7 @@ async fn two_sources_nutrition_allergens_ingredients_coexist_and_merge() {
             ingredients: Some("crowd-entered ingredients".into()),
             allergens: vec![Allergen {
                 allergen: "milk".into(),
-                presence: "may_contain".into(),
+                presence: Presence::MayContain,
             }],
             dietary: vec![],
         },
@@ -341,11 +344,11 @@ async fn two_sources_nutrition_allergens_ingredients_coexist_and_merge() {
             allergens: vec![
                 Allergen {
                     allergen: "milk".into(),
-                    presence: "contains".into(),
+                    presence: Presence::Contains,
                 },
                 Allergen {
                     allergen: "soya".into(),
-                    presence: "contains".into(),
+                    presence: Presence::Contains,
                 },
             ],
             dietary: vec![],
@@ -368,9 +371,9 @@ async fn two_sources_nutrition_allergens_ingredients_coexist_and_merge() {
         facts
             .allergens
             .iter()
-            .map(|a| (a.allergen.as_str(), a.presence.as_str()))
+            .map(|a| (a.allergen.as_str(), a.presence))
             .collect::<Vec<_>>(),
-        vec![("milk", "contains"), ("soya", "contains")],
+        vec![("milk", Presence::Contains), ("soya", Presence::Contains)],
         "milk upgraded to 'contains'; soya kept though OFF was silent"
     );
 
@@ -454,7 +457,7 @@ async fn real_brandbank_facts_parse_store_and_read_back() {
         "Oats declared"
     );
     let vegan = read.dietary.iter().find(|d| d.flag == "vegan");
-    assert_eq!(vegan.map(|d| d.value.as_str()), Some("yes"));
+    assert_eq!(vegan.map(|d| d.value), Some(Claim::Yes));
     assert!(
         read.dietary.iter().any(|d| d.flag == "milk_free"),
         "free-from booleans became dietary flags"
@@ -502,7 +505,7 @@ async fn a_failed_allergen_replace_keeps_the_previous_set() {
 
     let declared = |a: &str| Allergen {
         allergen: a.into(),
-        presence: "contains".into(),
+        presence: Presence::Contains,
     };
     repo::replace_allergens(
         &pool,

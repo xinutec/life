@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use life::db;
-use life::products::nutrition::{Allergen, Nutrition, ProductFacts};
+use life::products::nutrition::{Allergen, Nutrition, Presence, ProductFacts};
 use life::products::repo::{self, FactSourceMap};
 use life::products::types::SourceFacts;
 
@@ -101,12 +101,12 @@ fn merge_prefers_the_picked_source_else_precedence() {
     let mut asda = source_facts("asda", Some(panel(61.0)), None);
     asda.facts.allergens = vec![Allergen {
         allergen: "oats".into(),
-        presence: "contains".into(),
+        presence: Presence::Contains,
     }];
     let mut off = source_facts("off", Some(panel(59.0)), None);
     off.facts.allergens = vec![Allergen {
         allergen: "soya".into(),
-        presence: "may_contain".into(),
+        presence: Presence::MayContain,
     }];
     let by_source = vec![asda, off];
 

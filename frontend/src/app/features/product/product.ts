@@ -7,7 +7,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatRadioModule } from '@angular/material/radio';
 
 import { LifeApi } from '../../life-api';
-import { AsdaHit, ProductDetail, ProductListing } from '../../models';
+import { AsdaHit, Claim, ProductDetail, ProductListing } from '../../models';
 import { assertNever, classifyApiError, onlineHint } from '../../shared/api-error';
 import { Feedback } from '../../shared/feedback';
 import { ListState } from '../../shared/list-state';
@@ -38,10 +38,12 @@ interface NutrientRow {
   sub: boolean;
 }
 
-/** A dietary chip: the flag humanized, styled by its tri-state value. */
+/** A dietary chip: the flag humanized, styled by its tri-state value. The value
+ *  is the wire's own `Claim` — the backend types it as an enum, so there is no
+ *  re-declaration here to drift from it and nothing to assert. */
 interface DietaryChip {
   label: string;
-  value: 'yes' | 'no' | 'maybe';
+  value: Claim;
 }
 
 /** One safety-critical fact the sources disagree about, with each source's own
@@ -569,7 +571,7 @@ export class ProductPage {
     () =>
       this.detail()?.facts.dietary.map((f) => ({
         label: humanize(f.flag),
-        value: f.value as DietaryChip['value'],
+        value: f.value,
       })) ?? [],
   );
 
@@ -592,7 +594,7 @@ export class ProductPage {
           source: s.source,
           value: s.facts.dietary.find((f) => f.flag === flag)?.value,
         }))
-        .filter((x): x is { source: string; value: string } => !!x.value);
+        .filter((x): x is { source: string; value: Claim } => !!x.value);
       if (new Set(per.map((x) => x.value)).size > 1) {
         out.push({
           label: humanize(flag),

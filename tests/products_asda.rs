@@ -4,6 +4,7 @@
 //! assertions are hermetic: no network, no DB.
 
 use life::products::asda;
+use life::products::nutrition::Claim;
 
 // A real multi-query response: one product hit (Lurpak). IMAGE_ID is the EAN;
 // PRICES is region-keyed (EN/SC/…).
@@ -75,10 +76,10 @@ const OAT_DRINK: &str = r#"{
 #[test]
 fn lifestyle_tags_become_dietary_flags() {
     let hits = asda::parse_hits(OAT_DRINK).expect("parses");
-    let flags: Vec<(&str, &str)> = hits[0]
+    let flags: Vec<(&str, Claim)> = hits[0]
         .dietary
         .iter()
-        .map(|d| (d.flag.as_str(), d.value.as_str()))
+        .map(|d| (d.flag.as_str(), d.value))
         .collect();
     // The claimed diet/free-from tags we map: Vegan, Vegetarian, NoLactose,
     // NoNuts. Halal, Kosher and NoGluten are 0 — not claimed — so they assert
@@ -87,10 +88,10 @@ fn lifestyle_tags_become_dietary_flags() {
     assert_eq!(
         flags,
         vec![
-            ("vegan", "yes"),
-            ("vegetarian", "yes"),
-            ("lactose_free", "yes"),
-            ("nut_free", "yes"),
+            ("vegan", Claim::Yes),
+            ("vegetarian", Claim::Yes),
+            ("lactose_free", Claim::Yes),
+            ("nut_free", Claim::Yes),
         ]
     );
     assert_eq!(hits[0].quantity_label.as_deref(), Some("330ML"));

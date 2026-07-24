@@ -22,6 +22,8 @@ export type { ProductFacts } from './generated/ProductFacts';
 export type { Nutrition } from './generated/Nutrition';
 export type { Allergen } from './generated/Allergen';
 export type { DietaryFlag } from './generated/DietaryFlag';
+export type { Claim } from './generated/Claim';
+export type { Presence } from './generated/Presence';
 export type { ShoppingItem } from './generated/ShoppingItem';
 export type { RecipeIngredient } from './generated/RecipeIngredient';
 export type { Recipe } from './generated/Recipe';

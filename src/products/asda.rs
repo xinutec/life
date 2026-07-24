@@ -21,7 +21,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use super::nutrition::DietaryFlag;
+use super::nutrition::{Claim, DietaryFlag};
 use super::off::is_valid_barcode;
 use super::prices::PriceInput;
 
@@ -142,7 +142,7 @@ fn lifestyle_flags(info: &std::collections::BTreeMap<String, i64>) -> Vec<Dietar
         .filter(|(tag, _)| info.get(*tag).is_some_and(|v| *v == 1))
         .map(|(_, flag)| DietaryFlag {
             flag: (*flag).to_string(),
-            value: "yes".to_string(),
+            value: Claim::Yes,
         })
         .collect()
 }

@@ -8,8 +8,8 @@ use sqlx::types::Json;
 use sqlx::{MySqlConnection, MySqlPool};
 
 use super::nutrition::{
-    Allergen, DietaryFlag, Nutrition, ProductFacts, fact_rank, merge_allergens, merge_dietary,
-    merge_ingredients, merge_nutrition, summarize_nutrition,
+    Allergen, Claim, DietaryFlag, Nutrition, Presence, ProductFacts, fact_rank, merge_allergens,
+    merge_dietary, merge_ingredients, merge_nutrition, summarize_nutrition,
 };
 use super::prices::{PriceInput, ShopPrice};
 use super::source;
@@ -886,7 +886,7 @@ async fn replace_allergens_in(
         )
         .bind(product_id)
         .bind(&a.allergen)
-        .bind(&a.presence)
+        .bind(a.presence.to_string())
         .bind(source)
         .execute(&mut *conn)
         .await?;
@@ -932,7 +932,7 @@ async fn replace_dietary_in(
         )
         .bind(product_id)
         .bind(&f.flag)
-        .bind(&f.value)
+        .bind(f.value.to_string())
         .bind(source)
         .execute(&mut *conn)
         .await?;
@@ -1111,7 +1111,13 @@ pub async fn facts_by_source(pool: &MySqlPool, product_id: u64) -> Result<Vec<So
     for (source, text) in ing_rows {
         by_source.entry(source).or_insert_with(blank).ingredients = Some(text);
     }
+    // The columns are ENUMs, so a value outside the taxonomy means the schema and
+    // this code have diverged — a parse failure here is the honest report of that,
+    // not something to paper over with a default.
     for (source, allergen, presence) in allergen_rows {
+        let presence = presence
+            .parse::<Presence>()
+            .map_err(|e| anyhow::anyhow!("{e} (product {product_id}, source {source})"))?;
         by_source
             .entry(source)
             .or_insert_with(blank)
@@ -1119,6 +1125,9 @@ pub async fn facts_by_source(pool: &MySqlPool, product_id: u64) -> Result<Vec<So
             .push(Allergen { allergen, presence });
     }
     for (source, flag, value) in dietary_rows {
+        let value = value
+            .parse::<Claim>()
+            .map_err(|e| anyhow::anyhow!("{e} (product {product_id}, source {source})"))?;
         by_source
             .entry(source)
             .or_insert_with(blank)
@@ -1430,7 +1439,17 @@ pub async fn set_image(pool: &MySqlPool, barcode: &str, bytes: &[u8], mime: &str
     Ok(())
 }
 
-/// Insert or refresh a cached product (with optional image).
+/// Cache a product from an Open Food Facts lookup: insert it, or FILL THE GAPS
+/// on a row that already exists. Never an overwrite.
+///
+/// This used to restate name/brand/pack/image unconditionally, which quietly
+/// contradicted the policy every other write here follows (`refresh_canonical_name`,
+/// `upsert_external`, `sync_listing`): fill-if-empty, and a disagreement becomes a
+/// divergence to approve rather than a silent replacement. It was reachable only
+/// on the OFF cache-MISS path, so nothing hit it in practice — but it was a trap
+/// primed for the first refresh path anyone added, and it would have taken a
+/// hand-typed name with it while leaving `name_source = 'user'` behind, so the row
+/// would claim a provenance it no longer had.
 pub async fn upsert(
     pool: &MySqlPool,
     barcode: &str,
@@ -1444,11 +1463,20 @@ pub async fn upsert(
         None => (None, None),
     };
     sqlx::query(
-        "INSERT INTO products (barcode, name, brand, quantity_label, image, image_mime, source) \
-         VALUES (?, ?, ?, ?, ?, ?, 'off') \
-         ON DUPLICATE KEY UPDATE name = VALUES(name), brand = VALUES(brand), \
-         quantity_label = VALUES(quantity_label), image = VALUES(image), \
-         image_mime = VALUES(image_mime), fetched_at = CURRENT_TIMESTAMP",
+        // `COALESCE(NULLIF(col, ''), VALUES(col))` = keep what's there unless it's
+        // absent or blank. `image_mime` is assigned BEFORE `image` on purpose:
+        // ON DUPLICATE KEY assignments evaluate left to right, so this is the one
+        // ordering in which `image IS NULL` still describes the OLD image and the
+        // mime can't be left describing bytes we didn't take.
+        "INSERT INTO products \
+         (barcode, name, brand, quantity_label, image, image_mime, source, name_source) \
+         VALUES (?, ?, ?, ?, ?, ?, 'off', 'off') \
+         ON DUPLICATE KEY UPDATE name = COALESCE(NULLIF(name, ''), VALUES(name)), \
+         brand = COALESCE(NULLIF(brand, ''), VALUES(brand)), \
+         quantity_label = COALESCE(NULLIF(quantity_label, ''), VALUES(quantity_label)), \
+         image_mime = IF(image IS NULL, VALUES(image_mime), image_mime), \
+         image = COALESCE(image, VALUES(image)), \
+         fetched_at = CURRENT_TIMESTAMP",
     )
     .bind(barcode)
     .bind(name)
