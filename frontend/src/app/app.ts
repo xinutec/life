@@ -15,7 +15,7 @@ import { Alerts } from './shared/alerts';
 import { Feedback } from './shared/feedback';
 import { ScannerDialog } from './features/scanner/scanner-dialog';
 import { LifeApi } from './life-api';
-import { Me } from './models';
+import { ConnectionStatus, Me } from './models';
 import { SwUpdates } from './sw-updates';
 import { Telemetry } from './telemetry';
 import { WellbeingReminder } from './shared/wellbeing-reminder';
@@ -30,13 +30,43 @@ interface NavItem {
 
 const ME_CACHE_KEY = 'life.me';
 
+/** Every ConnectionStatus, so a cached value can be checked against the real
+ *  set rather than assumed to be one of them. The `Record` keys make the
+ *  compiler prove the list is exhaustive — a new status won't build until it's
+ *  here (same device as ITEM_CATEGORIES in models.ts). */
+const CONNECTION_STATUSES: string[] = Object.keys({
+  active: true,
+  needs_reauth: true,
+  not_linked: true,
+} satisfies Record<ConnectionStatus, true>);
+
+/** Is this parsed blob really a `Me`? Checked, not asserted: the cache outlives
+ *  every deploy that ran on this device, so it can hold the shape from two
+ *  versions ago — and the shell reads `nextcloud` to decide whether to nag for a
+ *  re-link, which is the wrong thing to get from a guess. */
+function isMe(v: unknown): v is Me {
+  if (typeof v !== 'object' || v === null) return false;
+  const m = v as Record<string, unknown>;
+  return (
+    typeof m['userId'] === 'string' &&
+    typeof m['displayName'] === 'string' &&
+    typeof m['avatarUrl'] === 'string' &&
+    typeof m['nextcloud'] === 'string' &&
+    CONNECTION_STATUSES.includes(m['nextcloud'])
+  );
+}
+
 /** Last-known identity, cached so the app opens offline instead of showing the
  *  sign-in screen when it can't reach `/api/me`. Best-effort — storage may be
- *  unavailable (private mode, quota); a miss just falls back to the network. */
+ *  unavailable (private mode, quota); a miss just falls back to the network.
+ *  A blob that isn't a `Me` is discarded the same way, so an old shape costs a
+ *  network round-trip rather than rendering a half-typed identity. */
 function loadCachedMe(): Me | null {
   try {
     const raw = localStorage.getItem(ME_CACHE_KEY);
-    return raw ? (JSON.parse(raw) as Me) : null;
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    return isMe(parsed) ? parsed : null;
   } catch {
     return null;
   }
