@@ -11,7 +11,8 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 
-import { emotionColor, emotionDesc, emotionLabel } from '../../shared/emotion-wheel';
+import { EMOTION_NODES, emotionColor, emotionDesc, emotionLabel } from '../../shared/emotion-wheel';
+import { LifeApi } from '../../life-api';
 import { Feedback } from '../../shared/feedback';
 import { SheetHeader } from '../../shared/sheet-header';
 import {
@@ -48,8 +49,12 @@ export class WellbeingEntry implements OnDestroy {
   private store = inject(WellbeingStore);
   private feedback = inject(Feedback);
   private dialog = inject(MatDialog);
+  private api = inject(LifeApi);
 
   private deleting = false;
+  // The model is preloaded once per entry, the moment real words appear — a second
+  // nudge would only repeat work, since the day's system prompt is unchanged.
+  private warmed = false;
   // True once the user has actually typed in the note field. Guards the
   // dismiss-time flush so it never writes back the value the sheet opened with —
   // otherwise an edit that landed remotely while the sheet was open would be
@@ -89,6 +94,16 @@ export class WellbeingEntry implements OnDestroy {
   onNoteInput(value: string): void {
     this.noteDirty = true;
     this.note.set(value);
+    // First real words: a suggestion is now near-certain to follow, so ask the
+    // server to preload the model while the rest of the note is still being typed
+    // — that overlaps the ~60s cold load with the writing instead of paying it
+    // when the picker opens. Fire-and-forget; a failed warm just means old timing.
+    if (!this.warmed && value.trim()) {
+      this.warmed = true;
+      this.api
+        .warmEmotions({ candidates: EMOTION_NODES.map((n) => ({ token: n.token, desc: n.desc })) })
+        .subscribe({ next: () => {}, error: () => {} });
+    }
   }
 
   /** Tap a face to set it; tap the face NEXT to the one that's on and both light

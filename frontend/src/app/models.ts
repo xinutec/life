@@ -39,6 +39,7 @@ export type { TrashKind } from './generated/TrashKind';
 export type { SuggestEmotionsRequest } from './generated/SuggestEmotionsRequest';
 export type { SuggestEmotionsResponse } from './generated/SuggestEmotionsResponse';
 export type { EmotionCandidate } from './generated/EmotionCandidate';
+export type { WarmEmotionsRequest } from './generated/WarmEmotionsRequest';
 
 import type { ItemCategory as ItemCategoryT } from './generated/ItemCategory';
 

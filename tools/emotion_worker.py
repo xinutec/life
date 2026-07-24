@@ -154,8 +154,23 @@ def run(base: str, token: str, model: Model) -> None:
         if job is None:
             continue
 
-        job_id = job["id"]
         prompt = job.get("prompt") or {}
+        if job.get("warm"):
+            # A preload, not a job: run the model on the day's system prompt to
+            # load the weights and build its prefix cache, then drop the output.
+            # Nothing to post — the point is only that the real request landing a
+            # moment later is warm instead of paying the cold load then.
+            try:
+                model.generate(prompt.get("system", ""), prompt.get("user", ""))
+                LOG.info("preloaded the model for today's emotion prompt")
+            except HolderDown as e:
+                LOG.warning("preload deferred: %s", e)
+                time.sleep(RETRY_SECS)
+            except Exception:  # a failed preload must never take the worker down
+                LOG.exception("preload failed")
+            continue
+
+        job_id = job["id"]
         started = time.monotonic()
         try:
             content = model.generate(prompt.get("system", ""), prompt.get("user", ""))

@@ -43,6 +43,12 @@ pub struct AppState {
     /// is what covers a job queued by a *different* process (this signal, like
     /// the OAuth map above, is per-pod).
     job_queued: Arc<tokio::sync::Notify>,
+    /// A pending "warm the model" request: the day's system prompt, set when a
+    /// check-in note starts being written. The worker preloads it — loading the
+    /// weights and building the day's prefix cache — so the real suggestion a
+    /// moment later is warm instead of paying the ~60s cold load then. In-memory
+    /// and best-effort: a missed or stale warm just means the old, cold timing.
+    warm_system: Arc<Mutex<Option<String>>>,
 }
 
 impl AppState {
@@ -54,12 +60,30 @@ impl AppState {
             oauth: Arc::new(Mutex::new(HashMap::new())),
             worker_seen: Arc::new(Mutex::new(None)),
             job_queued: Arc::new(tokio::sync::Notify::new()),
+            warm_system: Arc::new(Mutex::new(None)),
         }
     }
 
     /// A suggestion job was just queued.
     pub fn notify_job_queued(&self) {
         self.job_queued.notify_waiters();
+    }
+
+    /// Ask the worker to preload the model for this day's system prompt. Wakes the
+    /// poll on the same signal as a job, so the load starts within a second of the
+    /// note's first keystroke. A newer request simply replaces an unconsumed one —
+    /// the system is the same all day, so the latest is as good as the first.
+    pub fn request_warm(&self, system: String) {
+        *self.warm_system.lock().expect("warm system poisoned") = Some(system);
+        self.job_queued.notify_waiters();
+    }
+
+    /// Take the pending warm request, if any, clearing it — one preload per ask.
+    pub fn take_warm(&self) -> Option<String> {
+        self.warm_system
+            .lock()
+            .expect("warm system poisoned")
+            .take()
     }
 
     /// Wait for the next queued job. The caller must create this future BEFORE

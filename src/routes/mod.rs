@@ -82,6 +82,7 @@ pub fn router(state: AppState) -> Router {
             "/wellbeing/suggest-emotions",
             post(wellbeing::suggest_emotions),
         )
+        .route("/wellbeing/warm-emotions", post(wellbeing::warm_emotions))
         // The Mac's suggestion worker dials IN here — it holds the model, and the
         // fleet may not open connections toward it. Bearer token, not a session:
         // it is a daemon acting for nobody.

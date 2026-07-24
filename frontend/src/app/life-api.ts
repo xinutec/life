@@ -21,6 +21,7 @@ import {
   TelemetryEvent,
   TrashEntry,
   TrashKind,
+  WarmEmotionsRequest,
 } from './models';
 
 /** Thin client over the life backend. Same-origin in prod; via the dev proxy
@@ -41,6 +42,13 @@ export class LifeApi {
    *  picker degrades to the plain wheel. */
   suggestEmotions(body: SuggestEmotionsRequest): Observable<SuggestEmotionsResponse> {
     return this.http.post<SuggestEmotionsResponse>('/api/wellbeing/suggest-emotions', body);
+  }
+
+  /** Preload the model for a suggestion about to be asked for (fired when a note
+   *  starts being written). Fire-and-forget: the answer is still produced by the
+   *  real suggestEmotions call; this only makes it warm. */
+  warmEmotions(body: WarmEmotionsRequest): Observable<void> {
+    return this.http.post<void>('/api/wellbeing/warm-emotions', body);
   }
 
   locations(): Observable<Loc[]> {

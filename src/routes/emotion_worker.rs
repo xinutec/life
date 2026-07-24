@@ -46,6 +46,10 @@ struct JobOut {
     id: u64,
     /// `{ "system": …, "user": … }` — everything the model needs, and nothing else.
     prompt: serde_json::Value,
+    /// A preload, not a real job: run the model to load it and warm its prefix
+    /// cache, then throw the output away and post no result. `id` is 0 and unused.
+    #[serde(default)]
+    warm: bool,
 }
 
 /// What the worker got back from the model. The raw text, not a parsed list: the
@@ -105,6 +109,18 @@ pub async fn next(State(app): State<AppState>, headers: HeaderMap) -> Result<Res
             return Ok(Json(JobOut {
                 id: job.id,
                 prompt: job.prompt,
+                warm: false,
+            })
+            .into_response());
+        }
+        // No real work, but a note is being written — hand back a preload so the
+        // model is warm by the time the picker opens. Real jobs win: this is only
+        // reached when the queue is empty.
+        if let Some(system) = app.take_warm() {
+            return Ok(Json(JobOut {
+                id: 0,
+                prompt: serde_json::json!({ "system": system, "user": "" }),
+                warm: true,
             })
             .into_response());
         }

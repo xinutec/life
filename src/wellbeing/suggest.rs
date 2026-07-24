@@ -62,6 +62,17 @@ pub struct EmotionCandidate {
     pub desc: String,
 }
 
+/// Fired when a check-in's note starts being written: preload the model for the
+/// suggestion that is now almost certain to follow. Carries only the vocabulary —
+/// the system prompt (vocab + this day's few-shot) is all the preload needs, and
+/// the note itself does not exist yet.
+#[derive(Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct WarmEmotionsRequest {
+    pub candidates: Vec<EmotionCandidate>,
+}
+
 /// Response: suggested tokens, most-fitting first, each guaranteed to be one of
 /// the request's candidates and not already chosen — plus enough state for the
 /// picker to be honest about where they came from.

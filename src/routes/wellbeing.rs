@@ -6,11 +6,14 @@ use std::collections::HashSet;
 
 use axum::Json;
 use axum::extract::State;
+use axum::http::StatusCode;
 
 use crate::error::AppError;
 use crate::session::AuthUser;
 use crate::state::AppState;
-use crate::wellbeing::suggest::{self, SuggestEmotionsRequest, SuggestEmotionsResponse};
+use crate::wellbeing::suggest::{
+    self, SuggestEmotionsRequest, SuggestEmotionsResponse, WarmEmotionsRequest,
+};
 use crate::wellbeing::suggest_store;
 
 /// What the picker should show for this note, and whether a better answer is on
@@ -118,4 +121,25 @@ pub async fn suggest_emotions(
         pending,
         thinking_secs: pending.then_some(u32::try_from(queued.thinking_secs).unwrap_or(u32::MAX)),
     }))
+}
+
+/// Preload the model for a suggestion that is about to be asked for — fired when a
+/// check-in's note starts being written. Building the *same* system prompt the
+/// real request will use means the preload also warms that prompt's KV-cache
+/// prefix, so the suggestion a moment later is a cache hit rather than a cold ~60s
+/// load. Fire-and-forget: no worker, or a slow build, simply leaves the old
+/// timing; the answer is still computed by the real request either way.
+pub async fn warm_emotions(
+    State(app): State<AppState>,
+    AuthUser(user): AuthUser,
+    Json(body): Json<WarmEmotionsRequest>,
+) -> Result<StatusCode, AppError> {
+    if body.candidates.is_empty() {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+    let examples = suggest::fetch_examples(&app.pool, &user.user_id, suggest::MAX_EXAMPLES)
+        .await
+        .unwrap_or_default();
+    app.request_warm(suggest::build_system(&body.candidates, &examples));
+    Ok(StatusCode::ACCEPTED)
 }
