@@ -4,8 +4,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use anyhow::Result;
 use chrono::NaiveDateTime;
-use sqlx::MySqlPool;
 use sqlx::types::Json;
+use sqlx::{MySqlConnection, MySqlPool};
 
 use super::nutrition::{
     Allergen, DietaryFlag, Nutrition, ProductFacts, fact_rank, merge_allergens, merge_dietary,
@@ -767,6 +767,16 @@ pub async fn upsert_nutrition(
     n: &Nutrition,
     source: &str,
 ) -> Result<()> {
+    let mut conn = pool.acquire().await?;
+    upsert_nutrition_in(&mut conn, product_id, n, source).await
+}
+
+async fn upsert_nutrition_in(
+    conn: &mut MySqlConnection,
+    product_id: u64,
+    n: &Nutrition,
+    source: &str,
+) -> Result<()> {
     sqlx::query(
         "INSERT INTO product_nutrition \
          (product_id, basis, serving_size, energy_kj, energy_kcal, fat_g, saturates_g, \
@@ -792,7 +802,7 @@ pub async fn upsert_nutrition(
     .bind(n.salt_g)
     .bind(Json(&n.extra))
     .bind(source)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
     Ok(())
 }
@@ -814,6 +824,16 @@ pub async fn set_ingredients(
     text: &str,
     source: &str,
 ) -> Result<()> {
+    let mut conn = pool.acquire().await?;
+    set_ingredients_in(&mut conn, product_id, text, source).await
+}
+
+async fn set_ingredients_in(
+    conn: &mut MySqlConnection,
+    product_id: u64,
+    text: &str,
+    source: &str,
+) -> Result<()> {
     sqlx::query(
         "INSERT INTO product_ingredients (product_id, source, text) VALUES (?, ?, ?) \
          ON DUPLICATE KEY UPDATE text = VALUES(text)",
@@ -821,7 +841,7 @@ pub async fn set_ingredients(
     .bind(product_id)
     .bind(source)
     .bind(text)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
     Ok(())
 }
@@ -829,8 +849,27 @@ pub async fn set_ingredients(
 /// Replace THIS SOURCE's allergen set, leaving other sources' rows alone (0033).
 /// The incoming set is authoritative for this source (an empty set clears its
 /// allergens); `facts_for` unions every source on read.
+///
+/// Atomic, and that is the whole point: the delete and the re-inserts are one
+/// transaction, so a failure part-way through cannot leave a source declaring
+/// FEWER allergens than it does. Since `facts_for` unions the sources, a half-
+/// applied replace reads as a product that simply doesn't contain the allergen —
+/// silence is not a "free from", and this is the one table where getting that
+/// wrong is a health question rather than a data-quality one.
 pub async fn replace_allergens(
     pool: &MySqlPool,
+    product_id: u64,
+    allergens: &[Allergen],
+    source: &str,
+) -> Result<()> {
+    let mut tx = pool.begin().await?;
+    replace_allergens_in(&mut tx, product_id, allergens, source).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn replace_allergens_in(
+    conn: &mut MySqlConnection,
     product_id: u64,
     allergens: &[Allergen],
     source: &str,
@@ -838,7 +877,7 @@ pub async fn replace_allergens(
     sqlx::query("DELETE FROM product_allergens WHERE product_id = ? AND source = ?")
         .bind(product_id)
         .bind(source)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
     for a in allergens {
         sqlx::query(
@@ -849,7 +888,7 @@ pub async fn replace_allergens(
         .bind(&a.allergen)
         .bind(&a.presence)
         .bind(source)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
     }
     Ok(())
@@ -859,8 +898,24 @@ pub async fn replace_allergens(
 /// (migration 0028). Open Food Facts and Asda each tag the same product, and a
 /// re-lookup of one must not erase the other's contribution; `facts_for` merges
 /// them on read.
+///
+/// Atomic for the same reason as `replace_allergens`: half a replace would drop
+/// claims this source actually makes, and `merge_dietary` reads a missing "no"
+/// as an unopposed "yes".
 pub async fn replace_dietary(
     pool: &MySqlPool,
+    product_id: u64,
+    flags: &[DietaryFlag],
+    source: &str,
+) -> Result<()> {
+    let mut tx = pool.begin().await?;
+    replace_dietary_in(&mut tx, product_id, flags, source).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn replace_dietary_in(
+    conn: &mut MySqlConnection,
     product_id: u64,
     flags: &[DietaryFlag],
     source: &str,
@@ -868,7 +923,7 @@ pub async fn replace_dietary(
     sqlx::query("DELETE FROM product_dietary_flags WHERE product_id = ? AND source = ?")
         .bind(product_id)
         .bind(source)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
     for f in flags {
         sqlx::query(
@@ -879,7 +934,7 @@ pub async fn replace_dietary(
         .bind(&f.flag)
         .bind(&f.value)
         .bind(source)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
     }
     Ok(())
@@ -961,20 +1016,27 @@ pub async fn documents_for(pool: &MySqlPool, product_id: u64) -> Result<Vec<Sour
 /// Persist a product's full fact set from one source, each part restated. Skips
 /// nutrition/ingredients the source didn't provide (leaving any existing rows);
 /// allergens and dietary flags always replace (their absence is meaningful).
+///
+/// One transaction for the lot: a source's facts describe one product as that
+/// source understands it, and a partly-stored set is a description nobody wrote —
+/// Asda's nutrition beside OFF's allergens, attributed to Asda. Either the whole
+/// account lands or none of it does.
 pub async fn store_facts(
     pool: &MySqlPool,
     product_id: u64,
     facts: &ProductFacts,
     source: &str,
 ) -> Result<()> {
+    let mut tx = pool.begin().await?;
     if let Some(n) = &facts.nutrition {
-        upsert_nutrition(pool, product_id, n, source).await?;
+        upsert_nutrition_in(&mut tx, product_id, n, source).await?;
     }
     if let Some(ing) = &facts.ingredients {
-        set_ingredients(pool, product_id, ing, source).await?;
+        set_ingredients_in(&mut tx, product_id, ing, source).await?;
     }
-    replace_allergens(pool, product_id, &facts.allergens, source).await?;
-    replace_dietary(pool, product_id, &facts.dietary, source).await?;
+    replace_allergens_in(&mut tx, product_id, &facts.allergens, source).await?;
+    replace_dietary_in(&mut tx, product_id, &facts.dietary, source).await?;
+    tx.commit().await?;
     Ok(())
 }
 

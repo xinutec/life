@@ -460,3 +460,80 @@ async fn real_brandbank_facts_parse_store_and_read_back() {
         "free-from booleans became dietary flags"
     );
 }
+
+/// A replace that fails partway must leave the source's PREVIOUS set intact.
+///
+/// This is the property that makes allergens safe to merge: `facts_for` unions
+/// every source, so a half-applied replace doesn't read as "we're unsure about
+/// nuts" — it reads as a product with no nut allergen at all. Before the delete
+/// and the re-inserts shared a transaction, the DELETE autocommitted and any
+/// failing INSERT left exactly that hole.
+///
+/// The failure is forced by a value the column cannot hold (`allergen` is
+/// VARCHAR(48)), so it's the database that rejects the write, at the same place
+/// a connection reset or a pod eviction would land.
+#[tokio::test]
+async fn a_failed_allergen_replace_keeps_the_previous_set() {
+    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
+        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping allergen atomicity test");
+        return;
+    };
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    let barcode = "5000000000459";
+    sqlx::query("DELETE FROM products WHERE barcode = ?")
+        .bind(barcode)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let product = repo::upsert_external(
+        &pool,
+        "off",
+        barcode,
+        Some(barcode),
+        &repo::ListingFields {
+            raw_name: Some("Nut Bar"),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    let declared = |a: &str| Allergen {
+        allergen: a.into(),
+        presence: "contains".into(),
+    };
+    repo::replace_allergens(
+        &pool,
+        product.id,
+        &[declared("nuts"), declared("milk")],
+        "asda",
+    )
+    .await
+    .unwrap();
+
+    // A second allergen too long for the column: the first INSERT of this batch
+    // succeeds, the second fails — the case that used to leave the DELETE applied.
+    let err = repo::replace_allergens(
+        &pool,
+        product.id,
+        &[declared("soya"), declared(&"x".repeat(64))],
+        "asda",
+    )
+    .await;
+    assert!(err.is_err(), "an over-long allergen must be rejected");
+
+    let facts = repo::facts_for(&pool, product.id).await.unwrap();
+    let mut kept: Vec<&str> = facts
+        .allergens
+        .iter()
+        .map(|a| a.allergen.as_str())
+        .collect();
+    kept.sort_unstable();
+    assert_eq!(
+        kept,
+        ["milk", "nuts"],
+        "the rejected replace must roll back whole — not drop the declared allergens"
+    );
+}
