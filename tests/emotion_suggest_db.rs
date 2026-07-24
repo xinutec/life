@@ -7,6 +7,7 @@
 //! if it described the new text.
 
 use life::db;
+use life::wellbeing::suggest;
 use life::wellbeing::suggest_store as store;
 
 fn prompt(note: &str) -> serde_json::Value {
@@ -182,6 +183,64 @@ async fn suggestion_cache_and_queue_against_real_db() {
     assert!(gave_up.tokens.is_empty());
 
     wipe(&pool, user).await;
+}
+
+/// The few-shot must exclude TODAY's taggings, so the system prompt stays
+/// byte-identical for the day and the worker's disk KV cache keeps hitting. A
+/// yesterday tagging is in; a today tagging is out until tomorrow.
+#[tokio::test]
+async fn fetch_examples_excludes_today_to_keep_the_prefix_stable() {
+    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
+        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping few-shot cutoff DB test");
+        return;
+    };
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    let user = "test-user-emotion-cutoff";
+    sqlx::query("DELETE FROM wellbeing WHERE user_id = ?")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // Yesterday noon (UTC): a labelled check-in that SHOULD few-shot.
+    sqlx::query(
+        "INSERT INTO wellbeing (user_id, recorded_at, score_tenths, note, emotions) \
+         VALUES (?, UTC_DATE() - INTERVAL 12 HOUR, 30, ?, ?)",
+    )
+    .bind(user)
+    .bind("felt calm yesterday")
+    .bind(r#"["Calm/Flat"]"#)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Today: recorded after this UTC midnight — must NOT be in the few-shot yet.
+    sqlx::query(
+        "INSERT INTO wellbeing (user_id, recorded_at, score_tenths, note, emotions) \
+         VALUES (?, UTC_DATE() + INTERVAL 6 HOUR, 30, ?, ?)",
+    )
+    .bind(user)
+    .bind("angry today")
+    .bind(r#"["Angry/Frustrated"]"#)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let examples = suggest::fetch_examples(&pool, user, 80).await.unwrap();
+    let notes: Vec<&str> = examples.iter().map(|e| e.note.as_str()).collect();
+    assert_eq!(
+        notes,
+        vec!["felt calm yesterday"],
+        "today's tagging must be excluded from the few-shot until tomorrow"
+    );
+
+    sqlx::query("DELETE FROM wellbeing WHERE user_id = ?")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .unwrap();
 }
 
 /// The picker must keep waiting through a long generation. A worker blocked on the

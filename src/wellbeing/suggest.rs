@@ -154,7 +154,17 @@ pub fn note_hash(note: &str) -> String {
 }
 
 /// Fetch the user's own labelled check-ins (note + chosen feelings) for the
-/// few-shot, most recent first.
+/// few-shot, most recent first — but only through the end of YESTERDAY (UTC).
+///
+/// Excluding today is what keeps the few-shot, and therefore the whole system
+/// prompt, byte-identical for a day. That stability is what lets the worker's
+/// model cache the prompt's KV prefix to disk once and reuse it across the day's
+/// requests (the prefill of that prefix is most of a request); a sliding
+/// "latest 80" would shift on every new tagging and never hit the cache. The cost
+/// is that a feeling tagged today does not inform today's suggestions until
+/// tomorrow — negligible against 80 examples of history, and the whole point of
+/// the cutoff. `id DESC` breaks `recorded_at` ties so the set — and thus the cache
+/// key derived from the prompt — is deterministic.
 pub async fn fetch_examples(
     pool: &MySqlPool,
     user_id: &str,
@@ -165,7 +175,8 @@ pub async fn fetch_examples(
          WHERE user_id = ? AND deleted_at IS NULL \
            AND emotions IS NOT NULL AND emotions <> '[]' AND emotions <> '' \
            AND note IS NOT NULL AND note <> '' \
-         ORDER BY recorded_at DESC LIMIT ?",
+           AND recorded_at < UTC_DATE() \
+         ORDER BY recorded_at DESC, id DESC LIMIT ?",
     )
     .bind(user_id)
     .bind(limit)
