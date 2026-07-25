@@ -8,6 +8,8 @@
 
 use life::db;
 use life::wellbeing::suggest;
+use life::wellbeing::suggest::EmotionCandidate;
+use life::wellbeing::suggest_store;
 use life::wellbeing::suggest_store as store;
 
 fn prompt(note: &str) -> serde_json::Value {
@@ -312,4 +314,65 @@ async fn a_claimed_job_reads_as_being_worked_until_the_claim_goes_stale() {
     );
 
     wipe(&pool, user).await;
+}
+
+/// The vocabulary survives the request that carried it, so the rollover timer
+/// can rebuild the day's prompt with nobody waiting (0038).
+#[tokio::test]
+async fn the_picker_vocabulary_is_remembered_and_replaced_in_place() {
+    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
+        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping vocabulary test");
+        return;
+    };
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    let user = "test-user-vocabulary";
+    sqlx::query("DELETE FROM emotion_vocabulary WHERE user_id LIKE 'test-user-vocab%'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let vocab = |tokens: &[&str]| -> Vec<EmotionCandidate> {
+        tokens
+            .iter()
+            .map(|t| EmotionCandidate {
+                token: (*t).to_string(),
+                desc: format!("what {t} means"),
+            })
+            .collect()
+    };
+
+    suggest_store::remember_vocabulary(&pool, user, &vocab(&["Calm/Flat", "Sad/Low"]))
+        .await
+        .unwrap();
+    let (who, got) = suggest_store::latest_vocabulary(&pool)
+        .await
+        .unwrap()
+        .expect("a vocabulary");
+    assert_eq!(who, user);
+    // Order is part of the value: the prompt is built from it verbatim, and a
+    // different order is a different cache key.
+    assert_eq!(
+        got.iter().map(|c| c.token.as_str()).collect::<Vec<_>>(),
+        ["Calm/Flat", "Sad/Low"]
+    );
+    assert_eq!(got[0].desc, "what Calm/Flat means");
+
+    // A later send REPLACES rather than accumulates — the wheel is the authority,
+    // and a stale token left behind here would be offered to the model forever.
+    suggest_store::remember_vocabulary(&pool, user, &vocab(&["Glad/Warm"]))
+        .await
+        .unwrap();
+    let (_, replaced) = suggest_store::latest_vocabulary(&pool)
+        .await
+        .unwrap()
+        .expect("a vocabulary");
+    assert_eq!(
+        replaced
+            .iter()
+            .map(|c| c.token.as_str())
+            .collect::<Vec<_>>(),
+        ["Glad/Warm"]
+    );
 }

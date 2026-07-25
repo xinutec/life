@@ -2,5 +2,7 @@
 
 /**
  * One selectable feeling: its `Core/Name` token and the plain-English gloss.
+ * `Serialize` too: the day's vocabulary is stored back verbatim so a rollover
+ * can rebuild the prompt with nobody waiting (see `suggest_store`).
  */
 export type EmotionCandidate = { token: string, desc: string, };

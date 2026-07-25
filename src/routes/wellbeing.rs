@@ -12,7 +12,7 @@ use crate::error::AppError;
 use crate::session::AuthUser;
 use crate::state::AppState;
 use crate::wellbeing::suggest::{
-    self, SuggestEmotionsRequest, SuggestEmotionsResponse, WarmEmotionsRequest,
+    self, EmotionCandidate, SuggestEmotionsRequest, SuggestEmotionsResponse, WarmEmotionsRequest,
 };
 use crate::wellbeing::suggest_store;
 
@@ -50,6 +50,8 @@ pub async fn suggest_emotions(
     if note.is_empty() || body.candidates.is_empty() || body.ulid.is_empty() {
         return nothing();
     }
+
+    remember_vocabulary(&app, &user.user_id, &body.candidates).await;
 
     let hash = suggest::note_hash(note);
     let cached = suggest_store::cached(&app.pool, &user.user_id, &body.ulid).await?;
@@ -137,9 +139,24 @@ pub async fn warm_emotions(
     if body.candidates.is_empty() {
         return Ok(StatusCode::NO_CONTENT);
     }
+    remember_vocabulary(&app, &user.user_id, &body.candidates).await;
     let examples = suggest::fetch_examples(&app.pool, &user.user_id, suggest::MAX_EXAMPLES)
         .await
         .unwrap_or_default();
     app.request_warm(suggest::build_system(&body.candidates, &examples));
     Ok(StatusCode::ACCEPTED)
+}
+
+/// Keep the vocabulary the picker just sent, so the rollover timer can rebuild
+/// this prompt at midnight with nobody waiting (see `suggest_store`, 0038).
+///
+/// Deliberately infallible from the caller's side, and logged rather than
+/// swallowed: this is a hint for tomorrow, and failing today's suggestion over it
+/// would be the wrong trade — but a store that quietly never writes would look
+/// exactly like one that works, and the only symptom would be a slow morning
+/// nobody could explain.
+async fn remember_vocabulary(app: &AppState, user_id: &str, candidates: &[EmotionCandidate]) {
+    if let Err(e) = suggest_store::remember_vocabulary(&app.pool, user_id, candidates).await {
+        tracing::warn!("could not remember the emotion vocabulary: {e:#}");
+    }
 }

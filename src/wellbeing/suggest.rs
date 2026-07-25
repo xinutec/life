@@ -22,10 +22,12 @@
 //!
 //! Prompt-building and parsing are pure, so they are unit-tested without a model.
 
+use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::MySqlPool;
 use std::collections::HashSet;
+use std::time::Duration;
 use ts_rs::TS;
 
 /// Most recent past taggings to few-shot. Enough to teach a style; bounded so the
@@ -54,7 +56,9 @@ pub struct SuggestEmotionsRequest {
 }
 
 /// One selectable feeling: its `Core/Name` token and the plain-English gloss.
-#[derive(Deserialize, TS)]
+/// `Serialize` too: the day's vocabulary is stored back verbatim so a rollover
+/// can rebuild the prompt with nobody waiting (see `suggest_store`).
+#[derive(Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct EmotionCandidate {
@@ -200,6 +204,38 @@ pub async fn fetch_examples(
             (!tokens.is_empty()).then_some(EmotionExample { note, tokens })
         })
         .collect())
+}
+
+/// How long after the UTC rollover the day's prompt is rebuilt. Not on the
+/// stroke of midnight: `fetch_examples` cuts the few-shot at `UTC_DATE()`, and
+/// starting a few minutes late means the database has unambiguously turned the
+/// page before we ask it what yesterday held.
+pub const ROLLOVER_WARM_AFTER_MIDNIGHT: Duration = Duration::from_secs(5 * 60);
+
+/// How long to wait, from `now`, before the next rollover preload.
+///
+/// Pure and therefore testable, which is the point: a scheduler that computes
+/// its own delay from the clock it also reads is untestable exactly where it is
+/// most likely to be wrong (the boundary). Always strictly positive — landing on
+/// the target instant schedules the NEXT day rather than looping.
+pub fn until_rollover_warm(now: DateTime<Utc>) -> Duration {
+    let target = |day: NaiveDate| {
+        day.and_time(NaiveTime::MIN).and_utc()
+            + chrono::Duration::from_std(ROLLOVER_WARM_AFTER_MIDNIGHT).expect("5 minutes fits")
+    };
+    let today = target(now.date_naive());
+    let next = if today > now {
+        today
+    } else {
+        target(
+            now.date_naive()
+                .succ_opt()
+                .expect("a day after today exists"),
+        )
+    };
+    (next - now)
+        .to_std()
+        .unwrap_or(ROLLOVER_WARM_AFTER_MIDNIGHT)
 }
 
 /// Pull the ranked tokens out of what the model wrote — the JSON `{"tokens": [...]}`

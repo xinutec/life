@@ -277,3 +277,49 @@ pub async fn complete(
     tx.commit().await?;
     Ok(())
 }
+
+/// Remember the vocabulary the picker just offered, so the day's prompt can be
+/// rebuilt later without a request to read it from (migration 0038). A cache of
+/// what the client declared, never an authority — the wheel stays the one source
+/// of truth.
+///
+/// Best-effort by construction: the caller ignores the result, because failing a
+/// suggestion the user asked for in order to record a hint for tomorrow would be
+/// the wrong trade.
+pub async fn remember_vocabulary(
+    pool: &MySqlPool,
+    user_id: &str,
+    candidates: &[crate::wellbeing::suggest::EmotionCandidate],
+) -> sqlx::Result<()> {
+    sqlx::query(
+        "INSERT INTO emotion_vocabulary (user_id, candidates) VALUES (?, ?) \
+         ON DUPLICATE KEY UPDATE candidates = VALUES(candidates)",
+    )
+    .bind(user_id)
+    .bind(serde_json::json!(candidates))
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// The most recently active user's remembered vocabulary, if any.
+///
+/// ONE row, deliberately: the warm slot in `AppState` holds a single system
+/// prompt, so a rollover can only preload for one user anyway. That matches the
+/// single-user deployment this runs in (same standing assumption as the in-memory
+/// OAuth map, see `state`), and picking the most recent keeps it honest rather
+/// than arbitrary. A second user would want a warm slot per user, not a different
+/// query here.
+pub async fn latest_vocabulary(
+    pool: &MySqlPool,
+) -> sqlx::Result<Option<(String, Vec<crate::wellbeing::suggest::EmotionCandidate>)>> {
+    let row: Option<(String, serde_json::Value)> = sqlx::query_as(
+        "SELECT user_id, candidates FROM emotion_vocabulary ORDER BY updated_at DESC, user_id LIMIT 1",
+    )
+    .fetch_optional(pool)
+    .await?;
+    match row {
+        Some((user_id, candidates)) => Ok(Some((user_id, decode(candidates)?))),
+        None => Ok(None),
+    }
+}
