@@ -17,9 +17,9 @@ describe('emotion-wheel', () => {
     // no word at all, so a group may hold more — but never fewer.
     const groups = EMOTION_WHEEL.flatMap((c) => c.groups);
     // Roberts' 41, plus Agitated, Conflicted, Waiting (Bad); Caring, Elated,
-    // Admiring, Desiring, Meaningful (Happy); Discouraged, Alienated (Sad); Flat
-    // (Neutral).
-    expect(groups.length).toBe(52);
+    // Admiring, Desiring, Meaningful (Happy); Discouraged, Alienated (Sad); Flat,
+    // Reflective (Neutral).
+    expect(groups.length).toBe(53);
     expect(groups.every((g) => g.leaves.length >= 2)).toBe(true);
   });
 

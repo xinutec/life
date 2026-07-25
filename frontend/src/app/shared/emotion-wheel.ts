@@ -75,6 +75,15 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Free', desc: 'Unburdened and able to be yourself, without constraint.' },
           { name: 'Joyful', desc: 'Bright, buoyant gladness that lifts you.' },
+          {
+            // Contentment you are actively paying attention to. Not Absorbed
+            // (lost in a task, the world falling away — here the world is
+            // exactly what you're attending to) and not Thankful (appreciation
+            // for what you have, looking back at it); this is happening now and
+            // you noticed it happening.
+            name: 'Savouring',
+            desc: 'Taking in something small and good while it lasts, and noticing that you are.',
+          },
         ],
       },
       {
@@ -145,6 +154,25 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             // not Apathetic (which claims you stopped caring — you didn't).
             name: 'Accepting',
             desc: "You've stopped fighting what you can't change, and you're settled.",
+          },
+          {
+            // Comfort that ARRIVES, from something outside you. The rest of this
+            // group is comfort by absence — Calm is nothing pulling at you,
+            // Relieved is a dread that didn't land. Neither has a word for the
+            // wind through the window, the warmth, the sound doing the work.
+            name: 'Soothed',
+            desc: 'Something outside you is easing you — a sound, a warmth, a touch doing the work.',
+          },
+          {
+            // Where you ARE, rather than how things are going. Not Absorbed
+            // (attention swallowed by a task, the world falling away — here the
+            // world is precisely what you are in) and not Calm (which says
+            // nothing is pulling at you, but nothing about where you are).
+            // Sits under Peaceful because that is where this lands when it is
+            // good; presence in pain is a different feeling and would want its
+            // own word elsewhere.
+            name: 'Present',
+            desc: 'Here in your body and senses — not running ahead of it or looking back at it.',
           },
         ],
       },
@@ -683,6 +711,29 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             // that nothing is swinging you. "Emotionally stable today" lands here.
             name: 'Even',
             desc: 'On an even keel — steady, and not swinging either way.',
+          },
+        ],
+      },
+      {
+        // Turned inward without being pulled up or down. The wheel could record
+        // thinking that HURTS (Sad) or that FRIGHTENS (Fearful), and level
+        // not-thinking (Flat) — but not the ordinary act of turning something
+        // over, which is neither. Noticing you have changed is not the same as
+        // minding, and a wheel with no word for the noticing forces the minding.
+        name: 'Reflective',
+        desc: 'Turned inward — thinking something over, without it pulling you up or down.',
+        leaves: [
+          {
+            name: 'Pensive',
+            desc: 'Quietly turning something over; it has some weight, but it is not troubling you.',
+          },
+          {
+            // Deliberately NOT `Fearful/Unsure`, which sits under Insecure and
+            // means doubting YOURSELF. This is doubt about what is true or what
+            // you are noticing — "I feel different, but I'm not sure" — and
+            // filing that under fear would record a worry nobody had.
+            name: 'Uncertain',
+            desc: "Not sure what you're noticing or what it means — an open question, not self-doubt.",
           },
         ],
       },
