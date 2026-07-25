@@ -27,6 +27,21 @@ pub struct PendingOauth {
 /// promising an answer that isn't coming.
 const WORKER_ALIVE: Duration = Duration::from_secs(90);
 
+/// How long a worker may go quiet AFTER taking a preload before we stop
+/// believing in it.
+///
+/// The worker is single-threaded by design (one generation at a time), so while
+/// it preloads it does not poll — and a preload is the one piece of work that
+/// can outlast [`WORKER_ALIVE`]. Measured worst case ~130 s: the first check-in
+/// of a UTC day pays a cold model load (~60 s) *and* rebuilds that day's prefix
+/// cache from scratch (~50 s of prefill), because the few-shot is day-stable.
+///
+/// Without this the picker got the story exactly backwards on the first
+/// check-in of each day (2026-07-25): the warm-up meant to make suggestions feel
+/// instant was itself what made the app report that no worker was listening,
+/// while that worker was busy preparing for the very request being made.
+const PRELOAD_GRACE: Duration = Duration::from_secs(180);
+
 #[derive(Clone)]
 pub struct AppState {
     pub pool: MySqlPool,
@@ -49,6 +64,13 @@ pub struct AppState {
     /// moment later is warm instead of paying the ~60s cold load then. In-memory
     /// and best-effort: a missed or stale warm just means the old, cold timing.
     warm_system: Arc<Mutex<Option<String>>>,
+    /// When a worker last TOOK a preload directive — the start of the window in
+    /// which it is working but deliberately silent. Handing out work is better
+    /// evidence of liveness than "when did it last poll", because we know both
+    /// that a worker was there and why it is about to stop answering. Cleared
+    /// the moment it polls again, so the ordinary clock takes over and this can
+    /// never keep a dead worker alive beyond one [`PRELOAD_GRACE`].
+    warm_taken: Arc<Mutex<Option<Instant>>>,
 }
 
 impl AppState {
@@ -61,6 +83,7 @@ impl AppState {
             worker_seen: Arc::new(Mutex::new(None)),
             job_queued: Arc::new(tokio::sync::Notify::new()),
             warm_system: Arc::new(Mutex::new(None)),
+            warm_taken: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -79,11 +102,18 @@ impl AppState {
     }
 
     /// Take the pending warm request, if any, clearing it — one preload per ask.
+    ///
+    /// Handing one out also starts the silence window: the worker is about to
+    /// spend up to [`PRELOAD_GRACE`] loading weights and building the day's
+    /// prefix cache, and will not poll while it does.
     pub fn take_warm(&self) -> Option<String> {
-        self.warm_system
+        let system = self
+            .warm_system
             .lock()
             .expect("warm system poisoned")
-            .take()
+            .take()?;
+        *self.warm_taken.lock().expect("warm clock poisoned") = Some(Instant::now());
+        Some(system)
     }
 
     /// Wait for the next queued job. The caller must create this future BEFORE
@@ -96,16 +126,28 @@ impl AppState {
     /// The emotion worker just asked for work.
     pub fn mark_worker_seen(&self) {
         *self.worker_seen.lock().expect("worker clock poisoned") = Some(Instant::now());
+        // It is polling again, so any preload it took has finished: end the
+        // grace window rather than let it run on unearned.
+        *self.warm_taken.lock().expect("warm clock poisoned") = None;
     }
 
     /// Is there a worker to compute suggestions? Answered by observation rather
     /// than configuration, so the picker's "thinking…" reflects a machine that is
     /// actually listening, not merely a token that was set once.
     pub fn worker_alive(&self) -> bool {
-        self.worker_seen
+        let polled = self
+            .worker_seen
             .lock()
             .expect("worker clock poisoned")
-            .is_some_and(|t| t.elapsed() < WORKER_ALIVE)
+            .is_some_and(|t| t.elapsed() < WORKER_ALIVE);
+        if polled {
+            return true;
+        }
+        // Silent, but for a reason we handed it ourselves.
+        self.warm_taken
+            .lock()
+            .expect("warm clock poisoned")
+            .is_some_and(|t| t.elapsed() < PRELOAD_GRACE)
     }
 
     /// Mint a new opaque `state` token and remember its pending entry.
