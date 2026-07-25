@@ -71,7 +71,51 @@ describe('emotion-wheel', () => {
   it('every node carries a unique qualified token', () => {
     const tokens = EMOTION_NODES.map((n) => n.token);
     expect(new Set(tokens).size).toBe(tokens.length); // no collisions
-    expect(EMOTION_NODES.find((n) => n.name === 'Withdrawn')?.token).toBe('Angry/Withdrawn');
+    // Two nodes now carry this name (Angry and Sad), so what matters is not
+    // which comes first in the array but which a legacy bare word resolves to —
+    // asserted in the pinning test below.
+    expect(EMOTION_NODES.filter((n) => n.name === 'Withdrawn')).toHaveLength(2);
+  });
+
+  it('pins a legacy bare word to the core it displayed as, not to wheel order', () => {
+    // These three were duplicated into an EARLIER core than the one a check-in
+    // was saved against. Left to first-occurrence, an old bare 'Withdrawn' would
+    // silently become Sad — re-colouring history and asserting a feeling that
+    // was never recorded. The pin is what stops position deciding this.
+    expect(emotionToken('Withdrawn')).toBe('Angry/Withdrawn');
+    expect(emotionToken('Numb')).toBe('Angry/Numb');
+    expect(emotionToken('Hesitant')).toBe('Disgusted/Hesitant');
+    // Ambiguous before this revision; pinned where position had already put them.
+    expect(emotionToken('Embarrassed')).toBe('Sad/Embarrassed');
+    expect(emotionToken('Inferior')).toBe('Sad/Inferior');
+    expect(emotionToken('Overwhelmed')).toBe('Fearful/Overwhelmed');
+    // The new duplicates are still reachable — by their qualified token.
+    expect(emotionNode('Sad/Withdrawn')?.core).toBe('Sad');
+    expect(emotionNode('Fearful/Hesitant')?.core).toBe('Fearful');
+  });
+
+  it('resolves every bare word still stored in production', () => {
+    // The exact set found in the wellbeing table (2026-07-25, 15 values across
+    // 10 words) and what each must become. Migration 0039 rewrites them to these
+    // tokens, so this is the authority the SQL was written from — if the wheel
+    // ever moves one of these, this fails rather than the history quietly
+    // re-pointing.
+    const stored: Readonly<Record<string, string>> = {
+      Hopeful: 'Happy/Hopeful',
+      Worried: 'Fearful/Worried',
+      Thankful: 'Happy/Thankful',
+      Isolated: 'Sad/Isolated',
+      Overwhelmed: 'Fearful/Overwhelmed', // ambiguous: also Bad/Overwhelmed
+      Disappointed: 'Sad/Disappointed', // ambiguous: also the Disgusted GROUP
+      Annoyed: 'Angry/Annoyed',
+      Loving: 'Happy/Loving',
+      Sleepy: 'Bad/Sleepy',
+      Inspired: 'Happy/Inspired',
+    };
+    for (const [bare, token] of Object.entries(stored)) {
+      expect(emotionToken(bare), `bare "${bare}"`).toBe(token);
+      expect(emotionNode(token), `token "${token}"`).not.toBeNull();
+    }
   });
 
   it('resolves a qualified token to its path and family colour', () => {

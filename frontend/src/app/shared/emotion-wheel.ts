@@ -334,6 +334,21 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             name: 'Low',
             desc: 'Quietly down, without anything being wrong.',
           },
+          {
+            // Twin of `Angry/Withdrawn`, which sits under a group glossed "anger
+            // that withdraws" — but its own words claim no anger, and pulling
+            // away because you have nothing to give is not the same feeling as
+            // pulling away to shut someone out. Without this the low-mood
+            // version could only be recorded as anger.
+            name: 'Withdrawn',
+            desc: 'Pulled back from people — not to shut them out; there is nothing to give.',
+          },
+          {
+            // Twin of `Angry/Numb`, same reason. NOT Empty, which is hollowness —
+            // this is anaesthesia: the feeling is there, your access to it is not.
+            name: 'Numb',
+            desc: "Deadened — you can tell there's something to feel and you can't reach it.",
+          },
         ],
       },
       {
@@ -560,6 +575,16 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Nervous', desc: 'Jittery and on edge with apprehension.' },
           { name: 'Exposed', desc: 'Unprotected and open to harm.' },
+          {
+            // Twin of `Disgusted/Hesitant`, which sits under Repelled ("pushed
+            // away by something distasteful") — yet its own gloss says "wary",
+            // which is a fear word. Holding back because you are nervous and
+            // holding back because something repels you are different feelings.
+            // Not Nervous, which is apprehension about what might happen; this
+            // is the not-acting itself.
+            name: 'Hesitant',
+            desc: 'Holding back from acting, because it might go badly.',
+          },
         ],
       },
     ],
@@ -787,11 +812,44 @@ export const EMOTION_NODES: readonly EmotionNode[] = EMOTION_WHEEL.flatMap((core
 const BY_TOKEN = new Map<string, EmotionNode>();
 for (const n of EMOTION_NODES) BY_TOKEN.set(n.token, n);
 
-/** Legacy fallback: bare word → first wheel occurrence, preserving the
- *  pre-qualification resolution for check-ins saved before tokens existed.
- *  Leaves are seeded first so that where a group and a leaf share a word, an old
- *  bare value still resolves to the leaf it always displayed as. */
+/** Bare words whose legacy resolution is PINNED to the core they displayed as
+ *  when they were the only occurrence.
+ *
+ *  First-occurrence was never the rule — it was a proxy for "the core it always
+ *  displayed as", and the proxy holds only while nothing is added ahead of the
+ *  original. Duplicating `Withdrawn` and `Numb` into Sad, and `Hesitant` into
+ *  Fearful, put a new occurrence EARLIER in wheel order than the word a check-in
+ *  was saved against — so position would have silently re-pointed old entries to
+ *  a core they never meant, which is the one thing the fallback exists to
+ *  prevent. Pinning states the resolution instead of inferring it.
+ *
+ *  The three that were already ambiguous are pinned too, at the value position
+ *  gave them, so a future insertion or reorder cannot move them either. A word
+ *  only ever belongs here once history depends on it: new duplicates of a word
+ *  no check-in has stored need no entry. */
+const LEGACY_BARE: Readonly<Record<string, string>> = {
+  // Ambiguous before this revision; pinned at their existing resolution.
+  Embarrassed: 'Sad/Embarrassed',
+  Inferior: 'Sad/Inferior',
+  Overwhelmed: 'Fearful/Overwhelmed',
+  // Duplicated in this revision into an EARLIER core; pinned to the original.
+  Withdrawn: 'Angry/Withdrawn',
+  Numb: 'Angry/Numb',
+  Hesitant: 'Disgusted/Hesitant',
+};
+
+/** Legacy fallback: bare word → the node it displayed as before tokens existed.
+ *  Pinned words first (see LEGACY_BARE); otherwise first wheel occurrence, with
+ *  leaves seeded ahead of groups so that where a group and a leaf share a word,
+ *  an old bare value still resolves to the leaf it always displayed as. */
 const BY_NAME = new Map<string, EmotionNode>();
+for (const [name, token] of Object.entries(LEGACY_BARE)) {
+  const pinned = BY_TOKEN.get(token);
+  // A pin naming a token that no longer exists would silently fall through to
+  // position — the exact failure it guards. Fail loudly at module load instead.
+  if (!pinned) throw new Error(`emotion-wheel: legacy pin ${name} → ${token} has no such node`);
+  BY_NAME.set(name, pinned);
+}
 for (const n of EMOTION_NODES) if (n.kind === 'leaf' && !BY_NAME.has(n.name)) BY_NAME.set(n.name, n);
 for (const n of EMOTION_NODES) if (!BY_NAME.has(n.name)) BY_NAME.set(n.name, n);
 
