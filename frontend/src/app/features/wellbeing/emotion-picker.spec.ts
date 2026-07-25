@@ -52,10 +52,14 @@ describe('EmotionPicker', () => {
     expect(c.count()).toBe(1);
   });
 
-  it('upgrades a legacy bare word to its token when seeding', () => {
-    const { c } = setup(['Withdrawn']); // pre-qualification stored value
-    expect(c.isSelected('Angry/Withdrawn')).toBe(true);
-    expect(c.selectedList()).toEqual(['Angry/Withdrawn']);
+  it('carries an unresolvable stored word rather than dropping it', () => {
+    // Bare words are gone from storage (migration 0039) and no longer resolve.
+    // A word the current wheel cannot place — a retired one, or a bare value from
+    // a device that has not synced yet — is still carried, because silently
+    // dropping a recorded feeling is worse than showing it unstyled.
+    const { c } = setup(['Withdrawn']);
+    expect(c.selectedList()).toEqual(['Withdrawn']);
+    expect(c.isSelected('Angry/Withdrawn')).toBe(false);
   });
 
   it('toggles a token on and off', () => {

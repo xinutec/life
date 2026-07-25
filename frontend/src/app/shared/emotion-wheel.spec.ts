@@ -77,45 +77,21 @@ describe('emotion-wheel', () => {
     expect(EMOTION_NODES.filter((n) => n.name === 'Withdrawn')).toHaveLength(2);
   });
 
-  it('pins a legacy bare word to the core it displayed as, not to wheel order', () => {
-    // These three were duplicated into an EARLIER core than the one a check-in
-    // was saved against. Left to first-occurrence, an old bare 'Withdrawn' would
-    // silently become Sad — re-colouring history and asserting a feeling that
-    // was never recorded. The pin is what stops position deciding this.
-    expect(emotionToken('Withdrawn')).toBe('Angry/Withdrawn');
-    expect(emotionToken('Numb')).toBe('Angry/Numb');
-    expect(emotionToken('Hesitant')).toBe('Disgusted/Hesitant');
-    // Ambiguous before this revision; pinned where position had already put them.
-    expect(emotionToken('Embarrassed')).toBe('Sad/Embarrassed');
-    expect(emotionToken('Inferior')).toBe('Sad/Inferior');
-    expect(emotionToken('Overwhelmed')).toBe('Fearful/Overwhelmed');
-    // The new duplicates are still reachable — by their qualified token.
+  it('no longer resolves a bare word: every stored emotion is a token', () => {
+    // Migration 0039 rewrote the last 15 bare values, so the first-occurrence
+    // fallback is gone. This is what that buys: a word can now be added anywhere
+    // in the wheel without re-pointing anything already recorded — the failure
+    // that adding Sad/Withdrawn ahead of Angry/Withdrawn would have caused.
+    expect(emotionNode('Withdrawn')).toBeNull();
+    expect(emotionNode('Hopeful')).toBeNull();
+    expect(emotionNode('Overwhelmed')).toBeNull();
+    // Qualified tokens resolve, including both sides of a duplicated name.
+    expect(emotionNode('Angry/Withdrawn')?.core).toBe('Angry');
     expect(emotionNode('Sad/Withdrawn')?.core).toBe('Sad');
-    expect(emotionNode('Fearful/Hesitant')?.core).toBe('Fearful');
-  });
-
-  it('resolves every bare word still stored in production', () => {
-    // The exact set found in the wellbeing table (2026-07-25, 15 values across
-    // 10 words) and what each must become. Migration 0039 rewrites them to these
-    // tokens, so this is the authority the SQL was written from — if the wheel
-    // ever moves one of these, this fails rather than the history quietly
-    // re-pointing.
-    const stored: Readonly<Record<string, string>> = {
-      Hopeful: 'Happy/Hopeful',
-      Worried: 'Fearful/Worried',
-      Thankful: 'Happy/Thankful',
-      Isolated: 'Sad/Isolated',
-      Overwhelmed: 'Fearful/Overwhelmed', // ambiguous: also Bad/Overwhelmed
-      Disappointed: 'Sad/Disappointed', // ambiguous: also the Disgusted GROUP
-      Annoyed: 'Angry/Annoyed',
-      Loving: 'Happy/Loving',
-      Sleepy: 'Bad/Sleepy',
-      Inspired: 'Happy/Inspired',
-    };
-    for (const [bare, token] of Object.entries(stored)) {
-      expect(emotionToken(bare), `bare "${bare}"`).toBe(token);
-      expect(emotionNode(token), `token "${token}"`).not.toBeNull();
-    }
+    // An unresolvable word is still carried verbatim rather than dropped, so a
+    // tag from a retired vocabulary is never silently lost.
+    expect(emotionToken('Hopeful')).toBe('Hopeful');
+    expect(emotionLabel('Hopeful')).toBe('Hopeful');
   });
 
   it('resolves a qualified token to its path and family colour', () => {
@@ -142,26 +118,25 @@ describe('emotion-wheel', () => {
     expect(emotionColor('Fearful/Overwhelmed')).not.toBe(emotionColor('Bad/Overwhelmed'));
   });
 
-  it('resolves a legacy bare word to its first wheel occurrence', () => {
-    // Pre-qualification check-ins stored a bare word. "Embarrassed" is under both
-    // Sad › Hurt and Disgusted › Disapproving; Sad comes first, so that wins —
-    // exactly as it displayed before tokens existed.
-    expect(emotionNode('Embarrassed')?.core).toBe('Sad');
-    expect(emotionToken('Embarrassed')).toBe('Sad/Embarrassed'); // upgrades on next save
+  it('keeps a duplicated name distinct per core', () => {
+    // "Embarrassed" is under both Sad › Hurt and Disgusted › Disapproving, and
+    // "Disappointed" is a Sad LEAF as well as a Disgusted GROUP. Each is its own
+    // feeling with its own gloss; only the qualified token can tell them apart,
+    // which is why storage uses tokens and nothing else.
+    expect(emotionNode('Sad/Embarrassed')?.core).toBe('Sad');
+    expect(emotionNode('Disgusted/Embarrassed')?.core).toBe('Disgusted');
+    expect(emotionNode('Sad/Disappointed')).toMatchObject({ core: 'Sad', kind: 'leaf' });
+    expect(emotionNode('Disgusted/Disappointed')).toMatchObject({
+      core: 'Disgusted',
+      kind: 'group',
+    });
   });
 
-  it('prefers a leaf over a group when a legacy bare word matches both', () => {
-    // "Disappointed" is a Sad leaf and (under another core) a Disgusted group.
-    // An old bare value must still resolve to the leaf it always displayed as —
-    // making groups selectable must not re-point historical check-ins.
-    expect(emotionNode('Disappointed')).toMatchObject({ core: 'Sad', kind: 'leaf' });
-    expect(emotionToken('Disappointed')).toBe('Sad/Disappointed');
-  });
-
-  it('canonicalises words: token passes through, bare upgrades, unknown kept', () => {
+  it('canonicalises words: a known token passes through, anything else is kept', () => {
     expect(emotionToken('Bad/Overwhelmed')).toBe('Bad/Overwhelmed');
-    expect(emotionToken('Withdrawn')).toBe('Angry/Withdrawn');
-    expect(emotionToken('Anxious')).toBe('Fearful/Anxious'); // a group word, now resolvable
+    expect(emotionToken('Fearful/Anxious')).toBe('Fearful/Anxious'); // a group is a token too
+    // Neither a bare word nor a retired one resolves, and neither is discarded.
+    expect(emotionToken('Withdrawn')).toBe('Withdrawn');
     expect(emotionToken('Flabbergasted')).toBe('Flabbergasted');
   });
 

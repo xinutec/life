@@ -22,10 +22,12 @@
  *  always names exactly one node. The `/` delimiter is safe: no name contains a
  *  slash.
  *
- *  Back-compat: check-ins saved before qualification stored a bare leaf. Those
- *  still resolve, via a first-occurrence fallback, to exactly the core they
- *  always displayed as — so nothing regresses and we never invent which core an
- *  old ambiguous word "really" meant. */
+ *  Every stored emotion is a token. Bare leaf names were the pre-qualification
+ *  format and were resolved by a first-occurrence fallback until migration 0039
+ *  rewrote the last 15 of them; that fallback is gone, and with it the hazard
+ *  that adding a word ahead of an existing one silently re-pointed old history
+ *  to a core it never meant. Adding to the wheel is now free of consequence for
+ *  what is already recorded. */
 
 /** One outer-ring (tertiary) leaf: the word plus a brief gloss. */
 export interface EmotionLeafDef {
@@ -812,57 +814,16 @@ export const EMOTION_NODES: readonly EmotionNode[] = EMOTION_WHEEL.flatMap((core
 const BY_TOKEN = new Map<string, EmotionNode>();
 for (const n of EMOTION_NODES) BY_TOKEN.set(n.token, n);
 
-/** Bare words whose legacy resolution is PINNED to the core they displayed as
- *  when they were the only occurrence.
- *
- *  First-occurrence was never the rule — it was a proxy for "the core it always
- *  displayed as", and the proxy holds only while nothing is added ahead of the
- *  original. Duplicating `Withdrawn` and `Numb` into Sad, and `Hesitant` into
- *  Fearful, put a new occurrence EARLIER in wheel order than the word a check-in
- *  was saved against — so position would have silently re-pointed old entries to
- *  a core they never meant, which is the one thing the fallback exists to
- *  prevent. Pinning states the resolution instead of inferring it.
- *
- *  The three that were already ambiguous are pinned too, at the value position
- *  gave them, so a future insertion or reorder cannot move them either. A word
- *  only ever belongs here once history depends on it: new duplicates of a word
- *  no check-in has stored need no entry. */
-const LEGACY_BARE: Readonly<Record<string, string>> = {
-  // Ambiguous before this revision; pinned at their existing resolution.
-  Embarrassed: 'Sad/Embarrassed',
-  Inferior: 'Sad/Inferior',
-  Overwhelmed: 'Fearful/Overwhelmed',
-  // Duplicated in this revision into an EARLIER core; pinned to the original.
-  Withdrawn: 'Angry/Withdrawn',
-  Numb: 'Angry/Numb',
-  Hesitant: 'Disgusted/Hesitant',
-};
-
-/** Legacy fallback: bare word → the node it displayed as before tokens existed.
- *  Pinned words first (see LEGACY_BARE); otherwise first wheel occurrence, with
- *  leaves seeded ahead of groups so that where a group and a leaf share a word,
- *  an old bare value still resolves to the leaf it always displayed as. */
-const BY_NAME = new Map<string, EmotionNode>();
-for (const [name, token] of Object.entries(LEGACY_BARE)) {
-  const pinned = BY_TOKEN.get(token);
-  // A pin naming a token that no longer exists would silently fall through to
-  // position — the exact failure it guards. Fail loudly at module load instead.
-  if (!pinned) throw new Error(`emotion-wheel: legacy pin ${name} → ${token} has no such node`);
-  BY_NAME.set(name, pinned);
-}
-for (const n of EMOTION_NODES) if (n.kind === 'leaf' && !BY_NAME.has(n.name)) BY_NAME.set(n.name, n);
-for (const n of EMOTION_NODES) if (!BY_NAME.has(n.name)) BY_NAME.set(n.name, n);
-
-/** Resolve a stored word — a qualified `Core/Name` token or a legacy bare word —
- *  to its wheel node (path + colour + gloss), or null if it isn't in the
- *  vocabulary (e.g. a word retired from a later wheel revision). */
+/** Resolve a stored `Core/Name` token to its wheel node (path + colour + gloss),
+ *  or null if it isn't in the vocabulary (e.g. a word retired from a later wheel
+ *  revision). */
 export function emotionNode(word: string): EmotionNode | null {
-  return BY_TOKEN.get(word) ?? BY_NAME.get(word) ?? null;
+  return BY_TOKEN.get(word) ?? null;
 }
 
-/** Canonical stored token for a word: an already-qualified token passes through,
- *  a legacy bare leaf upgrades to its resolved `Core/Leaf`, and an unknown word
- *  is preserved verbatim (so a retired-vocabulary tag is never silently lost). */
+/** Canonical stored token for a word: a known token passes through, and anything
+ *  else is preserved verbatim — so a tag from a retired vocabulary is never
+ *  silently lost, even though nothing can resolve it. */
 export function emotionToken(word: string): string {
   return emotionNode(word)?.token ?? word;
 }
