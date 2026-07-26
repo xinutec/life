@@ -197,6 +197,14 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             name: 'Happy for them',
             desc: "Glad at someone else's good fortune or success, purely for their sake.",
           },
+          {
+            // The rest of this group is warmth you DIRECT at someone; this is
+            // warmth that arrives and lands on you. Not In awe (which is about
+            // scale) and not Tender (which is aimed at someone hurting) — the
+            // wheel had no word for being affected.
+            name: 'Moved',
+            desc: 'Something reached you — a kindness, a piece of music — and you felt it land.',
+          },
         ],
       },
       {
@@ -205,6 +213,14 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Sensitive', desc: "Open and finely attuned to feeling, yours and others'." },
           { name: 'Intimate', desc: 'Emotionally close and connected to someone.' },
+          {
+            // The group is glossed "safe enough to open up" and had no word for
+            // the safety itself — only for what safety lets you do. Nowhere in
+            // the wheel could record simply feeling safe, which is about as
+            // foundational as a felt state gets.
+            name: 'Safe',
+            desc: 'Not braced for anything — you can let your guard down here.',
+          },
         ],
       },
       {
@@ -269,6 +285,15 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
           { name: 'Isolated', desc: 'Cut off from others, with no one near.' },
           { name: 'Abandoned', desc: 'Left alone by those you counted on.' },
           { name: 'Longing', desc: "Aching for someone or something that isn't here." },
+          {
+            // Longing aches for a person, a place, a thing. This aches for a
+            // TIME, and it is fond rather than painful — the bittersweet one. It
+            // sits under Sad because there is a real pang in it, not only a
+            // thought; `Neutral/Reflective` is where the same noticing goes when
+            // it doesn't ache.
+            name: 'Wistful',
+            desc: 'A soft ache for a time that has passed — fond, not painful.',
+          },
         ],
       },
       {
