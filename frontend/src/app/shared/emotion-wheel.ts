@@ -236,6 +236,14 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             name: 'Reaching',
             desc: "Working toward a better feeling you haven't reached yet — trying, on the days it doesn't come on its own.",
           },
+          {
+            // Not Reaching, which is the EFFORT of getting better on a day it
+            // won't come by itself, and not Hopeful, which expects good things
+            // ahead. This is the observation that you are already further along
+            // than you were — improvement you can feel, without having arrived.
+            name: 'Mending',
+            desc: 'Further along than you were, and not there yet.',
+          },
         ],
       },
       {
@@ -401,6 +409,15 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Estranged', desc: 'Grown apart from people you were once close to.' },
           { name: 'Out of place', desc: "You don't fit here, though no one has shut you out." },
+          {
+            // Alone in an EXPERIENCE, not alone in a room. Isolated and Lonely
+            // both claim an absence of people, and picking one of them when the
+            // people are right there records the wrong loneliness. Applies to
+            // anything carried unshared — a diagnosis, a grief, a debt nobody
+            // has been told about.
+            name: 'Alone in it',
+            desc: 'People are here, and not one of them is carrying what you are carrying.',
+          },
         ],
       },
     ],
@@ -559,6 +576,15 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Overwhelmed', desc: 'Swamped; more coming at you than you can take in.' },
           { name: 'Worried', desc: 'Anxiously turning over what could go wrong.' },
+          {
+            // Something demanding is coming and you are already stiffening for
+            // it. Not Dread, which needs the thing to be BAD and certain — what
+            // is coming here may be neither, only costly. The positive twin,
+            // `Happy/Safe`, is glossed "not braced for anything"; the wheel
+            // named this state in a negation before it had a word for it.
+            name: 'Braced',
+            desc: 'Stiffening for something demanding that is on its way.',
+          },
           {
             // Worry turns over what *could* go wrong. Dread has stopped asking.
             name: 'Dread',
