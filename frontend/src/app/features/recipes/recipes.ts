@@ -10,7 +10,8 @@ import { Feedback } from '../../shared/feedback';
 import { ListState } from '../../shared/list-state';
 import { LifeApi } from '../../life-api';
 import { CookableStore, RecipesStore } from '../../stores/catalog';
-import { Recipe, RecipeIngredient } from '../../models';
+import { ItemCategory, Recipe, RecipeIngredient } from '../../models';
+import { ShoppingStore } from '../../sync/shopping-store';
 import { RecipeSheet, RecipeSheetData } from './recipe-sheet';
 
 @Component({
@@ -32,6 +33,7 @@ export class Recipes {
   private feedback = inject(Feedback);
   private recipesStore = inject(RecipesStore);
   private cookableStore = inject(CookableStore);
+  private shopping = inject(ShoppingStore);
 
   /** Online-only writes must not fail into silence: announce and move on. */
   private failed(what: string) {
@@ -48,7 +50,8 @@ export class Recipes {
   readonly cookableIds = computed(
     () => new Set((this.cookableStore.value() ?? []).map((r) => r.id)),
   );
-  readonly shopping = signal<Map<number, RecipeIngredient[]>>(new Map());
+  /** Per-recipe "what you're short of", loaded on demand by [[loadShoppingList]]. */
+  private readonly missingByRecipe = signal<Map<number, RecipeIngredient[]>>(new Map());
 
   readonly cookableCount = computed(() => this.cookableIds().size);
 
@@ -104,16 +107,48 @@ export class Recipes {
   loadShoppingList(id: number): void {
     this.api.shoppingList(id).subscribe({
       next: (list) => {
-        const next = new Map(this.shopping());
+        const next = new Map(this.missingByRecipe());
         next.set(id, list);
-        this.shopping.set(next);
+        this.missingByRecipe.set(next);
       },
       error: this.failed('load the shopping list'),
     });
   }
 
   shoppingFor(id: number): RecipeIngredient[] | undefined {
-    return this.shopping().get(id);
+    return this.missingByRecipe().get(id);
+  }
+
+  /** The Recipe→Buy bridge: everything this recipe needs and the cupboard hasn't
+   *  got, onto the Buy list in one tap.
+   *
+   *  Carries the quantity, unlike the Inventory→Buy bridge — there the number is
+   *  what you own, here it is what the recipe is short of, which is exactly what
+   *  to buy. Sends the LINE's name, not the linked product's: "cumin" is what
+   *  you look for in a shop, and `product_id` rides along to say precisely which
+   *  jar if the line ever named one. Local-first, so it works in the shop. */
+  async addMissingToBuy(recipe: Recipe): Promise<void> {
+    const missing = this.shoppingFor(recipe.id);
+    if (!missing?.length) return;
+    const { added, already } = await this.shopping.addMissing(
+      missing.map((ing) => ({
+        name: ing.name,
+        quantity: ing.quantity,
+        unit: ing.unit,
+        barcode: null,
+        category: 'food' satisfies ItemCategory,
+        product_id: ing.product_id,
+      })),
+    );
+    this.feedback.notify(this.addedMessage(added.length, already.length));
+  }
+
+  /** Says what actually happened, including the nothing-to-do case: a tap that
+   *  changed no rows must not read like it added them. */
+  private addedMessage(added: number, already: number): string {
+    const skipped = already > 0 ? ` (${already} already on it)` : '';
+    if (added === 0) return `Already on the Buy list — nothing to add.`;
+    return `Added ${added} item${added === 1 ? '' : 's'} to the Buy list${skipped}.`;
   }
 
   label(ing: RecipeIngredient): string {

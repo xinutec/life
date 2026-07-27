@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { BuyIdentity, ShoppingDoc, matchesIdentity, migrationStrategies } from './shopping-store';
+import {
+  BuyIdentity,
+  BuyInput,
+  ShoppingDoc,
+  matchesIdentity,
+  migrationStrategies,
+  planAdditions,
+} from './shopping-store';
 
 /** Pure-function tests for the RxDB schema migrations. A device that hasn't
  *  opened the app since before a schema bump runs these once on next open. */
@@ -79,5 +86,58 @@ describe('matchesIdentity', () => {
     // A Waitrose yoghurt and an OFF yoghurt may be the same thing under two
     // catalog ids; the weaker keys still get their say.
     expect(matchesIdentity(doc({ product_id: 3 }), identity({ product_id: 9 }))).toBe(true);
+  });
+});
+
+const input = (over: Partial<BuyInput>): BuyInput => ({
+  name: 'Cumin',
+  quantity: null,
+  unit: null,
+  barcode: null,
+  category: 'food',
+  product_id: null,
+  ...over,
+});
+
+/** The Recipe→Buy bridge's rule: add what isn't there, say what already was. */
+describe('planAdditions', () => {
+  it('adds everything to an empty list', () => {
+    const { fresh, already } = planAdditions([], [input({ name: 'Cumin' }), input({ name: 'Rice' })]);
+    expect(fresh.map((f) => f.name)).toEqual(['Cumin', 'Rice']);
+    expect(already).toEqual([]);
+  });
+
+  it('skips what the list already has un-done', () => {
+    const { fresh, already } = planAdditions(
+      [doc({ name: 'rice' })],
+      [input({ name: 'Cumin' }), input({ name: 'Rice' })],
+    );
+    expect(fresh.map((f) => f.name)).toEqual(['Cumin']);
+    expect(already).toEqual(['Rice']);
+  });
+
+  it('a recipe naming the same thing twice adds one row', () => {
+    const { fresh, already } = planAdditions(
+      [],
+      [input({ name: 'Cumin' }), input({ name: ' cumin ' })],
+    );
+    expect(fresh).toHaveLength(1);
+    expect(already).toEqual([' cumin ']);
+  });
+
+  it('matches an existing row by its catalog link, not just its name', () => {
+    const { fresh, already } = planAdditions(
+      [doc({ name: 'Bart Ground Cumin 38g', product_id: 42 })],
+      [input({ name: 'cumin', product_id: 42 })],
+    );
+    expect(fresh).toEqual([]);
+    expect(already).toEqual(['cumin']);
+  });
+
+  it('carries the quantity through untouched', () => {
+    // What a recipe is short of IS what to buy — unlike the inventory bridge,
+    // where the number is what you own.
+    const { fresh } = planAdditions([], [input({ name: 'Rice', quantity: 250, unit: 'g' })]);
+    expect(fresh[0]).toMatchObject({ quantity: 250, unit: 'g' });
   });
 });

@@ -45,6 +45,10 @@
               <li>{{ label(ing) }}</li>
             }
           </ul>
+          <button mat-stroked-button (click)="addMissingToBuy(recipe)">
+            <mat-icon>add_shopping_cart</mat-icon>
+            Add {{ missing.length }} to Buy
+          </button>
         }
       }
     </mat-card-content>

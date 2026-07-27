@@ -839,9 +839,21 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
       },
       {
         name: 'Excited',
-        desc: 'Eager, energised anticipation.',
+        // Roberts' gloss here ("eager, energised anticipation") is the same
+        // sentence you would write under Happy — it describes the charge and
+        // never says where it came from, which is the one thing this core is
+        // for. Under Surprised the charge is not one you had built up.
+        desc: 'Charge from something that has only just come into view.',
         leaves: [
-          { name: 'Eager', desc: 'Keenly looking forward to something.' },
+          {
+            // Twin of `Happy/Eager`, split on WHEN the wanting started. There
+            // the thing is already on its way and you are waiting badly for it;
+            // here you were not waiting at all until a moment ago. Same keenness,
+            // opposite histories — and it is the history that makes this one
+            // belong under Surprised.
+            name: 'Eager',
+            desc: "Keen for something you weren't waiting for until it appeared.",
+          },
           { name: 'Energetic', desc: 'Full of lively energy and drive.' },
         ],
       },
@@ -890,6 +902,34 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             // filing that under fear would record a worry nobody had.
             name: 'Uncertain',
             desc: "Not sure what you're noticing or what it means — an open question, not self-doubt.",
+          },
+        ],
+      },
+      {
+        // Standing outside something could be said two ways and no others:
+        // angrily (`Angry/Distant`, which shuts a person out) or sadly
+        // (`Sad/Alienated`, `Sad/Numb`, which hurt). Both name the same posture
+        // and then charge for a mood to go with it, so being alongside things
+        // without minding got recorded as one of the two moods that happen to
+        // stand the same way. This group is the posture without the mood.
+        name: 'Apart',
+        desc: 'Alongside it rather than in it — present, and not part of what is going on.',
+        leaves: [
+          {
+            // Not `Angry/Withdrawn` (pulled back AT someone) and not `Sad/Numb`
+            // (feeling gone where there was some). Here nothing is reaching you
+            // and nothing has to. When the distance IS distressing it is one of
+            // those two — or this one combined with them; grey on its own would
+            // otherwise file a bad stretch as a level one.
+            name: 'Detached',
+            desc: 'Watching it from outside; nothing is reaching you, and nothing has to.',
+          },
+          {
+            // The neutral twin of `Sad/Isolated` ("cut off from others, with no
+            // one near"). Same fact — nobody else here — and the opposite claim
+            // about it: this is the arrangement, not the deprivation.
+            name: 'Solitary',
+            desc: 'On your own, and that is the arrangement you want.',
           },
         ],
       },

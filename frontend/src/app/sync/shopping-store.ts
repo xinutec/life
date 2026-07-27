@@ -78,6 +78,39 @@ export function matchesIdentity(doc: ShoppingDoc, identity: BuyIdentity): boolea
   return doc.name.trim().toLowerCase() === identity.name.trim().toLowerCase();
 }
 
+/** Everything a caller decides about a new Buy row; the rest (identity, revision,
+ *  done) is the store's to set. */
+export type BuyInput = Omit<ShoppingDoc, 'ulid' | 'id' | 'done' | 'rev'>;
+
+function newRow(input: BuyInput): ShoppingDoc {
+  return { ulid: ulid(), id: null, ...input, done: false, rev: 0 };
+}
+
+/** Which of `inputs` the list hasn't already got, and which it has. Split out of
+ *  [[ShoppingStore.addMissing]] so the rule is testable without a database.
+ *
+ *  Each accepted input is matched against the ones accepted before it as well as
+ *  against `active`: a recipe naming the same thing on two lines wants one row,
+ *  not two that then dedupe against each other on the next add. */
+export function planAdditions(
+  active: readonly ShoppingDoc[],
+  inputs: readonly BuyInput[],
+): { fresh: BuyInput[]; already: string[] } {
+  const fresh: BuyInput[] = [];
+  const already: string[] = [];
+  const staged: ShoppingDoc[] = [];
+  for (const input of inputs) {
+    const identity = { name: input.name, barcode: input.barcode, product_id: input.product_id };
+    if ([...active, ...staged].some((d) => matchesIdentity(d, identity))) {
+      already.push(input.name);
+      continue;
+    }
+    fresh.push(input);
+    staged.push({ ulid: '', id: null, ...input, done: false, rev: 0 });
+  }
+  return { fresh, already };
+}
+
 /** The synced content fields (everything but the identity/server fields). */
 type ShoppingContent = Omit<ShoppingDoc, 'ulid' | 'id' | 'rev'>;
 
@@ -128,27 +161,27 @@ export class ShoppingStore extends SyncedStore<ShoppingDoc> {
     };
   }
 
-  async add(input: {
-    name: string;
-    quantity: number | null;
-    unit: string | null;
-    barcode: string | null;
-    category: string;
-    product_id: number | null;
-  }): Promise<void> {
+  async add(input: BuyInput): Promise<void> {
     const col = await this.collection;
-    await col.insert({
-      ulid: ulid(),
-      id: null,
-      name: input.name,
-      quantity: input.quantity,
-      unit: input.unit,
-      barcode: input.barcode,
-      category: input.category,
-      product_id: input.product_id,
-      done: false,
-      rev: 0,
-    });
+    await col.insert(newRow(input));
+  }
+
+  /** Put several things on the list at once, skipping whatever it already has
+   *  un-done, and report which were which — the caller has to be able to say
+   *  "2 added, 1 already there" rather than claiming it added three.
+   *
+   *  One read of the collection rather than one [[findActive]] per input: this
+   *  is what the recipe bridge calls, and a recipe is a whole list at a time.
+   *  The rule itself is [[planAdditions]]. */
+  async addMissing(inputs: readonly BuyInput[]): Promise<{ added: string[]; already: string[] }> {
+    const col = await this.collection;
+    const docs = await col.find({ selector: { done: false } }).exec();
+    const { fresh, already } = planAdditions(
+      docs.map((d) => d.toJSON() as ShoppingDoc),
+      inputs,
+    );
+    if (fresh.length > 0) await col.bulkInsert(fresh.map(newRow));
+    return { added: fresh.map((f) => f.name), already };
   }
 
   /** The un-done row for the same thing, if the list already has one — what the

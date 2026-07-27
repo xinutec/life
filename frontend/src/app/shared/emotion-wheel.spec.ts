@@ -18,8 +18,8 @@ describe('emotion-wheel', () => {
     const groups = EMOTION_WHEEL.flatMap((c) => c.groups);
     // Roberts' 41, plus Agitated, Conflicted, Waiting (Bad); Caring, Elated,
     // Admiring, Desiring, Meaningful (Happy); Discouraged, Alienated (Sad); Flat,
-    // Reflective (Neutral).
-    expect(groups.length).toBe(53);
+    // Reflective, Apart (Neutral).
+    expect(groups.length).toBe(54);
     expect(groups.every((g) => g.leaves.length >= 2)).toBe(true);
   });
 

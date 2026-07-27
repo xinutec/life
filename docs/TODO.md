@@ -526,14 +526,18 @@ through something that resets the NC session.
       - MVP: capture shop + amount at buy-time. Later: per-unit ranking,
         cheapest-shop, estimated totals, shop-trip scheduling via NC Calendar
         (overview §5).
-- [ ] **Shopping list refinements** — add a recipe's missing ingredients to the
-      Buy list in one tap; low-stock auto-suggestions. ~~Carry category through
-      buy→inventory~~ DONE 2026-07-16 (shopping rows own category/product_id).
-- [ ] **Recipe ingredients → product links** — a `recipe_ingredient.product_id`
-      FK so ingredients resolve to catalog products instead of matching by name
-      string ("cumin" vs "ground cumin" vs "cumin seeds" don't match today). This
-      is the weakest joint in the data model; it unlocks reliable have-it? /
-      missing-ingredient logic and the one-tap "add missing to Buy" above.
+- [ ] **Shopping list refinements** — low-stock auto-suggestions. ~~Add a
+      recipe's missing ingredients to the Buy list in one tap~~ DONE 2026-07-27
+      (the shopping-list panel on a recipe card grows an "Add N to Buy" button;
+      local-first, carries quantity + product link, deduped against the un-done
+      rows). ~~Carry category through buy→inventory~~ DONE 2026-07-16 (shopping
+      rows own category/product_id).
+- [x] **Recipe ingredients → product links** — DONE 2026-07-27 (migration 0040:
+      `recipe_ingredients.product_id`, picker on the recipe sheet, product-match
+      unioned with name-match in `src/recipes/matching.rs`). Was the weakest joint
+      in the data model; a linked line now matches the jar in the cupboard
+      whatever the label calls it. Still name-only where no link exists —
+      "cumin" vs "ground cumin" only agree once one of them names a product.
 - [x] **Frontend: shared list-state component** — SHIPPED as increment A of
       `docs/proposals/wellbeing-timing-ux.md` (`<app-list-state>` used on all
       list screens). Remaining stragglers that bypass it (House error-as-empty,
