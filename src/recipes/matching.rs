@@ -8,16 +8,34 @@ fn norm(s: &str) -> String {
     s.trim().to_lowercase()
 }
 
-/// Whether the inventory satisfies one ingredient. Name-matched
-/// case-insensitively. When the ingredient gives a quantity AND some stock of
-/// the same unit also gives quantities, the summed stock must meet the amount;
-/// otherwise presence of a name match is enough.
-fn is_satisfied(ingredient: &RecipeIngredient, inventory: &[Item]) -> bool {
+/// The stock that counts as this ingredient: anything linked to the same
+/// catalog product, plus anything whose name matches case-insensitively.
+///
+/// The two rules are ALTERNATIVES, deliberately — not a precedence with the
+/// link winning. An ingredient is a kind of thing ("cumin") and a product is one
+/// barcode ("Bart Ground Cumin 38g"), so treating a link as authoritative would
+/// make the jar you actually own stop counting the day you buy another brand.
+/// Union means a link can only ever find MORE stock than before, never less,
+/// and an unlinked line behaves exactly as it did before links existed.
+fn stock_for<'a>(ingredient: &RecipeIngredient, inventory: &'a [Item]) -> Vec<&'a Item> {
     let want_name = norm(&ingredient.name);
-    let matches: Vec<&Item> = inventory
+    inventory
         .iter()
-        .filter(|it| norm(&it.name) == want_name)
-        .collect();
+        .filter(|it| {
+            // `Some(x) == Some(x)` only: two unlinked rows are not "the same
+            // product", they are two rows that know nothing about themselves.
+            let same_product =
+                ingredient.product_id.is_some() && it.product_id == ingredient.product_id;
+            same_product || norm(&it.name) == want_name
+        })
+        .collect()
+}
+
+/// Whether the inventory satisfies one ingredient. When the ingredient gives a
+/// quantity AND some stock of the same unit also gives quantities, the summed
+/// stock must meet the amount; otherwise presence of a match is enough.
+fn is_satisfied(ingredient: &RecipeIngredient, inventory: &[Item]) -> bool {
+    let matches = stock_for(ingredient, inventory);
     if matches.is_empty() {
         return false;
     }

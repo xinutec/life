@@ -12,3 +12,21 @@
   margin: 0.25rem 0 0;
   font: var(--mat-sys-title-small);
 }
+
+// What a linked line points at — the shop's name for it, which is usually not
+// what the line above says. Sits under its row rather than in it: the row is
+// already four controls wide at phone width.
+.linked-product {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: -0.25rem 0 0;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+
+  mat-icon {
+    font-size: 1rem;
+    width: 1rem;
+    height: 1rem;
+  }
+}

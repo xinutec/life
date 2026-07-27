@@ -19,6 +19,8 @@ struct RecipeRow {
 struct IngredientRow {
     recipe_id: u64,
     name: String,
+    product_id: Option<u64>,
+    product_name: Option<String>,
     quantity: Option<f64>,
     unit: Option<String>,
 }
@@ -35,8 +37,10 @@ pub async fn list_recipes(pool: &MySqlPool, user_id: &str) -> Result<Vec<Recipe>
     .await?;
 
     let ing_rows: Vec<IngredientRow> = sqlx::query_as(
-        "SELECT ri.recipe_id, ri.name, ri.quantity, ri.unit \
+        "SELECT ri.recipe_id, ri.name, ri.product_id, p.name AS product_name, \
+                ri.quantity, ri.unit \
          FROM recipe_ingredients ri JOIN recipes r ON r.id = ri.recipe_id \
+         LEFT JOIN products p ON p.id = ri.product_id \
          WHERE r.user_id = ? AND r.deleted_at IS NULL \
          ORDER BY ri.recipe_id, ri.sort_order, ri.id",
     )
@@ -51,6 +55,8 @@ pub async fn list_recipes(pool: &MySqlPool, user_id: &str) -> Result<Vec<Recipe>
             .or_default()
             .push(RecipeIngredient {
                 name: r.name,
+                product_id: r.product_id,
+                product_name: r.product_name,
                 quantity: r.quantity,
                 unit: r.unit,
             });
@@ -82,8 +88,10 @@ pub async fn get_recipe(pool: &MySqlPool, user_id: &str, id: u64) -> Result<Opti
     };
 
     let ing_rows: Vec<IngredientRow> = sqlx::query_as(
-        "SELECT recipe_id, name, quantity, unit FROM recipe_ingredients \
-         WHERE recipe_id = ? ORDER BY sort_order, id",
+        "SELECT ri.recipe_id, ri.name, ri.product_id, p.name AS product_name, \
+                ri.quantity, ri.unit \
+         FROM recipe_ingredients ri LEFT JOIN products p ON p.id = ri.product_id \
+         WHERE ri.recipe_id = ? ORDER BY ri.sort_order, ri.id",
     )
     .bind(id)
     .fetch_all(pool)
@@ -98,6 +106,8 @@ pub async fn get_recipe(pool: &MySqlPool, user_id: &str, id: u64) -> Result<Opti
             .into_iter()
             .map(|r| RecipeIngredient {
                 name: r.name,
+                product_id: r.product_id,
+                product_name: r.product_name,
                 quantity: r.quantity,
                 unit: r.unit,
             })
@@ -121,11 +131,12 @@ pub async fn create_recipe(pool: &MySqlPool, user_id: &str, new: NewRecipe) -> R
 
     for (i, ing) in new.ingredients.iter().enumerate() {
         sqlx::query(
-            "INSERT INTO recipe_ingredients (recipe_id, name, quantity, unit, sort_order) \
-             VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO recipe_ingredients (recipe_id, name, product_id, quantity, unit, sort_order) \
+             VALUES (?, ?, ?, ?, ?, ?)",
         )
         .bind(id)
         .bind(&ing.name)
+        .bind(ing.product_id)
         .bind(ing.quantity)
         .bind(&ing.unit)
         .bind(i as i32)
@@ -134,13 +145,12 @@ pub async fn create_recipe(pool: &MySqlPool, user_id: &str, new: NewRecipe) -> R
     }
     tx.commit().await?;
 
-    Ok(Recipe {
-        id,
-        name: new.name,
-        instructions: new.instructions,
-        servings: new.servings,
-        ingredients: new.ingredients,
-    })
+    // Re-read rather than echo what was sent: `product_name` is joined on read,
+    // so an echoed body would say a linked line has no product until the next
+    // GET disagreed with it.
+    get_recipe(pool, user_id, id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("recipe {id} vanished between insert and read"))
 }
 
 /// Replace a recipe's fields and its whole ingredient list atomically. Returns
@@ -182,11 +192,12 @@ pub async fn update_recipe(
         .await?;
     for (i, ing) in new.ingredients.iter().enumerate() {
         sqlx::query(
-            "INSERT INTO recipe_ingredients (recipe_id, name, quantity, unit, sort_order) \
-             VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO recipe_ingredients (recipe_id, name, product_id, quantity, unit, sort_order) \
+             VALUES (?, ?, ?, ?, ?, ?)",
         )
         .bind(id)
         .bind(&ing.name)
+        .bind(ing.product_id)
         .bind(ing.quantity)
         .bind(&ing.unit)
         .bind(i as i32)
@@ -195,13 +206,8 @@ pub async fn update_recipe(
     }
     tx.commit().await?;
 
-    Ok(Some(Recipe {
-        id,
-        name: new.name,
-        instructions: new.instructions,
-        servings: new.servings,
-        ingredients: new.ingredients,
-    }))
+    // Re-read, as `create_recipe` does and for the same reason.
+    get_recipe(pool, user_id, id).await
 }
 
 /// Delete a recipe — a tombstone, restorable from the trash; its ingredient

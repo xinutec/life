@@ -43,6 +43,25 @@
           [ngModel]="ing.name"
           (ngModelChange)="patchIngredient($index, { name: $event })"
         />
+        @if (ing.product_id) {
+          <button
+            matSuffix
+            mat-icon-button
+            (click)="unlinkProduct($index)"
+            [attr.aria-label]="'Unlink ' + (ing.product_name ?? 'the linked product')"
+          >
+            <mat-icon>link_off</mat-icon>
+          </button>
+        } @else {
+          <button
+            matSuffix
+            mat-icon-button
+            (click)="linkProduct($index)"
+            aria-label="Link a product"
+          >
+            <mat-icon>manage_search</mat-icon>
+          </button>
+        }
       </mat-form-field>
       <mat-form-field appearance="outline" subscriptSizing="dynamic">
         <mat-label>Qty</mat-label>
@@ -66,6 +85,12 @@
         <mat-icon>close</mat-icon>
       </button>
     </div>
+    @if (ing.product_id) {
+      <p class="linked-product">
+        <mat-icon>link</mat-icon>
+        {{ ing.product_name ?? 'a product with no name yet' }}
+      </p>
+    }
   }
 
   <div class="actions">

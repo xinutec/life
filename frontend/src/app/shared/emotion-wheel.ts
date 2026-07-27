@@ -272,9 +272,13 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             // anticipation") has nothing to do with being caught off guard, so
             // looking forward to something could only be recorded as surprise.
             // Not Hopeful, which expects a good outcome; you can be eager for a
-            // thing whose outcome you already know.
+            // thing whose outcome you already know. What this word carries that
+            // Hopeful does not is the ARRIVAL — wanting it here, not wanting it
+            // to go well. Deliberately not glossed with "impatient": that is
+            // `Bad/Impatient`, a chafing at the wait, and borrowing its name
+            // here would point you at two places at once.
             name: 'Eager',
-            desc: "Keen for something that's coming, and impatient for it to arrive.",
+            desc: "Keen for something that's on its way, and wanting it here now.",
           },
         ],
       },

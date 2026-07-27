@@ -3,11 +3,31 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-/// One ingredient line of a recipe. Matched to inventory by `name`.
+/// One ingredient line of a recipe. Matched to inventory by `product_id` when
+/// the line names a catalog product and the stock does too, and by `name`
+/// otherwise — the two are alternatives, not a precedence: see
+/// [[super::matching]] for why a link can only ever find MORE stock.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct RecipeIngredient {
     pub name: String,
+    /// The catalog product this line names, if it names one. Optional forever:
+    /// an ingredient is a kind of thing and most lines will never be worth
+    /// pinning to one barcode.
+    #[ts(type = "number | null")]
+    #[serde(default)]
+    pub product_id: Option<u64>,
+    /// The linked product's canonical name, joined on read so a client can say
+    /// WHAT a line is linked to. Server-derived: the write path never stores it
+    /// (there is no such column — `product_id` is the only link), and every
+    /// write re-reads, so what a client sends here cannot survive. The line
+    /// keeps its own `name` (what a cook calls it); this is what the shop calls
+    /// the thing it points at. `#[serde(default)]` so a client can PUT back a
+    /// recipe it just read without stripping the field — and NOT
+    /// `skip_deserializing`, which ts-rs cannot parse and warns about on every
+    /// build; ignoring the value costs nothing that attribute would buy.
+    #[serde(default)]
+    pub product_name: Option<String>,
     pub quantity: Option<f64>,
     pub unit: Option<String>,
 }

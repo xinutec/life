@@ -2,12 +2,14 @@ import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 
 import { onlineHint } from '../../shared/api-error';
 import { Feedback } from '../../shared/feedback';
+import { ProductPick, ProductPickData, ProductPicker } from '../../shared/product-picker';
 import { SheetHeader } from '../../shared/sheet-header';
 import { LifeApi } from '../../life-api';
 import { Recipe, RecipeIngredient } from '../../models';
@@ -26,7 +28,7 @@ interface RecipeForm {
 }
 
 function blankIngredient(): RecipeIngredient {
-  return { name: '', quantity: null, unit: null };
+  return { name: '', product_id: null, product_name: null, quantity: null, unit: null };
 }
 
 /** Add / edit-recipe bottom sheet. Online-only (recipes are a server API);
@@ -40,6 +42,7 @@ function blankIngredient(): RecipeIngredient {
   imports: [
     FormsModule,
     MatButtonModule,
+    MatDialogModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
@@ -50,6 +53,7 @@ export class RecipeSheet {
   private ref = inject(MatBottomSheetRef<RecipeSheet, boolean>);
   private data = inject<RecipeSheetData | null>(MAT_BOTTOM_SHEET_DATA, { optional: true });
   private api = inject(LifeApi);
+  private dialog = inject(MatDialog);
   private feedback = inject(Feedback);
 
   /** null = creating; a number = editing that recipe (PUT). */
@@ -84,6 +88,40 @@ export class RecipeSheet {
       ingredients: f.ingredients.map((g, j) => (j === i ? { ...g, ...p } : g)),
     }));
   }
+  /** Pin an ingredient line to a catalog product, so it matches the jar in the
+   *  cupboard whatever either one is called. The line keeps ITS name — "cumin"
+   *  is what the recipe says and what you want to read — and only takes the
+   *  product's name if the line is still blank. */
+  linkProduct(i: number): void {
+    this.dialog
+      .open<ProductPicker, ProductPickData, ProductPick | null>(ProductPicker, {
+        data: { initialQuery: this.form().ingredients[i].name.trim() },
+        ariaLabel: 'Find a product',
+      })
+      .afterClosed()
+      .subscribe((pick) => {
+        if (!pick) return;
+        const row = this.form().ingredients[i];
+        // The inventory tier can hand back something with no catalog product
+        // behind it (an item you typed in yourself). Take the name — that is
+        // still a useful pick — but say that nothing was linked, rather than
+        // leaving a row that looks linked and matches like it isn't.
+        this.patchIngredient(i, {
+          name: row.name.trim() || pick.name,
+          product_id: pick.product_id,
+          product_name: pick.product_id ? pick.name : null,
+        });
+        if (pick.unit != null && !row.unit?.trim()) this.patchIngredient(i, { unit: pick.unit });
+        if (!pick.product_id) {
+          this.feedback.error(`“${pick.name}” isn’t in the product catalogue, so nothing to link`);
+        }
+      });
+  }
+
+  unlinkProduct(i: number): void {
+    this.patchIngredient(i, { product_id: null, product_name: null });
+  }
+
   addIngredientRow(): void {
     this.form.update((f) => ({ ...f, ingredients: [...f.ingredients, blankIngredient()] }));
   }
