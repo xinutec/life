@@ -65,7 +65,15 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         name: 'Playful',
         desc: 'In high spirits and up for fun, teasing, or mischief.',
         leaves: [
-          { name: 'Aroused', desc: 'Stimulated and keenly alert; energised in the moment.' },
+          {
+            // The inherited gloss ("stimulated and keenly alert") described plain
+            // alertness, which is `Surprised/Energetic`, and said nothing about
+            // play at all. What this word is for under Playful is the charge that
+            // makes you want to play — including the frankly sexual reading, which
+            // the old gloss neither named nor excluded.
+            name: 'Aroused',
+            desc: 'Switched on and keyed up — the charge that wants an outlet.',
+          },
           { name: 'Cheeky', desc: 'Playfully bold or irreverent; teasing without meaning harm.' },
           // Cheeky is you being playful at someone; this is the world striking you funny.
           { name: 'Amused', desc: 'Something struck you funny.' },
@@ -76,7 +84,14 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         desc: 'Quietly satisfied and at ease with how things are.',
         leaves: [
           { name: 'Free', desc: 'Unburdened and able to be yourself, without constraint.' },
-          { name: 'Joyful', desc: 'Bright, buoyant gladness that lifts you.' },
+          {
+            // "Bright, buoyant gladness that lifts you" contradicted its own group
+            // ("quietly satisfied and at ease") and described what Elated now
+            // holds — Overjoyed, Thrilled. Since Elated arrived, this is free to be
+            // the quiet kind: gladness that is simply there, with no event under it.
+            name: 'Joyful',
+            desc: 'Gladness that is just there, without anything having happened.',
+          },
           {
             // Contentment you are actively paying attention to. Not Absorbed
             // (lost in a task, the world falling away — here the world is
@@ -144,7 +159,14 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         name: 'Peaceful',
         desc: 'Calm, settled contentment.',
         leaves: [
-          { name: 'Loving', desc: 'Warm and tender affection toward others.' },
+          {
+            // "Warm and tender affection toward others" described the Caring group,
+            // not this one — and a name is unique within a core, so this cannot
+            // simply be duplicated there. What Peaceful contributes is the
+            // settledness: love with nothing to resolve, prove or repair.
+            name: 'Loving',
+            desc: 'Affection with nothing to resolve — settled, unstriving warmth.',
+          },
           { name: 'Thankful', desc: 'Grateful and appreciative for what you have.' },
           {
             name: 'Relieved',
@@ -244,6 +266,16 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             name: 'Mending',
             desc: 'Further along than you were, and not there yet.',
           },
+          {
+            // Twin of `Surprised/Eager`, which is where Roberts put the whole
+            // Excited group — a group whose own gloss ("eager, energised
+            // anticipation") has nothing to do with being caught off guard, so
+            // looking forward to something could only be recorded as surprise.
+            // Not Hopeful, which expects a good outcome; you can be eager for a
+            // thing whose outcome you already know.
+            name: 'Eager',
+            desc: "Keen for something that's coming, and impatient for it to arrive.",
+          },
         ],
       },
       {
@@ -308,8 +340,24 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         name: 'Vulnerable',
         desc: 'Exposed and easily hurt.',
         leaves: [
-          { name: 'Victimised', desc: 'Wronged or taken advantage of by another.' },
+          {
+            // The inherited gloss described only what someone DID to you, which is
+            // where Angry › Bitter › Violated lives. Under Vulnerable the feeling
+            // is the exposure it leaves behind — being the one things get done to.
+            name: 'Victimised',
+            desc: 'Something was done to you, and it left you open to it happening again.',
+          },
           { name: 'Fragile', desc: 'Easily broken or overwhelmed; delicate right now.' },
+          {
+            // Twin of `Happy/Sensitive`, which sits under Trusting and means being
+            // OPEN — finely attuned, safe enough to feel. This is the everyday
+            // reading of the word: thin-skinned today, everything landing harder
+            // than it would on another day. Not Fragile, which says you might break;
+            // this says the volume is up. Recording it as Happy — or as Fragile —
+            // was the only option, and neither is what the word means here.
+            name: 'Sensitive',
+            desc: 'Thin-skinned today — everything is landing harder than it would.',
+          },
         ],
       },
       {
@@ -384,6 +432,15 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             name: 'Numb',
             desc: "Deadened — you can tell there's something to feel and you can't reach it.",
           },
+          {
+            // Twin of `Fearful/Worthless`, whose home is Roberts' — fear of your own
+            // insufficiency. But on a flat low day this is not fear, and picking the
+            // only copy there recorded the day as FEAR and coloured the trend chart
+            // accordingly. This is the top of the ladder the group already holds:
+            // Low, Empty, Inferior — and then nothing.
+            name: 'Worthless',
+            desc: 'Not worth much to anyone, including yourself.',
+          },
         ],
       },
       {
@@ -433,6 +490,15 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Judgemental', desc: "Harshly critical of others' choices or worth." },
           { name: 'Embarrassed', desc: 'Uncomfortably self-conscious, wanting to shrink from view.' },
+          {
+            // Every other group under Disgusted points outward; the whole core had
+            // no way to turn on you. Twin of `Sad/Ashamed`, which sits under Guilty
+            // and is about having fallen SHORT — a matter of standards, and it can
+            // pass. This one is not about what you did: it is being repelled by
+            // yourself, which is why it belongs to disgust and not to sorrow.
+            name: 'Ashamed',
+            desc: "Repelled by yourself — you'd rather not look at what you are.",
+          },
         ],
       },
       {
@@ -530,8 +596,16 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         name: 'Distant',
         desc: 'Anger that withdraws and shuts down.',
         leaves: [
-          { name: 'Withdrawn', desc: 'Pulled back and closed off from others.' },
-          { name: 'Numb', desc: 'Deadened; feeling little or nothing.' },
+          // Both of these have a twin under Sad › Depressed, and for a while only
+          // the twins said what their core contributed — these two read as though
+          // they were about nobody in particular, which is exactly the half of the
+          // distinction a picker cannot show you. The anger is the POINT here:
+          // shutting down is what this anger does instead of shouting.
+          {
+            name: 'Withdrawn',
+            desc: 'Pulled back to shut someone out — you are not giving them you.',
+          },
+          { name: 'Numb', desc: 'The anger has gone cold; there is nothing where it was.' },
         ],
       },
       {

@@ -98,7 +98,7 @@ describe('emotion-wheel', () => {
     expect(emotionNode('Angry/Withdrawn')).toEqual({
       token: 'Angry/Withdrawn',
       name: 'Withdrawn',
-      desc: 'Pulled back and closed off from others.',
+      desc: 'Pulled back to shut someone out — you are not giving them you.',
       kind: 'leaf',
       secondary: 'Distant',
       core: 'Angry',
@@ -106,7 +106,25 @@ describe('emotion-wheel', () => {
     });
     expect(emotionColor('Angry/Withdrawn')).toBe('angry');
     expect(emotionLabel('Angry/Withdrawn')).toBe('Withdrawn');
-    expect(emotionDesc('Angry/Withdrawn')).toBe('Pulled back and closed off from others.');
+  });
+
+  it('makes every twinned name say what its own core contributes', () => {
+    // A duplicated name is only useful if the picker can tell you WHICH one you
+    // are choosing, and the gloss is the only thing that can. This held for the
+    // Sad copies of Withdrawn/Numb from the day they were added while the Angry
+    // originals still read as being about nobody in particular — a half-made
+    // distinction, which is worse than none. Asserted for every twin so the next
+    // duplicate cannot land with an inherited gloss.
+    const twins = EMOTION_NODES.filter(
+      (n) => EMOTION_NODES.filter((m) => m.name === n.name).length > 1,
+    );
+    expect(twins.length).toBeGreaterThan(0);
+    for (const node of twins) {
+      const others = twins.filter((m) => m.name === node.name && m.token !== node.token);
+      for (const other of others) {
+        expect(node.desc, `${node.token} vs ${other.token}`).not.toBe(other.desc);
+      }
+    }
   });
 
   it('keeps a same-named leaf under two cores distinct', () => {
