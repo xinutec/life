@@ -73,7 +73,12 @@ export class ShoppingItemSheet {
         this.quantity.set(it.quantity);
         this.unit.set(it.unit);
         this.barcode.set(it.barcode ?? '');
-        this.category.set(it.category as ItemCategory);
+        // The stored row's category is a plain string: it came from a device
+        // that may predate a category being renamed or dropped. Asserting it
+        // into the union puts a value in the picker that has no option, and
+        // the sheet then saves it straight back.
+        const stored = ITEM_CATEGORIES.find((c) => c === it.category);
+        if (stored !== undefined) this.category.set(stored);
         this.productId.set(it.product_id);
       }
     }

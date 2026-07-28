@@ -6,6 +6,8 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 
+import { isRecord } from '../../shared/narrow';
+
 // BarcodeDetector is a browser global (Chromium) with no TS lib types, so give
 // it the minimal shape we use — typed, not `any`, so the call sites stay safe.
 interface DetectedBarcode {
@@ -19,9 +21,8 @@ declare const BarcodeDetector: new (options?: { formats?: string[] }) => Barcode
 
 // Torch (flashlight) is a camera-track capability/constraint that TS's DOM lib
 // doesn't model — same minimal-shape treatment as BarcodeDetector above.
-interface TorchCapabilities {
-  torch?: boolean;
-}
+// Only the constraint side is declared: the capability is READ back from the
+// browser, so it is checked at the callsite rather than described here.
 interface TorchConstraints {
   advanced: { torch: boolean }[];
 }
@@ -91,9 +92,13 @@ export class ScannerDialog implements OnDestroy {
   /** Offer the torch button only when the camera actually supports one. */
   private probeTorch(): void {
     const track = this.stream?.getVideoTracks()[0];
-    const caps = track?.getCapabilities?.() as TorchCapabilities | undefined;
-    this.torchAvailable.set(caps?.torch === true);
-    if (caps?.torch) this.log('torch available');
+    // `torch` is not in the DOM lib's MediaTrackCapabilities (it is a
+    // non-standard extension), and the browsers that lack it also lack the
+    // key — so read it rather than declaring the shape.
+    const caps: unknown = track?.getCapabilities?.();
+    const torch = isRecord(caps) && caps['torch'] === true;
+    this.torchAvailable.set(torch);
+    if (torch) this.log('torch available');
   }
 
   toggleTorch(): void {
@@ -101,6 +106,9 @@ export class ScannerDialog implements OnDestroy {
     if (!track) return;
     const next = !this.torchOn();
     const constraints: TorchConstraints = { advanced: [{ torch: next }] };
+    // Same non-standard extension on the way in: the DOM lib has no `torch`
+    // constraint to widen to, so this one stays a declared claim.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
     track.applyConstraints(constraints as MediaTrackConstraints).then(
       () => {
         this.torchOn.set(next);

@@ -3,6 +3,7 @@ import { take } from 'rxjs';
 
 import { WellbeingStore } from '../sync/wellbeing-store';
 import { Reminders } from './reminders';
+import { isRecord } from './narrow';
 
 /** One daily wellbeing-reminder rule: fire at local `time`, but only if there's been
  *  no check-in within the last `quietHours` — so "if I haven't logged anything for
@@ -89,18 +90,24 @@ function loadConfig(): WellbeingReminderConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { rules: [] };
-    const parsed = JSON.parse(raw) as Partial<WellbeingReminderConfig>;
-    const rules = Array.isArray(parsed.rules) ? parsed.rules : [];
+    // Parsed as `unknown`: this blob outlives every deploy that ran on this
+    // device, so `as Partial<Config>` described a shape nothing guarantees —
+    // and the per-rule filter below then read its fields through that claim.
+    const parsed: unknown = JSON.parse(raw);
+    const rulesField = isRecord(parsed) ? parsed['rules'] : null;
+    const rules: unknown[] = Array.isArray(rulesField) ? rulesField : [];
     // Keep only well-formed rules; drop anything a hand-edit or old build left.
-    const clean = rules.filter(
-      (r): r is WellbeingReminderRule =>
-        !!r &&
-        typeof r.id === 'string' &&
-        typeof r.time === 'string' &&
-        parseHhMm(r.time) !== null &&
-        typeof r.quietHours === 'number' &&
-        r.quietHours >= 0,
-    );
+    const clean = rules.filter((r): r is WellbeingReminderRule => {
+      if (!isRecord(r)) return false;
+      const time = r['time'];
+      return (
+        typeof r['id'] === 'string' &&
+        typeof time === 'string' &&
+        parseHhMm(time) !== null &&
+        typeof r['quietHours'] === 'number' &&
+        r['quietHours'] >= 0
+      );
+    });
     return { rules: clean };
   } catch {
     return { rules: [] };

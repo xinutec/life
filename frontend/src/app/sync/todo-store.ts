@@ -5,6 +5,7 @@ import { type RxJsonSchema } from 'rxdb';
 import { TodoPriority, TodoStatus, TodoType } from '../models';
 import { ConflictReporter, FieldSpec, makeConflictHandler } from './conflict-merge';
 import { SyncedCollectionConfig, SyncedStore } from './synced-store';
+import { keysOf } from '../shared/narrow';
 
 /** A to-do row as stored locally. `ulid` is the stable identity; `rev` is the
  *  last server revision seen (set by sync, not local edits); `id` is the server
@@ -76,7 +77,7 @@ const TODO_FIELDS: FieldSpec<TodoContent> = {
 
 /** The field-name allowlist the Conflicts screen may patch on "use other",
  *  derived from the spec so the two can never drift apart. */
-export const TODO_MERGE_FIELDS = Object.keys(TODO_FIELDS) as (keyof TodoContent)[];
+export const TODO_MERGE_FIELDS = keysOf(TODO_FIELDS);
 
 /** Local-first store for the to-do list — the machinery lives in
  *  {@link SyncedStore}; this declares only the collection and its content. */

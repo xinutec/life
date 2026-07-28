@@ -14,8 +14,15 @@ interface AndroidClipboard {
   /** A `data:` URL of the image on the system clipboard, or null if none. */
   readImage(): string | null;
 }
+// Declared rather than asserted at the read. An ambient declaration is what a
+// foreign API contract is for: the shape is stated once, so the read below is
+// an ordinary typed property access — and the runtime check that follows is
+// about PRESENCE (are we in the wrapper?), which is the only thing in doubt.
+declare global {
+  var AndroidClipboard: AndroidClipboard | undefined;
+}
 function androidClipboard(): AndroidClipboard | undefined {
-  const bridge = (globalThis as { AndroidClipboard?: AndroidClipboard }).AndroidClipboard;
+  const bridge = globalThis.AndroidClipboard;
   return typeof bridge?.readImage === 'function' ? bridge : undefined;
 }
 

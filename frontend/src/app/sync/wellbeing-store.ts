@@ -4,6 +4,7 @@ import { type RxJsonSchema } from 'rxdb';
 
 import { ConflictReporter, FieldSpec, makeConflictHandler } from './conflict-merge';
 import { SyncedCollectionConfig, SyncedStore } from './synced-store';
+import { keysOf } from '../shared/narrow';
 
 /** A wellbeing check-in as stored locally. `recordedAt` is an ISO-8601 UTC
  *  instant (the moment the feeling was — may be backdated). Readings are in TENTHS
@@ -94,7 +95,7 @@ const WELLBEING_FIELDS: FieldSpec<WellbeingContent> = {
 
 /** The field-name allowlist the Conflicts screen may patch on "use other",
  *  derived from the spec so the two can never drift apart. */
-export const WELLBEING_MERGE_FIELDS = Object.keys(WELLBEING_FIELDS) as (keyof WellbeingContent)[];
+export const WELLBEING_MERGE_FIELDS = keysOf(WELLBEING_FIELDS);
 
 /** Local-first store for wellbeing check-ins — the machinery lives in
  *  {@link SyncedStore}; this declares only the collection and its content. */

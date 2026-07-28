@@ -6,6 +6,7 @@ import type { RxConflictHandler } from 'rxdb';
 import { Alerts } from '../shared/alerts';
 import { LifeApi } from '../life-api';
 import { ConflictKind } from '../models';
+import { isRecord, stringField } from '../shared/narrow';
 
 /** One same-field collision the merge had to decide: `mine` was kept (the
  *  pushing device's latest intent), `theirs` lost and gets logged. */
@@ -114,9 +115,9 @@ export function makeConflictHandler<
   // The spec's keys are the merge field set; each maps to its equality strategy.
   const spec = opts.fields as Record<string, FieldEq>;
   const keys = Object.keys(spec);
-  const get = (o: unknown, f: string): unknown => (o as Record<string, unknown>)[f];
+  const get = (o: unknown, f: string): unknown => (isRecord(o) ? o[f] : undefined);
   const set = (o: unknown, f: string, v: unknown): void => {
-    (o as Record<string, unknown>)[f] = v;
+    if (isRecord(o)) o[f] = v;
   };
   const eq = (f: string, a: unknown, b: unknown): boolean => eqBy(spec[f], a, b);
   return {
@@ -133,7 +134,7 @@ export function makeConflictHandler<
       !!a._deleted === !!b._deleted &&
       (!!a._deleted || (a.rev === b.rev && keys.every((f) => eq(f, get(a, f), get(b, f))))),
     resolve: ({ realMasterState: real, newDocumentState: mine, assumedMasterState: assumed }) => {
-      const id = (mine as { ulid?: string }).ulid ?? '?';
+      const id = stringField(mine, 'ulid') ?? '?';
       if (real._deleted) {
         trace({ ulid: id, mine: [], theirs: [], collided: [], deleted: true, noBase: false });
         return Promise.resolve(real);

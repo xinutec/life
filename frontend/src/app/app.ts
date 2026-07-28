@@ -15,6 +15,7 @@ import { Alerts } from './shared/alerts';
 import { Feedback } from './shared/feedback';
 import { ScannerDialog } from './features/scanner/scanner-dialog';
 import { LifeApi } from './life-api';
+import { isRecord } from './shared/narrow';
 import { ConnectionStatus, Me } from './models';
 import { SwUpdates } from './sw-updates';
 import { Telemetry } from './telemetry';
@@ -45,8 +46,8 @@ const CONNECTION_STATUSES: string[] = Object.keys({
  *  versions ago — and the shell reads `nextcloud` to decide whether to nag for a
  *  re-link, which is the wrong thing to get from a guess. */
 function isMe(v: unknown): v is Me {
-  if (typeof v !== 'object' || v === null) return false;
-  const m = v as Record<string, unknown>;
+  if (!isRecord(v)) return false;
+  const m = v;
   return (
     typeof m['userId'] === 'string' &&
     typeof m['displayName'] === 'string' &&

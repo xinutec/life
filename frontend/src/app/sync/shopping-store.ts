@@ -4,6 +4,7 @@ import { type RxJsonSchema } from 'rxdb';
 
 import { ConflictReporter, FieldSpec, makeConflictHandler } from './conflict-merge';
 import { SyncedCollectionConfig, SyncedStore } from './synced-store';
+import { keysOf } from '../shared/narrow';
 
 /** A shopping row as stored locally. `ulid` is the stable identity; `rev` is the
  *  last server revision seen (set by sync, not by local edits); `id` is the
@@ -128,7 +129,7 @@ const SHOPPING_FIELDS: FieldSpec<ShoppingContent> = {
 
 /** The field-name allowlist the Conflicts screen may patch on "use other",
  *  derived from the spec so the two can never drift apart. */
-export const SHOPPING_MERGE_FIELDS = Object.keys(SHOPPING_FIELDS) as (keyof ShoppingContent)[];
+export const SHOPPING_MERGE_FIELDS = keysOf(SHOPPING_FIELDS);
 
 /** Local-first store for the shopping list — the machinery lives in
  *  {@link SyncedStore}; this declares only the collection and its content. */

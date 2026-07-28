@@ -22,9 +22,12 @@ export function labelFor(node: EventTarget | null): string | null {
   // icon+label button ("storeFind at Asda"); aria-hidden content is by
   // definition not part of what the control says. Strip both on a clone so the
   // live DOM is untouched.
-  const clone = el.cloneNode(true) as Element;
-  clone.querySelectorAll('mat-icon, [aria-hidden="true"]').forEach((n) => n.remove());
-  const text = (clone.textContent ?? '').replace(/\s+/g, ' ').trim();
+  const clone = el.cloneNode(true);
+  let text = '';
+  if (clone instanceof Element) {
+    clone.querySelectorAll('mat-icon, [aria-hidden="true"]').forEach((n) => n.remove());
+    text = (clone.textContent ?? '').replace(/\s+/g, ' ').trim();
+  }
   if (text) return text;
   const title = el.getAttribute('title')?.trim();
   if (title) return title;

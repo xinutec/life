@@ -3,6 +3,7 @@ import { RxCollection } from 'rxdb';
 import { replicateRxCollection } from 'rxdb/plugins/replication';
 
 import { assertNever, classifyFetchResponse } from '../shared/api-error';
+import { isRecord, numberField } from '../shared/narrow';
 import { SyncStatus } from './sync-status';
 
 /** Auth guard for sync fetches. An expired session shows up two ways: our API
@@ -82,13 +83,19 @@ export function startHttpReplication<T>(opts: {
         });
         guardAuth(res, opts.syncError, () => (authLost = true));
         if (!res.ok) throw new Error(`pull failed: ${res.status}`);
-        const body = (await res.json()) as {
-          documents: (T & { _deleted: boolean })[];
-          checkpoint: { rev: number };
-        };
+        // The row TYPE is our own wire contract and is taken on trust, but the
+        // two things replication cannot survive being wrong about are checked:
+        // a non-array `documents` would be fed to RxDB as a batch, and a
+        // missing `checkpoint.rev` would rewind the pull to 0 and refetch
+        // everything on every cycle.
+        const body: unknown = await res.json();
+        const documents = isRecord(body) && Array.isArray(body['documents']) ? body['documents'] : null;
+        const rev = numberField(isRecord(body) ? body['checkpoint'] : null, 'rev');
+        if (documents === null || rev === null) throw new Error('pull returned a malformed batch');
         opts.syncError.set(null);
         opts.syncStatus.clearError(opts.label);
-        return { documents: body.documents, checkpoint: body.checkpoint };
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+        return { documents: documents as (T & { _deleted: boolean })[], checkpoint: { rev } };
       },
     },
     push: {
@@ -104,7 +111,12 @@ export function startHttpReplication<T>(opts: {
         if (!res.ok) throw new Error(`push failed: ${res.status}`);
         opts.syncError.set(null);
         opts.syncStatus.clearError(opts.label);
-        return (await res.json()) as (T & { _deleted: boolean })[];
+        // The push response is the server's conflict list — same wire contract
+        // as the pull rows, checked for being a list at all.
+        const conflicts: unknown = await res.json();
+        if (!Array.isArray(conflicts)) throw new Error('push returned a malformed response');
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+        return conflicts as (T & { _deleted: boolean })[];
       },
     },
   });

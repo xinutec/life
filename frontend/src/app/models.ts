@@ -44,17 +44,18 @@ export type { EmotionCandidate } from './generated/EmotionCandidate';
 export type { WarmEmotionsRequest } from './generated/WarmEmotionsRequest';
 
 import type { ItemCategory as ItemCategoryT } from './generated/ItemCategory';
+import { keysOf } from './shared/narrow';
 
 /** Every ItemCategory, in the order category pickers show them. The `Record`
  *  keys make the compiler prove the list is exhaustive and duplicate-free — a
  *  new enum value won't build until it's placed here. */
-export const ITEM_CATEGORIES = Object.keys({
+export const ITEM_CATEGORIES = keysOf({
   food: true,
   medication: true,
   tool: true,
   document: true,
   other: true,
-} satisfies Record<ItemCategoryT, true>) as ItemCategoryT[];
+} satisfies Record<ItemCategoryT, true>);
 
 // Scene-file types are frontend-owned: /api/house streams scenes/house.json
 // through as raw JSON (no Rust struct), so these aren't generated.

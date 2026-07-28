@@ -88,6 +88,11 @@ export abstract class SyncedStore<T extends SyncDoc> {
   protected liveQuery(sort?: MangoQuerySortPart<T>[]): Observable<T[]> {
     return from(this.collection).pipe(
       switchMap((col) => (sort ? col.find({ sort }) : col.find()).$),
+      // RxDB types a document's JSON as RxDocumentData<T> (T plus _rev/_meta/
+      // _attachments). Narrowing it back to T is a claim about RxDB's own
+      // representation, not about anything on the wire, and it is stated here
+      // once for every store rather than at each query.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
       map((docs) => docs.map((d) => d.toJSON() as T)),
       shareReplay({ bufferSize: 1, refCount: false }),
     );
@@ -99,6 +104,7 @@ export abstract class SyncedStore<T extends SyncDoc> {
     const doc = await this.find(key);
     // Content keys are a subset of `keyof T`, so the widening cast is sound; it
     // just bridges the generic `T` to RxDB's own patch type.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
     await doc?.incrementalPatch(fields as Partial<T>);
   }
 
