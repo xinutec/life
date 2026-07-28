@@ -176,7 +176,7 @@ pub async fn fetch(http: &reqwest::Client, barcode: &str) -> Result<Option<OffPr
 /// internal service. The leading-dot subdomain check rejects look-alikes like
 /// `openfoodfacts.org.evil.com`, and `url::Url` parsing defeats the userinfo
 /// trick (`host.tld@evil.com` parses with host `evil.com`).
-fn host_allowed(url: &str, suffixes: &[&str]) -> bool {
+pub fn host_allowed(url: &str, suffixes: &[&str]) -> bool {
     let Ok(parsed) = url::Url::parse(url) else {
         return false;
     };

@@ -20,7 +20,7 @@ import {
 
 import { LifeApi } from '../life-api';
 import { AsdaHit, Item, ItemCategory, Product } from '../models';
-import { ShopCandidate, ShopProvider, Shops } from '../shop';
+import { ShopCandidate, ShopProvider, Shops, shopPrice } from '../shop';
 import { WAITROSE } from '../shops/waitrose';
 import { ItemsStore } from '../stores/catalog';
 import { Dialog } from './dialog';
@@ -264,6 +264,10 @@ export class ProductPicker {
             brand: p.brand,
             barcode: p.barcodes[0] ?? null, // Waitrose SUMMARY carries barCodes[]
             image_url: p.image_url,
+            // What the shop quoted, recorded like every other shop's price —
+            // linking a product here and finding it from the product page must
+            // not produce two different amounts of knowledge.
+            price: shopPrice(p),
           }),
         ),
       )

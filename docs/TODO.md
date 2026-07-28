@@ -279,11 +279,36 @@ through something that resets the NC session.
         `None` means every hit was checked and none carried this EAN, a real
         answer, not "gave up early".
       - This caches OUR OWN queries only — never a crawl of a shop's catalogue.
-      - **7b (next): "Find at Waitrose"** on the product page, via the Android
-        bridge (server can't pass the bot-wall). Its search hits carry no
-        barcode, so it fetches candidates until one matches — uncapped, cache
-        first, app-only. The cache + `find` endpoint are already shop-agnostic;
-        7b wires the bridge into `shop_cache::remember` and a Waitrose provider.
+- [x] **Product data model, increment 7b — a second shop you can actually find
+      things at** (2026-07-28) — until now only Asda could answer "do you carry
+      this?", so the cheapest-shop query the price model was built for had never
+      had two prices to compare (prod: 5 of 78 products had any shop listing, 0
+      had two).
+      - **`find/{source}` is shop-agnostic**: memory is answerable for every
+        shop from any browser, so both are offered. What differs is the miss —
+        Asda gets searched server-side; a bot-walled shop answers
+        **`searched: false`**, a third state the wire needed because `hit: None`
+        otherwise had to mean both "we asked and they don't carry it" and "we
+        never looked". The screen must never say the first when the truth is the
+        second.
+      - **`POST /api/products/shop/{source}/listings`** — the phone reports what
+        its WebView saw, feeding the same `shop_cache::remember` the server's own
+        Asda path writes through. `validate_seen` refuses what would poison the
+        `(source, barcode)` index (unknown shop, malformed id, a barcode that
+        isn't one) and merely drops an image URL from a non-allowlisted host —
+        identity is the point, the picture is a nicety.
+      - **The hunt** (product page, in-app): Waitrose search hits carry no EAN,
+        so it walks the candidates, fetching each product page until one's
+        `barCodes` contains ours — and reports **every listing it passed over**,
+        matching one filed under the barcode WE asked about. The eight page loads
+        a fruitless hunt costs become eight lookups nobody pays for again.
+      - **Attach/refresh follow who can see the shop**: Asda is re-read
+        server-side (`syncListing`); a bot-walled shop is imported from the record
+        the phone already fetched, price included, and its refresh button is
+        absent in a browser rather than present and failing.
+      - **The picker now records Waitrose's price too** (`shopPrice`, shared) —
+        it was dropping it, so where you linked a product from decided how much
+        we knew about it.
 - [x] **Product data model, increment 8 — store the whole record; reconcile the
       canonical row by approval** (2026-07-18) — a source's account of a product
       used to be flattened onto the canonical row (silently overwriting name/brand,

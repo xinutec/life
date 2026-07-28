@@ -15,6 +15,8 @@ export type { ProductListing } from './generated/ProductListing';
 export type { ProductDetail } from './generated/ProductDetail';
 export type { AsdaHit } from './generated/AsdaHit';
 export type { ShopFind } from './generated/ShopFind';
+export type { Remembered } from './generated/Remembered';
+export type { SeenListing } from './generated/SeenListing';
 export type { TelemetryEvent } from './generated/TelemetryEvent';
 export type { PriceInput } from './generated/PriceInput';
 export type { ShopPrice } from './generated/ShopPrice';

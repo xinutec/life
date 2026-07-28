@@ -458,13 +458,18 @@ async fn apply_picture_choice(
 #[derive(serde::Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct ShopFind {
-    /// The barcode-confirmed listing, or `None` for "we looked and this shop
-    /// doesn't carry this barcode" — never "we gave up early".
+    /// The barcode-confirmed listing, if we have one.
     pub hit: Option<asda::AsdaHit>,
     /// Whether this came from memory rather than a fresh shop query. The UI says
     /// so: an answer we already had and one we just paid for are different
     /// things, and hiding which is which makes the cache unfalsifiable.
     pub from_cache: bool,
+    /// Whether the shop itself was asked. Without this, `hit: None` would have to
+    /// mean two opposite things: "we asked and this shop doesn't carry it" and
+    /// "we've never looked". Only the server-searchable shops can produce the
+    /// first; for a bot-walled shop a miss is always the second, and the phone —
+    /// which CAN look — acts on the difference.
+    pub searched: bool,
 }
 
 /// A remembered listing, shaped as a search hit.
@@ -501,20 +506,22 @@ fn cached_as_hit(c: shop_cache::CachedListing) -> asda::AsdaHit {
 ///
 /// Identity is always the barcode, never the name: Asda's relevance order is no
 /// evidence about which product this is (a name search for a balsamic ranked a
-/// raspberry glaze above it). So a `None` here means every hit was checked and
-/// none carried this EAN — a real, if unwelcome, answer.
+/// raspberry glaze above it). So a `None` with `searched` means every hit was
+/// checked and none carried this EAN — a real, if unwelcome, answer.
+///
+/// Every registered shop can be asked, because memory is shop-agnostic and the
+/// question "what do we already know" is answerable for all of them. What differs
+/// is what happens on a miss: Asda's storefront search is a public API the server
+/// can call, while Waitrose sits behind a bot-wall only the app's hidden WebView
+/// passes. For the latter the answer is `searched: false` — "we don't know" — and
+/// the phone goes looking, reporting what it saw to `remember_seen`.
 pub async fn find_at_shop(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
     Path((id, source)): Path<(u64, String)>,
 ) -> Result<Json<ShopFind>, AppError> {
-    // Waitrose can't be reached from here — its bot-wall needs the Android app's
-    // WebView, so the phone does that lookup and hands the results back to be
-    // remembered. Rejecting it is honest; pretending to search it is not.
-    if source != "asda" {
-        return Err(AppError::BadRequest(format!(
-            "{source} can't be searched from the server"
-        )));
+    if source::importable(&source).is_none() {
+        return Err(AppError::BadRequest(format!("unknown shop: {source}")));
     }
     let product = repo::get_by_id(&app.pool, id)
         .await?
@@ -529,6 +536,18 @@ pub async fn find_at_shop(
         return Ok(Json(ShopFind {
             hit: Some(cached_as_hit(cached)),
             from_cache: true,
+            searched: false,
+        }));
+    }
+
+    // Nothing in memory. Only a shop the server can query gets asked from here;
+    // for the rest, saying "we haven't looked" is the whole answer, and it is the
+    // answer the phone needs to know it should look itself.
+    if source != "asda" {
+        return Ok(Json(ShopFind {
+            hit: None,
+            from_cache: false,
+            searched: false,
         }));
     }
 
@@ -547,7 +566,51 @@ pub async fn find_at_shop(
     Ok(Json(ShopFind {
         hit: asda::match_barcode(hits, &barcode),
         from_cache: false,
+        searched: true,
     }))
+}
+
+/// POST /api/products/shop/{source}/listings → remember listings a client's
+/// WebView saw at a shop the server can't reach.
+///
+/// The mirror image of `remember_hits`: for Asda the server sees the search
+/// result and files it on the way past, and for a bot-walled shop the phone is
+/// the only thing that ever sees it. Without this, a Waitrose hunt would cost
+/// eight page loads and teach us nothing — the next hunt for the same product,
+/// or for any other product those pages described, would pay all over again.
+///
+/// Reporting is the point, so this stays cheap and forgiving in shape (identity
+/// plus whatever else was on the page) while refusing anything that would poison
+/// the barcode index. Returns how many rows were stored, so a client that thinks
+/// it taught us something can tell when it didn't.
+pub async fn remember_seen(
+    State(app): State<AppState>,
+    AuthUser(_user): AuthUser,
+    Path(source): Path<String>,
+    Json(seen): Json<Vec<shop_cache::SeenListing>>,
+) -> Result<Json<Remembered>, AppError> {
+    let listings = shop_cache::validate_seen(&source, &seen).map_err(AppError::BadRequest)?;
+    for (from, to) in seen.iter().zip(&listings) {
+        if from.image_url.is_some() && to.image_url.is_none() {
+            tracing::warn!(
+                %source, external_id = %to.external_id, url = ?from.image_url,
+                "dropping a reported image URL: host is not allowlisted for this source"
+            );
+        }
+    }
+    shop_cache::remember(&app.pool, &listings).await?;
+    tracing::info!(%source, count = listings.len(), "remembered what the client saw");
+    Ok(Json(Remembered {
+        remembered: listings.len(),
+    }))
+}
+
+/// How many listings a report actually stored.
+#[derive(serde::Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct Remembered {
+    #[ts(type = "number")]
+    pub remembered: usize,
 }
 
 /// Which shop listing to pull, for `sync_listing`.

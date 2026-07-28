@@ -95,6 +95,10 @@ pub fn router(state: AppState) -> Router {
         .route("/trash/{kind}/{ref}/restore", post(trash::restore))
         .route("/products", get(products::search))
         .route("/products/shop/asda", get(products::search_asda))
+        .route(
+            "/products/shop/{source}/listings",
+            post(products::remember_seen),
+        )
         .route("/products/import", post(products::import))
         .route("/products/id/{id}", get(products::product_detail))
         .route("/products/id/{id}/listings", post(products::sync_listing))

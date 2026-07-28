@@ -78,12 +78,20 @@ const hit = (over: Partial<AsdaHit>): AsdaHit => ({
   ...over,
 });
 
+/** Let the WebView hunt's awaited promises settle. */
+const flush = () => new Promise((r) => setTimeout(r));
+
+/** One shop's lookup row, by source — what the template switches on. */
+function lookup(page: ProductPage, source: string) {
+  return page.shopLookups().find((s) => s.source === source)!;
+}
+
 describe('ProductPage', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   function setup(
     detail: ProductDetail = DETAIL,
-    find: ShopFind = { hit: null, from_cache: false },
+    find: ShopFind = { hit: null, from_cache: false, searched: true },
     shops: Partial<Shops> = { available: false },
   ) {
     const api = {
@@ -91,6 +99,8 @@ describe('ProductPage', () => {
       productImageByIdUrl: (id: number) => `/api/products/id/${id}/image`,
       findAtShop: vi.fn(() => of(find)),
       syncListing: vi.fn(() => of(detail.product)),
+      importProduct: vi.fn(() => of(detail.product)),
+      rememberShopListings: vi.fn((_s: string, l: unknown[]) => of({ remembered: l.length })),
       // Answers with the same detail but no divergences left (the settled state).
       reconcile: vi.fn(() => of({ ...detail, reconciliation: { fields: [] } })),
       submitFacts: vi.fn(() => of({ ...detail, reconciliation: { fields: [] } })),
@@ -198,17 +208,18 @@ describe('ProductPage', () => {
   };
 
   // The lookup is offered only when it can answer truthfully:
-  it('hides the Asda lookup when Asda already lists the product', () => {
-    expect(setup().page.canFindAtAsda()).toBe(false);
+  it('hides a shop’s lookup once that shop lists the product', () => {
+    // DETAIL is listed at both, so neither is worth looking for.
+    expect(setup().page.shopLookups()).toEqual([]);
   });
 
-  it('hides the Asda lookup with no barcode — there’d be nothing to match on', () => {
+  it('hides every lookup with no barcode — there’d be nothing to match on', () => {
     const detail = { ...UNLISTED, product: { ...UNLISTED.product, barcode: null } };
-    expect(setup(detail).page.canFindAtAsda()).toBe(false);
+    expect(setup(detail).page.shopLookups()).toEqual([]);
   });
 
-  it('offers the Asda lookup for a barcoded product no shop lists yet', () => {
-    expect(setup(UNLISTED).page.canFindAtAsda()).toBe(true);
+  it('offers both shops for a barcoded product no shop lists yet', () => {
+    expect(setup(UNLISTED).page.shopLookups().map((s) => s.label)).toEqual(['Asda', 'Waitrose']);
   });
 
   it('shows the confirmed match and adds it under its own barcode', () => {
@@ -220,20 +231,20 @@ describe('ProductPage', () => {
       name: 'Extra Special Balsamic Vinegar of Modena 250ml',
       price: { amount_minor: 800, currency: 'GBP', unit_amount_minor: null, unit_measure: null, region: 'EN' },
     });
-    const { page, api } = setup(UNLISTED, { hit: confirmed, from_cache: false });
-    page.findAtAsda();
+    const { page, api } = setup(UNLISTED, { hit: confirmed, from_cache: false, searched: true });
+    page.find('asda');
     // Asks the backend about THIS product at THIS shop; it owns both the cache
     // check and the barcode match (products::asda::match_barcode).
     expect(api.findAtShop).toHaveBeenCalledWith(42, 'asda');
-    expect(page.shopLookup()).toBe('found');
-    expect(page.shopMatch()?.external_id).toBe('9020290');
-    expect(page.fromCache()).toBe(false);
+    expect(lookup(page, 'asda').state).toBe('found');
+    expect(lookup(page, 'asda').hit?.external_id).toBe('9020290');
+    expect(lookup(page, 'asda').fromCache).toBe(false);
 
     // Attaching hands the backend only the listing's identity — it re-fetches
     // shop-side and re-checks the barcode itself, so no facts are client-supplied.
-    page.attach(page.shopMatch()!);
+    page.attachHit(lookup(page, 'asda'));
     expect(api.syncListing).toHaveBeenCalledWith(42, 'asda', '9020290');
-    expect(page.shopLookup()).toBe('idle'); // panel resets; the page reloads
+    expect(lookup(page, 'asda').state).toBe('idle'); // panel resets; the page reloads
   });
 
   it('previews the match — picture and pack details — before you commit to Add', () => {
@@ -247,9 +258,9 @@ describe('ProductPage', () => {
       quantity_label: '250ml',
       image_url: 'https://s7g10.scene7.com/is/image/asda/9020290?$ProdList$',
     });
-    const { fixture, page } = setup(UNLISTED, { hit: confirmed, from_cache: false });
-    page.findAtAsda();
-    expect(page.hitSubtitle(confirmed)).toBe('Asda Extra Special · 250ml');
+    const { fixture, page } = setup(UNLISTED, { hit: confirmed, from_cache: false, searched: true });
+    page.find('asda');
+    expect(page.hitSubtitle(lookup(page, 'asda').hit!)).toBe('Asda Extra Special · 250ml');
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
     const img = el.querySelector<HTMLImageElement>('.match-img');
@@ -259,13 +270,14 @@ describe('ProductPage', () => {
 
   it('falls back to the verified tick when a match has no picture', () => {
     const confirmed = hit({ external_id: '7', name: 'Pictureless thing', image_url: null });
-    const { fixture, page } = setup(UNLISTED, { hit: confirmed, from_cache: false });
-    page.findAtAsda();
+    const { fixture, page } = setup(UNLISTED, { hit: confirmed, from_cache: false, searched: true });
+    page.find('asda');
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.match-img')).toBeNull();
     expect(el.querySelector('.match .ok')).not.toBeNull();
-    expect(page.hitSubtitle(confirmed)).toBe(''); // nothing to size up, so nothing shown
+    // Nothing to size up, so nothing shown.
+    expect(page.hitSubtitle(lookup(page, 'asda').hit!)).toBe('');
   });
 
   it('refreshes a shop row only when asked, by the listing it names', () => {
@@ -280,10 +292,10 @@ describe('ProductPage', () => {
     // No confirmed hit: the backend checked every result and none carried this
     // EAN. That's a real answer, and it must read as one — not as an error, and
     // never as a nearest-name suggestion.
-    const { page } = setup(UNLISTED, { hit: null, from_cache: false });
-    page.findAtAsda();
-    expect(page.shopLookup()).toBe('none');
-    expect(page.shopMatch()).toBeNull();
+    const { page } = setup(UNLISTED, { hit: null, from_cache: false, searched: true });
+    page.find('asda');
+    expect(lookup(page, 'asda').state).toBe('none');
+    expect(lookup(page, 'asda').hit).toBeNull();
   });
 
   it('says so when the answer came from memory rather than the shop', () => {
@@ -295,10 +307,10 @@ describe('ProductPage', () => {
       name: 'Extra Special Balsamic Vinegar of Modena 250ml',
       price_label: null,
     });
-    const { page } = setup(UNLISTED, { hit: remembered, from_cache: true });
-    page.findAtAsda();
-    expect(page.shopLookup()).toBe('found');
-    expect(page.fromCache()).toBe(true);
+    const { page } = setup(UNLISTED, { hit: remembered, from_cache: true, searched: false });
+    page.find('asda');
+    expect(lookup(page, 'asda').state).toBe('found');
+    expect(lookup(page, 'asda').fromCache).toBe(true);
   });
 
   it('distinguishes a failed search from an empty one', () => {
@@ -314,8 +326,144 @@ describe('ProductPage', () => {
     const fixture = TestBed.createComponent(ProductPage);
     fixture.componentRef.setInput('id', '42');
     fixture.detectChanges();
-    fixture.componentInstance.findAtAsda();
-    expect(fixture.componentInstance.shopLookup()).toBe('error');
+    fixture.componentInstance.find('asda');
+    expect(lookup(fixture.componentInstance, 'asda').state).toBe('error');
+  });
+
+  // --- A shop only the app can see (increment 7b) ---
+
+  const CANDIDATES = [
+    { external_id: '271100', name: 'Balsamic Vinegar 500ml', image_url: 'https://x/1.jpg' },
+    { external_id: '271105', name: 'Balsamic Vinegar of Modena 250ml', image_url: 'https://x/2.jpg' },
+  ];
+
+  /** The Waitrose SUMMARY record for a lineNumber, as the WebView returns it. */
+  const waitroseProduct = (externalId: string, barcodes: string[]) => ({
+    source: 'waitrose',
+    external_id: externalId,
+    name: 'Waitrose Balsamic Vinegar of Modena',
+    brand: 'Waitrose',
+    barcodes,
+    image_url: 'https://ecom-su-static-prod.wtrecom.com/x.jpg',
+    display_price: { amount: 2.65, currencyCode: 'GBP' },
+    categories: [],
+  });
+
+  /** In the app, with a WebView that answers the search and each product fetch. */
+  function setupApp(products: Record<string, string[]>) {
+    const shops = {
+      available: true,
+      search: vi.fn(() => Promise.resolve(CANDIDATES)),
+      fetchProduct: vi.fn((_p: unknown, id: string) =>
+        Promise.resolve(waitroseProduct(id, products[id] ?? [])),
+      ),
+    };
+    return setup(UNLISTED, { hit: null, from_cache: false, searched: false }, shops);
+  }
+
+  it('says it hasn’t looked, rather than reporting an absence it never checked', async () => {
+    // A browser can't reach a bot-walled shop. "We haven't checked" and "they
+    // don't carry it" are opposite claims, and only one of them is true here.
+    const { page } = setup(UNLISTED, { hit: null, from_cache: false, searched: false });
+    page.find('waitrose');
+    await flush();
+    expect(lookup(page, 'waitrose').state).toBe('unknown');
+  });
+
+  it('walks the shop’s own results in the app until one carries our barcode', async () => {
+    const { page, api } = setupApp({
+      '271100': ['5000169000000'], // a look-alike: right shelf, wrong product
+      '271105': ['5063089281581'], // ours
+    });
+    page.find('waitrose');
+    await flush();
+    const row = lookup(page, 'waitrose');
+    expect(row.state).toBe('found');
+    expect(row.hit?.external_id).toBe('271105');
+    expect(row.hit?.price_label).toBe('£2.65');
+    expect(row.checked).toBe(2); // both were read; the second matched
+    // Matching is the barcode's job, never the shop's ranking — the first hit
+    // was the better-ranked one and it is not what we took.
+    expect(api.rememberShopListings).toHaveBeenCalled();
+  });
+
+  it('reports every listing the hunt passed over, not just the one that matched', async () => {
+    // The point of a hunt that costs a page load each: the pages we read are
+    // worth keeping, so the next hunt — for this product or any other — is free.
+    const { page, api } = setupApp({ '271100': ['5000169000000'], '271105': ['5063089281581'] });
+    page.find('waitrose');
+    await flush();
+    const reported = api.rememberShopListings.mock.calls.flatMap(
+      (c: unknown[]) => c[1] as { external_id: string; barcode: string | null }[],
+    );
+    // Each listing is reported twice — once from the search, which knows no
+    // barcode, and again once its page has been read. The backend keeps the
+    // fuller sighting (COALESCE), so what matters is that the barcode was sent
+    // at all, not which report carried it.
+    const barcodesFor = (id: string) =>
+      reported.filter((l) => l.external_id === id).map((l) => l.barcode);
+    expect(barcodesFor('271100')).toContain('5000169000000');
+    // And the matching one is filed under the barcode WE asked about, so the
+    // next lookup for it hits memory instead of walking the shop again.
+    expect(barcodesFor('271105')).toContain('5063089281581');
+  });
+
+  it('adds a bridge-found listing from the record it already fetched, price and all', async () => {
+    // The server can't re-read this shop, so what the phone saw IS the import —
+    // and the price rides along, or a second shop could never be compared.
+    const { page, api } = setupApp({ '271105': ['5063089281581'] });
+    page.find('waitrose');
+    await flush();
+    page.attachHit(lookup(page, 'waitrose'));
+    expect(api.importProduct).toHaveBeenCalledWith({
+      source: 'waitrose',
+      external_id: '271105',
+      name: 'Waitrose Balsamic Vinegar of Modena',
+      brand: 'Waitrose',
+      barcode: '5063089281581',
+      image_url: 'https://ecom-su-static-prod.wtrecom.com/x.jpg',
+      price: {
+        amount_minor: 265,
+        currency: 'GBP',
+        unit_amount_minor: null,
+        unit_measure: null,
+        region: null,
+      },
+    });
+    expect(api.syncListing).not.toHaveBeenCalled(); // the server can't fetch it
+  });
+
+  it('says how many it checked when a hunt finds nothing', async () => {
+    // "None of these" is not "not in the catalogue", and the copy has to be
+    // able to tell the difference.
+    const { page } = setupApp({ '271100': ['1'], '271105': ['2'] });
+    page.find('waitrose');
+    await flush();
+    expect(lookup(page, 'waitrose').state).toBe('none');
+    expect(lookup(page, 'waitrose').checked).toBe(2);
+  });
+
+  it('offers a refresh only where this device can actually re-read the shop', () => {
+    // Asda is the server's to re-read from anywhere; a bot-walled shop's button
+    // is absent in a browser rather than present and failing.
+    const browser = setup().page;
+    expect(browser.canRefresh('asda')).toBe(true);
+    expect(browser.canRefresh('waitrose')).toBe(false);
+  });
+
+  it('re-reads a bot-walled shop through the app and re-imports what it says', async () => {
+    const shops = {
+      available: true,
+      search: vi.fn(),
+      fetchProduct: vi.fn(() => Promise.resolve(waitroseProduct('271105', ['5000328042732']))),
+    };
+    const { page, api } = setup(DETAIL, { hit: null, from_cache: false, searched: false }, shops);
+    expect(page.canRefresh('waitrose')).toBe(true);
+    page.refresh(page.buyRows().find((r) => r.label === 'Waitrose')!);
+    await flush();
+    expect(api.importProduct).toHaveBeenCalledWith(
+      expect.objectContaining({ source: 'waitrose', external_id: '271105' }),
+    );
   });
 
   /** Mount the page with an API that fails the detail load with `err`. */

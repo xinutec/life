@@ -203,7 +203,8 @@ h3 {
   }
 }
 
-// "Find at Asda" and whatever the lookup came back with.
+// "Find at <shop>" and whatever that lookup came back with — one per shop that
+// could still be added, so they stack.
 .shop-lookup {
   margin-top: 0.25rem;
 

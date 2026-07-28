@@ -18,9 +18,12 @@
 //! being silently wrong.
 
 use anyhow::Result;
+use serde::Deserialize;
 use sqlx::MySqlPool;
+use ts_rs::TS;
 
 use super::asda::AsdaHit;
+use super::{off, source};
 
 /// One shop listing as the shop described it. Shop-agnostic on purpose: Asda
 /// fills it from an Algolia hit server-side, Waitrose from the Android bridge's
@@ -53,6 +56,88 @@ impl CachedListing {
             image_url: hit.image_url.clone(),
         }
     }
+}
+
+/// One listing a client's WebView saw, as it reports it.
+///
+/// Exists because a bot-walled shop (Waitrose) can only be queried by the phone:
+/// the server can't see what the phone saw, so the phone hands it back and the
+/// memory fills exactly as it does for the shops the server can query itself.
+/// Everything but the shop's own id is optional — a search hit knows a name and
+/// a lineNumber, and only a product fetch learns the barcode.
+#[derive(Debug, Clone, PartialEq, Deserialize, TS)]
+#[ts(export)]
+pub struct SeenListing {
+    pub external_id: String,
+    #[serde(default)]
+    pub barcode: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub brand: Option<String>,
+    #[serde(default)]
+    pub quantity_label: Option<String>,
+    #[serde(default)]
+    pub image_url: Option<String>,
+}
+
+/// The most listings one report may carry. A Waitrose search returns 8 and an
+/// Asda search 15; anything near this is a client bug, not a busy shopper.
+pub const MAX_SEEN: usize = 50;
+
+/// Turn a client's report into cache rows, or say why it can't be trusted.
+///
+/// Rejects (whole batch) what would poison the identity index: an unknown shop,
+/// a malformed shop id, or a barcode that isn't a barcode — the `(source,
+/// barcode)` lookup is the one thing this table exists to answer, so a wrong
+/// row there is worse than no row.
+///
+/// Drops (row keeps its identity) an `image_url` from a host the source isn't
+/// allowed to serve pictures from: the picture is a nicety, the identity is the
+/// point, and losing a hunt over a CDN rename would be the wrong trade. Dropping
+/// is logged by the caller rather than done silently.
+pub fn validate_seen(source_id: &str, seen: &[SeenListing]) -> Result<Vec<CachedListing>, String> {
+    let Some(src) = source::importable(source_id) else {
+        return Err(format!("unknown shop: {source_id}"));
+    };
+    if seen.len() > MAX_SEEN {
+        return Err(format!("at most {MAX_SEEN} listings per report"));
+    }
+    seen.iter()
+        .map(|s| {
+            let external_id = s.external_id.trim();
+            if external_id.is_empty()
+                || external_id.len() > 64
+                || !external_id
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+            {
+                return Err("external_id must be 1-64 chars of [A-Za-z0-9_-]".to_string());
+            }
+            let barcode = trimmed(&s.barcode);
+            if let Some(bc) = &barcode
+                && !off::is_valid_barcode(bc)
+            {
+                return Err(format!("not a barcode: {bc}"));
+            }
+            Ok(CachedListing {
+                source: src.id.to_string(),
+                external_id: external_id.to_string(),
+                barcode,
+                name: trimmed(&s.name),
+                brand: trimmed(&s.brand),
+                quantity_label: trimmed(&s.quantity_label),
+                image_url: trimmed(&s.image_url).filter(|u| off::host_allowed(u, src.image_hosts)),
+            })
+        })
+        .collect()
+}
+
+fn trimmed(v: &Option<String>) -> Option<String> {
+    v.as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
 }
 
 /// Store everything a shop query showed us, keyed by the shop's own identity.

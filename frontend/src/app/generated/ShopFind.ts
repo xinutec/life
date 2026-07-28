@@ -6,8 +6,7 @@ import type { AsdaHit } from "./AsdaHit";
  */
 export type ShopFind = { 
 /**
- * The barcode-confirmed listing, or `None` for "we looked and this shop
- * doesn't carry this barcode" — never "we gave up early".
+ * The barcode-confirmed listing, if we have one.
  */
 hit: AsdaHit | null, 
 /**
@@ -15,4 +14,12 @@ hit: AsdaHit | null,
  * so: an answer we already had and one we just paid for are different
  * things, and hiding which is which makes the cache unfalsifiable.
  */
-from_cache: boolean, };
+from_cache: boolean, 
+/**
+ * Whether the shop itself was asked. Without this, `hit: None` would have to
+ * mean two opposite things: "we asked and this shop doesn't carry it" and
+ * "we've never looked". Only the server-searchable shops can produce the
+ * first; for a bot-walled shop a miss is always the second, and the phone —
+ * which CAN look — acts on the difference.
+ */
+searched: boolean, };

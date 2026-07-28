@@ -1,5 +1,7 @@
 import { Injectable } from '@angular/core';
 
+import { PriceInput } from './models';
+
 /** Full detail for a shop product; maps onto LifeApi.importProduct. */
 export interface ShopProduct {
   source: string;
@@ -10,6 +12,27 @@ export interface ShopProduct {
   image_url: string | null;
   display_price: { amount: number; currencyCode: string } | null;
   categories: string[];
+}
+
+/** What a shop's own quote becomes on our side: integer minor units, never a
+ *  float (see products::prices). `null` when the shop quoted nothing.
+ *
+ *  Shared rather than repeated: the picker imports shop products and so does the
+ *  product page's shop lookup, and a price recorded by one path but not the
+ *  other would make "which shop is cheaper" depend on which screen you used. */
+export function shopPrice(product: ShopProduct): PriceInput | null {
+  const p = product.display_price;
+  if (!p || !(p.amount > 0)) return null;
+  return {
+    amount_minor: Math.round(p.amount * 100),
+    currency: p.currencyCode,
+    // The SUMMARY payload's per-unit price sits behind a different view; until
+    // we read it, saying nothing beats guessing a measure.
+    unit_amount_minor: null,
+    unit_measure: null,
+    // One price, no nations — unlike Asda, which quotes EN/NI/SC/WA separately.
+    region: null,
+  };
 }
 
 /** A lightweight search hit; fetchProduct() gets the rest. */

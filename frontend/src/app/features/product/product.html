@@ -172,7 +172,7 @@
     </section>
   }
 
-  @if (buyRows().length || canFindAtAsda()) {
+  @if (buyRows().length || shopLookups().length) {
     <h3>Where to buy</h3>
     <div class="buy">
       @for (r of buyRows(); track r.key) {
@@ -188,8 +188,10 @@
               <span class="fine">no price yet</span>
             }
           </span>
-          @if (r.source === 'asda') {
-            <!-- On demand only: never refetched on a timer (see refresh()). -->
+          @if (canRefresh(r.source)) {
+            <!-- On demand only: never refetched on a timer (see refresh()).
+                 A bot-walled shop can only be re-read inside the app, so its
+                 button is absent in a browser rather than there and failing. -->
             <button
               mat-icon-button
               (click)="refresh(r)"
@@ -214,17 +216,24 @@
       }
     </div>
 
-    @if (canFindAtAsda()) {
+    @for (shop of shopLookups(); track shop.source) {
       <div class="shop-lookup">
-        @switch (shopLookup()) {
+        @switch (shop.state) {
           @case ('searching') {
-            <span class="fine">Looking for this barcode at Asda…</span>
+            <span class="fine">
+              Looking for this barcode at {{ shop.label }}
+              @if (shop.progress) {
+                — checking {{ shop.progress }}
+              }
+              …
+            </span>
           }
           @case ('found') {
-            @if (shopMatch(); as hit) {
-              <!-- See it before you add it: Asda's own picture and pack details,
-                   shown straight from the shop — nothing is written to our DB
-                   until you tap Add. Barcode-confirmed, so this IS the product. -->
+            @if (shop.hit; as hit) {
+              <!-- See it before you add it: the shop's own picture and pack
+                   details, shown straight from the shop — nothing is written to
+                   our DB until you tap Add. Barcode-confirmed, so this IS the
+                   product, whoever did the confirming. -->
               <div class="match">
                 @if (hit.image_url) {
                   <img class="match-img" [src]="hit.image_url" alt="" loading="lazy" />
@@ -237,32 +246,49 @@
                     <span class="fine">{{ sub }}</span>
                   }
                   <!-- A remembered hit has no price: the cache keeps identity,
-                       which doesn't rot, not figures, which do. Adding it
-                       fetches the real price from Asda. -->
+                       which doesn't rot, not figures, which do. Adding it reads
+                       the real price — server-side for Asda, from the record the
+                       phone just fetched for a shop only it can see. -->
                   <span class="fine">
                     same barcode
                     @if (hit.price_label) {
                       · {{ hit.price_label }}
                     }
-                    @if (fromCache()) {
+                    @if (shop.fromCache) {
                       · already knew this one
                     }
                   </span>
                 </span>
-                <button mat-flat-button (click)="attach(hit)" [disabled]="attaching()">Add</button>
+                <button mat-flat-button (click)="attachHit(shop)" [disabled]="attaching()">
+                  Add
+                </button>
               </div>
             }
           }
           @case ('none') {
-            <span class="fine">No Asda product carries this barcode.</span>
+            <!-- What was actually checked, not a claim about the catalogue: a
+                 shop's own search showed us these and none carried the barcode. -->
+            <span class="fine">
+              No {{ shop.label }} product carries this barcode
+              @if (shop.checked) {
+                (checked {{ shop.checked }})
+              }.
+            </span>
+          }
+          @case ('unknown') {
+            <!-- Nobody has looked and this browser can't: the shop's pages are
+                 behind a bot-wall only the app's WebView gets through. -->
+            <span class="fine">
+              Haven’t checked {{ shop.label }} — the app can look for this one.
+            </span>
           }
           @case ('error') {
-            <span class="fine">Couldn’t reach Asda — are you online?</span>
+            <span class="fine">Couldn’t reach {{ shop.label }} — are you online?</span>
           }
           @default {
-            <button mat-button (click)="findAtAsda()">
+            <button mat-button (click)="find(shop.source)">
               <mat-icon>storefront</mat-icon>
-              Find at Asda
+              Find at {{ shop.label }}
             </button>
           }
         }

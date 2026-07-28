@@ -14,6 +14,8 @@ import {
   ProductDetail,
   Recipe,
   RecipeIngredient,
+  Remembered,
+  SeenListing,
   ShopFind,
   ShoppingItem,
   SuggestEmotionsRequest,
@@ -118,6 +120,16 @@ export class LifeApi {
   findAtShop(id: number, source: string): Observable<ShopFind> {
     return this.http.get<ShopFind>(
       `/api/products/id/${id}/find/${encodeURIComponent(source)}`,
+    );
+  }
+  /** Teach the backend what this device's WebView saw at a shop the server
+   *  can't reach itself (Waitrose is behind a bot-wall). Every listing a hunt
+   *  passed over is worth reporting, not just the one that matched: each is a
+   *  durable barcode → shop-id fact that spares the next hunt a page load. */
+  rememberShopListings(source: string, listings: SeenListing[]): Observable<Remembered> {
+    return this.http.post<Remembered>(
+      `/api/products/shop/${encodeURIComponent(source)}/listings`,
+      listings,
     );
   }
   /** Fold a batch of client activity events (navigations, taps) into the backend

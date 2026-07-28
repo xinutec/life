@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Feedback } from './feedback';
 import { LifeApi } from '../life-api';
-import { AsdaHit, Item, Product } from '../models';
+import { AsdaHit, Item, PriceInput, Product } from '../models';
 import { Shops } from '../shop';
 import { ItemsStore } from '../stores/catalog';
 import { ProductPicker, localHits, withoutLocalDupes } from './product-picker';
@@ -98,7 +98,7 @@ describe('ProductPicker', () => {
         brand: 'Waitrose',
         barcodes: [],
         image_url: 'https://cdn/img.jpg',
-        display_price: null,
+        display_price: { amount: 2.65, currencyCode: 'GBP' },
         categories: [],
       }),
     };
@@ -223,7 +223,21 @@ describe('ProductPicker', () => {
 
     expect(shops.fetchProduct).toHaveBeenCalledWith(cmp.shopProviders[0], '062593');
     expect(api.importProduct).toHaveBeenCalledWith(
-      expect.objectContaining({ source: 'waitrose', external_id: '062593' }),
+      expect.objectContaining({
+        source: 'waitrose',
+        external_id: '062593',
+        // The shop's own quote, recorded here as it is everywhere else — a price
+        // this path dropped would make "cheapest shop" depend on which screen
+        // you linked the product from. Spelled out rather than matched loosely:
+        // the whole shape is what the import path promises.
+        price: {
+          amount_minor: 265,
+          currency: 'GBP',
+          unit_amount_minor: null,
+          unit_measure: null,
+          region: null,
+        } satisfies PriceInput,
+      }),
     );
     expect(ref.close).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'Waitrose Cheddar', product_id: 99 }),
