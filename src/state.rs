@@ -1,25 +1,14 @@
-//! Shared application state + the short-lived OAuth `state` store.
+//! Shared application state.
 //!
-//! NOTE: the pending-OAuth map is in-memory (per process). That is fine for a
-//! single-pod single-user deployment. The design doc (docs/design/overview.md
-//! §3) calls for moving this to a DB table before running a 2nd replica.
+//! The login in progress is NOT held here: it rides in a signed cookie
+//! (`pending_login`), so it survives a restart and does not assume one pod.
 
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use rand::Rng;
 use sqlx::MySqlPool;
 
 use crate::config::Config;
-
-const OAUTH_TTL: Duration = Duration::from_secs(600); // 10 minutes
-
-pub struct PendingOauth {
-    created: Instant,
-    /// Internal path to redirect to after callback; allowlist-validated when used.
-    pub return_to: Option<String>,
-}
 
 /// A worker seen less recently than this is assumed gone. Comfortably longer than
 /// one long-poll cycle, so a worker that is merely between polls still counts as
@@ -47,7 +36,6 @@ pub struct AppState {
     pub pool: MySqlPool,
     pub cfg: Arc<Config>,
     pub http: reqwest::Client,
-    oauth: Arc<Mutex<HashMap<String, PendingOauth>>>,
     /// Last time the emotion-suggestion worker polled for work. In-memory on
     /// purpose: it is a fact about *now*, worthless after a restart, and a restart
     /// re-learns it within one poll.
@@ -55,8 +43,8 @@ pub struct AppState {
     /// Wakes a waiting worker the instant a suggestion job is queued, so a note
     /// is picked up as you finish writing it rather than at the next tick. A
     /// hint, not the mechanism: the worker also re-checks on a slow timer, which
-    /// is what covers a job queued by a *different* process (this signal, like
-    /// the OAuth map above, is per-pod).
+    /// is what covers a job queued by a *different* process (this signal is
+    /// per-pod).
     job_queued: Arc<tokio::sync::Notify>,
     /// A pending "warm the model" request: the day's system prompt, set when a
     /// check-in note starts being written. The worker preloads it — loading the
@@ -79,7 +67,6 @@ impl AppState {
             pool,
             cfg: Arc::new(cfg),
             http,
-            oauth: Arc::new(Mutex::new(HashMap::new())),
             worker_seen: Arc::new(Mutex::new(None)),
             job_queued: Arc::new(tokio::sync::Notify::new()),
             warm_system: Arc::new(Mutex::new(None)),
@@ -148,32 +135,5 @@ impl AppState {
             .lock()
             .expect("warm clock poisoned")
             .is_some_and(|t| t.elapsed() < PRELOAD_GRACE)
-    }
-
-    /// Mint a new opaque `state` token and remember its pending entry.
-    pub fn create_oauth_state(&self, return_to: Option<String>) -> String {
-        let mut bytes = [0u8; 24];
-        rand::rng().fill_bytes(&mut bytes);
-        let state = hex::encode(bytes);
-        let mut map = self.oauth.lock().expect("oauth map poisoned");
-        map.retain(|_, v| v.created.elapsed() < OAUTH_TTL);
-        map.insert(
-            state.clone(),
-            PendingOauth {
-                created: Instant::now(),
-                return_to,
-            },
-        );
-        state
-    }
-
-    /// Consume a `state` token exactly once. None if unknown or expired.
-    pub fn consume_oauth_state(&self, state: &str) -> Option<PendingOauth> {
-        let mut map = self.oauth.lock().expect("oauth map poisoned");
-        let entry = map.remove(state)?;
-        if entry.created.elapsed() > OAUTH_TTL {
-            return None;
-        }
-        Some(entry)
     }
 }

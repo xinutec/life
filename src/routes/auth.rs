@@ -7,11 +7,13 @@ use axum::Json;
 use axum::extract::{Query, State};
 use axum::response::Redirect;
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
+use chrono::Utc;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::error::AppError;
 use crate::nextcloud::{credentials, identity, login_flow};
+use crate::pending_login;
 use crate::session::{AuthUser, COOKIE_NAME, UserSession, create_session, destroy_session};
 use crate::state::AppState;
 
@@ -31,6 +33,18 @@ fn session_cookie(value: String) -> Cookie<'static> {
         .build()
 }
 
+/// The login-in-progress cookie. `Lax`, because the callback arrives as a
+/// top-level navigation from Nextcloud and a `Strict` cookie would not be sent.
+fn pending_cookie(value: String) -> Cookie<'static> {
+    Cookie::build((pending_login::COOKIE_NAME, value))
+        .path("/")
+        .http_only(true)
+        .secure(true)
+        .same_site(SameSite::Lax)
+        .max_age(time::Duration::seconds(pending_login::ttl().num_seconds()))
+        .build()
+}
+
 /// Only allow same-site internal paths as a post-login redirect target.
 /// Rejects `//host` (protocol-relative) and `/\host` — browsers fold `\` to
 /// `/` in special-scheme URLs, so a Location of `/\evil.com` would redirect
@@ -47,11 +61,19 @@ pub struct LoginQuery {
     return_to: Option<String>,
 }
 
-/// GET /login → redirect to NC's OAuth2 authorize endpoint.
-pub async fn login(State(app): State<AppState>, Query(q): Query<LoginQuery>) -> Redirect {
-    let state = app.create_oauth_state(q.return_to.clone());
+/// GET /login → redirect to NC's OAuth2 authorize endpoint, remembering the login
+/// in a signed cookie (see [`pending_login`] for why the `state` echo isn't enough).
+pub async fn login(
+    State(app): State<AppState>,
+    jar: CookieJar,
+    Query(q): Query<LoginQuery>,
+) -> (CookieJar, Redirect) {
     tracing::info!(return_to = ?q.return_to, "login started");
-    Redirect::to(&identity::authorize_url(&app.cfg, &state))
+    let (nonce, cookie) = pending_login::issue(&app.cfg.session_secret, q.return_to, Utc::now());
+    (
+        jar.add(pending_cookie(cookie)),
+        Redirect::to(&identity::authorize_url(&app.cfg, &nonce)),
+    )
 }
 
 #[derive(Deserialize)]
@@ -63,23 +85,21 @@ pub struct CallbackQuery {
 /// GET /auth/callback → exchange code, read identity, create our session.
 ///
 /// Every way this can fail says so in the log. A login that dies here otherwise
-/// looks like a bare 401 and tells you nothing — and one of the failures is not
-/// even the user's doing: the pending-`state` map lives in memory (see
-/// `state.rs`), so a pod restart between /login and the callback drops the entry
-/// and the login is refused through no fault of anyone's.
+/// looks like a bare 401 and tells you nothing.
 pub async fn callback(
     State(app): State<AppState>,
     jar: CookieJar,
     Query(q): Query<CallbackQuery>,
 ) -> Result<(CookieJar, Redirect), AppError> {
-    let Some(state) = q.state.filter(|s| !s.is_empty()) else {
-        tracing::warn!(reason = "no_state", "login callback rejected");
-        return Err(AppError::Unauthorized);
-    };
-    let Some(pending) = app.consume_oauth_state(&state) else {
-        // Expired (>10 min at the NC consent screen), already used, or minted by
-        // a process that has since been replaced.
-        tracing::warn!(reason = "unknown_state", "login callback rejected");
+    let Some(pending) = pending_login::accept(
+        &app.cfg.session_secret,
+        jar.get(pending_login::COOKIE_NAME).map(Cookie::value),
+        q.state.as_deref(),
+        Utc::now(),
+    ) else {
+        // No cookie (the login didn't start here), older than 10 minutes at the NC
+        // consent screen, or a `state` that doesn't match the one we minted.
+        tracing::warn!(reason = "no_pending_login", "login callback rejected");
         return Err(AppError::Unauthorized);
     };
     let code = q.code.ok_or_else(|| {
@@ -97,6 +117,8 @@ pub async fn callback(
     let signed = create_session(&app.pool, &app.cfg.session_secret, &user).await?;
     let dest = validate_return_to(pending.return_to.as_deref());
     tracing::info!(user = %user.user_id, %dest, "login complete");
+    // The login is over: drop its cookie so a stale one can't be replayed.
+    let jar = jar.remove(Cookie::from(pending_login::COOKIE_NAME));
     Ok((jar.add(session_cookie(signed)), Redirect::to(&dest)))
 }
 

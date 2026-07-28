@@ -203,7 +203,7 @@ class MainActivity : Activity() {
                             isReload: Boolean,
                         ) {
                             super.doUpdateVisitedHistory(view, url, isReload)
-                            if (url.startsWith(LIFE_URL)) {
+                            if (Restore.isRestorable(LIFE_URL, url)) {
                                 prefs.edit().putString(KEY_LAST_URL, url).apply()
                             }
                         }
