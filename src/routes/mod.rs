@@ -61,6 +61,7 @@ pub fn router(state: AppState) -> Router {
             patch(shopping::update).delete(shopping::delete),
         )
         .route("/shopping/{id}/buy", post(shopping::buy))
+        .route("/shopping/coverage", post(shopping::coverage))
         .route(
             "/sync/shopping",
             get(sync::pull_shopping).post(sync::push_shopping),

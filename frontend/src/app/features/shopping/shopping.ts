@@ -1,4 +1,4 @@
-import { Component, computed, inject } from "@angular/core";
+import { Component, computed, effect, inject, signal } from "@angular/core";
 import { toSignal } from "@angular/core/rxjs-interop";
 import { MatBottomSheet, MatBottomSheetModule } from "@angular/material/bottom-sheet";
 import { MatButtonModule } from "@angular/material/button";
@@ -13,6 +13,8 @@ import { Feedback } from "../../shared/feedback";
 import { isNotFound } from "../../shared/api-error";
 import { ListState } from "../../shared/list-state";
 import { LifeApi } from "../../life-api";
+import { CoverageQuery } from "../../models";
+import { sourceLabel } from "../../shared/sources";
 import { ProductThumb } from "../../product-thumb";
 import { ShoppingDoc, ShoppingStore } from "../../sync/shopping-store";
 import { ShoppingItemSheet } from "./shopping-item-sheet";
@@ -52,6 +54,88 @@ export class Shopping {
     () => this.items().filter((i) => i.done).length,
   );
   readonly syncError = this.store.syncError;
+
+  // --- Where can I get this trip? ---
+  //
+  // Answered from what earlier shop lookups already taught us, so it costs the
+  // shops nothing and can run whenever the list changes. It says where a thing
+  // is SOLD, never whether it is on the shelf tonight — the copy has to keep
+  // that distinction, because a shopping list is exactly where a confident
+  // wrong answer would send you to the wrong shop.
+
+  private readonly coverage = signal<Map<string, string[]>>(new Map());
+  /** Whether the answer is missing because we couldn't ask, rather than because
+   *  nothing is known. Shown, so an offline blank doesn't read as "nowhere". */
+  private readonly coverageUnavailable = signal(false);
+
+  constructor() {
+    // Re-ask only when the rows worth asking about change — not on every store
+    // emission (ticking one box would otherwise re-query the whole list).
+    effect(() => {
+      const rows = this.askable();
+      if (!rows.length) {
+        this.coverage.set(new Map());
+        return;
+      }
+      this.api.shopCoverage(rows).subscribe({
+        next: (answers) => {
+          this.coverageUnavailable.set(false);
+          this.coverage.set(new Map(answers.map((a) => [a.key, a.sources])));
+        },
+        // Enrichment, not the list itself: a failure leaves the Buy list working
+        // and says the coverage line is unknown rather than empty.
+        error: () => this.coverageUnavailable.set(true),
+      });
+    });
+  }
+
+  /** The un-done rows that carry something to look up. A ticked-off row is
+   *  already in the trolley, and a free-text jotting has no identity to ask
+   *  about. */
+  private readonly askable = computed<CoverageQuery[]>(() =>
+    this.items()
+      .filter((it) => !it.done && (it.product_id != null || !!it.barcode?.trim()))
+      .map((it) => ({ key: it.ulid, barcode: it.barcode, product_id: it.product_id })),
+  );
+
+  /** The shops known to sell this row, for its own line. */
+  shopsFor(it: ShoppingDoc): string[] {
+    return this.coverage().get(it.ulid) ?? [];
+  }
+
+  /** "Asda · Waitrose" — the row's own shops, named as they are everywhere else. */
+  shopLine(it: ShoppingDoc): string {
+    return this.shopsFor(it).map(sourceLabel).join(" · ");
+  }
+
+  /** "Asda 6/8 · Waitrose 4/8", best first — the one-shop-trip question. Rows we
+   *  can't ask about are counted separately rather than folded into the
+   *  denominator, so a list of hand-typed jottings doesn't read as bad coverage. */
+  readonly tripSummary = computed<{ shops: { label: string; have: number }[]; of: number; unknown: number } | null>(() => {
+    const wanted = this.items().filter((it) => !it.done);
+    if (!wanted.length || this.coverageUnavailable()) return null;
+    const cover = this.coverage();
+    const asked = wanted.filter((it) => cover.has(it.ulid));
+    const counts = new Map<string, number>();
+    for (const it of asked) {
+      for (const source of cover.get(it.ulid) ?? []) {
+        counts.set(source, (counts.get(source) ?? 0) + 1);
+      }
+    }
+    if (!counts.size) return null;
+    return {
+      shops: [...counts.entries()]
+        .map(([source, have]) => ({ label: sourceLabel(source), have }))
+        .sort((a, b) => b.have - a.have || a.label.localeCompare(b.label)),
+      of: asked.length,
+      unknown: wanted.length - asked.length,
+    };
+  });
+
+  /** True when the coverage line is blank because we couldn't ask. */
+  readonly coverageOffline = computed(
+    () => this.coverageUnavailable() && this.askable().length > 0,
+  );
 
   /** The FAB's action: the add sheet (stays open for burst entry). */
   openAdd(): void {

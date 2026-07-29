@@ -5,6 +5,7 @@ import {
   AsdaHit,
   ConflictEntry,
   ConflictKind,
+  CoverageQuery,
   HouseScene,
   Item,
   Loc,
@@ -15,6 +16,7 @@ import {
   Recipe,
   RecipeIngredient,
   Remembered,
+  RowCoverage,
   SeenListing,
   ShopFind,
   ShoppingItem,
@@ -131,6 +133,14 @@ export class LifeApi {
       `/api/products/shop/${encodeURIComponent(source)}/listings`,
       listings,
     );
+  }
+  /** Where each Buy-list row is known to be SOLD — the shops holding a listing
+   *  for its product, plus the shops a past query showed carrying its barcode.
+   *  Memory only: no shop is contacted, so this can run on every list load.
+   *  Never a stock check, and an empty `sources` means we know nothing about
+   *  that row rather than that nowhere sells it. */
+  shopCoverage(rows: CoverageQuery[]): Observable<RowCoverage[]> {
+    return this.http.post<RowCoverage[]>('/api/shopping/coverage', rows);
   }
   /** Fold a batch of client activity events (navigations, taps) into the backend
    *  log stream. Best-effort telemetry — see `Telemetry`; callers ignore the

@@ -551,6 +551,21 @@ through something that resets the NC session.
       - MVP: capture shop + amount at buy-time. Later: per-unit ranking,
         cheapest-shop, estimated totals, shop-trip scheduling via NC Calendar
         (overview §5).
+- [x] **Buy list: where can I get this trip?** (2026-07-29) — the shop knowledge
+      existed but stopped at a single product page, so the list that would use it
+      showed nothing. `POST /api/shopping/coverage` answers a whole list from
+      memory alone — the shops holding a listing for each row's product, plus the
+      shops a past query showed carrying its barcode (`shop_listings`) — in two
+      queries and no outbound traffic, so it can run on every load.
+      - **Says "sold at", never "in stock".** The freshest thing behind it is
+        whenever someone last looked; on a shopping list a confident wrong answer
+        sends you to the wrong shop.
+      - **Empty ≠ nowhere.** A row we know nothing about comes back with an empty
+        list and renders as silence; a failed call renders as *"can't check right
+        now"* rather than as an absence. Unaskable rows (free-text jottings) are
+        counted separately from the denominator, so a list of jottings doesn't
+        read as bad coverage.
+      - Ticked-off rows leave the trip: they're already in the trolley.
 - [ ] **Shopping list refinements** — low-stock auto-suggestions. ~~Add a
       recipe's missing ingredients to the Buy list in one tap~~ DONE 2026-07-27
       (the shopping-list panel on a recipe card grows an "Add N to Buy" button;

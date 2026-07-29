@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Feedback } from '../../shared/feedback';
 import { LifeApi } from '../../life-api';
+import { CoverageQuery } from '../../models';
 import { ShoppingDoc, ShoppingStore } from '../../sync/shopping-store';
 import { Shopping } from './shopping';
 
@@ -25,7 +26,11 @@ const doc = (over: Partial<ShoppingDoc>): ShoppingDoc => ({
   ...over,
 });
 
-function setup(items: ShoppingDoc[], failIds: number[] = []) {
+function setup(
+  items: ShoppingDoc[],
+  failIds: number[] = [],
+  coverage: { key: string; sources: string[] }[] = [],
+) {
   const store = {
     items$: of(items),
     syncError: signal<string | null>(null),
@@ -41,6 +46,9 @@ function setup(items: ShoppingDoc[], failIds: number[] = []) {
     ),
     restoreTrash: vi.fn(() => of(void 0)),
     lookupProduct: vi.fn((barcode: string) => of({ id: 900, barcode })),
+    shopCoverage: vi.fn((rows: CoverageQuery[]) =>
+      of(coverage.filter((c) => rows.some((r) => r.key === c.key))),
+    ),
   };
   const feedback = { notify: vi.fn(), error: vi.fn(), undo: vi.fn() };
   const sheet = { open: vi.fn() };
@@ -126,5 +134,100 @@ describe('Shopping buyDone', () => {
     expect(api.buyShopping).not.toHaveBeenCalled();
     expect(feedback.notify).not.toHaveBeenCalled();
     expect(feedback.error).not.toHaveBeenCalled();
+  });
+});
+
+/** Where each row is sold, from remembered lookups — never a stock check. */
+describe('Shopping shop coverage', () => {
+  const linked = (over: Partial<ShoppingDoc>) => doc({ product_id: 42, ...over });
+
+  it('asks only about rows there is something to ask about', () => {
+    // A ticked-off row is already in the trolley, and a free-text jotting has no
+    // identity to look up — asking about either would be noise the shops' memory
+    // cannot answer.
+    const { c, api } = setup([
+      linked({ ulid: 'a' }),
+      doc({ ulid: 'b', product_id: null, barcode: null }),
+      linked({ ulid: 'c', done: true }),
+      doc({ ulid: 'd', product_id: null, barcode: '5000000000123' }),
+    ]);
+    TestBed.tick();
+    expect(c.items().length).toBe(4);
+    const asked = api.shopCoverage.mock.calls[0][0];
+    expect(asked.map((r) => r.key)).toEqual(['a', 'd']);
+  });
+
+  it('names the shops on the row that has them, and nothing on the row that has none', () => {
+    const { c } = setup([linked({ ulid: 'a' }), linked({ ulid: 'b' })], [], [
+      { key: 'a', sources: ['asda', 'waitrose'] },
+      { key: 'b', sources: [] },
+    ]);
+    TestBed.tick();
+    expect(c.shopLine(linked({ ulid: 'a' }))).toBe('Asda · Waitrose');
+    expect(c.shopsFor(linked({ ulid: 'b' }))).toEqual([]);
+  });
+
+  it('counts the trip per shop, best first, and says what it could not answer', () => {
+    const { c } = setup(
+      [
+        linked({ ulid: 'a' }),
+        linked({ ulid: 'b' }),
+        doc({ ulid: 'c', product_id: null, barcode: null }), // unanswerable
+      ],
+      [],
+      [
+        { key: 'a', sources: ['asda', 'waitrose'] },
+        { key: 'b', sources: ['asda'] },
+      ],
+    );
+    TestBed.tick();
+    const trip = c.tripSummary()!;
+    expect(trip.shops).toEqual([
+      { label: 'Asda', have: 2 },
+      { label: 'Waitrose', have: 1 },
+    ]);
+    // The denominator is what we asked about; the jotting is named separately
+    // rather than counted as a shop's failure.
+    expect(trip.of).toBe(2);
+    expect(trip.unknown).toBe(1);
+  });
+
+  it('a ticked-off row leaves the trip it is no longer part of', () => {
+    const { c } = setup([linked({ ulid: 'a' }), linked({ ulid: 'b', done: true })], [], [
+      { key: 'a', sources: ['asda'] },
+    ]);
+    TestBed.tick();
+    expect(c.tripSummary()!.of).toBe(1);
+  });
+
+  it('says it could not check, rather than showing an empty list as an answer', () => {
+    // Offline, "no shops known" and "we could not ask" look identical unless the
+    // screen distinguishes them — and one of them would send you shopping blind.
+    const store = {
+      items$: of([linked({ ulid: 'a' })]),
+      syncError: signal<string | null>(null),
+      setDone: vi.fn(),
+      remove: vi.fn(),
+      revive: vi.fn(),
+      reSync: vi.fn(),
+      clearDone: vi.fn(),
+    };
+    const api = {
+      shopCoverage: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 0 }))),
+    };
+    TestBed.configureTestingModule({
+      providers: [
+        Shopping,
+        { provide: ShoppingStore, useValue: store },
+        { provide: LifeApi, useValue: api },
+        { provide: Feedback, useValue: { notify: vi.fn(), error: vi.fn(), undo: vi.fn() } },
+        { provide: MatBottomSheet, useValue: { open: vi.fn() } },
+        { provide: Router, useValue: { navigate: vi.fn() } },
+      ],
+    });
+    const c = TestBed.inject(Shopping);
+    TestBed.tick();
+    expect(c.coverageOffline()).toBe(true);
+    expect(c.tripSummary()).toBeNull();
   });
 });

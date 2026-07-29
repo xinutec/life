@@ -4,6 +4,23 @@
   <p class="sync-warn">{{ err }}</p>
 }
 
+<!-- Can this trip be one shop? Counted over the rows we can actually answer
+     for, with the rest named rather than folded in — and "sells", never "in
+     stock": the freshest thing behind it is whenever someone last looked. -->
+@if (tripSummary(); as trip) {
+  <p class="coverage-summary">
+    Sold at:
+    @for (shop of trip.shops; track shop.label) {
+      <span class="shop-count">{{ shop.label }} {{ shop.have }}/{{ trip.of }}</span>
+    }
+    @if (trip.unknown) {
+      <span class="fine">· {{ trip.unknown }} we haven’t looked up</span>
+    }
+  </p>
+} @else if (coverageOffline()) {
+  <p class="coverage-summary fine">Can’t check which shops sell these right now.</p>
+}
+
 <app-list-state
   [loading]="!loaded()"
   [empty]="items().length === 0"
@@ -40,6 +57,11 @@
       </span>
       @if (label(it)) {
         <span matListItemLine [class.done]="it.done">{{ label(it) }}</span>
+      }
+      <!-- Only where we know something: a row with no shops shows nothing rather
+           than an empty label, since silence and "nowhere" are different. -->
+      @if (shopsFor(it).length) {
+        <span matListItemLine class="row-shops">{{ shopLine(it) }}</span>
       }
       <button
         matListItemMeta

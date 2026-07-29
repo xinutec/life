@@ -26,3 +26,33 @@
     bottom: 0.5rem;
   }
 }
+
+// "Sold at: Asda 6/8 · Waitrose 4/8" — the one-shop-trip question, answered
+// from remembered lookups. Sits directly under the heading because it frames
+// the whole list rather than any one row.
+.coverage-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.5rem;
+  margin: 0 0 0.5rem;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+
+  .shop-count {
+    padding: 0.1rem 0.5rem;
+    border-radius: var(--mat-sys-corner-full);
+    background: var(--mat-sys-surface-container-high);
+    color: var(--mat-sys-on-surface);
+  }
+
+  .fine {
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+// The row's own shops. Quiet by design: it is provenance, not an instruction,
+// and it must not compete with the thing you came here to read.
+.row-shops {
+  color: var(--mat-sys-on-surface-variant);
+}

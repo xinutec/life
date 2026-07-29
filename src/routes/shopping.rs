@@ -7,6 +7,8 @@ use axum::http::StatusCode;
 use crate::error::AppError;
 use crate::inventory::repo as inventory_repo;
 use crate::inventory::types::{Item, NewItem};
+use crate::products::coverage;
+use crate::products::repo as product_repo;
 use crate::session::AuthUser;
 use crate::shopping::repo;
 use crate::shopping::types::{NewShoppingItem, ShoppingItem, UpdateShoppingItem};
@@ -88,4 +90,30 @@ pub async fn buy(
     )
     .await?;
     Ok(Json(item))
+}
+
+/// POST /api/shopping/coverage → where each of these rows is known to be sold.
+///
+/// Reads memory only: the shops that hold a listing for the row's product, plus
+/// the shops a past query showed carrying its barcode. No outbound traffic, so a
+/// whole list costs two queries and the shops nothing — which is the point, since
+/// this runs every time the Buy list loads.
+///
+/// It answers "where is this SOLD", never "is it in stock": the freshest thing
+/// here is a sighting from whenever someone last looked. An empty `sources` means
+/// we know nothing about that row, not that nowhere sells it.
+pub async fn coverage(
+    State(app): State<AppState>,
+    AuthUser(_user): AuthUser,
+    Json(queries): Json<Vec<coverage::CoverageQuery>>,
+) -> Result<Json<Vec<coverage::RowCoverage>>, AppError> {
+    if queries.len() > coverage::MAX_ROWS {
+        return Err(AppError::BadRequest(format!(
+            "at most {} rows per request",
+            coverage::MAX_ROWS
+        )));
+    }
+    let attached = product_repo::shops_holding(&app.pool, &coverage::product_ids(&queries)).await?;
+    let seen = product_repo::shops_seen_carrying(&app.pool, &coverage::barcodes(&queries)).await?;
+    Ok(Json(coverage::combine(&queries, &attached, &seen)))
 }

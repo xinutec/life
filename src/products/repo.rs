@@ -276,6 +276,45 @@ pub async fn listing_id(pool: &MySqlPool, source: &str, external_id: &str) -> Re
     Ok(row.map(|(id,)| id))
 }
 
+/// Which shops hold a listing for each of these products — the attached half of
+/// [[super::coverage]]. Excludes 'off' and 'user': neither is somewhere you can
+/// walk into. One query for the whole Buy list.
+pub async fn shops_holding(pool: &MySqlPool, ids: &[u64]) -> Result<Vec<(u64, String)>> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut qb = sqlx::QueryBuilder::new(
+        "SELECT product_id, source FROM product_listings \
+         WHERE source NOT IN ('off', 'user') AND product_id IN (",
+    );
+    let mut sep = qb.separated(", ");
+    for id in ids {
+        sep.push_bind(id);
+    }
+    qb.push(")");
+    Ok(qb.build_query_as().fetch_all(pool).await?)
+}
+
+/// Which shops we've *seen* carry each of these barcodes, from the memory of our
+/// own past shop queries (`shop_listings`). Weaker than a held listing and not a
+/// stock check — see [[super::coverage]].
+pub async fn shops_seen_carrying(
+    pool: &MySqlPool,
+    barcodes: &[String],
+) -> Result<Vec<(String, String)>> {
+    if barcodes.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut qb =
+        sqlx::QueryBuilder::new("SELECT barcode, source FROM shop_listings WHERE barcode IN (");
+    let mut sep = qb.separated(", ");
+    for barcode in barcodes {
+        sep.push_bind(barcode);
+    }
+    qb.push(")");
+    Ok(qb.build_query_as().fetch_all(pool).await?)
+}
+
 // --- Reconciliation: source values vs the canonical row ---
 //
 // Each source's account of a product lives on its listing (0030). The canonical
