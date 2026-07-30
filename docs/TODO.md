@@ -566,6 +566,53 @@ through something that resets the NC session.
         counted separately from the denominator, so a list of jottings doesn't
         read as bad coverage.
       - Ticked-off rows leave the trip: they're already in the trolley.
+- [x] **The product domain's closed sets became types** (2026-07-30) — `source`
+      was a `String` in 44 places and `field`/`choice` in 9 more: the one domain
+      here where nothing was proven at compile time, and the busiest. Now
+      `Source` (asda|off|user|waitrose), `ReconcileField`, and `Choice`, with
+      ts-rs handing the frontend the same unions — so 127 string literals over
+      there are checked too, and `sourceLabel`'s `default: return source` (which
+      put a raw id on screen) is gone as unreachable.
+      - **What the types decide, that convention used to.** `shops_holding`'s
+        `NOT IN ('off','user')` derives from `Source::is_shop`;
+        `ReconcileField::reconciler` makes the route/repo/facts dispatch
+        exhaustive (adding a field previously meant remembering four sites with
+        no compiler help); `set_canonical_field` takes the spec, so there is no
+        "unknown field" arm; coverage takes `AttachedListing`/`Sighting` rather
+        than two same-shaped tuples.
+      - **sqlx's derived `Type` is wrong for these columns.** `#[derive(sqlx::Type)]`
+        on a unit enum declares the SQL type as `ENUM`; every `source` column is
+        a `VARCHAR`, so decoding a real row failed. Hand-written `Type`/`Encode`/
+        `Decode` delegating to `str` — and `Decode` *parses*, so a stored value
+        outside the set is a loud error rather than a silent default (pinned by
+        `a_stored_source_outside_the_enum_fails_the_read_loudly`). Production was
+        checked for out-of-set values before deploying; there were none.
+      - **`Cargo.toml [lints]`** — forbid `unsafe`, deny the cast / `float_cmp` /
+        debug-print families. Found five real cast sites, including Asda's
+        `to_minor` saturating `f64 as i64` on money (NaN → 0), now `None` outside
+        a sane range. `print_stderr` is deliberately *not* denied: `[lints]`
+        covers every target, and the DB tests' skip announcements are the point.
+- [ ] **Type safety, remaining** — identifier newtypes (`Barcode`/`ExternalId`/
+      `ProductId`): `external_id` is a `String` documented as `[A-Za-z0-9_-]{1,64}`
+      and validated at three separate boundaries, each with its own copy of the
+      rule. A newtype makes that structural and stops a barcode being passed where
+      a source-scoped id belongs.
+- [ ] **Compile-time-checked SQL (decision pending)** — `verify.sh` says it
+      plainly: *"the queries are strings, so nothing else checks them"*. 130
+      runtime `sqlx::query_as`/`query` calls, zero `query_as!`, though the
+      `macros` feature is already on. Switching makes a column rename a compile
+      error instead of a test failure, and retires the hand-synced `SELECT`
+      column list in `repo.rs` (repeated 4×, comment admits it). Needs an offline
+      `.sqlx` cache committed and wired into CI — the largest of these, so ask
+      before starting.
+- [ ] **`noUncheckedIndexedAccess` (surveyed, parked)** — enabled and measured
+      2026-07-30: 59 sites, **none a latent bug**, including the one most likely
+      to be (`conflict-merge.ts`, where the key always comes from `Object.keys`).
+      31 of the 59 are one numeric kernel (`monotonePath`, Fritsch–Carlson) where
+      the flag has no information to add — typed arrays don't sidestep it, and the
+      honest options are `!` assertions or restructuring a golden-tested chart.
+      Reverted rather than left half-applied. The survey is itself the finding:
+      index access here is already disciplined.
 - [ ] **Shopping list refinements** — low-stock auto-suggestions. ~~Add a
       recipe's missing ingredients to the Buy list in one tap~~ DONE 2026-07-27
       (the shopping-list panel on a recipe card grows an "Add N to Buy" button;

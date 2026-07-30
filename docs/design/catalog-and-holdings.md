@@ -48,7 +48,17 @@ Indices that matter: `products.barcode` UNIQUE (lookup + dedup); `items
   (expiry is per-instance); same product + same expiry = one row with quantity.
 - **Category** is canonical on the product; an item may override (freeform).
 - **Image** = BLOB on the product (rides in the mysqldump backup); a `source`
-  flag distinguishes OFF vs a photo you took (for products OFF has no image for).
+  distinguishes OFF vs a photo you took (for products OFF has no image for).
+- **`source` is a closed type, not a string.** Every `source` column names a
+  value from `products::source::Source` (`asda | off | user | waitrose`) and
+  nothing else, for the reason `nutrition::Presence` is a type: a fifth spelling
+  can't be invented at a call site, `match` names every place that must change
+  when a shop is added, and ts-rs gives the frontend the same union instead of a
+  bare `string`. The reads *parse*, so a value in the database outside the set
+  fails the query rather than arriving as a plausible default. Two consequences
+  worth knowing: adding a shop is one variant plus the arms the compiler then
+  demands, and the SQL that excludes non-shops is derived from `Source::is_shop`
+  rather than written out.
 - **Freeform has a floor.** Don't force one-offs into the catalog — that's why
   `product_id` is nullable. Promote to a product only with a barcode or when
   you'll rebuy/track it.
