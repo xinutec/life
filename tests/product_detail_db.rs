@@ -3,26 +3,27 @@
 //! tests run only when LIFE_TEST_DATABASE_URL is set).
 
 use life::db;
-use life::products::{repo, source};
+use life::products::repo;
+use life::products::source::Source;
 
 #[test]
 fn deep_links_derive_from_listing_identity() {
     assert_eq!(
-        source::listing_url("off", "5000328042732").as_deref(),
+        Source::Off.listing_url("5000328042732").as_deref(),
         Some("https://world.openfoodfacts.org/product/5000328042732")
     );
     assert_eq!(
-        source::listing_url("asda", "9346702").as_deref(),
+        Source::Asda.listing_url("9346702").as_deref(),
         Some("https://www.asda.com/groceries/product/9346702")
     );
     // Waitrose PDP URLs carry a slug, but any slug redirects to the canonical
     // one — the trailing lineNumber is the key.
     assert_eq!(
-        source::listing_url("waitrose", "271105").as_deref(),
+        Source::Waitrose.listing_url("271105").as_deref(),
         Some("https://www.waitrose.com/ecom/products/x/271105")
     );
     // Sources without a public product page yield no link.
-    assert_eq!(source::listing_url("user", "anything"), None);
+    assert_eq!(Source::User.listing_url("anything"), None);
 }
 
 #[tokio::test]
@@ -52,7 +53,7 @@ async fn canonical_name_is_sticky_a_new_source_does_not_silently_switch_it() {
     // canonical name (fill-if-empty).
     let p = repo::upsert_external(
         &pool,
-        "off",
+        Source::Off,
         barcode,
         Some(barcode),
         &repo::ListingFields {
@@ -66,7 +67,7 @@ async fn canonical_name_is_sticky_a_new_source_does_not_silently_switch_it() {
         p.name.as_deref(),
         Some("quaker oats porridge oats 500 g value pack")
     );
-    assert_eq!(p.name_source.as_deref(), Some("off"));
+    assert_eq!(p.name_source, Some(Source::Off));
 
     // A retailer listing arrives with a cleaner title. It does NOT silently take
     // over the canonical name — no source overwrites another behind your back.
@@ -75,7 +76,7 @@ async fn canonical_name_is_sticky_a_new_source_does_not_silently_switch_it() {
     // stays exactly what it was.
     let p = repo::upsert_external(
         &pool,
-        "asda",
+        Source::Asda,
         "dettest-asda-1",
         Some(barcode),
         &repo::ListingFields {
@@ -91,23 +92,23 @@ async fn canonical_name_is_sticky_a_new_source_does_not_silently_switch_it() {
         Some("quaker oats porridge oats 500 g value pack"),
         "a new source must not silently replace the canonical name"
     );
-    assert_eq!(p.name_source.as_deref(), Some("off"));
+    assert_eq!(p.name_source, Some(Source::Off));
 
     // Both the crowd title and the retailer's cleaner title are on record, each
     // on its own line — the raw material a diff-and-approve reconciliation needs.
     let listings = repo::listings_for(&pool, p.id).await.unwrap();
-    let by_source = |s: &str| {
+    let by_source = |s: Source| {
         listings
             .iter()
             .find(|l| l.source == s)
             .and_then(|l| l.raw_name.clone())
     };
     assert_eq!(
-        by_source("off").as_deref(),
+        by_source(Source::Off).as_deref(),
         Some("quaker oats porridge oats 500 g value pack")
     );
     assert_eq!(
-        by_source("asda").as_deref(),
+        by_source(Source::Asda).as_deref(),
         Some("Quaker Porridge Oats 500g")
     );
 
@@ -143,10 +144,12 @@ async fn unranked_sources_keep_their_own_name() {
         .unwrap();
 
     // A source outside the name-preference order still names its own product —
-    // the refresh leaves rows alone when no ranked candidate exists.
+    // the refresh leaves rows alone when no ranked candidate exists. `user` is
+    // that source: our own hand-entry never competes for the canonical name,
+    // it simply holds it (see Source::name_rank).
     let p = repo::upsert_external(
         &pool,
-        "somefutureshop",
+        Source::User,
         ext,
         None,
         &repo::ListingFields {
@@ -157,5 +160,5 @@ async fn unranked_sources_keep_their_own_name() {
     .await
     .unwrap();
     assert_eq!(p.name.as_deref(), Some("Future Thing"));
-    assert_eq!(p.name_source.as_deref(), Some("somefutureshop"));
+    assert_eq!(p.name_source, Some(Source::User));
 }

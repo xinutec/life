@@ -1,10 +1,10 @@
 import { Injectable } from '@angular/core';
 
-import { PriceInput } from './models';
+import { PriceInput, Source } from './models';
 
 /** Full detail for a shop product; maps onto LifeApi.importProduct. */
 export interface ShopProduct {
-  source: string;
+  source: Source;
   external_id: string;
   name: string | null;
   brand: string | null;
@@ -58,7 +58,9 @@ export interface ShopFacts {
  *  ShopProvider: Asda's search/import already run server-side (see products::asda),
  *  so its WebView role is facts alone. */
 export interface FactsProvider {
-  readonly id: string; // matches products.source ('asda')
+  /** The source this provider speaks for — the same closed set the backend
+   *  stores, so a provider can't name a shop the server doesn't know. */
+  readonly id: Source;
   /** Load this product's page and return its raw facts blob for the server. */
   facts(externalId: string): { url: string; js: string };
 }
@@ -72,7 +74,8 @@ export interface FactsProvider {
  * `{ ok, candidates }` for search, `{ ok, product }` for product, or `{ ok:false, error }`.
  */
 export interface ShopProvider {
-  readonly id: string; // matches products.source ('waitrose', 'asda')
+  /** The source this provider speaks for (see FactsProvider.id). */
+  readonly id: Source;
   readonly displayName: string;
   readonly loginUrl: string; // shown by connect()
   search(query: string): { url: string; js: string };

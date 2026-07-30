@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 
 use life::db;
 use life::products::nutrition::{Allergen, Claim, DietaryFlag, Nutrition, Presence, ProductFacts};
+use life::products::source::Source;
 use life::products::{brandbank, repo};
 
 const OALTY_BRANDBANK: &str = include_str!("fixtures/asda_brandbank_oalty.json");
@@ -46,7 +47,7 @@ async fn store_and_read_facts_then_replace_on_relookup() {
 
     let product = repo::upsert_external(
         &pool,
-        "off",
+        Source::Off,
         barcode,
         Some(barcode),
         &repo::ListingFields {
@@ -88,7 +89,7 @@ async fn store_and_read_facts_then_replace_on_relookup() {
             },
         ],
     };
-    repo::store_facts(&pool, product.id, &facts, "off")
+    repo::store_facts(&pool, product.id, &facts, Source::Off)
         .await
         .unwrap();
 
@@ -137,7 +138,7 @@ async fn store_and_read_facts_then_replace_on_relookup() {
             value: Claim::Yes,
         }],
     };
-    repo::store_facts(&pool, product.id, &restated, "off")
+    repo::store_facts(&pool, product.id, &restated, Source::Off)
         .await
         .unwrap();
 
@@ -179,7 +180,7 @@ async fn two_sources_dietary_claims_coexist_and_merge() {
         .unwrap();
     let product = repo::upsert_external(
         &pool,
-        "off",
+        Source::Off,
         barcode,
         Some(barcode),
         &repo::ListingFields {
@@ -208,7 +209,7 @@ async fn two_sources_dietary_claims_coexist_and_merge() {
                 value: Claim::No,
             },
         ],
-        "off",
+        Source::Off,
     )
     .await
     .unwrap();
@@ -227,7 +228,7 @@ async fn two_sources_dietary_claims_coexist_and_merge() {
                 value: Claim::Yes,
             },
         ],
-        "asda",
+        Source::Asda,
     )
     .await
     .unwrap();
@@ -265,7 +266,7 @@ async fn two_sources_dietary_claims_coexist_and_merge() {
             flag: "vegan".into(),
             value: Claim::Maybe,
         }],
-        "off",
+        Source::Off,
     )
     .await
     .unwrap();
@@ -299,7 +300,7 @@ async fn two_sources_nutrition_allergens_ingredients_coexist_and_merge() {
         .unwrap();
     let product = repo::upsert_external(
         &pool,
-        "off",
+        Source::Off,
         barcode,
         Some(barcode),
         &repo::ListingFields {
@@ -326,7 +327,7 @@ async fn two_sources_nutrition_allergens_ingredients_coexist_and_merge() {
             }],
             dietary: vec![],
         },
-        "off",
+        Source::Off,
     )
     .await
     .unwrap();
@@ -353,7 +354,7 @@ async fn two_sources_nutrition_allergens_ingredients_coexist_and_merge() {
             ],
             dietary: vec![],
         },
-        "asda",
+        Source::Asda,
     )
     .await
     .unwrap();
@@ -390,7 +391,7 @@ async fn two_sources_nutrition_allergens_ingredients_coexist_and_merge() {
             allergens: vec![],
             dietary: vec![],
         },
-        "off",
+        Source::Off,
     )
     .await
     .unwrap();
@@ -424,7 +425,7 @@ async fn real_brandbank_facts_parse_store_and_read_back() {
         .unwrap();
     let product = repo::upsert_external(
         &pool,
-        "asda",
+        Source::Asda,
         "6163443",
         Some(barcode),
         &repo::ListingFields {
@@ -437,7 +438,7 @@ async fn real_brandbank_facts_parse_store_and_read_back() {
 
     // The whole chain the endpoint runs: parse the page blob, store as 'asda'.
     let facts = brandbank::parse(OALTY_BRANDBANK).expect("parse Brandbank");
-    repo::store_facts(&pool, product.id, &facts, "asda")
+    repo::store_facts(&pool, product.id, &facts, Source::Asda)
         .await
         .unwrap();
 
@@ -492,7 +493,7 @@ async fn a_failed_allergen_replace_keeps_the_previous_set() {
         .unwrap();
     let product = repo::upsert_external(
         &pool,
-        "off",
+        Source::Off,
         barcode,
         Some(barcode),
         &repo::ListingFields {
@@ -511,7 +512,7 @@ async fn a_failed_allergen_replace_keeps_the_previous_set() {
         &pool,
         product.id,
         &[declared("nuts"), declared("milk")],
-        "asda",
+        Source::Asda,
     )
     .await
     .unwrap();
@@ -522,7 +523,7 @@ async fn a_failed_allergen_replace_keeps_the_previous_set() {
         &pool,
         product.id,
         &[declared("soya"), declared(&"x".repeat(64))],
-        "asda",
+        Source::Asda,
     )
     .await;
     assert!(err.is_err(), "an over-long allergen must be rejected");

@@ -6,6 +6,7 @@ use life::products::nutrition::{
     Allergen, Claim, DietaryFlag, Nutrition, Presence, RawFacts, merge_allergens, merge_dietary,
     merge_ingredients, merge_nutrition,
 };
+use life::products::source::Source;
 
 fn parse(value: serde_json::Value) -> life::products::nutrition::ProductFacts {
     serde_json::from_value::<RawFacts>(value)
@@ -267,18 +268,15 @@ fn panel(salt: f64) -> Nutrition {
 fn nutrition_prefers_the_retailer_over_the_crowd() {
     // Asda (Brandbank, manufacturer-grade) outranks OFF (crowd) — whole panel, not
     // a blend of the two.
-    let chosen = merge_nutrition(vec![
-        ("off".to_string(), panel(1.0)),
-        ("asda".to_string(), panel(2.0)),
-    ])
-    .unwrap();
+    let chosen =
+        merge_nutrition(vec![(Source::Off, panel(1.0)), (Source::Asda, panel(2.0))]).unwrap();
     assert_eq!(chosen.salt_g, Some(2.0), "Asda's panel wins");
 }
 
 #[test]
 fn nutrition_of_one_source_is_that_source() {
     assert_eq!(
-        merge_nutrition(vec![("off".to_string(), panel(1.0))])
+        merge_nutrition(vec![(Source::Off, panel(1.0))])
             .unwrap()
             .salt_g,
         Some(1.0)
@@ -290,16 +288,16 @@ fn nutrition_of_one_source_is_that_source() {
 fn ingredients_prefer_the_retailer_and_skip_empties() {
     assert_eq!(
         merge_ingredients(vec![
-            ("off".to_string(), "crowd text".to_string()),
-            ("asda".to_string(), "Water, Oats 10%".to_string()),
+            (Source::Off, "crowd text".to_string()),
+            (Source::Asda, "Water, Oats 10%".to_string()),
         ]),
         Some("Water, Oats 10%".to_string()),
     );
     // A source that stored a blank contributes nothing.
     assert_eq!(
         merge_ingredients(vec![
-            ("asda".to_string(), "   ".to_string()),
-            ("off".to_string(), "crowd text".to_string()),
+            (Source::Asda, "   ".to_string()),
+            (Source::Off, "crowd text".to_string()),
         ]),
         Some("crowd text".to_string()),
     );
@@ -315,11 +313,11 @@ fn allergen(name: &str, presence: Presence) -> Allergen {
     }
 }
 
-fn allergens_merged(claims: &[(&str, &str, Presence)]) -> Vec<(String, Presence)> {
+fn allergens_merged(claims: &[(Source, &str, Presence)]) -> Vec<(String, Presence)> {
     merge_allergens(
         claims
             .iter()
-            .map(|(src, name, pres)| (src.to_string(), allergen(name, *pres)))
+            .map(|(src, name, pres)| (*src, allergen(name, *pres)))
             .collect(),
     )
     .into_iter()
@@ -333,8 +331,8 @@ fn allergens_union_every_source_never_dropping_one() {
     // source is not a "free from".
     assert_eq!(
         allergens_merged(&[
-            ("off", "milk", Presence::Contains),
-            ("asda", "soya", Presence::Contains),
+            (Source::Off, "milk", Presence::Contains),
+            (Source::Asda, "soya", Presence::Contains),
         ]),
         [
             ("milk".to_string(), Presence::Contains),
@@ -349,16 +347,16 @@ fn a_declared_allergen_beats_a_mere_trace() {
     // firmer, more dangerous claim wins.
     assert_eq!(
         allergens_merged(&[
-            ("off", "milk", Presence::MayContain),
-            ("asda", "milk", Presence::Contains),
+            (Source::Off, "milk", Presence::MayContain),
+            (Source::Asda, "milk", Presence::Contains),
         ]),
         [("milk".to_string(), Presence::Contains)]
     );
     // Order of sources doesn't change the outcome.
     assert_eq!(
         allergens_merged(&[
-            ("asda", "milk", Presence::Contains),
-            ("off", "milk", Presence::MayContain),
+            (Source::Asda, "milk", Presence::Contains),
+            (Source::Off, "milk", Presence::MayContain),
         ]),
         [("milk".to_string(), Presence::Contains)]
     );

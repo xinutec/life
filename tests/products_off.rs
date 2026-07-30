@@ -3,7 +3,8 @@
 //! URLs and non-numeric barcodes short-circuit *before* any network call, so
 //! these assertions are hermetic (no OFF request is ever made).
 
-use life::products::{off, source};
+use life::products::off;
+use life::products::source::Source;
 
 #[tokio::test]
 async fn image_proxy_refuses_non_off_and_non_https_urls() {
@@ -56,9 +57,8 @@ async fn asda_attach_pulls_its_image_only_from_scene7() {
     // product picture from Asda through this exact allowlist. Tie the test to the
     // CONFIGURED list, not a hand-copied one, so the guard can't silently drift
     // from what the attach path actually passes.
-    let asda = source::importable("asda").expect("asda is importable");
     assert!(
-        asda.image_hosts.contains(&"scene7.com"),
+        Source::Asda.image_hosts().contains(&"scene7.com"),
         "attach relies on scene7 being the Asda image host"
     );
 
@@ -74,7 +74,7 @@ async fn asda_attach_pulls_its_image_only_from_scene7() {
         "https://openfoodfacts.org/x.jpg",   // allowed for OFF, not for an Asda pull
         "file:///etc/passwd",
     ] {
-        let got = off::fetch_image_from(url, asda.image_hosts)
+        let got = off::fetch_image_from(url, Source::Asda.image_hosts())
             .await
             .expect("the guard returns Ok(None), never an error");
         assert!(

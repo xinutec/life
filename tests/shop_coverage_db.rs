@@ -4,6 +4,7 @@
 use life::db;
 use life::products::repo;
 use life::products::shop_cache::{self, CachedListing};
+use life::products::source::Source;
 use sqlx::MySqlPool;
 
 const BARCODE: &str = "5000000000901";
@@ -29,7 +30,7 @@ async fn fixture() -> Option<(MySqlPool, u64)> {
         .unwrap();
     let id = repo::upsert_external(
         &pool,
-        "asda",
+        Source::Asda,
         "cov-asda-1",
         Some(BARCODE),
         &repo::ListingFields {
@@ -43,7 +44,7 @@ async fn fixture() -> Option<(MySqlPool, u64)> {
     shop_cache::remember(
         &pool,
         &[CachedListing {
-            source: "waitrose".to_string(),
+            source: Source::Waitrose,
             external_id: "cov-wtr-1".to_string(),
             barcode: Some(BARCODE.to_string()),
             name: Some("Coverage Test Product".to_string()),
@@ -63,12 +64,12 @@ async fn a_held_listing_is_found_and_off_is_not_a_shop() {
         return;
     };
     let held = repo::shops_holding(&pool, &[id]).await.unwrap();
-    let sources: Vec<&str> = held.iter().map(|(_, s)| s.as_str()).collect();
-    assert!(sources.contains(&"asda"), "{sources:?}");
+    let sources: Vec<Source> = held.iter().map(|l| l.source).collect();
+    assert!(sources.contains(&Source::Asda), "{sources:?}");
     // The catalogue row also has an 'off' listing (barcode-keyed) — Open Food
     // Facts is not a shop you can walk into, so it must not appear here.
-    assert!(!sources.contains(&"off"), "{sources:?}");
-    assert!(held.iter().all(|(pid, _)| *pid == id));
+    assert!(!sources.contains(&Source::Off), "{sources:?}");
+    assert!(held.iter().all(|l| l.product_id == id));
 }
 
 #[tokio::test]
@@ -80,7 +81,8 @@ async fn a_sighting_is_found_by_barcode_without_any_listing_of_ours() {
         .await
         .unwrap();
     assert!(
-        seen.iter().any(|(b, s)| b == BARCODE && s == "waitrose"),
+        seen.iter()
+            .any(|s| s.barcode == BARCODE && s.source == Source::Waitrose),
         "{seen:?}"
     );
 }

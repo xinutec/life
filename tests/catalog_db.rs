@@ -7,6 +7,7 @@ use life::db;
 use life::inventory::repo as inv;
 use life::inventory::types::{ItemCategory, NewItem};
 use life::products::repo as prod;
+use life::products::source::Source;
 
 fn new_item(name: &str, barcode: Option<&str>) -> NewItem {
     NewItem {
@@ -113,7 +114,7 @@ async fn item_links_to_barcodeless_shop_product_by_id() {
     // A shop product has no EAN barcode — only the shop's own external id.
     let product = prod::upsert_external(
         &pool,
-        "waitrose",
+        Source::Waitrose,
         external_id,
         None, // barcodeless shop product
         &prod::ListingFields {

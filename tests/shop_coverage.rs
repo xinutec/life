@@ -1,7 +1,23 @@
 //! Where a Buy-list row is known to be sold — the pure fold behind
 //! POST /api/shopping/coverage. No DB: these pin the rule, not the queries.
 
-use life::products::coverage::{CoverageQuery, barcodes, combine, product_ids};
+use life::products::coverage::{
+    AttachedListing, CoverageQuery, Sighting, barcodes, combine, product_ids,
+};
+use life::products::source::Source;
+
+/// A shop's own listing for a product.
+fn held(product_id: u64, source: Source) -> AttachedListing {
+    AttachedListing { product_id, source }
+}
+
+/// A shop query of ours that once showed this barcode at this shop.
+fn seen(barcode: &str, source: Source) -> Sighting {
+    Sighting {
+        barcode: barcode.to_string(),
+        source,
+    }
+}
 
 fn row(key: &str, barcode: Option<&str>, product_id: Option<u64>) -> CoverageQuery {
     CoverageQuery {
@@ -14,9 +30,9 @@ fn row(key: &str, barcode: Option<&str>, product_id: Option<u64>) -> CoverageQue
 #[test]
 fn a_held_listing_says_the_shop_sells_it() {
     let q = [row("a", None, Some(42))];
-    let got = combine(&q, &[(42, "asda".into())], &[]);
+    let got = combine(&q, &[held(42, Source::Asda)], &[]);
     assert_eq!(got[0].key, "a");
-    assert_eq!(got[0].sources, ["asda"]);
+    assert_eq!(got[0].sources, [Source::Asda]);
 }
 
 #[test]
@@ -24,8 +40,8 @@ fn a_sighting_counts_too_even_with_no_listing_of_our_own() {
     // The whole point of remembering shop queries: a barcode we've seen at a
     // shop answers the trip question without anything being attached.
     let q = [row("a", Some("5000169146767"), None)];
-    let got = combine(&q, &[], &[("5000169146767".into(), "waitrose".into())]);
-    assert_eq!(got[0].sources, ["waitrose"]);
+    let got = combine(&q, &[], &[seen("5000169146767", Source::Waitrose)]);
+    assert_eq!(got[0].sources, [Source::Waitrose]);
 }
 
 #[test]
@@ -33,10 +49,10 @@ fn a_shop_that_both_holds_and_has_been_seen_is_one_answer() {
     let q = [row("a", Some("5000169146767"), Some(42))];
     let got = combine(
         &q,
-        &[(42, "asda".into())],
-        &[("5000169146767".into(), "asda".into())],
+        &[held(42, Source::Asda)],
+        &[seen("5000169146767", Source::Asda)],
     );
-    assert_eq!(got[0].sources, ["asda"]);
+    assert_eq!(got[0].sources, [Source::Asda]);
 }
 
 #[test]
@@ -44,10 +60,10 @@ fn shops_come_back_sorted_so_the_display_does_not_shuffle() {
     let q = [row("a", Some("5000169146767"), Some(42))];
     let got = combine(
         &q,
-        &[(42, "waitrose".into())],
-        &[("5000169146767".into(), "asda".into())],
+        &[held(42, Source::Waitrose)],
+        &[seen("5000169146767", Source::Asda)],
     );
-    assert_eq!(got[0].sources, ["asda", "waitrose"]);
+    assert_eq!(got[0].sources, [Source::Asda, Source::Waitrose]);
 }
 
 #[test]
@@ -55,7 +71,7 @@ fn a_row_we_know_nothing_about_gets_an_empty_list_not_a_missing_row() {
     // "We don't know" and "nowhere sells it" are different claims; the row has
     // to come back either way so the client can say which.
     let q = [row("hand-typed", None, None)];
-    let got = combine(&q, &[(42, "asda".into())], &[]);
+    let got = combine(&q, &[held(42, Source::Asda)], &[]);
     assert_eq!(got.len(), 1);
     assert!(got[0].sources.is_empty());
 }
@@ -69,8 +85,8 @@ fn every_row_is_answered_in_the_order_it_was_asked() {
     ];
     let got = combine(
         &q,
-        &[(42, "asda".into())],
-        &[("5000169146767".into(), "waitrose".into())],
+        &[held(42, Source::Asda)],
+        &[seen("5000169146767", Source::Waitrose)],
     );
     assert_eq!(
         got.iter().map(|r| r.key.as_str()).collect::<Vec<_>>(),
@@ -82,9 +98,13 @@ fn every_row_is_answered_in_the_order_it_was_asked() {
 #[test]
 fn one_products_shops_never_leak_onto_another_row() {
     let q = [row("a", None, Some(42)), row("b", None, Some(43))];
-    let got = combine(&q, &[(42, "asda".into()), (43, "waitrose".into())], &[]);
-    assert_eq!(got[0].sources, ["asda"]);
-    assert_eq!(got[1].sources, ["waitrose"]);
+    let got = combine(
+        &q,
+        &[held(42, Source::Asda), held(43, Source::Waitrose)],
+        &[],
+    );
+    assert_eq!(got[0].sources, [Source::Asda]);
+    assert_eq!(got[1].sources, [Source::Waitrose]);
 }
 
 #[test]

@@ -9,7 +9,8 @@ use std::collections::{BTreeMap, HashMap};
 use life::db;
 use life::products::nutrition::{Allergen, Nutrition, Presence, ProductFacts};
 use life::products::repo::{self, FactSourceMap};
-use life::products::types::SourceFacts;
+use life::products::source::Source;
+use life::products::types::{Choice, FieldChoice, ReconcileField, SourceFacts};
 
 /// A minimal panel carrying just an energy figure — enough to differ.
 fn panel(kcal: f64) -> Nutrition {
@@ -30,12 +31,12 @@ fn panel(kcal: f64) -> Nutrition {
 }
 
 fn source_facts(
-    source: &str,
+    source: Source,
     nutrition: Option<Nutrition>,
     ingredients: Option<&str>,
 ) -> SourceFacts {
     SourceFacts {
-        source: source.into(),
+        source,
         facts: ProductFacts {
             nutrition,
             ingredients: ingredients.map(str::to_string),
@@ -51,26 +52,26 @@ fn source_facts(
 fn differing_nutrition_surfaces_a_divergence() {
     // Precedence order (retailer before crowd), as facts_by_source returns it.
     let by_source = vec![
-        source_facts("asda", Some(panel(61.0)), None),
-        source_facts("off", Some(panel(59.0)), None),
+        source_facts(Source::Asda, Some(panel(61.0)), None),
+        source_facts(Source::Off, Some(panel(59.0)), None),
     ];
     let divs = repo::fact_divergences(&by_source, &FactSourceMap::new());
     let nut = divs
         .iter()
-        .find(|d| d.field == "nutrition")
+        .find(|d| d.field == ReconcileField::Nutrition)
         .expect("a nutrition divergence");
     // The current pick is the precedence winner (asda), and off is offered.
     assert!(nut.current.as_deref().unwrap().contains("61 kcal"));
     assert_eq!(nut.candidates.len(), 1);
-    assert_eq!(nut.candidates[0].source, "off");
+    assert_eq!(nut.candidates[0].source, Source::Off);
     assert!(nut.candidates[0].value.contains("59 kcal"));
 }
 
 #[test]
 fn agreeing_facts_have_no_divergence() {
     let by_source = vec![
-        source_facts("asda", Some(panel(61.0)), Some("Water, Oats")),
-        source_facts("off", Some(panel(61.0)), Some("Water, Oats")),
+        source_facts(Source::Asda, Some(panel(61.0)), Some("Water, Oats")),
+        source_facts(Source::Off, Some(panel(61.0)), Some("Water, Oats")),
     ];
     assert!(repo::fact_divergences(&by_source, &FactSourceMap::new()).is_empty());
 }
@@ -78,10 +79,10 @@ fn agreeing_facts_have_no_divergence() {
 #[test]
 fn a_recorded_pick_settles_the_divergence() {
     let by_source = vec![
-        source_facts("asda", Some(panel(61.0)), None),
-        source_facts("off", Some(panel(59.0)), None),
+        source_facts(Source::Asda, Some(panel(61.0)), None),
+        source_facts(Source::Off, Some(panel(59.0)), None),
     ];
-    let prefs: FactSourceMap = HashMap::from([("nutrition".to_string(), "off".to_string())]);
+    let prefs: FactSourceMap = HashMap::from([(ReconcileField::Nutrition, Source::Off)]);
     assert!(
         repo::fact_divergences(&by_source, &prefs).is_empty(),
         "once a source is picked the divergence is quiet"
@@ -90,7 +91,11 @@ fn a_recorded_pick_settles_the_divergence() {
 
 #[test]
 fn a_single_source_is_not_a_divergence() {
-    let by_source = vec![source_facts("asda", Some(panel(61.0)), Some("Water, Oats"))];
+    let by_source = vec![source_facts(
+        Source::Asda,
+        Some(panel(61.0)),
+        Some("Water, Oats"),
+    )];
     assert!(repo::fact_divergences(&by_source, &FactSourceMap::new()).is_empty());
 }
 
@@ -98,12 +103,12 @@ fn a_single_source_is_not_a_divergence() {
 
 #[test]
 fn merge_prefers_the_picked_source_else_precedence() {
-    let mut asda = source_facts("asda", Some(panel(61.0)), None);
+    let mut asda = source_facts(Source::Asda, Some(panel(61.0)), None);
     asda.facts.allergens = vec![Allergen {
         allergen: "oats".into(),
         presence: Presence::Contains,
     }];
-    let mut off = source_facts("off", Some(panel(59.0)), None);
+    let mut off = source_facts(Source::Off, Some(panel(59.0)), None);
     off.facts.allergens = vec![Allergen {
         allergen: "soya".into(),
         presence: Presence::MayContain,
@@ -115,7 +120,7 @@ fn merge_prefers_the_picked_source_else_precedence() {
     assert_eq!(merged.nutrition.unwrap().energy_kcal, Some(61.0));
 
     // Pick OFF → its panel shows instead.
-    let prefs: FactSourceMap = HashMap::from([("nutrition".to_string(), "off".to_string())]);
+    let prefs: FactSourceMap = HashMap::from([(ReconcileField::Nutrition, Source::Off)]);
     let merged = repo::merge_facts(&by_source, &prefs);
     assert_eq!(merged.nutrition.unwrap().energy_kcal, Some(59.0));
     // Allergens are unioned regardless of any pick — safety never gets narrowed.
@@ -141,7 +146,7 @@ async fn reconcile_records_a_fact_source_and_settles() {
         .unwrap();
     let product = repo::upsert_external(
         &pool,
-        "off",
+        Source::Off,
         barcode,
         Some(barcode),
         &repo::ListingFields {
@@ -153,16 +158,16 @@ async fn reconcile_records_a_fact_source_and_settles() {
     .unwrap();
 
     // Two sources disagree on both nutrition and ingredients.
-    repo::upsert_nutrition(&pool, product.id, &panel(61.0), "asda")
+    repo::upsert_nutrition(&pool, product.id, &panel(61.0), Source::Asda)
         .await
         .unwrap();
-    repo::upsert_nutrition(&pool, product.id, &panel(59.0), "off")
+    repo::upsert_nutrition(&pool, product.id, &panel(59.0), Source::Off)
         .await
         .unwrap();
-    repo::set_ingredients(&pool, product.id, "Water, Oats 10%", "asda")
+    repo::set_ingredients(&pool, product.id, "Water, Oats 10%", Source::Asda)
         .await
         .unwrap();
-    repo::set_ingredients(&pool, product.id, "Oat base (water, oats)", "off")
+    repo::set_ingredients(&pool, product.id, "Oat base (water, oats)", Source::Off)
         .await
         .unwrap();
 
@@ -170,8 +175,8 @@ async fn reconcile_records_a_fact_source_and_settles() {
     let by_source = repo::facts_by_source(&pool, product.id).await.unwrap();
     let prefs = repo::fact_source_prefs(&pool, product.id).await.unwrap();
     let divs = repo::fact_divergences(&by_source, &prefs);
-    assert!(divs.iter().any(|d| d.field == "nutrition"));
-    assert!(divs.iter().any(|d| d.field == "ingredients"));
+    assert!(divs.iter().any(|d| d.field == ReconcileField::Nutrition));
+    assert!(divs.iter().any(|d| d.field == ReconcileField::Ingredients));
     assert_eq!(
         repo::facts_for(&pool, product.id)
             .await
@@ -188,14 +193,14 @@ async fn reconcile_records_a_fact_source_and_settles() {
         &pool,
         product.id,
         &[
-            repo::FieldChoice {
-                field: "nutrition".into(),
-                choice: "off".into(),
+            FieldChoice {
+                field: ReconcileField::Nutrition,
+                choice: Choice::Off,
                 value: None,
             },
-            repo::FieldChoice {
-                field: "ingredients".into(),
-                choice: repo::KEEP.into(),
+            FieldChoice {
+                field: ReconcileField::Ingredients,
+                choice: Choice::Keep,
                 value: None,
             },
         ],
@@ -205,10 +210,10 @@ async fn reconcile_records_a_fact_source_and_settles() {
 
     // The pick drives the merge, and both divergences are now settled.
     let prefs = repo::fact_source_prefs(&pool, product.id).await.unwrap();
-    assert_eq!(prefs.get("nutrition").map(String::as_str), Some("off"));
+    assert_eq!(prefs.get(&ReconcileField::Nutrition), Some(&Source::Off));
     assert_eq!(
-        prefs.get("ingredients").map(String::as_str),
-        Some("asda"),
+        prefs.get(&ReconcileField::Ingredients),
+        Some(&Source::Asda),
         "keep records the current precedence winner"
     );
     let facts = repo::facts_for(&pool, product.id).await.unwrap();

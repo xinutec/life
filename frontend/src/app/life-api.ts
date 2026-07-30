@@ -6,6 +6,7 @@ import {
   ConflictEntry,
   ConflictKind,
   CoverageQuery,
+  FieldChoice,
   HouseScene,
   Item,
   Loc,
@@ -20,6 +21,7 @@ import {
   SeenListing,
   ShopFind,
   ShoppingItem,
+  Source,
   SuggestEmotionsRequest,
   SuggestEmotionsResponse,
   TelemetryEvent,
@@ -119,7 +121,7 @@ export class LifeApi {
    *  own memory of past shop queries when it can, so a repeat lookup costs the
    *  shop nothing; only a miss goes out to search. Matching is by barcode
    *  server-side — a shop's relevance ranking is not evidence of identity. */
-  findAtShop(id: number, source: string): Observable<ShopFind> {
+  findAtShop(id: number, source: Source): Observable<ShopFind> {
     return this.http.get<ShopFind>(
       `/api/products/id/${id}/find/${encodeURIComponent(source)}`,
     );
@@ -128,7 +130,7 @@ export class LifeApi {
    *  can't reach itself (Waitrose is behind a bot-wall). Every listing a hunt
    *  passed over is worth reporting, not just the one that matched: each is a
    *  durable barcode → shop-id fact that spares the next hunt a page load. */
-  rememberShopListings(source: string, listings: SeenListing[]): Observable<Remembered> {
+  rememberShopListings(source: Source, listings: SeenListing[]): Observable<Remembered> {
     return this.http.post<Remembered>(
       `/api/products/shop/${encodeURIComponent(source)}/listings`,
       listings,
@@ -164,7 +166,7 @@ export class LifeApi {
   /** Import a product from an external source (a shop) into the catalog, keyed on
    *  (source, external_id). The backend fetches + stores the image server-side. */
   importProduct(body: {
-    source: string;
+    source: Source;
     external_id: string;
     name: string;
     brand?: string | null;
@@ -181,7 +183,7 @@ export class LifeApi {
    *  shop's lifestyle tags, pack size, clean name. Same call attaches a shop for
    *  the first time and refreshes it later; the backend fetches shop-side and
    *  enforces that the listing's barcode really is this product's. */
-  syncListing(id: number, source: string, externalId: string): Observable<Product> {
+  syncListing(id: number, source: Source, externalId: string): Observable<Product> {
     return this.http.post<Product>(`/api/products/id/${id}/listings`, {
       source,
       external_id: externalId,
@@ -196,12 +198,12 @@ export class LifeApi {
   /** Settle where the product's sources disagree with its canonical row: each
    *  decision adopts a source's value ({field, choice: source}), keeps the
    *  current one ({field, choice: 'keep'}), or sets our own typed value
-   *  ({field, choice: 'user', value}). Returns the re-read detail with the
-   *  divergence list updated. */
-  reconcile(
-    id: number,
-    decisions: { field: string; choice: string; value?: string }[],
-  ): Observable<ProductDetail> {
+   *  ({field, choice: 'user', value}).
+   *
+   *  `FieldChoice` is the backend's own request type, so a field name or choice
+   *  it doesn't accept can't be sent — the 400 it used to answer with is now a
+   *  compile error. Returns the re-read detail with the divergence list updated. */
+  reconcile(id: number, decisions: FieldChoice[]): Observable<ProductDetail> {
     return this.http.post<ProductDetail>(`/api/products/id/${id}/reconcile`, decisions);
   }
   /** Store facts a shop's product PAGE carries but its API doesn't — Asda's
@@ -211,7 +213,7 @@ export class LifeApi {
    *  Returns the re-read detail. */
   submitFacts(
     id: number,
-    body: { source: string; ean: string; blob: string },
+    body: { source: Source; ean: string; blob: string },
   ): Observable<ProductDetail> {
     return this.http.post<ProductDetail>(`/api/products/id/${id}/facts`, body);
   }

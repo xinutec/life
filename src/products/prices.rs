@@ -4,6 +4,8 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use super::source::Source;
+
 /// A price a source reported for a listing. The client sends this on import
 /// (derived from an Asda hit or a Waitrose product); the backend appends it to
 /// the listing's price history.
@@ -33,8 +35,8 @@ pub struct PriceInput {
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct ShopPrice {
-    /// The listing's source ('asda', 'waitrose', …). Unique within a response.
-    pub source: String,
+    /// The listing's source. Unique within a response.
+    pub source: Source,
     /// Source-scoped id of the listing this price came from.
     pub external_id: String,
     #[ts(type = "number")]

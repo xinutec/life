@@ -23,7 +23,8 @@ use sqlx::MySqlPool;
 use ts_rs::TS;
 
 use super::asda::AsdaHit;
-use super::{off, source};
+use super::off;
+use super::source::Source;
 
 /// One shop listing as the shop described it. Shop-agnostic on purpose: Asda
 /// fills it from an Algolia hit server-side, Waitrose from the Android bridge's
@@ -31,7 +32,7 @@ use super::{off, source};
 /// by position).
 #[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
 pub struct CachedListing {
-    pub source: String,
+    pub source: Source,
     pub external_id: String,
     /// `None` means "we haven't learned it yet", not "it has none" — a Waitrose
     /// search hit carries no barcode until its product page is fetched.
@@ -47,7 +48,7 @@ impl CachedListing {
     /// EAN, so every hit teaches us a barcode → CIN mapping for free.
     pub fn from_asda(hit: &AsdaHit) -> Self {
         Self {
-            source: "asda".to_string(),
+            source: Source::Asda,
             external_id: hit.external_id.clone(),
             barcode: hit.barcode.clone(),
             name: Some(hit.name.clone()),
@@ -97,8 +98,11 @@ pub const MAX_SEEN: usize = 50;
 /// point, and losing a hunt over a CDN rename would be the wrong trade. Dropping
 /// is logged by the caller rather than done silently.
 pub fn validate_seen(source_id: &str, seen: &[SeenListing]) -> Result<Vec<CachedListing>, String> {
-    let Some(src) = source::importable(source_id) else {
-        return Err(format!("unknown shop: {source_id}"));
+    // The untrusted boundary: `source_id` is a path segment a client chose, so
+    // this is where a string becomes a `Source` and stops being one.
+    let source = match source_id.parse::<Source>() {
+        Ok(s) if s.is_shop() => s,
+        _ => return Err(format!("unknown shop: {source_id}")),
     };
     if seen.len() > MAX_SEEN {
         return Err(format!("at most {MAX_SEEN} listings per report"));
@@ -121,13 +125,14 @@ pub fn validate_seen(source_id: &str, seen: &[SeenListing]) -> Result<Vec<Cached
                 return Err(format!("not a barcode: {bc}"));
             }
             Ok(CachedListing {
-                source: src.id.to_string(),
+                source,
                 external_id: external_id.to_string(),
                 barcode,
                 name: trimmed(&s.name),
                 brand: trimmed(&s.brand),
                 quantity_label: trimmed(&s.quantity_label),
-                image_url: trimmed(&s.image_url).filter(|u| off::host_allowed(u, src.image_hosts)),
+                image_url: trimmed(&s.image_url)
+                    .filter(|u| off::host_allowed(u, source.image_hosts())),
             })
         })
         .collect()
@@ -161,7 +166,7 @@ pub async fn remember(pool: &MySqlPool, listings: &[CachedListing]) -> Result<()
                  image_url      = COALESCE(VALUES(image_url), image_url),
                  last_seen_at   = CURRENT_TIMESTAMP",
         )
-        .bind(&l.source)
+        .bind(l.source)
         .bind(&l.external_id)
         .bind(&l.barcode)
         .bind(&l.name)
@@ -180,7 +185,7 @@ pub async fn remember(pool: &MySqlPool, listings: &[CachedListing]) -> Result<()
 /// The caller decides whether to go ask; this function never does.
 pub async fn find_by_barcode(
     pool: &MySqlPool,
-    source: &str,
+    source: Source,
     barcode: &str,
 ) -> Result<Option<CachedListing>> {
     Ok(sqlx::query_as::<_, CachedListing>(

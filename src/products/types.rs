@@ -1,11 +1,15 @@
 //! Product wire types: the canonical product, its per-source listings, and the
 //! aggregate the product page fetches.
 
-use serde::Serialize;
+use std::fmt;
+use std::str::FromStr;
+
+use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::nutrition::ProductFacts;
 use super::prices::ShopPrice;
+use super::source::Source;
 
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
@@ -17,17 +21,17 @@ pub struct Product {
     pub name: Option<String>,
     pub brand: Option<String>,
     pub quantity_label: Option<String>,
-    /// Where the row came from: 'off', 'user', or a shop ('waitrose', …).
-    pub source: Option<String>,
+    /// Where the row came from. `None` only for rows predating provenance.
+    pub source: Option<Source>,
     /// Source-scoped external id (e.g. a Waitrose lineNumber). Unique per source;
     /// how a shop product with no barcode is addressed and de-duped.
     pub external_id: Option<String>,
     /// Which source's title `name` currently is (see repo's canonical-name
     /// refresh) — provenance for display, never hand-assigned.
-    pub name_source: Option<String>,
-    /// Which source the cached picture came from ('off', a shop, or 'user' for a
-    /// hand upload) — provenance for picture reconciliation. NULL when unknown.
-    pub image_source: Option<String>,
+    pub name_source: Option<Source>,
+    /// Which source the cached picture came from — provenance for picture
+    /// reconciliation. `None` when unknown.
+    pub image_source: Option<Source>,
     /// True if we have a cached image. Served from /api/products/id/{id}/image
     /// (barcodeless shop products), or /api/products/{barcode}/image when barcoded.
     pub has_image: bool,
@@ -39,7 +43,7 @@ pub struct Product {
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct ProductListing {
-    pub source: String,
+    pub source: Source,
     pub external_id: String,
     /// Deep link to the source's product page, when it has one.
     pub url: Option<String>,
@@ -54,7 +58,7 @@ pub struct ProductListing {
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct SourceDocument {
-    pub source: String,
+    pub source: Source,
     /// Which fetch it was ('page' = Asda's Brandbank product-page blob).
     pub kind: String,
     /// When we fetched it (epoch millis).
@@ -70,10 +74,183 @@ pub struct SourceDocument {
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct Candidate {
-    /// The source offering this value ('off', 'asda', 'waitrose', …).
-    pub source: String,
+    /// The source offering this value.
+    pub source: Source,
     /// The source's value for the field, as a display string.
     pub value: String,
+}
+
+/// A field of a product that sources can disagree about.
+///
+/// Closed, because every one of them has to be handled by name somewhere: the
+/// route splits the picture out (its bytes come through the SSRF gate), the repo
+/// splits facts out (they record a trusted source rather than copying a value),
+/// and each scalar needs a reader for its current and offered values. As a
+/// `String` those four dispatch sites agreed only by convention and a new field
+/// could silently fall through all of them; as an enum, [`Self::reconciler`] is
+/// exhaustive and the compiler names every site that must learn about it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum ReconcileField {
+    Name,
+    Brand,
+    QuantityLabel,
+    Picture,
+    Nutrition,
+    Ingredients,
+}
+
+/// Which machinery settles a field — see [`ReconcileField`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Reconciler {
+    /// A canonical scalar on `products`: adopting copies the value across.
+    Scalar,
+    /// The picture. Provenance-based rather than value-based, and adopting means
+    /// re-fetching bytes through the SSRF gate — I/O the route layer owns.
+    Picture,
+    /// A fact trusted from one source (`product_fact_sources`): adopting records
+    /// whose account to believe, and never invents or copies a value.
+    Fact,
+}
+
+impl ReconcileField {
+    /// Every field. Iterate this rather than writing a subset out again.
+    pub const ALL: [ReconcileField; 6] = [
+        ReconcileField::Name,
+        ReconcileField::Brand,
+        ReconcileField::QuantityLabel,
+        ReconcileField::Picture,
+        ReconcileField::Nutrition,
+        ReconcileField::Ingredients,
+    ];
+
+    pub fn reconciler(self) -> Reconciler {
+        match self {
+            ReconcileField::Name | ReconcileField::Brand | ReconcileField::QuantityLabel => {
+                Reconciler::Scalar
+            }
+            ReconcileField::Picture => Reconciler::Picture,
+            ReconcileField::Nutrition | ReconcileField::Ingredients => Reconciler::Fact,
+        }
+    }
+
+    /// Human label, shown as the row heading in the diff.
+    pub fn label(self) -> &'static str {
+        match self {
+            ReconcileField::Name => "Name",
+            ReconcileField::Brand => "Brand",
+            ReconcileField::QuantityLabel => "Pack size",
+            ReconcileField::Picture => "Picture",
+            ReconcileField::Nutrition => "Nutrition",
+            ReconcileField::Ingredients => "Ingredients",
+        }
+    }
+
+    /// The column name in `product_field_decisions` / `product_fact_sources`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ReconcileField::Name => "name",
+            ReconcileField::Brand => "brand",
+            ReconcileField::QuantityLabel => "quantity_label",
+            ReconcileField::Picture => "picture",
+            ReconcileField::Nutrition => "nutrition",
+            ReconcileField::Ingredients => "ingredients",
+        }
+    }
+}
+
+impl fmt::Display for ReconcileField {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for ReconcileField {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "name" => Ok(ReconcileField::Name),
+            "brand" => Ok(ReconcileField::Brand),
+            "quantity_label" => Ok(ReconcileField::QuantityLabel),
+            "picture" => Ok(ReconcileField::Picture),
+            "nutrition" => Ok(ReconcileField::Nutrition),
+            "ingredients" => Ok(ReconcileField::Ingredients),
+            other => Err(format!("unknown reconcile field {other:?}")),
+        }
+    }
+}
+
+/// What to do about one field's divergence: keep what we have, or adopt one
+/// source's account of it.
+///
+/// The variants after `Keep` are exactly [`Source`]'s — kept as one flat set
+/// because that is what travels on the wire (`"keep" | "asda" | …`). The
+/// conversions to and from `Source` are exhaustive matches, so adding a shop
+/// fails to compile here until this list grows too.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum Choice {
+    /// Leave the canonical value alone; just settle the divergence.
+    Keep,
+    Asda,
+    Off,
+    User,
+    Waitrose,
+}
+
+impl Choice {
+    /// The source being adopted, or `None` for [`Choice::Keep`].
+    pub fn source(self) -> Option<Source> {
+        match self {
+            Choice::Keep => None,
+            Choice::Asda => Some(Source::Asda),
+            Choice::Off => Some(Source::Off),
+            Choice::User => Some(Source::User),
+            Choice::Waitrose => Some(Source::Waitrose),
+        }
+    }
+}
+
+impl From<Source> for Choice {
+    fn from(s: Source) -> Self {
+        match s {
+            Source::Asda => Choice::Asda,
+            Source::Off => Choice::Off,
+            Source::User => Choice::User,
+            Source::Waitrose => Choice::Waitrose,
+        }
+    }
+}
+
+impl fmt::Display for Choice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.source() {
+            Some(s) => write!(f, "{s}"),
+            None => f.write_str("keep"),
+        }
+    }
+}
+
+/// One decision in a reconcile request: what to do about one field.
+///
+/// Shared by the route and the repo rather than each holding its own copy —
+/// there used to be two structurally identical structs and a hand-written copy
+/// between them, which is one more place for the two ideas of a decision to
+/// drift apart.
+#[derive(Debug, Clone, PartialEq, Deserialize, TS)]
+#[ts(export)]
+pub struct FieldChoice {
+    pub field: ReconcileField,
+    pub choice: Choice,
+    /// The typed value, when `choice` is [`Choice::User`]. `#[ts(optional)]` so
+    /// the generated type says `value?: string` — matching `serde(default)`
+    /// exactly, rather than forcing every keep/adopt decision to spell out a
+    /// null it doesn't have.
+    #[serde(default)]
+    #[ts(optional)]
+    pub value: Option<String>,
 }
 
 /// A field where at least one source disagrees with the canonical product and no
@@ -81,9 +258,7 @@ pub struct Candidate {
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct FieldDivergence {
-    /// The field: a canonical scalar ('name' | 'brand' | 'quantity_label') or a
-    /// source-picked fact ('nutrition' | 'ingredients').
-    pub field: String,
+    pub field: ReconcileField,
     /// Human label for the field ('Name', 'Brand', 'Pack size').
     pub label: String,
     /// The current canonical value, or None when the product has none.
@@ -111,8 +286,8 @@ pub struct ProductReconciliation {
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct SourceFacts {
-    /// The source these facts came from ('off', 'asda', 'waitrose', …).
-    pub source: String,
+    /// The source these facts came from.
+    pub source: Source,
     pub facts: ProductFacts,
 }
 

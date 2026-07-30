@@ -5,6 +5,7 @@
 //! report can be dropped without losing the row.
 
 use life::products::shop_cache::{MAX_SEEN, SeenListing, validate_seen};
+use life::products::source::Source;
 
 fn seen(external_id: &str, barcode: Option<&str>) -> SeenListing {
     SeenListing {
@@ -24,7 +25,7 @@ fn seen(external_id: &str, barcode: Option<&str>) -> SeenListing {
 fn a_product_the_phone_fetched_becomes_a_cache_row() {
     let rows = validate_seen("waitrose", &[seen("271105", Some("5000169146767"))]).unwrap();
     assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].source, "waitrose");
+    assert_eq!(rows[0].source, Source::Waitrose);
     assert_eq!(rows[0].external_id, "271105");
     assert_eq!(rows[0].barcode.as_deref(), Some("5000169146767"));
     assert_eq!(rows[0].quantity_label.as_deref(), Some("250ml"));
@@ -110,5 +111,5 @@ fn asda_may_report_too_even_though_the_server_can_search_it() {
     // The endpoint is shop-agnostic on purpose: what differs between shops is
     // who can see the page, not what a sighting means.
     let rows = validate_seen("asda", &[seen("9346702", Some("5000169146767"))]).unwrap();
-    assert_eq!(rows[0].source, "asda");
+    assert_eq!(rows[0].source, Source::Asda);
 }

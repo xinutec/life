@@ -4,6 +4,7 @@
 
 use life::db;
 use life::products::repo;
+use life::products::source::Source;
 
 #[tokio::test]
 async fn stores_a_payload_verbatim_overwrites_by_kind_and_cascades() {
@@ -22,7 +23,7 @@ async fn stores_a_payload_verbatim_overwrites_by_kind_and_cascades() {
         .unwrap();
     let product = repo::upsert_external(
         &pool,
-        "asda",
+        Source::Asda,
         "doc-cin-1",
         Some(barcode),
         &repo::ListingFields {
@@ -35,7 +36,7 @@ async fn stores_a_payload_verbatim_overwrites_by_kind_and_cascades() {
 
     // Nothing stored yet.
     assert!(
-        repo::get_document(&pool, product.id, "asda", "page")
+        repo::get_document(&pool, product.id, Source::Asda, "page")
             .await
             .unwrap()
             .is_none()
@@ -50,12 +51,12 @@ async fn stores_a_payload_verbatim_overwrites_by_kind_and_cascades() {
     // Store a page blob verbatim.
     let blob =
         r#"{"calculatedNutrition":[{"nameValue":"Energy (kcal)","per100":61}],"vegan":true}"#;
-    repo::upsert_document(&pool, product.id, "asda", "page", blob)
+    repo::upsert_document(&pool, product.id, Source::Asda, "page", blob)
         .await
         .unwrap();
 
     assert_eq!(
-        repo::get_document(&pool, product.id, "asda", "page")
+        repo::get_document(&pool, product.id, Source::Asda, "page")
             .await
             .unwrap()
             .as_deref(),
@@ -64,10 +65,10 @@ async fn stores_a_payload_verbatim_overwrites_by_kind_and_cascades() {
     );
     let docs = repo::documents_for(&pool, product.id).await.unwrap();
     assert_eq!(docs.len(), 1);
-    assert_eq!(docs[0].source, "asda");
+    assert_eq!(docs[0].source, Source::Asda);
     assert_eq!(docs[0].kind, "page");
     assert_eq!(
-        docs[0].bytes as usize,
+        usize::try_from(docs[0].bytes).expect("a byte count fits a usize"),
         blob.len(),
         "size hint = payload length"
     );
@@ -75,11 +76,11 @@ async fn stores_a_payload_verbatim_overwrites_by_kind_and_cascades() {
 
     // Re-fetching the same kind overwrites (last fetch wins), still one row.
     let blob2 = r#"{"calculatedNutrition":[],"vegan":false}"#;
-    repo::upsert_document(&pool, product.id, "asda", "page", blob2)
+    repo::upsert_document(&pool, product.id, Source::Asda, "page", blob2)
         .await
         .unwrap();
     assert_eq!(
-        repo::get_document(&pool, product.id, "asda", "page")
+        repo::get_document(&pool, product.id, Source::Asda, "page")
             .await
             .unwrap()
             .as_deref(),
@@ -92,7 +93,7 @@ async fn stores_a_payload_verbatim_overwrites_by_kind_and_cascades() {
     );
 
     // A different kind coexists.
-    repo::upsert_document(&pool, product.id, "off", "product", "{}")
+    repo::upsert_document(&pool, product.id, Source::Off, "product", "{}")
         .await
         .unwrap();
     assert_eq!(

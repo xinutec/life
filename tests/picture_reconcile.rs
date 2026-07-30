@@ -9,26 +9,27 @@ use std::collections::HashMap;
 
 use life::db;
 use life::products::repo::{self, Listing};
-use life::products::types::Product;
+use life::products::source::Source;
+use life::products::types::{Product, ReconcileField};
 
-fn product(image_source: Option<&str>, has_image: bool) -> Product {
+fn product(image_source: Option<Source>, has_image: bool) -> Product {
     Product {
         id: 1,
         barcode: Some("5000000000789".into()),
         name: Some("Name".into()),
         brand: Some("Brand".into()),
         quantity_label: Some("500g".into()),
-        source: Some("off".into()),
+        source: Some(Source::Off),
         external_id: None,
-        name_source: Some("off".into()),
-        image_source: image_source.map(str::to_string),
+        name_source: Some(Source::Off),
+        image_source,
         has_image,
     }
 }
 
-fn listing(source: &str, image_url: Option<&str>) -> Listing {
+fn listing(source: Source, image_url: Option<&str>) -> Listing {
     Listing {
-        source: source.into(),
+        source,
         external_id: format!("{source}-cin"),
         url: None,
         raw_name: Some("Name".into()),
@@ -53,15 +54,15 @@ async fn picture_divergence(
 #[test]
 fn a_picture_from_another_source_surfaces() {
     // We hold OFF's picture; Asda offers its own → a candidate to adopt.
-    let p = product(Some("off"), true);
-    let asda = listing("asda", Some("https://asda.example/x.jpg"));
-    let off = listing("off", Some("https://off.example/y.jpg"));
+    let p = product(Some(Source::Off), true);
+    let asda = listing(Source::Asda, Some("https://asda.example/x.jpg"));
+    let off = listing(Source::Off, Some("https://off.example/y.jpg"));
     let d = repo::picture_divergence(&p, &[off, asda], &HashMap::new())
         .expect("a differing-source picture surfaces");
-    assert_eq!(d.field, "picture");
+    assert_eq!(d.field, ReconcileField::Picture);
     // Only the OTHER source is a candidate; the one we already hold is not.
     assert_eq!(d.candidates.len(), 1);
-    assert_eq!(d.candidates[0].source, "asda");
+    assert_eq!(d.candidates[0].source, Source::Asda);
     assert_eq!(d.candidates[0].value, "https://asda.example/x.jpg");
     assert_eq!(
         d.current.as_deref(),
@@ -73,8 +74,8 @@ fn a_picture_from_another_source_surfaces() {
 #[test]
 fn the_source_we_already_hold_is_not_a_candidate() {
     // Only the source our picture came from offers one → nothing to adopt.
-    let p = product(Some("asda"), true);
-    let asda = listing("asda", Some("https://asda.example/x.jpg"));
+    let p = product(Some(Source::Asda), true);
+    let asda = listing(Source::Asda, Some("https://asda.example/x.jpg"));
     assert!(
         repo::picture_divergence(&p, &[asda], &HashMap::new()).is_none(),
         "same-source picture raises no divergence"
@@ -84,8 +85,8 @@ fn the_source_we_already_hold_is_not_a_candidate() {
 #[test]
 fn a_hand_uploaded_picture_is_never_nagged() {
     // Our own upload outranks every source and is never asked to be replaced.
-    let p = product(Some("user"), true);
-    let asda = listing("asda", Some("https://asda.example/x.jpg"));
+    let p = product(Some(Source::User), true);
+    let asda = listing(Source::Asda, Some("https://asda.example/x.jpg"));
     assert!(
         repo::picture_divergence(&p, &[asda], &HashMap::new()).is_none(),
         "a user picture is ours — no source can nag it"
@@ -96,7 +97,7 @@ fn a_hand_uploaded_picture_is_never_nagged() {
 fn with_no_picture_any_source_is_a_candidate() {
     // Nothing held yet: a source picture is an offer to fill, current is None.
     let p = product(None, false);
-    let asda = listing("asda", Some("https://asda.example/x.jpg"));
+    let asda = listing(Source::Asda, Some("https://asda.example/x.jpg"));
     let d = repo::picture_divergence(&p, &[asda], &HashMap::new())
         .expect("a source picture surfaces when we have none");
     assert_eq!(d.candidates.len(), 1);
@@ -105,8 +106,8 @@ fn with_no_picture_any_source_is_a_candidate() {
 
 #[test]
 fn a_listing_without_a_picture_offers_nothing() {
-    let p = product(Some("off"), true);
-    let asda = listing("asda", None);
+    let p = product(Some(Source::Off), true);
+    let asda = listing(Source::Asda, None);
     assert!(
         repo::picture_divergence(&p, &[asda], &HashMap::new()).is_none(),
         "a source with no image_url is not a picture candidate"
@@ -140,7 +141,7 @@ async fn settle_picture_quiets_it_until_a_url_changes() {
     // OFF seeds the product and lists a picture; Asda lists a different one.
     let p = repo::upsert_external(
         &pool,
-        "off",
+        Source::Off,
         off_ext,
         Some(barcode),
         &repo::ListingFields {
@@ -153,7 +154,7 @@ async fn settle_picture_quiets_it_until_a_url_changes() {
     .unwrap();
     repo::upsert_external(
         &pool,
-        "asda",
+        Source::Asda,
         asda_ext,
         Some(barcode),
         &repo::ListingFields {
@@ -169,7 +170,7 @@ async fn settle_picture_quiets_it_until_a_url_changes() {
     repo::set_image_by_id(&pool, p.id, &[0x42], "image/jpeg")
         .await
         .unwrap();
-    repo::set_image_provenance(&pool, p.id, "off")
+    repo::set_image_provenance(&pool, p.id, Source::Off)
         .await
         .unwrap();
 
@@ -177,7 +178,7 @@ async fn settle_picture_quiets_it_until_a_url_changes() {
     let d = picture_divergence(&pool, p.id)
         .await
         .expect("picture divergence before settle");
-    assert_eq!(d.candidates[0].source, "asda");
+    assert_eq!(d.candidates[0].source, Source::Asda);
 
     // Keep OFF's: settling records the current set → the divergence goes quiet.
     repo::settle_picture(&pool, p.id).await.unwrap();
@@ -189,7 +190,7 @@ async fn settle_picture_quiets_it_until_a_url_changes() {
     // Asda changes its picture URL → the set changes → it resurfaces.
     repo::upsert_external(
         &pool,
-        "asda",
+        Source::Asda,
         asda_ext,
         Some(barcode),
         &repo::ListingFields {

@@ -4,11 +4,12 @@
 
 use life::db;
 use life::products::shop_cache::{self, CachedListing};
+use life::products::source::Source;
 use sqlx::MySqlPool;
 
-fn listing(source: &str, external_id: &str, barcode: Option<&str>) -> CachedListing {
+fn listing(source: Source, external_id: &str, barcode: Option<&str>) -> CachedListing {
     CachedListing {
-        source: source.to_string(),
+        source,
         external_id: external_id.to_string(),
         barcode: barcode.map(str::to_string),
         name: Some("Natural Yoghurt".to_string()),
@@ -42,9 +43,9 @@ async fn every_hit_from_one_search_is_remembered_not_just_the_match() {
     // All of them are stored, so a later lookup for ANY of these barcodes is
     // answered without asking the shop again.
     let hits = vec![
-        listing("asda", "test-1", Some("5000000000001")),
-        listing("asda", "test-2", Some("5000000000002")),
-        listing("asda", "test-3", Some("5000000000003")),
+        listing(Source::Asda, "test-1", Some("5000000000001")),
+        listing(Source::Asda, "test-2", Some("5000000000002")),
+        listing(Source::Asda, "test-3", Some("5000000000003")),
     ];
     shop_cache::remember(&pool, &hits).await.unwrap();
 
@@ -53,7 +54,7 @@ async fn every_hit_from_one_search_is_remembered_not_just_the_match() {
         ("test-2", "5000000000002"),
         ("test-3", "5000000000003"),
     ] {
-        let found = shop_cache::find_by_barcode(&pool, "asda", barcode)
+        let found = shop_cache::find_by_barcode(&pool, Source::Asda, barcode)
             .await
             .unwrap()
             .expect("a remembered listing");
@@ -69,7 +70,7 @@ async fn an_unknown_barcode_is_a_dont_know_not_a_no() {
     };
     // Nothing cached for this barcode → None. Callers must read this as "ask the
     // shop", never as "the shop doesn't carry it".
-    let found = shop_cache::find_by_barcode(&pool, "asda", "9999999999999")
+    let found = shop_cache::find_by_barcode(&pool, Source::Asda, "9999999999999")
         .await
         .unwrap();
     assert!(found.is_none());
@@ -84,7 +85,7 @@ async fn a_thinner_sighting_never_erases_what_we_already_learned() {
     // A Waitrose product fetch taught us the barcode...
     shop_cache::remember(
         &pool,
-        &[listing("waitrose", "test-w1", Some("5000000000010"))],
+        &[listing(Source::Waitrose, "test-w1", Some("5000000000010"))],
     )
     .await
     .unwrap();
@@ -97,11 +98,11 @@ async fn a_thinner_sighting_never_erases_what_we_already_learned() {
         brand: None,
         quantity_label: None,
         image_url: None,
-        ..listing("waitrose", "test-w1", None)
+        ..listing(Source::Waitrose, "test-w1", None)
     };
     shop_cache::remember(&pool, &[thin]).await.unwrap();
 
-    let found = shop_cache::find_by_barcode(&pool, "waitrose", "5000000000010")
+    let found = shop_cache::find_by_barcode(&pool, Source::Waitrose, "5000000000010")
         .await
         .unwrap()
         .expect("the barcode survives a thinner re-sighting");
@@ -114,17 +115,20 @@ async fn re_seeing_a_listing_updates_its_description() {
     let Some(pool) = fresh_pool().await else {
         return;
     };
-    shop_cache::remember(&pool, &[listing("asda", "test-r1", Some("5000000000020"))])
-        .await
-        .unwrap();
+    shop_cache::remember(
+        &pool,
+        &[listing(Source::Asda, "test-r1", Some("5000000000020"))],
+    )
+    .await
+    .unwrap();
 
     let renamed = CachedListing {
         name: Some("Natural Bio Live Yoghurt".to_string()),
-        ..listing("asda", "test-r1", Some("5000000000020"))
+        ..listing(Source::Asda, "test-r1", Some("5000000000020"))
     };
     shop_cache::remember(&pool, &[renamed]).await.unwrap();
 
-    let found = shop_cache::find_by_barcode(&pool, "asda", "5000000000020")
+    let found = shop_cache::find_by_barcode(&pool, Source::Asda, "5000000000020")
         .await
         .unwrap()
         .expect("still one row");
@@ -151,18 +155,18 @@ async fn shops_keep_their_own_memories() {
     shop_cache::remember(
         &pool,
         &[
-            listing("asda", "test-s1", Some("5000000000030")),
-            listing("waitrose", "test-s2", Some("5000000000030")),
+            listing(Source::Asda, "test-s1", Some("5000000000030")),
+            listing(Source::Waitrose, "test-s2", Some("5000000000030")),
         ],
     )
     .await
     .unwrap();
 
-    let a = shop_cache::find_by_barcode(&pool, "asda", "5000000000030")
+    let a = shop_cache::find_by_barcode(&pool, Source::Asda, "5000000000030")
         .await
         .unwrap()
         .expect("asda");
-    let w = shop_cache::find_by_barcode(&pool, "waitrose", "5000000000030")
+    let w = shop_cache::find_by_barcode(&pool, Source::Waitrose, "5000000000030")
         .await
         .unwrap()
         .expect("waitrose");

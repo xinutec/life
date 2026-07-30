@@ -25,8 +25,11 @@ function fakeBridge() {
   };
 }
 
+// A stand-in for the bridge mechanics, not for Waitrose itself — but its `id`
+// still has to name a real source, because that is what a provider is allowed to
+// be. The URLs below are deliberately fake; only the plumbing is under test.
 const provider: ShopProvider = {
-  id: 'test',
+  id: 'waitrose',
   displayName: 'Test',
   loginUrl: 'https://x.test/',
   search: (q) => ({ url: `https://x.test/s?q=${q}`, js: 'SEARCH_JS' }),

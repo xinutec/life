@@ -7,13 +7,17 @@ use chrono::NaiveDateTime;
 use sqlx::types::Json;
 use sqlx::{MySqlConnection, MySqlPool};
 
+use super::coverage::{AttachedListing, Sighting};
 use super::nutrition::{
     Allergen, Claim, DietaryFlag, Nutrition, Presence, ProductFacts, fact_rank, merge_allergens,
     merge_dietary, merge_ingredients, merge_nutrition, summarize_nutrition,
 };
 use super::prices::{PriceInput, ShopPrice};
-use super::source;
-use super::types::{Candidate, FieldDivergence, Product, SourceDocument, SourceFacts};
+use super::source::Source;
+use super::types::{
+    Candidate, Choice, FieldChoice, FieldDivergence, Product, ReconcileField, Reconciler,
+    SourceDocument, SourceFacts,
+};
 
 #[derive(sqlx::FromRow)]
 struct MetaRow {
@@ -23,9 +27,9 @@ struct MetaRow {
     name: Option<String>,
     brand: Option<String>,
     quantity_label: Option<String>,
-    source: Option<String>,
-    name_source: Option<String>,
-    image_source: Option<String>,
+    source: Option<Source>,
+    name_source: Option<Source>,
+    image_source: Option<Source>,
     has_image: i64,
 }
 
@@ -103,7 +107,7 @@ pub async fn get_by_id(pool: &MySqlPool, id: u64) -> Result<Option<Product>> {
 /// sources — not only the one it was first created from.
 pub async fn get_by_source_external(
     pool: &MySqlPool,
-    source: &str,
+    source: Source,
     external_id: &str,
 ) -> Result<Option<Product>> {
     let row: Option<MetaRow> = sqlx::query_as(
@@ -124,7 +128,7 @@ pub async fn get_by_source_external(
 /// paths that need the full record).
 #[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
 pub struct Listing {
-    pub source: String,
+    pub source: Source,
     pub external_id: String,
     pub url: Option<String>,
     pub raw_name: Option<String>,
@@ -174,7 +178,7 @@ pub struct ListingFields<'a> {
 pub async fn upsert_listing(
     pool: &MySqlPool,
     product_id: u64,
-    source: &str,
+    source: Source,
     external_id: &str,
     fields: &ListingFields<'_>,
 ) -> Result<()> {
@@ -233,7 +237,7 @@ pub async fn refresh_canonical_name(pool: &MySqlPool, product_id: u64) -> Result
                 .as_deref()
                 .map(str::trim)
                 .filter(|n| !n.is_empty())?;
-            Some((source::name_rank(&l.source)?, name, l.source.as_str()))
+            Some((l.source.name_rank()?, name, l.source))
         })
         .min_by_key(|(rank, ..)| *rank);
     if let Some((_, name, name_source)) = best {
@@ -250,7 +254,7 @@ pub async fn refresh_canonical_name(pool: &MySqlPool, product_id: u64) -> Result
 /// The canonical product id an existing listing points at, if any.
 async fn listing_product_id(
     pool: &MySqlPool,
-    source: &str,
+    source: Source,
     external_id: &str,
 ) -> Result<Option<u64>> {
     let row: Option<(u64,)> = sqlx::query_as(
@@ -266,7 +270,11 @@ async fn listing_product_id(
 /// The listing id for (source, external_id) — the FK target a price observation
 /// hangs off. Public: the import route records a price against the listing it
 /// just upserted.
-pub async fn listing_id(pool: &MySqlPool, source: &str, external_id: &str) -> Result<Option<u64>> {
+pub async fn listing_id(
+    pool: &MySqlPool,
+    source: Source,
+    external_id: &str,
+) -> Result<Option<u64>> {
     let row: Option<(u64,)> =
         sqlx::query_as("SELECT id FROM product_listings WHERE source = ? AND external_id = ?")
             .bind(source)
@@ -279,29 +287,37 @@ pub async fn listing_id(pool: &MySqlPool, source: &str, external_id: &str) -> Re
 /// Which shops hold a listing for each of these products — the attached half of
 /// [[super::coverage]]. Excludes 'off' and 'user': neither is somewhere you can
 /// walk into. One query for the whole Buy list.
-pub async fn shops_holding(pool: &MySqlPool, ids: &[u64]) -> Result<Vec<(u64, String)>> {
+pub async fn shops_holding(pool: &MySqlPool, ids: &[u64]) -> Result<Vec<AttachedListing>> {
     if ids.is_empty() {
         return Ok(Vec::new());
     }
+    // The exclusion is derived from the type, not spelled out in SQL: a source
+    // that stops (or starts) being a shop changes this query by changing
+    // `Source::is_shop`, and can't be forgotten here.
     let mut qb = sqlx::QueryBuilder::new(
-        "SELECT product_id, source FROM product_listings \
-         WHERE source NOT IN ('off', 'user') AND product_id IN (",
+        "SELECT product_id, source FROM product_listings WHERE source IN (",
     );
+    let mut shops = qb.separated(", ");
+    for shop in Source::shops() {
+        shops.push_bind(shop);
+    }
+    qb.push(") AND product_id IN (");
     let mut sep = qb.separated(", ");
     for id in ids {
         sep.push_bind(id);
     }
     qb.push(")");
-    Ok(qb.build_query_as().fetch_all(pool).await?)
+    let rows: Vec<(u64, Source)> = qb.build_query_as().fetch_all(pool).await?;
+    Ok(rows
+        .into_iter()
+        .map(|(product_id, source)| AttachedListing { product_id, source })
+        .collect())
 }
 
 /// Which shops we've *seen* carry each of these barcodes, from the memory of our
 /// own past shop queries (`shop_listings`). Weaker than a held listing and not a
 /// stock check — see [[super::coverage]].
-pub async fn shops_seen_carrying(
-    pool: &MySqlPool,
-    barcodes: &[String],
-) -> Result<Vec<(String, String)>> {
+pub async fn shops_seen_carrying(pool: &MySqlPool, barcodes: &[String]) -> Result<Vec<Sighting>> {
     if barcodes.is_empty() {
         return Ok(Vec::new());
     }
@@ -312,7 +328,11 @@ pub async fn shops_seen_carrying(
         sep.push_bind(barcode);
     }
     qb.push(")");
-    Ok(qb.build_query_as().fetch_all(pool).await?)
+    let rows: Vec<(String, Source)> = qb.build_query_as().fetch_all(pool).await?;
+    Ok(rows
+        .into_iter()
+        .map(|(barcode, source)| Sighting { barcode, source })
+        .collect())
 }
 
 // --- Reconciliation: source values vs the canonical row ---
@@ -327,10 +347,15 @@ pub async fn shops_seen_carrying(
 /// A canonical scalar field reconciliation covers: how to read its current value
 /// off the product and its offered value off a listing.
 struct ReconciledField {
-    field: &'static str,
-    label: &'static str,
+    field: ReconcileField,
     current: fn(&Product) -> Option<String>,
     offered: fn(&Listing) -> Option<String>,
+    /// The UPDATE that adopts a value for this field, bound `(value, source,
+    /// product_id)`. It lives in the table so `set_canonical_field` picks a
+    /// whole statement rather than splicing a column name — the column can
+    /// never come from the request, and there is no "unknown field" arm to fall
+    /// through, because a non-scalar field cannot reach it.
+    adopt_sql: &'static str,
 }
 
 /// The fields with a single canonical value that a source can disagree about.
@@ -338,35 +363,24 @@ struct ReconciledField {
 /// their own mechanisms; see the reconciliation plan.)
 const RECONCILED_FIELDS: &[ReconciledField] = &[
     ReconciledField {
-        field: "name",
-        label: "Name",
+        field: ReconcileField::Name,
+        adopt_sql: "UPDATE products SET name = ?, name_source = ? WHERE id = ?",
         current: |p| p.name.clone(),
         offered: |l| l.raw_name.clone(),
     },
     ReconciledField {
-        field: "brand",
-        label: "Brand",
+        field: ReconcileField::Brand,
+        adopt_sql: "UPDATE products SET brand = ?, brand_source = ? WHERE id = ?",
         current: |p| p.brand.clone(),
         offered: |l| l.brand.clone(),
     },
     ReconciledField {
-        field: "quantity_label",
-        label: "Pack size",
+        field: ReconcileField::QuantityLabel,
+        adopt_sql: "UPDATE products SET quantity_label = ?, quantity_label_source = ? WHERE id = ?",
         current: |p| p.quantity_label.clone(),
         offered: |l| l.quantity_label.clone(),
     },
 ];
-
-/// "keep" as a reconcile choice: leave the canonical value, just settle the
-/// divergence.
-pub const KEEP: &str = "keep";
-
-/// "user" as a reconcile choice: our own value, typed by hand — not any source's.
-/// It becomes the canonical value with provenance `user`, and (being non-empty)
-/// is never auto-overwritten afterward. The one deliberate exception to
-/// "reconcile only picks among sources": when every source is wrong (a shop's
-/// typo), our own layer is how the product still reads correctly.
-pub const USER: &str = "user";
 
 fn trimmed(s: Option<String>) -> Option<String> {
     s.map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
@@ -389,7 +403,7 @@ fn value_set(spec: &ReconciledField, product: &Product, listings: &[Listing]) ->
 }
 
 /// field → the value set that was on the table when it was last decided.
-pub type DecisionMap = HashMap<String, Vec<String>>;
+pub type DecisionMap = HashMap<ReconcileField, Vec<String>>;
 
 /// The decisions settled for a product's fields.
 pub async fn field_decisions(pool: &MySqlPool, product_id: u64) -> Result<DecisionMap> {
@@ -399,7 +413,17 @@ pub async fn field_decisions(pool: &MySqlPool, product_id: u64) -> Result<Decisi
     .bind(product_id)
     .fetch_all(pool)
     .await?;
-    Ok(rows.into_iter().map(|(f, v)| (f, v.0)).collect())
+    // A field we no longer know about is a hard error, not a row to skip: it
+    // would mean a decision is being silently ignored, and the divergence it
+    // settled would quietly come back.
+    rows.into_iter()
+        .map(|(f, v)| {
+            Ok((
+                f.parse::<ReconcileField>().map_err(anyhow::Error::msg)?,
+                v.0,
+            ))
+        })
+        .collect()
 }
 
 /// Where the sources disagree with the canonical row and it isn't already
@@ -417,8 +441,8 @@ pub fn divergences(
             .iter()
             .filter_map(|l| {
                 let value = trimmed((spec.offered)(l))?;
-                (current.as_deref() != Some(value.as_str())).then(|| Candidate {
-                    source: l.source.clone(),
+                (current.as_deref() != Some(value.as_str())).then_some(Candidate {
+                    source: l.source,
                     value,
                 })
             })
@@ -428,23 +452,18 @@ pub fn divergences(
         }
         // Settled if the exact value set on the table matches what was decided.
         let set = value_set(spec, product, listings);
-        if decisions.get(spec.field) == Some(&set) {
+        if decisions.get(&spec.field) == Some(&set) {
             continue;
         }
         out.push(FieldDivergence {
-            field: spec.field.to_string(),
-            label: spec.label.to_string(),
+            field: spec.field,
+            label: spec.field.label().to_string(),
             current,
             candidates,
         });
     }
     out
 }
-
-/// The reconcile field id for the picture. Its divergence is provenance-based,
-/// not value-based (see `picture_divergence`), and adopting it re-fetches bytes
-/// through the SSRF gate in the route layer — so it lives outside RECONCILED_FIELDS.
-pub const PICTURE_FIELD: &str = "picture";
 
 /// The suppression key for a picture decision: the current image's provenance
 /// plus every offered picture URL. Any change (a new source picture, or the
@@ -454,10 +473,10 @@ fn picture_value_set(product: &Product, listings: &[Listing]) -> Vec<String> {
     let mut set = BTreeSet::new();
     // The current holder, marked so it can't collide with a URL and so adopting a
     // different source (which changes provenance) re-keys the decision.
-    set.insert(format!(
-        "@{}",
-        product.image_source.as_deref().unwrap_or("")
-    ));
+    set.insert(match product.image_source {
+        Some(s) => format!("@{s}"),
+        None => "@".to_string(),
+    });
     for l in listings {
         if let Some(url) = trimmed(l.image_url.clone()) {
             set.insert(url);
@@ -476,16 +495,16 @@ pub fn picture_divergence(
     listings: &[Listing],
     decisions: &DecisionMap,
 ) -> Option<FieldDivergence> {
-    if product.image_source.as_deref() == Some(USER) {
+    if product.image_source == Some(Source::User) {
         return None;
     }
-    let current_src = product.image_source.as_deref();
+    let current_src = product.image_source;
     let candidates: Vec<Candidate> = listings
         .iter()
         .filter_map(|l| {
             let url = trimmed(l.image_url.clone())?;
-            (Some(l.source.as_str()) != current_src).then(|| Candidate {
-                source: l.source.clone(),
+            (Some(l.source) != current_src).then_some(Candidate {
+                source: l.source,
                 value: url,
             })
         })
@@ -494,23 +513,23 @@ pub fn picture_divergence(
         return None;
     }
     let set = picture_value_set(product, listings);
-    if decisions.get(PICTURE_FIELD) == Some(&set) {
+    if decisions.get(&ReconcileField::Picture) == Some(&set) {
         return None;
     }
     Some(FieldDivergence {
-        field: PICTURE_FIELD.to_string(),
-        label: "Picture".to_string(),
+        field: ReconcileField::Picture,
+        label: ReconcileField::Picture.label().to_string(),
         // The source we currently hold a picture from (if any) — the frontend
         // shows the actual thumbnail; this is the provenance behind it.
         current: product
             .has_image
-            .then(|| current_src.unwrap_or("").to_string()),
+            .then(|| current_src.map(|s| s.to_string()).unwrap_or_default()),
         candidates,
     })
 }
 
 /// Record the picture bytes' provenance (which source it came from, or `user`).
-pub async fn set_image_provenance(pool: &MySqlPool, product_id: u64, source: &str) -> Result<()> {
+pub async fn set_image_provenance(pool: &MySqlPool, product_id: u64, source: Source) -> Result<()> {
     sqlx::query("UPDATE products SET image_source = ? WHERE id = ?")
         .bind(source)
         .bind(product_id)
@@ -528,18 +547,7 @@ pub async fn settle_picture(pool: &MySqlPool, product_id: u64) -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("no such product: {product_id}"))?;
     let listings = listings_for(pool, product_id).await?;
     let set = picture_value_set(&product, &listings);
-    upsert_decision(pool, product_id, PICTURE_FIELD, &set).await
-}
-
-/// One field's decision from the reconcile UI: adopt a source's value (`choice`
-/// is the source id), keep the current canonical value (`choice` == `KEEP`), or
-/// set our own typed value (`choice` == `USER`, with `value` supplied).
-#[derive(Debug, Clone)]
-pub struct FieldChoice {
-    pub field: String,
-    pub choice: String,
-    /// The typed value, required when `choice == USER`, ignored otherwise.
-    pub value: Option<String>,
+    upsert_decision(pool, product_id, ReconcileField::Picture, &set).await
 }
 
 /// Apply reconcile decisions: set the canonical row from the chosen source, our
@@ -548,31 +556,46 @@ pub struct FieldChoice {
 pub async fn reconcile(pool: &MySqlPool, product_id: u64, choices: &[FieldChoice]) -> Result<()> {
     let listings = listings_for(pool, product_id).await?;
     for c in choices {
-        // Nutrition and ingredients settle by recording which source to trust
-        // (0035), not by writing the canonical row — handle them and move on.
-        if PICKED_FACTS.iter().any(|(f, _)| *f == c.field) {
-            reconcile_fact(pool, product_id, c).await?;
-            continue;
+        match c.field.reconciler() {
+            // Nutrition and ingredients settle by recording which source to
+            // trust (0035), not by writing the canonical row.
+            Reconciler::Fact => {
+                reconcile_fact(pool, product_id, c).await?;
+                continue;
+            }
+            // The route adopts the picture itself (its bytes come through the
+            // SSRF gate) and calls `settle_picture`; it never reaches here.
+            Reconciler::Picture => anyhow::bail!("the picture is settled by the route"),
+            Reconciler::Scalar => {}
         }
         let Some(spec) = RECONCILED_FIELDS.iter().find(|s| s.field == c.field) else {
-            anyhow::bail!("unknown reconcilable field: {}", c.field);
+            // Unreachable while every Scalar field has a row above; a missing
+            // one is a programming error, not bad input.
+            anyhow::bail!("no reconcile spec for {}", c.field);
         };
-        if c.choice == USER {
-            // Our own value: taken from the request, not a listing.
-            let value = c.value.as_deref().map(str::trim).filter(|v| !v.is_empty());
-            let Some(value) = value else {
-                anyhow::bail!("choosing our own {} needs a value", c.field);
-            };
-            set_canonical_field(pool, product_id, spec.field, value, USER).await?;
-        } else if c.choice != KEEP {
-            let value = listings
-                .iter()
-                .find(|l| l.source == c.choice)
-                .and_then(|l| trimmed((spec.offered)(l)));
-            let Some(value) = value else {
-                anyhow::bail!("source {} offers no {} to adopt", c.choice, c.field);
-            };
-            set_canonical_field(pool, product_id, spec.field, &value, &c.choice).await?;
+        match c.choice {
+            Choice::Keep => {}
+            Choice::User => {
+                // Our own value: taken from the request, not a listing.
+                let value = c.value.as_deref().map(str::trim).filter(|v| !v.is_empty());
+                let Some(value) = value else {
+                    anyhow::bail!("choosing our own {} needs a value", c.field);
+                };
+                set_canonical_field(pool, product_id, spec, value, Source::User).await?;
+            }
+            adopt => {
+                let source = adopt
+                    .source()
+                    .ok_or_else(|| anyhow::anyhow!("{adopt} is not a source"))?;
+                let value = listings
+                    .iter()
+                    .find(|l| l.source == source)
+                    .and_then(|l| trimmed((spec.offered)(l)));
+                let Some(value) = value else {
+                    anyhow::bail!("source {source} offers no {} to adopt", c.field);
+                };
+                set_canonical_field(pool, product_id, spec, &value, source).await?;
+            }
         }
         // Recompute the set AFTER applying so the decision reflects the settled
         // state (the adopted value is now the canonical one).
@@ -591,38 +614,39 @@ pub async fn reconcile(pool: &MySqlPool, product_id: u64, choices: &[FieldChoice
 /// rejected — these facts are chosen among sources, never typed by hand (unlike
 /// the scalar fields), so we never invent a nutrition panel or ingredient list.
 async fn reconcile_fact(pool: &MySqlPool, product_id: u64, c: &FieldChoice) -> Result<()> {
-    if c.choice == USER {
+    if c.choice == Choice::User {
         anyhow::bail!("{} is chosen by source, not typed", c.field);
     }
     let by_source = facts_by_source(pool, product_id).await?;
-    let source = if c.choice == KEEP {
-        // by_source is precedence-ordered; the first source that has this fact is
-        // the current pick.
-        by_source
+    let source = match c.choice.source() {
+        // by_source is precedence-ordered; the first source that has this fact
+        // is the current pick.
+        None => by_source
             .iter()
-            .find(|s| fact_display(&c.field, &s.facts).is_some())
-            .map(|s| s.source.clone())
-            .ok_or_else(|| anyhow::anyhow!("no source offers {} to keep", c.field))?
-    } else {
-        let has = by_source
-            .iter()
-            .find(|s| s.source == c.choice)
-            .and_then(|s| fact_display(&c.field, &s.facts))
-            .is_some();
-        if !has {
-            anyhow::bail!("source {} offers no {} to adopt", c.choice, c.field);
+            .find(|s| fact_display(c.field, &s.facts).is_some())
+            .map(|s| s.source)
+            .ok_or_else(|| anyhow::anyhow!("no source offers {} to keep", c.field))?,
+        Some(want) => {
+            let has = by_source
+                .iter()
+                .find(|s| s.source == want)
+                .and_then(|s| fact_display(c.field, &s.facts))
+                .is_some();
+            if !has {
+                anyhow::bail!("source {want} offers no {} to adopt", c.field);
+            }
+            want
         }
-        c.choice.clone()
     };
-    upsert_fact_source(pool, product_id, &c.field, &source).await
+    upsert_fact_source(pool, product_id, c.field, source).await
 }
 
 /// Record (or change) the source picked to trust for a fact kind (0035).
 async fn upsert_fact_source(
     pool: &MySqlPool,
     product_id: u64,
-    kind: &str,
-    source: &str,
+    kind: ReconcileField,
+    source: Source,
 ) -> Result<()> {
     sqlx::query(
         "INSERT INTO product_fact_sources (product_id, kind, source) \
@@ -630,61 +654,49 @@ async fn upsert_fact_source(
          ON DUPLICATE KEY UPDATE source = VALUES(source), decided_at = CURRENT_TIMESTAMP",
     )
     .bind(product_id)
-    .bind(kind)
+    .bind(kind.as_str())
     .bind(source)
     .execute(pool)
     .await?;
     Ok(())
 }
 
-/// Set one canonical scalar field to an adopted value. Only the reconcilable
-/// fields are settable here — the column name is never taken from user input.
+/// Set one canonical scalar field to an adopted value.
+///
+/// Takes the spec rather than a field name: a `ReconciledField` only exists for
+/// a field that has an `adopt_sql`, so "which column" is settled by construction
+/// and there is nothing to reject at runtime.
 async fn set_canonical_field(
     pool: &MySqlPool,
     product_id: u64,
-    field: &str,
+    spec: &ReconciledField,
     value: &str,
-    source: &str,
+    source: Source,
 ) -> Result<()> {
     // Each reconcilable scalar carries a provenance column (`*_source`): the
-    // adopted source's id, or `user` for our own correction. `user` there is
-    // what a later source refresh checks before touching the value.
-    match field {
-        "name" => {
-            sqlx::query("UPDATE products SET name = ?, name_source = ? WHERE id = ?")
-                .bind(value)
-                .bind(source)
-                .bind(product_id)
-                .execute(pool)
-                .await?;
-        }
-        "brand" => {
-            sqlx::query("UPDATE products SET brand = ?, brand_source = ? WHERE id = ?")
-                .bind(value)
-                .bind(source)
-                .bind(product_id)
-                .execute(pool)
-                .await?;
-        }
-        "quantity_label" => {
-            sqlx::query(
-                "UPDATE products SET quantity_label = ?, quantity_label_source = ? WHERE id = ?",
-            )
-            .bind(value)
-            .bind(source)
-            .bind(product_id)
-            .execute(pool)
-            .await?;
-        }
-        other => anyhow::bail!("field {other} is not settable by reconcile"),
-    }
+    // adopted source, or `user` for our own correction. `user` there is what a
+    // later source refresh checks before touching the value.
+    //
+    // The statement is a `&'static str` from RECONCILED_FIELDS above — three
+    // literals in one table, never concatenated and never derived from a
+    // request. Holding them there rather than matching here is what removes the
+    // runtime "field is not settable" arm: a `ReconciledField` only exists for a
+    // field that has one.
+    //
+    // dev-lint: allow-sqlx static literal chosen from RECONCILED_FIELDS, above
+    sqlx::query(spec.adopt_sql)
+        .bind(value)
+        .bind(source)
+        .bind(product_id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
 async fn upsert_decision(
     pool: &MySqlPool,
     product_id: u64,
-    field: &str,
+    field: ReconcileField,
     set: &[String],
 ) -> Result<()> {
     let json = serde_json::to_string(set)?;
@@ -694,7 +706,7 @@ async fn upsert_decision(
          ON DUPLICATE KEY UPDATE seen_values = VALUES(seen_values), decided_at = CURRENT_TIMESTAMP",
     )
     .bind(product_id)
-    .bind(field)
+    .bind(field.as_str())
     .bind(json)
     .execute(pool)
     .await?;
@@ -723,7 +735,7 @@ pub async fn record_price(pool: &MySqlPool, listing_id: u64, price: &PriceInput)
 
 #[derive(sqlx::FromRow)]
 struct ShopPriceRow {
-    source: String,
+    source: Source,
     external_id: String,
     amount_minor: i64,
     currency: String,
@@ -758,7 +770,7 @@ pub async fn latest_prices(pool: &MySqlPool, product_id: u64) -> Result<Vec<Shop
     let mut seen = std::collections::HashSet::new();
     Ok(rows
         .into_iter()
-        .filter(|r| seen.insert(r.source.clone()))
+        .filter(|r| seen.insert(r.source))
         .map(|r| ShopPrice {
             source: r.source,
             external_id: r.external_id,
@@ -783,7 +795,7 @@ pub async fn latest_prices(pool: &MySqlPool, product_id: u64) -> Result<Vec<Shop
 
 #[derive(sqlx::FromRow)]
 struct NutritionRow {
-    source: String,
+    source: Source,
     basis: String,
     serving_size: Option<String>,
     energy_kj: Option<f64>,
@@ -804,7 +816,7 @@ pub async fn upsert_nutrition(
     pool: &MySqlPool,
     product_id: u64,
     n: &Nutrition,
-    source: &str,
+    source: Source,
 ) -> Result<()> {
     let mut conn = pool.acquire().await?;
     upsert_nutrition_in(&mut conn, product_id, n, source).await
@@ -814,7 +826,7 @@ async fn upsert_nutrition_in(
     conn: &mut MySqlConnection,
     product_id: u64,
     n: &Nutrition,
-    source: &str,
+    source: Source,
 ) -> Result<()> {
     sqlx::query(
         "INSERT INTO product_nutrition \
@@ -861,7 +873,7 @@ pub async fn set_ingredients(
     pool: &MySqlPool,
     product_id: u64,
     text: &str,
-    source: &str,
+    source: Source,
 ) -> Result<()> {
     let mut conn = pool.acquire().await?;
     set_ingredients_in(&mut conn, product_id, text, source).await
@@ -871,7 +883,7 @@ async fn set_ingredients_in(
     conn: &mut MySqlConnection,
     product_id: u64,
     text: &str,
-    source: &str,
+    source: Source,
 ) -> Result<()> {
     sqlx::query(
         "INSERT INTO product_ingredients (product_id, source, text) VALUES (?, ?, ?) \
@@ -899,7 +911,7 @@ pub async fn replace_allergens(
     pool: &MySqlPool,
     product_id: u64,
     allergens: &[Allergen],
-    source: &str,
+    source: Source,
 ) -> Result<()> {
     let mut tx = pool.begin().await?;
     replace_allergens_in(&mut tx, product_id, allergens, source).await?;
@@ -911,7 +923,7 @@ async fn replace_allergens_in(
     conn: &mut MySqlConnection,
     product_id: u64,
     allergens: &[Allergen],
-    source: &str,
+    source: Source,
 ) -> Result<()> {
     sqlx::query("DELETE FROM product_allergens WHERE product_id = ? AND source = ?")
         .bind(product_id)
@@ -945,7 +957,7 @@ pub async fn replace_dietary(
     pool: &MySqlPool,
     product_id: u64,
     flags: &[DietaryFlag],
-    source: &str,
+    source: Source,
 ) -> Result<()> {
     let mut tx = pool.begin().await?;
     replace_dietary_in(&mut tx, product_id, flags, source).await?;
@@ -957,7 +969,7 @@ async fn replace_dietary_in(
     conn: &mut MySqlConnection,
     product_id: u64,
     flags: &[DietaryFlag],
-    source: &str,
+    source: Source,
 ) -> Result<()> {
     sqlx::query("DELETE FROM product_dietary_flags WHERE product_id = ? AND source = ?")
         .bind(product_id)
@@ -985,7 +997,7 @@ async fn replace_dietary_in(
 pub async fn upsert_document(
     pool: &MySqlPool,
     product_id: u64,
-    source: &str,
+    source: Source,
     kind: &str,
     body: &str,
 ) -> Result<()> {
@@ -1007,7 +1019,7 @@ pub async fn upsert_document(
 pub async fn get_document(
     pool: &MySqlPool,
     product_id: u64,
-    source: &str,
+    source: Source,
     kind: &str,
 ) -> Result<Option<String>> {
     let row: Option<(String,)> = sqlx::query_as(
@@ -1023,7 +1035,7 @@ pub async fn get_document(
 
 #[derive(sqlx::FromRow)]
 struct DocRow {
-    source: String,
+    source: Source,
     kind: String,
     fetched_at: i64,
     bytes: i64,
@@ -1064,7 +1076,7 @@ pub async fn store_facts(
     pool: &MySqlPool,
     product_id: u64,
     facts: &ProductFacts,
-    source: &str,
+    source: Source,
 ) -> Result<()> {
     let mut tx = pool.begin().await?;
     if let Some(n) = &facts.nutrition {
@@ -1100,19 +1112,19 @@ pub async fn facts_by_source(pool: &MySqlPool, product_id: u64) -> Result<Vec<So
     .bind(product_id)
     .fetch_all(pool)
     .await?;
-    let ing_rows: Vec<(String, String)> =
+    let ing_rows: Vec<(Source, String)> =
         sqlx::query_as("SELECT source, text FROM product_ingredients WHERE product_id = ?")
             .bind(product_id)
             .fetch_all(pool)
             .await?;
-    let allergen_rows: Vec<(String, String, String)> = sqlx::query_as(
+    let allergen_rows: Vec<(Source, String, String)> = sqlx::query_as(
         "SELECT source, allergen, presence FROM product_allergens WHERE product_id = ? \
          ORDER BY allergen",
     )
     .bind(product_id)
     .fetch_all(pool)
     .await?;
-    let dietary_rows: Vec<(String, String, String)> = sqlx::query_as(
+    let dietary_rows: Vec<(Source, String, String)> = sqlx::query_as(
         "SELECT source, flag, value FROM product_dietary_flags WHERE product_id = ? \
          ORDER BY flag",
     )
@@ -1121,7 +1133,7 @@ pub async fn facts_by_source(pool: &MySqlPool, product_id: u64) -> Result<Vec<So
     .await?;
 
     // Group every table's rows by source into one ProductFacts each.
-    let mut by_source: BTreeMap<String, ProductFacts> = BTreeMap::new();
+    let mut by_source: BTreeMap<Source, ProductFacts> = BTreeMap::new();
     let blank = || ProductFacts {
         nutrition: None,
         ingredients: None,
@@ -1129,10 +1141,7 @@ pub async fn facts_by_source(pool: &MySqlPool, product_id: u64) -> Result<Vec<So
         dietary: Vec::new(),
     };
     for r in nrows {
-        by_source
-            .entry(r.source.clone())
-            .or_insert_with(blank)
-            .nutrition = Some(Nutrition {
+        by_source.entry(r.source).or_insert_with(blank).nutrition = Some(Nutrition {
             basis: r.basis,
             serving_size: r.serving_size,
             energy_kj: r.energy_kj,
@@ -1179,60 +1188,70 @@ pub async fn facts_by_source(pool: &MySqlPool, product_id: u64) -> Result<Vec<So
         .map(|(source, facts)| SourceFacts { source, facts })
         .collect();
     // Precedence order, so the UI lists the trusted source first.
-    out.sort_by_key(|s| (fact_rank(&s.source), s.source.clone()));
+    out.sort_by_key(|s| (fact_rank(s.source), s.source));
     Ok(out)
 }
 
-/// kind ('nutrition' | 'ingredients') → the source picked to trust for it (0035).
-pub type FactSourceMap = HashMap<String, String>;
+/// Which source to trust for each source-picked fact (0035).
+pub type FactSourceMap = HashMap<ReconcileField, Source>;
 
 /// The fact-source picks recorded for a product (empty if none — precedence then
 /// decides the merge).
 pub async fn fact_source_prefs(pool: &MySqlPool, product_id: u64) -> Result<FactSourceMap> {
-    let rows: Vec<(String, String)> =
+    let rows: Vec<(String, Source)> =
         sqlx::query_as("SELECT kind, source FROM product_fact_sources WHERE product_id = ?")
             .bind(product_id)
             .fetch_all(pool)
             .await?;
-    Ok(rows.into_iter().collect())
+    // As in `field_decisions`: a kind we no longer know is a hard error, because
+    // silently dropping it would un-settle a fact you already decided.
+    rows.into_iter()
+        .map(|(k, src)| {
+            Ok((
+                k.parse::<ReconcileField>().map_err(anyhow::Error::msg)?,
+                src,
+            ))
+        })
+        .collect()
 }
 
-/// The whole-value facts that reconcile by picking one source (not by merge):
-/// nutrition and ingredients. Allergens and dietary are excluded on purpose —
-/// they're safety-critical and merge by union / tri-state.
-pub const PICKED_FACTS: &[(&str, &str)] =
-    &[("nutrition", "Nutrition"), ("ingredients", "Ingredients")];
+/// The whole-value facts that reconcile by picking one source (not by merge).
+/// Allergens and dietary are excluded on purpose — they're safety-critical and
+/// merge by union / tri-state.
+///
+/// Derived from the field type rather than listed again: a new `Fact` field is
+/// picked up here without anyone remembering to add it.
+pub fn picked_facts() -> impl Iterator<Item = ReconcileField> {
+    ReconcileField::ALL
+        .into_iter()
+        .filter(|f| f.reconciler() == Reconciler::Fact)
+}
 
 /// Combine every source's facts into the one answer to display, honouring any
 /// recorded source pick (0035). Nutrition and ingredients take one source's value
 /// whole — the pick if set and present, else by precedence; allergens union and
 /// dietary tri-state exactly as before (safety — a pick never applies). Pure.
 pub fn merge_facts(by_source: &[SourceFacts], prefs: &FactSourceMap) -> ProductFacts {
-    let panels: Vec<(String, Nutrition)> = by_source
+    let panels: Vec<(Source, Nutrition)> = by_source
         .iter()
-        .filter_map(|s| s.facts.nutrition.clone().map(|n| (s.source.clone(), n)))
+        .filter_map(|s| s.facts.nutrition.clone().map(|n| (s.source, n)))
         .collect();
-    let nutrition = pick_source(&panels, prefs.get("nutrition"))
+    let nutrition = pick_source(&panels, prefs.get(&ReconcileField::Nutrition))
         .cloned()
         .or_else(|| merge_nutrition(panels.clone()));
 
-    let texts: Vec<(String, String)> = by_source
+    let texts: Vec<(Source, String)> = by_source
         .iter()
-        .filter_map(|s| s.facts.ingredients.clone().map(|t| (s.source.clone(), t)))
+        .filter_map(|s| s.facts.ingredients.clone().map(|t| (s.source, t)))
         .collect();
-    let ingredients = pick_source(&texts, prefs.get("ingredients"))
+    let ingredients = pick_source(&texts, prefs.get(&ReconcileField::Ingredients))
         .cloned()
         .or_else(|| merge_ingredients(texts.clone()));
 
     let allergens = merge_allergens(
         by_source
             .iter()
-            .flat_map(|s| {
-                s.facts
-                    .allergens
-                    .iter()
-                    .map(|a| (s.source.clone(), a.clone()))
-            })
+            .flat_map(|s| s.facts.allergens.iter().map(|a| (s.source, a.clone())))
             .collect(),
     );
     let dietary = merge_dietary(
@@ -1251,9 +1270,9 @@ pub fn merge_facts(by_source: &[SourceFacts], prefs: &FactSourceMap) -> ProductF
 
 /// The value from the picked source, if that pick is set and that source actually
 /// has a value here. `None` falls the caller back to precedence.
-fn pick_source<'a, T>(values: &'a [(String, T)], pref: Option<&String>) -> Option<&'a T> {
-    let want = pref?;
-    values.iter().find(|(src, _)| src == want).map(|(_, v)| v)
+fn pick_source<'a, T>(values: &'a [(Source, T)], pref: Option<&Source>) -> Option<&'a T> {
+    let want = *pref?;
+    values.iter().find(|(src, _)| *src == want).map(|(_, v)| v)
 }
 
 /// Facts that reconcile by source-pick and where the sources genuinely disagree,
@@ -1262,15 +1281,15 @@ fn pick_source<'a, T>(values: &'a [(String, T)], pref: Option<&String>) -> Optio
 /// test.
 pub fn fact_divergences(by_source: &[SourceFacts], prefs: &FactSourceMap) -> Vec<FieldDivergence> {
     let mut out = Vec::new();
-    for (field, label) in PICKED_FACTS {
+    for field in picked_facts() {
         // Once a source is picked for this fact, the divergence is settled.
-        if prefs.contains_key(*field) {
+        if prefs.contains_key(&field) {
             continue;
         }
         // Each source's display value for this fact, in precedence order.
-        let offered: Vec<(String, String)> = by_source
+        let offered: Vec<(Source, String)> = by_source
             .iter()
-            .filter_map(|s| fact_display(field, &s.facts).map(|v| (s.source.clone(), v)))
+            .filter_map(|s| fact_display(field, &s.facts).map(|v| (s.source, v)))
             .collect();
         // Only a real disagreement (≥2 distinct values) is worth approving.
         let distinct: BTreeSet<&str> = offered.iter().map(|(_, v)| v.as_str()).collect();
@@ -1285,8 +1304,8 @@ pub fn fact_divergences(by_source: &[SourceFacts], prefs: &FactSourceMap) -> Vec
             .map(|(source, value)| Candidate { source, value })
             .collect();
         out.push(FieldDivergence {
-            field: field.to_string(),
-            label: label.to_string(),
+            field,
+            label: field.label().to_string(),
             current,
             candidates,
         });
@@ -1295,15 +1314,21 @@ pub fn fact_divergences(by_source: &[SourceFacts], prefs: &FactSourceMap) -> Vec
 }
 
 /// One source's display string for a picked fact, or `None` if it has none.
-fn fact_display(field: &str, facts: &ProductFacts) -> Option<String> {
+///
+/// `None` for a field that isn't a picked fact: those reconcile by another
+/// mechanism entirely and have no single value to show in a radio row.
+fn fact_display(field: ReconcileField, facts: &ProductFacts) -> Option<String> {
     match field {
-        "nutrition" => facts.nutrition.as_ref().map(summarize_nutrition),
-        "ingredients" => facts
+        ReconcileField::Nutrition => facts.nutrition.as_ref().map(summarize_nutrition),
+        ReconcileField::Ingredients => facts
             .ingredients
             .as_ref()
             .map(|t| t.trim().to_string())
             .filter(|t| !t.is_empty()),
-        _ => None,
+        ReconcileField::Name
+        | ReconcileField::Brand
+        | ReconcileField::QuantityLabel
+        | ReconcileField::Picture => None,
     }
 }
 
@@ -1316,7 +1341,7 @@ async fn find_or_create_by_barcode(
     barcode: &str,
     name: Option<&str>,
     brand: Option<&str>,
-    source: &str,
+    source: Source,
 ) -> Result<u64> {
     sqlx::query(
         "INSERT INTO products (barcode, name, brand, source, name_source) \
@@ -1344,7 +1369,7 @@ async fn find_or_create_by_barcode(
 /// row, found via its existing listing. Returns the canonical product.
 pub async fn upsert_external(
     pool: &MySqlPool,
-    source: &str,
+    source: Source,
     external_id: &str,
     barcode: Option<&str>,
     fields: &ListingFields<'_>,

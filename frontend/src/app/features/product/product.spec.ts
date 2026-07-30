@@ -4,8 +4,8 @@ import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { LifeApi } from '../../life-api';
-import { AsdaHit, ProductDetail, ShopFind } from '../../models';
-import { Shops } from '../../shop';
+import { AsdaHit, ProductDetail, ShopFind, SourceDocument } from '../../models';
+import { ShopProduct, Shops } from '../../shop';
 import { ProductPage } from './product';
 
 const DETAIL: ProductDetail = {
@@ -338,7 +338,7 @@ describe('ProductPage', () => {
   ];
 
   /** The Waitrose SUMMARY record for a lineNumber, as the WebView returns it. */
-  const waitroseProduct = (externalId: string, barcodes: string[]) => ({
+  const waitroseProduct = (externalId: string, barcodes: string[]): ShopProduct => ({
     source: 'waitrose',
     external_id: externalId,
     name: 'Waitrose Balsamic Vinegar of Modena',
@@ -777,7 +777,9 @@ describe('ProductPage', () => {
   it('reads as a refresh, with when, once the Asda page is already stored', () => {
     const withDoc = {
       ...DETAIL,
-      documents: [{ source: 'asda', kind: 'page', fetched_at: Date.now(), bytes: 1200 }],
+      documents: [
+        { source: 'asda', kind: 'page', fetched_at: Date.now(), bytes: 1200 },
+      ] satisfies SourceDocument[],
     };
     const { fixture, page } = setup(withDoc, undefined, {
       available: true,

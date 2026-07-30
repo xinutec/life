@@ -3,6 +3,7 @@
 
 use life::db;
 use life::products::repo;
+use life::products::source::Source;
 
 #[tokio::test]
 async fn product_cache_against_real_db() {
@@ -155,7 +156,7 @@ async fn external_import_against_real_db() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let (source, ext) = ("waitrose", "TEST062593");
+    let (source, ext) = (Source::Waitrose, "TEST062593");
     sqlx::query("DELETE FROM products WHERE source = ? AND external_id = ?")
         .bind(source)
         .bind(ext)
@@ -185,7 +186,7 @@ async fn external_import_against_real_db() {
     )
     .await
     .unwrap();
-    assert_eq!(p.source.as_deref(), Some("waitrose"));
+    assert_eq!(p.source, Some(Source::Waitrose));
     assert_eq!(p.external_id.as_deref(), Some(ext));
     assert_eq!(p.name.as_deref(), Some("Cravendale Semi-Skimmed Milk"));
     assert!(p.barcode.is_none(), "shop product has no barcode");
@@ -237,4 +238,57 @@ async fn external_import_against_real_db() {
     assert_eq!(p2.id, p.id, "same (source, external_id) → same row");
     assert_eq!(p2.name.as_deref(), Some("Cravendale Whole Milk"));
     assert!(p2.has_image, "re-import preserves the stored image");
+}
+
+#[tokio::test]
+async fn a_stored_source_outside_the_enum_fails_the_read_loudly() {
+    // `Source` decodes by parsing, so a `source` column holding something that
+    // isn't a source is an error on the read rather than a value the rest of the
+    // code has to second-guess. The row stays findable and repairable instead of
+    // arriving as a silent default — the same policy the facts columns follow.
+    //
+    // This also guards the mapping itself: `#[derive(sqlx::Type)]` would declare
+    // these columns as SQL `ENUM` while they are `VARCHAR`, which failed every
+    // read of a real row.
+    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
+        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping unknown-source DB test");
+        return;
+    };
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    let ext = "TESTUNKNOWNSRC";
+    sqlx::query("DELETE FROM products WHERE external_id = ?")
+        .bind(ext)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO products (source, external_id, name) VALUES ('tesco', ?, 'Ghost')")
+        .bind(ext)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let err = repo::get_by_source_external(&pool, Source::Waitrose, ext).await;
+    // Reading it by its own (bogus) source isn't expressible — that is the
+    // point — so read the row the way the catalogue does, by id.
+    assert!(err.is_ok(), "the miss on a real source is just a miss");
+    let id: (u64,) = sqlx::query_as("SELECT id FROM products WHERE external_id = ?")
+        .bind(ext)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let read = repo::get_by_id(&pool, id.0).await;
+    assert!(read.is_err(), "an unknown source must not decode silently");
+    let msg = read.unwrap_err().to_string();
+    assert!(
+        msg.contains("tesco"),
+        "the error names the bad value: {msg}"
+    );
+
+    sqlx::query("DELETE FROM products WHERE external_id = ?")
+        .bind(ext)
+        .execute(&pool)
+        .await
+        .unwrap();
 }

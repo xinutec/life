@@ -139,7 +139,7 @@ pub async fn create_recipe(pool: &MySqlPool, user_id: &str, new: NewRecipe) -> R
         .bind(ing.product_id)
         .bind(ing.quantity)
         .bind(&ing.unit)
-        .bind(i as i32)
+        .bind(i32::try_from(i)?)
         .execute(&mut *tx)
         .await?;
     }
@@ -200,7 +200,7 @@ pub async fn update_recipe(
         .bind(ing.product_id)
         .bind(ing.quantity)
         .bind(&ing.unit)
-        .bind(i as i32)
+        .bind(i32::try_from(i)?)
         .execute(&mut *tx)
         .await?;
     }

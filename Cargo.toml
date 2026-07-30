@@ -3,6 +3,40 @@ name = "life"
 version = "0.1.0"
 edition = "2024"
 
+# Lints the toolchain leaves at `allow` that this crate wants denied. `-D
+# warnings` in scripts/verify.sh then makes each of them a hard failure, so the
+# rule is enforced by the build rather than by remembering it at review time.
+[lints.rust]
+# Nothing here needs it, and a future need should be an argued exception rather
+# than a quiet addition.
+unsafe_code = "forbid"
+# A `pub` item nobody uses is either dead or an unfinished wiring-up; both are
+# worth seeing.
+unreachable_pub = "warn"
+
+[lints.clippy]
+# Debugging leftovers. The app logs through `tracing`; a stray dbg!/println!
+# writes past it and is invisible in production.
+#
+# `print_stderr` is deliberately NOT here: `[lints]` covers every target of the
+# package, and the DB-backed tests announce a skip on stderr — which is the
+# point of them (verify.sh is built around never skipping silently). Denying it
+# would mean 27 waivers to protect `src/`, which contains no prints at all.
+dbg_macro = "deny"
+print_stdout = "deny"
+todo = "deny"
+unimplemented = "deny"
+# Numeric casts that can silently change a value. Money is integer pence and
+# nutrition is f64 from the sources — a truncating `as` in either is a bug that
+# nothing else would catch.
+cast_possible_truncation = "deny"
+cast_precision_loss = "deny"
+cast_sign_loss = "deny"
+cast_lossless = "warn"
+# `==` on floats. Nutrition figures come from two sources and are compared for
+# divergence; exact equality there is a trap.
+float_cmp = "deny"
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 axum = "0.8"

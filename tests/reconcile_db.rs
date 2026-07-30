@@ -7,7 +7,8 @@ use std::collections::HashMap;
 
 use life::db;
 use life::products::repo::{self, Listing};
-use life::products::types::Product;
+use life::products::source::Source;
+use life::products::types::{Choice, FieldChoice, Product, ReconcileField};
 
 fn product(name: &str, brand: &str, quantity: &str) -> Product {
     Product {
@@ -16,17 +17,17 @@ fn product(name: &str, brand: &str, quantity: &str) -> Product {
         name: Some(name.into()),
         brand: Some(brand.into()),
         quantity_label: Some(quantity.into()),
-        source: Some("off".into()),
+        source: Some(Source::Off),
         external_id: None,
-        name_source: Some("off".into()),
+        name_source: Some(Source::Off),
         image_source: None,
         has_image: false,
     }
 }
 
-fn listing(source: &str, name: &str, brand: &str, quantity: &str) -> Listing {
+fn listing(source: Source, name: &str, brand: &str, quantity: &str) -> Listing {
     Listing {
-        source: source.into(),
+        source,
         external_id: format!("{source}-cin"),
         url: None,
         raw_name: Some(name.into()),
@@ -40,15 +41,18 @@ fn listing(source: &str, name: &str, brand: &str, quantity: &str) -> Listing {
 fn divergences_flag_each_field_a_source_disagrees_on() {
     let p = product("Off Crowd Name", "OFF Brand", "500g");
     // Asda disagrees on all three fields (name, brand, and pack-size casing).
-    let asda = listing("asda", "Clean Asda Name", "Asda Brand", "500G");
+    let asda = listing(Source::Asda, "Clean Asda Name", "Asda Brand", "500G");
     let divs = repo::divergences(&p, &[asda], &HashMap::new());
 
     let fields: Vec<&str> = divs.iter().map(|d| d.field.as_str()).collect();
     assert_eq!(fields, vec!["name", "brand", "quantity_label"]);
-    let brand = divs.iter().find(|d| d.field == "brand").unwrap();
+    let brand = divs
+        .iter()
+        .find(|d| d.field == ReconcileField::Brand)
+        .unwrap();
     assert_eq!(brand.current.as_deref(), Some("OFF Brand"));
     assert_eq!(brand.candidates.len(), 1);
-    assert_eq!(brand.candidates[0].source, "asda");
+    assert_eq!(brand.candidates[0].source, Source::Asda);
     assert_eq!(brand.candidates[0].value, "Asda Brand");
 }
 
@@ -56,7 +60,7 @@ fn divergences_flag_each_field_a_source_disagrees_on() {
 fn a_source_that_agrees_is_not_a_divergence() {
     let p = product("Name", "Brand", "500g");
     // Same brand, same pack; only the name differs.
-    let asda = listing("asda", "A Different Name", "Brand", "500g");
+    let asda = listing(Source::Asda, "A Different Name", "Brand", "500g");
     let divs = repo::divergences(&p, &[asda], &HashMap::new());
     let fields: Vec<&str> = divs.iter().map(|d| d.field.as_str()).collect();
     assert_eq!(fields, vec!["name"], "agreeing fields raise no divergence");
@@ -65,24 +69,24 @@ fn a_source_that_agrees_is_not_a_divergence() {
 #[test]
 fn a_settled_field_stays_quiet_until_the_value_set_changes() {
     let p = product("Name", "OFF Brand", "500g");
-    let asda = listing("asda", "Name", "Asda Brand", "500g");
+    let asda = listing(Source::Asda, "Name", "Asda Brand", "500g");
     // Decision recorded the exact value set that's on the table now → suppressed.
     let mut decided: repo::DecisionMap = HashMap::new();
     decided.insert(
-        "brand".into(),
+        ReconcileField::Brand,
         vec!["Asda Brand".into(), "OFF Brand".into()],
     );
     let divs = repo::divergences(&p, std::slice::from_ref(&asda), &decided);
     assert!(
-        divs.iter().all(|d| d.field != "brand"),
+        divs.iter().all(|d| d.field != ReconcileField::Brand),
         "a settled field is suppressed while its value set is unchanged"
     );
 
     // A source changes its value → the set differs → it resurfaces.
-    let asda2 = listing("asda", "Name", "Asda Brand v2", "500g");
+    let asda2 = listing(Source::Asda, "Name", "Asda Brand v2", "500g");
     let divs = repo::divergences(&p, &[asda2], &decided);
     assert!(
-        divs.iter().any(|d| d.field == "brand"),
+        divs.iter().any(|d| d.field == ReconcileField::Brand),
         "a changed source value re-surfaces the divergence"
     );
 }
@@ -114,7 +118,7 @@ async fn reconcile_adopts_keeps_and_settles_against_the_db() {
     // OFF first: seeds the canonical name/brand/pack.
     let p = repo::upsert_external(
         &pool,
-        "off",
+        Source::Off,
         off_ext,
         Some(barcode),
         &repo::ListingFields {
@@ -130,7 +134,7 @@ async fn reconcile_adopts_keeps_and_settles_against_the_db() {
     // Asda lists the same barcode, disagreeing on all three fields.
     repo::upsert_external(
         &pool,
-        "asda",
+        Source::Asda,
         asda_ext,
         Some(barcode),
         &repo::ListingFields {
@@ -160,19 +164,19 @@ async fn reconcile_adopts_keeps_and_settles_against_the_db() {
         &pool,
         p.id,
         &[
-            repo::FieldChoice {
-                field: "brand".into(),
-                choice: "asda".into(),
+            FieldChoice {
+                field: ReconcileField::Brand,
+                choice: Choice::Asda,
                 value: None,
             },
-            repo::FieldChoice {
-                field: "quantity_label".into(),
-                choice: "asda".into(),
+            FieldChoice {
+                field: ReconcileField::QuantityLabel,
+                choice: Choice::Asda,
                 value: None,
             },
-            repo::FieldChoice {
-                field: "name".into(),
-                choice: repo::KEEP.into(),
+            FieldChoice {
+                field: ReconcileField::Name,
+                choice: Choice::Keep,
                 value: None,
             },
         ],
@@ -198,7 +202,7 @@ async fn reconcile_adopts_keeps_and_settles_against_the_db() {
     // Asda changes its brand → that divergence returns, the settled ones stay quiet.
     repo::upsert_external(
         &pool,
-        "asda",
+        Source::Asda,
         asda_ext,
         Some(barcode),
         &repo::ListingFields {
@@ -249,7 +253,7 @@ async fn our_own_name_wins_over_every_source_and_survives_a_refresh() {
     // Both sources spell it wrong: OFF a crowd title, Asda a genuine typo.
     repo::upsert_external(
         &pool,
-        "off",
+        Source::Off,
         off_ext,
         Some(barcode),
         &repo::ListingFields {
@@ -261,7 +265,7 @@ async fn our_own_name_wins_over_every_source_and_survives_a_refresh() {
     .unwrap();
     let p = repo::upsert_external(
         &pool,
-        "asda",
+        Source::Asda,
         asda_ext,
         Some(barcode),
         &repo::ListingFields {
@@ -276,9 +280,9 @@ async fn our_own_name_wins_over_every_source_and_survives_a_refresh() {
     repo::reconcile(
         &pool,
         p.id,
-        &[repo::FieldChoice {
-            field: "name".into(),
-            choice: repo::USER.into(),
+        &[FieldChoice {
+            field: ReconcileField::Name,
+            choice: Choice::User,
             value: Some("Oatly Barista Edition 1L".into()),
         }],
     )
@@ -287,7 +291,7 @@ async fn our_own_name_wins_over_every_source_and_survives_a_refresh() {
 
     let after = repo::get_by_id(&pool, p.id).await.unwrap().unwrap();
     assert_eq!(after.name.as_deref(), Some("Oatly Barista Edition 1L"));
-    assert_eq!(after.name_source.as_deref(), Some("user"), "marked our own");
+    assert_eq!(after.name_source, Some(Source::User), "marked our own");
 
     // Our own name settled the divergence — no nagging even though both shops
     // still disagree.
@@ -296,12 +300,12 @@ async fn our_own_name_wins_over_every_source_and_survives_a_refresh() {
     assert!(
         repo::divergences(&after, &listings, &decisions)
             .iter()
-            .all(|d| d.field != "name"),
+            .all(|d| d.field != ReconcileField::Name),
         "our own name settles the name divergence"
     );
 
     // The shops' honest spellings are untouched — we corrected our layer, not theirs.
-    let asda = listings.iter().find(|l| l.source == "asda").unwrap();
+    let asda = listings.iter().find(|l| l.source == Source::Asda).unwrap();
     assert_eq!(
         asda.raw_name.as_deref(),
         Some("Oalty Oat Drink Barista Edition 1L"),
@@ -311,7 +315,7 @@ async fn our_own_name_wins_over_every_source_and_survives_a_refresh() {
     // Re-pulling a shop must never clobber our own name.
     repo::upsert_external(
         &pool,
-        "asda",
+        Source::Asda,
         asda_ext,
         Some(barcode),
         &repo::ListingFields {
@@ -355,7 +359,7 @@ async fn our_own_brand_and_pack_win_over_sources_and_survive_a_refresh() {
     // that started this: no other source disagrees, so only our layer can fix it.
     let p = repo::upsert_external(
         &pool,
-        "asda",
+        Source::Asda,
         asda_ext,
         Some(barcode),
         &repo::ListingFields {
@@ -373,14 +377,14 @@ async fn our_own_brand_and_pack_win_over_sources_and_survive_a_refresh() {
         &pool,
         p.id,
         &[
-            repo::FieldChoice {
-                field: "brand".into(),
-                choice: repo::USER.into(),
+            FieldChoice {
+                field: ReconcileField::Brand,
+                choice: Choice::User,
                 value: Some("Oatly".into()),
             },
-            repo::FieldChoice {
-                field: "quantity_label".into(),
-                choice: repo::USER.into(),
+            FieldChoice {
+                field: ReconcileField::QuantityLabel,
+                choice: Choice::User,
                 value: Some("250ml".into()),
             },
         ],
@@ -403,12 +407,12 @@ async fn our_own_brand_and_pack_win_over_sources_and_survive_a_refresh() {
     assert!(
         repo::divergences(&after, &listings, &decisions)
             .iter()
-            .all(|d| d.field != "brand" && d.field != "quantity_label"),
+            .all(|d| d.field != ReconcileField::Brand && d.field != ReconcileField::QuantityLabel),
         "our own brand/pack settle their divergences"
     );
 
     // Asda's listing keeps its honest casing.
-    let asda = listings.iter().find(|l| l.source == "asda").unwrap();
+    let asda = listings.iter().find(|l| l.source == Source::Asda).unwrap();
     assert_eq!(asda.quantity_label.as_deref(), Some("250ML"));
     assert_eq!(asda.brand.as_deref(), Some("asda brand"));
 
@@ -416,7 +420,7 @@ async fn our_own_brand_and_pack_win_over_sources_and_survive_a_refresh() {
     // must not clobber our own brand/pack.
     repo::upsert_external(
         &pool,
-        "asda",
+        Source::Asda,
         asda_ext,
         Some(barcode),
         &repo::ListingFields {
@@ -460,7 +464,7 @@ async fn a_barcodeless_source_refresh_keeps_our_own_brand() {
     // A barcodeless product whose single owner refreshes name + brand on re-import.
     let p = repo::upsert_external(
         &pool,
-        "waitrose",
+        Source::Waitrose,
         ext,
         None,
         &repo::ListingFields {
@@ -476,9 +480,9 @@ async fn a_barcodeless_source_refresh_keeps_our_own_brand() {
     repo::reconcile(
         &pool,
         p.id,
-        &[repo::FieldChoice {
-            field: "brand".into(),
-            choice: repo::USER.into(),
+        &[FieldChoice {
+            field: ReconcileField::Brand,
+            choice: Choice::User,
             value: Some("Our Brand".into()),
         }],
     )
@@ -489,7 +493,7 @@ async fn a_barcodeless_source_refresh_keeps_our_own_brand() {
     // the brand is protected (ours).
     let after = repo::upsert_external(
         &pool,
-        "waitrose",
+        Source::Waitrose,
         ext,
         None,
         &repo::ListingFields {
@@ -532,7 +536,7 @@ async fn a_barcodeless_source_refresh_keeps_our_own_name() {
     // refreshes a single owner's name on re-import.
     let p = repo::upsert_external(
         &pool,
-        "waitrose",
+        Source::Waitrose,
         ext,
         None,
         &repo::ListingFields {
@@ -546,9 +550,9 @@ async fn a_barcodeless_source_refresh_keeps_our_own_name() {
     repo::reconcile(
         &pool,
         p.id,
-        &[repo::FieldChoice {
-            field: "name".into(),
-            choice: repo::USER.into(),
+        &[FieldChoice {
+            field: ReconcileField::Name,
+            choice: Choice::User,
             value: Some("Our Corrected Name".into()),
         }],
     )
@@ -559,7 +563,7 @@ async fn a_barcodeless_source_refresh_keeps_our_own_name() {
     // refreshes the single owner's name, but our own name is protected.
     let after = repo::upsert_external(
         &pool,
-        "waitrose",
+        Source::Waitrose,
         ext,
         None,
         &repo::ListingFields {
@@ -579,7 +583,7 @@ async fn a_barcodeless_source_refresh_keeps_our_own_name() {
     assert_eq!(
         listings
             .iter()
-            .find(|l| l.source == "waitrose")
+            .find(|l| l.source == Source::Waitrose)
             .unwrap()
             .raw_name
             .as_deref(),

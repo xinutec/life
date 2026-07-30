@@ -13,7 +13,7 @@ import { Feedback } from "../../shared/feedback";
 import { isNotFound } from "../../shared/api-error";
 import { ListState } from "../../shared/list-state";
 import { LifeApi } from "../../life-api";
-import { CoverageQuery } from "../../models";
+import { CoverageQuery, Source } from "../../models";
 import { sourceLabel } from "../../shared/sources";
 import { ProductThumb } from "../../product-thumb";
 import { ShoppingDoc, ShoppingStore } from "../../sync/shopping-store";
@@ -63,7 +63,7 @@ export class Shopping {
   // that distinction, because a shopping list is exactly where a confident
   // wrong answer would send you to the wrong shop.
 
-  private readonly coverage = signal<Map<string, string[]>>(new Map());
+  private readonly coverage = signal<Map<string, Source[]>>(new Map());
   /** Whether the answer is missing because we couldn't ask, rather than because
    *  nothing is known. Shown, so an offline blank doesn't read as "nowhere". */
   private readonly coverageUnavailable = signal(false);
@@ -99,7 +99,7 @@ export class Shopping {
   );
 
   /** The shops known to sell this row, for its own line. */
-  shopsFor(it: ShoppingDoc): string[] {
+  shopsFor(it: ShoppingDoc): Source[] {
     return this.coverage().get(it.ulid) ?? [];
   }
 
@@ -116,7 +116,7 @@ export class Shopping {
     if (!wanted.length || this.coverageUnavailable()) return null;
     const cover = this.coverage();
     const asked = wanted.filter((it) => cover.has(it.ulid));
-    const counts = new Map<string, number>();
+    const counts = new Map<Source, number>();
     for (const it of asked) {
       for (const source of cover.get(it.ulid) ?? []) {
         counts.set(source, (counts.get(source) ?? 0) + 1);

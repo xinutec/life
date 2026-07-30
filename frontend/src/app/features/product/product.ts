@@ -7,7 +7,16 @@ import { MatInputModule } from '@angular/material/input';
 import { MatRadioModule } from '@angular/material/radio';
 
 import { LifeApi } from '../../life-api';
-import { Claim, ProductDetail, ProductListing, SeenListing } from '../../models';
+import {
+  Choice,
+  Claim,
+  FieldChoice,
+  ProductDetail,
+  ProductListing,
+  ReconcileField,
+  SeenListing,
+  Source,
+} from '../../models';
 import { assertNever, classifyApiError, onlineHint } from '../../shared/api-error';
 import { Feedback } from '../../shared/feedback';
 import { ListState } from '../../shared/list-state';
@@ -25,7 +34,7 @@ interface BuyRow {
   label: string;
   /** The source's own id for the listing — what a refresh re-reads. */
   externalId: string;
-  source: string;
+  source: Source;
   url: string | null;
   price: string | null;
   perUnit: string | null;
@@ -67,13 +76,13 @@ type ShopLookup = 'idle' | 'searching' | 'found' | 'none' | 'unknown' | 'error';
 /** The shops a product can be looked up at, in the order they're offered. Both
  *  are answerable from memory anywhere; only Asda can be searched afresh without
  *  the app (see [[find]]). */
-const FINDABLE_SOURCES = ['asda', 'waitrose'];
+const FINDABLE_SOURCES: Source[] = ['asda', 'waitrose'];
 
 /** Shops the app's WebView can walk itself. Keyed by source id so a lookup, a
  *  refresh and the picker all reach the same provider. */
 const BRIDGE_PROVIDERS: ShopProvider[] = [WAITROSE];
 
-function bridgeProvider(source: string): ShopProvider | undefined {
+function bridgeProvider(source: Source): ShopProvider | undefined {
   return BRIDGE_PROVIDERS.find((p) => p.id === source);
 }
 
@@ -82,7 +91,7 @@ function bridgeProvider(source: string): ShopProvider | undefined {
  *  shop. `product` is set only in the last case — it's the full record already in
  *  hand, so adding it costs no second page load. */
 interface ShopHit {
-  source: string;
+  source: Source;
   external_id: string;
   name: string;
   brand: string | null;
@@ -94,7 +103,7 @@ interface ShopHit {
 
 /** One shop's lookup as the screen renders it. */
 interface ShopLookupRow {
-  source: string;
+  source: Source;
   label: string;
   state: ShopLookup;
   /** What a hunt is doing right now ("2 of 8") — each step is a page load in a
@@ -107,7 +116,7 @@ interface ShopLookupRow {
   checked: number;
 }
 
-function blankLookup(source: string): ShopLookupRow {
+function blankLookup(source: Source): ShopLookupRow {
   return {
     source,
     label: sourceLabel(source),
@@ -122,7 +131,7 @@ function blankLookup(source: string): ShopLookupRow {
 
 /** A listing's identity — what joins a price to the listing that quoted it, and
  *  what keys a row. `(source, external_id)` is the listing's unique key. */
-function listingKey(l: { source: string; external_id: string }): string {
+function listingKey(l: { source: Source; external_id: string }): string {
   return `${l.source}/${l.external_id}`;
 }
 
@@ -266,7 +275,7 @@ export class ProductPage {
     );
   });
 
-  private patchLookup(source: string, patch: Partial<ShopLookupRow>): void {
+  private patchLookup(source: Source, patch: Partial<ShopLookupRow>): void {
     const state = this.lookupState();
     this.lookupState.set({ ...state, [source]: { ...(state[source] ?? blankLookup(source)), ...patch } });
   }
@@ -279,7 +288,7 @@ export class ProductPage {
    *  evidence of identity. When it can't reach the shop at all it says so
    *  (`searched: false`) rather than reporting an absence it never checked, and
    *  the hunt below takes over if this device can do the looking. */
-  find(source: string): void {
+  find(source: Source): void {
     this.patchLookup(source, { state: 'searching', hit: null, progress: null, checked: 0 });
     this.api.findAtShop(this.id(), source).subscribe({
       next: (found) => {
@@ -307,7 +316,7 @@ export class ProductPage {
    *  is reported to the backend on the way. The eight pages a fruitless hunt
    *  costs are then eight lookups nobody has to pay for again, for this product
    *  or any other. */
-  private async hunt(source: string): Promise<void> {
+  private async hunt(source: Source): Promise<void> {
     const provider = bridgeProvider(source);
     const d = this.detail();
     const barcode = d?.product.barcode;
@@ -381,7 +390,7 @@ export class ProductPage {
    *  a lookup the user asked for, so a failed cache write must not fail their
    *  hunt — but it is reported, because a cache that silently never writes looks
    *  exactly like one that works. */
-  private remember(source: string, listings: SeenListing[]): void {
+  private remember(source: Source, listings: SeenListing[]): void {
     if (!listings.length) return;
     this.api.rememberShopListings(source, listings).subscribe({
       error: (e: unknown) => console.warn(`[shop:${source}] could not remember what we saw`, e),
@@ -429,7 +438,7 @@ export class ProductPage {
   /** Whether a listed shop can be re-read from this device. Asda always (the
    *  server does it); the rest only in the app, whose WebView is the only thing
    *  that can see their pages. */
-  canRefresh(source: string): boolean {
+  canRefresh(source: Source): boolean {
     return source === 'asda' || (this.shops.available && !!bridgeProvider(source));
   }
 
@@ -470,7 +479,7 @@ export class ProductPage {
   }
 
   private importListing(
-    source: string,
+    source: Source,
     body: Parameters<LifeApi['importProduct']>[0],
     ok: string,
     bad: string,
@@ -575,7 +584,7 @@ export class ProductPage {
   saveDetails(): void {
     if (this.reconciling()) return;
     const p = this.detail()?.product;
-    const decisions: { field: string; choice: string; value: string }[] = [];
+    const decisions: FieldChoice[] = [];
     const brand = this.brandDraft().trim();
     if (brand && brand !== (p?.brand ?? '')) {
       decisions.push({ field: 'brand', choice: 'user', value: brand });
@@ -605,8 +614,8 @@ export class ProductPage {
 
   // --- Reconciliation: approve where the sources disagree with the product ---
 
-  /** The "keep the current value" choice — mirrors the backend's KEEP. */
-  static readonly KEEP = 'keep';
+  /** The "keep the current value" choice — the backend's `Choice::Keep`. */
+  static readonly KEEP: Choice = 'keep';
 
   /** Fields where a source disagrees with the canonical product and you haven't
    *  decided yet. Empty (so the section is hidden) when everything agrees. */
@@ -614,19 +623,19 @@ export class ProductPage {
 
   /** Your per-field pick, keyed by field. Absent → "keep" (the safe default:
    *  nothing changes unless you choose a source). */
-  readonly choices = signal<Record<string, string>>({});
+  readonly choices = signal<Partial<Record<ReconcileField, Choice>>>({});
   readonly reconciling = signal(false);
 
-  choiceFor(field: string): string {
+  choiceFor(field: ReconcileField): Choice {
     return this.choices()[field] ?? ProductPage.KEEP;
   }
 
-  setChoice(field: string, choice: string): void {
+  setChoice(field: ReconcileField, choice: Choice): void {
     this.choices.update((c) => ({ ...c, [field]: choice }));
   }
 
   /** A source id → its display name, for the candidate labels. */
-  label(source: string): string {
+  label(source: Source): string {
     return sourceLabel(source);
   }
 
@@ -637,7 +646,10 @@ export class ProductPage {
   applyReconcile(): void {
     const fields = this.reconFields();
     if (!fields.length || this.reconciling()) return;
-    const decisions = fields.map((f) => ({ field: f.field, choice: this.choiceFor(f.field) }));
+    const decisions: FieldChoice[] = fields.map((f) => ({
+      field: f.field,
+      choice: this.choiceFor(f.field),
+    }));
     this.reconciling.set(true);
     this.api.reconcile(this.id(), decisions).subscribe({
       next: (d) => {
@@ -846,7 +858,7 @@ export class ProductPage {
           source: s.source,
           value: s.facts.dietary.find((f) => f.flag === flag)?.value,
         }))
-        .filter((x): x is { source: string; value: Claim } => !!x.value);
+        .filter((x): x is { source: Source; value: Claim } => !!x.value);
       if (new Set(per.map((x) => x.value)).size > 1) {
         out.push({
           label: humanize(flag),

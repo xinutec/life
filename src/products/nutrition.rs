@@ -17,6 +17,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use ts_rs::TS;
 
+use super::source::Source;
+
 /// The nutrition panel, per `basis`. Every figure is optional — a source declares
 /// whatever it has. `None` throughout + empty `extra` means "no panel".
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -245,21 +247,21 @@ pub fn merge_dietary(claims: Vec<DietaryFlag>) -> Vec<DietaryFlag> {
 ///
 /// Input is `(source, panel)` pairs in any order; a source not in the precedence
 /// list sorts last. Pure — the unit under test.
-pub fn merge_nutrition(panels: Vec<(String, Nutrition)>) -> Option<Nutrition> {
+pub fn merge_nutrition(panels: Vec<(Source, Nutrition)>) -> Option<Nutrition> {
     panels
         .into_iter()
-        .min_by_key(|(source, _)| fact_rank(source))
+        .min_by_key(|(source, _)| fact_rank(*source))
         .map(|(_, n)| n)
 }
 
 /// Merge several sources' ingredient texts into the one to show: the
 /// highest-precedence source's, whole (same reasoning as `merge_nutrition` — you
 /// don't splice two ingredient lists together). Pure.
-pub fn merge_ingredients(texts: Vec<(String, String)>) -> Option<String> {
+pub fn merge_ingredients(texts: Vec<(Source, String)>) -> Option<String> {
     texts
         .into_iter()
         .filter(|(_, t)| !t.trim().is_empty())
-        .min_by_key(|(source, _)| fact_rank(source))
+        .min_by_key(|(source, _)| fact_rank(*source))
         .map(|(_, t)| t)
 }
 
@@ -273,7 +275,7 @@ pub fn merge_ingredients(texts: Vec<(String, String)>) -> Option<String> {
 ///
 /// Input is `(source, allergen)` pairs; the result has one entry per allergen,
 /// sorted. Pure — the unit under test.
-pub fn merge_allergens(claims: Vec<(String, Allergen)>) -> Vec<Allergen> {
+pub fn merge_allergens(claims: Vec<(Source, Allergen)>) -> Vec<Allergen> {
     let mut by_name: BTreeMap<String, Presence> = BTreeMap::new();
     for (_, a) in &claims {
         // `Presence` is ordered by severity, so "the more severe wins" is a max.
@@ -292,8 +294,8 @@ pub fn merge_allergens(claims: Vec<(String, Allergen)>) -> Vec<Allergen> {
 /// Rank of a fact source (lower wins), reusing the canonical-name precedence so
 /// facts follow the same "retailer over crowd" order. An unlisted source sorts
 /// last, so it only ever fills a gap.
-pub fn fact_rank(source: &str) -> usize {
-    crate::products::source::name_rank(source).unwrap_or(usize::MAX)
+pub fn fact_rank(source: Source) -> usize {
+    source.name_rank().unwrap_or(usize::MAX)
 }
 
 /// A one-line summary of a nutrition panel — the headline figures, per basis —
@@ -328,7 +330,9 @@ pub fn summarize_nutrition(n: &Nutrition) -> String {
 /// Format a nutrition figure without a trailing ".0" (so 3.0 → "3", 3.4 → "3.4").
 fn trim_num(v: f64) -> String {
     if v.fract() == 0.0 {
-        format!("{}", v as i64)
+        // Formatted, not cast: `as i64` would silently truncate a figure too
+        // large for i64, and this only ever produces a display string.
+        format!("{v:.0}")
     } else {
         format!("{v}")
     }

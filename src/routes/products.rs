@@ -9,8 +9,10 @@ use serde::Deserialize;
 
 use crate::error::AppError;
 use crate::products::prices::PriceInput;
+use crate::products::source::Source;
+use crate::products::types::{Choice, FieldChoice, ReconcileField};
 use crate::products::types::{Product, ProductDetail, ProductListing, ProductReconciliation};
-use crate::products::{asda, brandbank, off, repo, shop_cache, source};
+use crate::products::{asda, brandbank, off, repo, shop_cache};
 use crate::session::AuthUser;
 use crate::state::AppState;
 
@@ -114,7 +116,7 @@ pub async fn lookup(
     repo::upsert_listing(
         &app.pool,
         product.id,
-        "off",
+        Source::Off,
         &barcode,
         &repo::ListingFields {
             raw_name: found.name.as_deref(),
@@ -130,7 +132,7 @@ pub async fn lookup(
     .await?;
     // Store the nutrition/ingredients/allergens/dietary facts from the same OFF
     // response, attached to the canonical product.
-    repo::store_facts(&app.pool, product.id, &found.facts, "off").await?;
+    repo::store_facts(&app.pool, product.id, &found.facts, Source::Off).await?;
     // Seed the canonical name from the best-ranked source if the product had
     // none yet (fill-if-empty). It never switches an existing name: a source
     // that disagrees is surfaced as a divergence to approve, not applied here.
@@ -191,8 +193,9 @@ pub async fn set_image(
 /// already-normalized fields; the backend stays source-agnostic.
 #[derive(serde::Deserialize)]
 pub struct ImportProduct {
-    /// Registered source id ('waitrose', …). See products::source.
-    pub source: String,
+    /// The shop this listing came from. Only a shop may be imported; an
+    /// unknown id is refused by deserialization, before any of this runs.
+    pub source: Source,
     /// Source-scoped id (e.g. a Waitrose lineNumber).
     pub external_id: String,
     pub name: String,
@@ -219,12 +222,12 @@ pub async fn import(
     AuthUser(_user): AuthUser,
     Json(body): Json<ImportProduct>,
 ) -> Result<Json<Product>, AppError> {
-    let Some(src) = source::importable(&body.source) else {
+    if !body.source.is_shop() {
         return Err(AppError::BadRequest(format!(
-            "unknown import source: {}",
+            "{} is not a shop to import from",
             body.source
         )));
-    };
+    }
     let ext = body.external_id.trim();
     if ext.is_empty()
         || ext.len() > 64
@@ -261,7 +264,7 @@ pub async fn import(
     }
     let product = repo::upsert_external(
         &app.pool,
-        &body.source,
+        body.source,
         ext,
         barcode,
         &repo::ListingFields {
@@ -277,7 +280,7 @@ pub async fn import(
     // Optional price: append an observation to this listing's history. Best-effort
     // relative to the import — a missing listing id (shouldn't happen) just skips it.
     if let Some(price) = &body.price
-        && let Some(lid) = repo::listing_id(&app.pool, &body.source, ext).await?
+        && let Some(lid) = repo::listing_id(&app.pool, body.source, ext).await?
     {
         repo::record_price(&app.pool, lid, price).await?;
         tracing::info!(source = %body.source, external_id = %ext, amount_minor = price.amount_minor, "price recorded");
@@ -285,12 +288,13 @@ pub async fn import(
 
     // Optional image: SSRF-gated against the source's host allowlist, fetched
     // from the source CDN. A failed fetch just leaves the row image-less.
+    let hosts = body.source.image_hosts();
     if let Some(url) = body.image_url.as_deref().filter(|s| !s.is_empty())
-        && !src.image_hosts.is_empty()
-        && let Some((bytes, mime)) = off::fetch_image_from(url, src.image_hosts).await?
+        && !hosts.is_empty()
+        && let Some((bytes, mime)) = off::fetch_image_from(url, hosts).await?
     {
         repo::set_image_by_id(&app.pool, product.id, &bytes, &mime).await?;
-        repo::set_image_provenance(&app.pool, product.id, &body.source).await?;
+        repo::set_image_provenance(&app.pool, product.id, body.source).await?;
         return repo::get_by_id(&app.pool, product.id)
             .await?
             .map(Json)
@@ -342,7 +346,7 @@ async fn build_detail(pool: &sqlx::MySqlPool, id: u64) -> Result<ProductDetail, 
             url: l
                 .url
                 .clone()
-                .or_else(|| source::listing_url(&l.source, &l.external_id)),
+                .or_else(|| l.source.listing_url(&l.external_id)),
             source: l.source,
             external_id: l.external_id,
             raw_name: l.raw_name,
@@ -362,15 +366,6 @@ async fn build_detail(pool: &sqlx::MySqlPool, id: u64) -> Result<ProductDetail, 
 /// One field's decision, as the reconcile UI sends it: adopt a source's value
 /// (`choice` = source id), keep the current one (`choice` = "keep"), or set our
 /// own typed value (`choice` = "user", with `value`).
-#[derive(serde::Deserialize)]
-pub struct ReconcileChoice {
-    pub field: String,
-    pub choice: String,
-    /// The typed value, when `choice` == "user".
-    #[serde(default)]
-    pub value: Option<String>,
-}
-
 /// POST /api/products/id/{id}/reconcile → settle field disagreements between the
 /// product's sources and its canonical row. Each decision either adopts a
 /// source's value or keeps the current one; either way the divergence is marked
@@ -380,7 +375,7 @@ pub async fn reconcile(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
     Path(id): Path<u64>,
-    Json(body): Json<Vec<ReconcileChoice>>,
+    Json(body): Json<Vec<FieldChoice>>,
 ) -> Result<Json<ProductDetail>, AppError> {
     // 404 before touching anything if the product doesn't exist.
     if repo::get_by_id(&app.pool, id).await?.is_none() {
@@ -391,20 +386,12 @@ pub async fn reconcile(
     // value copy. Split it out and handle it here; the rest is a plain DB reconcile.
     let (picture, scalar): (Vec<_>, Vec<_>) = body
         .into_iter()
-        .partition(|c| c.field == repo::PICTURE_FIELD);
+        .partition(|c| c.field == ReconcileField::Picture);
     let total = picture.len() + scalar.len();
     for c in &picture {
         apply_picture_choice(&app.pool, id, c).await?;
     }
-    let choices: Vec<repo::FieldChoice> = scalar
-        .into_iter()
-        .map(|c| repo::FieldChoice {
-            field: c.field,
-            choice: c.choice,
-            value: c.value,
-        })
-        .collect();
-    repo::reconcile(&app.pool, id, &choices)
+    repo::reconcile(&app.pool, id, &scalar)
         .await
         .map_err(|e| AppError::BadRequest(e.to_string()))?;
     tracing::info!(product = id, decisions = total, "product reconciled");
@@ -419,35 +406,41 @@ pub async fn reconcile(
 async fn apply_picture_choice(
     pool: &sqlx::MySqlPool,
     id: u64,
-    c: &ReconcileChoice,
+    c: &FieldChoice,
 ) -> Result<(), AppError> {
-    if c.choice == repo::USER {
-        return Err(AppError::BadRequest(
-            "a picture is uploaded, not typed".into(),
-        ));
-    }
-    if c.choice != repo::KEEP {
-        let listings = repo::listings_for(pool, id).await?;
-        let url = listings
-            .iter()
-            .find(|l| l.source == c.choice)
-            .and_then(|l| l.image_url.as_deref())
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| {
-                AppError::BadRequest(format!("source {} offers no picture to adopt", c.choice))
+    match c.choice {
+        Choice::User => {
+            return Err(AppError::BadRequest(
+                "a picture is uploaded, not typed".into(),
+            ));
+        }
+        // Keep: nothing to fetch, just settle below.
+        Choice::Keep => {}
+        adopt => {
+            let source = adopt
+                .source()
+                .ok_or_else(|| AppError::BadRequest(format!("{adopt} is not a source")))?;
+            let listings = repo::listings_for(pool, id).await?;
+            let url = listings
+                .iter()
+                .find(|l| l.source == source)
+                .and_then(|l| l.image_url.as_deref())
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| {
+                    AppError::BadRequest(format!("source {source} offers no picture to adopt"))
+                })?;
+            let hosts = source.image_hosts();
+            if hosts.is_empty() {
+                return Err(AppError::BadRequest(format!(
+                    "source {source} carries no adoptable picture"
+                )));
+            }
+            let (bytes, mime) = off::fetch_image_from(url, hosts).await?.ok_or_else(|| {
+                AppError::BadRequest("the source's picture host is not allowed".into())
             })?;
-        let hosts = source::image_hosts(&c.choice).filter(|h| !h.is_empty());
-        let Some(hosts) = hosts else {
-            return Err(AppError::BadRequest(format!(
-                "source {} carries no adoptable picture",
-                c.choice
-            )));
-        };
-        let (bytes, mime) = off::fetch_image_from(url, hosts).await?.ok_or_else(|| {
-            AppError::BadRequest("the source's picture host is not allowed".into())
-        })?;
-        repo::set_image_by_id(pool, id, &bytes, &mime).await?;
-        repo::set_image_provenance(pool, id, &c.choice).await?;
+            repo::set_image_by_id(pool, id, &bytes, &mime).await?;
+            repo::set_image_provenance(pool, id, source).await?;
+        }
     }
     // Settle AFTER any change, so the recorded set reflects the new provenance.
     repo::settle_picture(pool, id).await?;
@@ -520,9 +513,12 @@ pub async fn find_at_shop(
     AuthUser(_user): AuthUser,
     Path((id, source)): Path<(u64, String)>,
 ) -> Result<Json<ShopFind>, AppError> {
-    if source::importable(&source).is_none() {
-        return Err(AppError::BadRequest(format!("unknown shop: {source}")));
-    }
+    // A path segment is a client's string until it parses; after this line the
+    // rest of the handler cannot be looking at a shop that doesn't exist.
+    let source = match source.parse::<Source>() {
+        Ok(s) if s.is_shop() => s,
+        _ => return Err(AppError::BadRequest(format!("unknown shop: {source}"))),
+    };
     let product = repo::get_by_id(&app.pool, id)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -532,7 +528,7 @@ pub async fn find_at_shop(
         ));
     };
 
-    if let Some(cached) = shop_cache::find_by_barcode(&app.pool, &source, &barcode).await? {
+    if let Some(cached) = shop_cache::find_by_barcode(&app.pool, source, &barcode).await? {
         return Ok(Json(ShopFind {
             hit: Some(cached_as_hit(cached)),
             from_cache: true,
@@ -543,7 +539,7 @@ pub async fn find_at_shop(
     // Nothing in memory. Only a shop the server can query gets asked from here;
     // for the rest, saying "we haven't looked" is the whole answer, and it is the
     // answer the phone needs to know it should look itself.
-    if source != "asda" {
+    if source != Source::Asda {
         return Ok(Json(ShopFind {
             hit: None,
             from_cache: false,
@@ -668,7 +664,7 @@ pub async fn sync_listing(
     let raw_json = hit.raw.as_ref().and_then(|v| serde_json::to_string(v).ok());
     let updated = repo::upsert_external(
         &app.pool,
-        "asda",
+        Source::Asda,
         &hit.external_id,
         hit.barcode.as_deref(),
         &repo::ListingFields {
@@ -690,9 +686,9 @@ pub async fn sync_listing(
     }
     // The shop's own lifestyle tags, kept apart from OFF's claims (migration
     // 0028) and merged on read.
-    repo::replace_dietary(&app.pool, updated.id, &hit.dietary, "asda").await?;
+    repo::replace_dietary(&app.pool, updated.id, &hit.dietary, Source::Asda).await?;
     if let Some(price) = &hit.price
-        && let Some(lid) = repo::listing_id(&app.pool, "asda", &hit.external_id).await?
+        && let Some(lid) = repo::listing_id(&app.pool, Source::Asda, &hit.external_id).await?
     {
         repo::record_price(&app.pool, lid, price).await?;
     }
@@ -704,12 +700,10 @@ pub async fn sync_listing(
     // fetch just leaves the product image-less, never fails the attach.
     if !updated.has_image
         && let Some(url) = hit.image_url.as_deref().filter(|s| !s.is_empty())
-        && let Some(src) = source::importable("asda")
-        && !src.image_hosts.is_empty()
-        && let Some((bytes, mime)) = off::fetch_image_from(url, src.image_hosts).await?
+        && let Some((bytes, mime)) = off::fetch_image_from(url, Source::Asda.image_hosts()).await?
     {
         repo::set_image_by_id(&app.pool, updated.id, &bytes, &mime).await?;
-        repo::set_image_provenance(&app.pool, updated.id, "asda").await?;
+        repo::set_image_provenance(&app.pool, updated.id, Source::Asda).await?;
     }
     tracing::info!(product = updated.id, cin = %hit.external_id, flags = hit.dietary.len(), "asda listing pulled");
     repo::get_by_id(&app.pool, updated.id)
@@ -766,9 +760,9 @@ pub async fn submit_facts(
     // Keep the page's payload verbatim FIRST — so we hold it even if parsing finds
     // nothing (or a better parser wants it later), and never have to drive the
     // WebView through Cloudflare again for the same product.
-    repo::upsert_document(&app.pool, id, "asda", "page", &body.blob).await?;
+    repo::upsert_document(&app.pool, id, Source::Asda, "page", &body.blob).await?;
     let facts = brandbank::parse(&body.blob).map_err(|e| AppError::BadRequest(e.to_string()))?;
-    repo::store_facts(&app.pool, id, &facts, "asda").await?;
+    repo::store_facts(&app.pool, id, &facts, Source::Asda).await?;
     tracing::info!(
         product = id,
         bytes = body.blob.len(),

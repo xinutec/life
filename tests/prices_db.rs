@@ -5,6 +5,7 @@
 use life::db;
 use life::products::prices::PriceInput;
 use life::products::repo;
+use life::products::source::Source;
 
 fn gbp(amount_minor: i64, unit: Option<(i64, &str)>) -> PriceInput {
     PriceInput {
@@ -45,7 +46,7 @@ async fn latest_price_per_shop_cheapest_first_with_history() {
     // Both shops list the same product (reconciled by barcode → one product).
     let product = repo::upsert_external(
         &pool,
-        "asda",
+        Source::Asda,
         asda_id,
         Some(barcode),
         &repo::ListingFields {
@@ -57,7 +58,7 @@ async fn latest_price_per_shop_cheapest_first_with_history() {
     .unwrap();
     repo::upsert_external(
         &pool,
-        "waitrose",
+        Source::Waitrose,
         wr_id,
         Some(barcode),
         &repo::ListingFields {
@@ -67,11 +68,11 @@ async fn latest_price_per_shop_cheapest_first_with_history() {
     )
     .await
     .unwrap();
-    let asda_listing = repo::listing_id(&pool, "asda", asda_id)
+    let asda_listing = repo::listing_id(&pool, Source::Asda, asda_id)
         .await
         .unwrap()
         .unwrap();
-    let wr_listing = repo::listing_id(&pool, "waitrose", wr_id)
+    let wr_listing = repo::listing_id(&pool, Source::Waitrose, wr_id)
         .await
         .unwrap()
         .unwrap();
@@ -94,11 +95,11 @@ async fn latest_price_per_shop_cheapest_first_with_history() {
 
     let prices = repo::latest_prices(&pool, product.id).await.unwrap();
     assert_eq!(prices.len(), 2, "one latest price per shop");
-    assert_eq!(prices[0].source, "asda"); // cheapest first
+    assert_eq!(prices[0].source, Source::Asda); // cheapest first
     assert_eq!(prices[0].amount_minor, 357);
     assert_eq!(prices[0].unit_amount_minor, Some(892));
     assert_eq!(prices[0].unit_measure.as_deref(), Some("KG"));
-    assert_eq!(prices[1].source, "waitrose");
+    assert_eq!(prices[1].source, Source::Waitrose);
     assert_eq!(prices[1].amount_minor, 380);
 
     // A newer Asda observation is history, not a duplicate — latest reflects it.
@@ -150,7 +151,7 @@ async fn a_shop_listing_a_product_twice_collapses_to_its_cheapest() {
 
     let product = repo::upsert_external(
         &pool,
-        "asda",
+        Source::Asda,
         cin_a,
         Some(barcode),
         &repo::ListingFields {
@@ -162,7 +163,7 @@ async fn a_shop_listing_a_product_twice_collapses_to_its_cheapest() {
     .unwrap();
     repo::upsert_external(
         &pool,
-        "asda",
+        Source::Asda,
         cin_b,
         Some(barcode),
         &repo::ListingFields {
@@ -172,11 +173,11 @@ async fn a_shop_listing_a_product_twice_collapses_to_its_cheapest() {
     )
     .await
     .unwrap();
-    let listing_a = repo::listing_id(&pool, "asda", cin_a)
+    let listing_a = repo::listing_id(&pool, Source::Asda, cin_a)
         .await
         .unwrap()
         .unwrap();
-    let listing_b = repo::listing_id(&pool, "asda", cin_b)
+    let listing_b = repo::listing_id(&pool, Source::Asda, cin_b)
         .await
         .unwrap()
         .unwrap();
@@ -190,7 +191,7 @@ async fn a_shop_listing_a_product_twice_collapses_to_its_cheapest() {
 
     let prices = repo::latest_prices(&pool, product.id).await.unwrap();
     assert_eq!(prices.len(), 1, "one row per shop, not one per listing");
-    assert_eq!(prices[0].source, "asda");
+    assert_eq!(prices[0].source, Source::Asda);
     assert_eq!(
         prices[0].amount_minor, 395,
         "the shop's cheapest listing wins"

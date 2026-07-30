@@ -169,8 +169,24 @@ fn non_empty(s: Option<String>) -> Option<String> {
 
 /// Pounds (Asda gives prices as floats) → integer minor units (pence). Rounded,
 /// so float error can't leak into stored money.
-fn to_minor(pounds: f64) -> i64 {
-    (pounds * 100.0).round() as i64
+///
+/// `None` for anything that isn't a real price. `as i64` on an f64 saturates
+/// (and turns NaN into 0) without saying so, which on money means a malformed
+/// payload lands in the price history as a plausible-looking number. A price we
+/// can't read is not a price.
+fn to_minor(pounds: f64) -> Option<i64> {
+    /// £1,000,000 in pence. Not a technical limit — an i64 holds far more —
+    /// but the point past which a "price" is evidence the payload is wrong.
+    const MAX_PENCE: f64 = 100_000_000.0;
+    let pence = (pounds * 100.0).round();
+    if !pence.is_finite() || !(0.0..=MAX_PENCE).contains(&pence) {
+        return None;
+    }
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "guarded above: finite and within 0..=MAX_PENCE, which i64 holds exactly"
+    )]
+    Some(pence as i64)
 }
 
 /// The unit of measure out of Asda's per-unit label: "£8.93/KG" → "KG". `None`
@@ -187,9 +203,9 @@ fn unit_measure(formatted: &str) -> Option<String> {
 fn price_input(r: &PriceRegion) -> Option<PriceInput> {
     let amount = r.price.filter(|p| *p > 0.0)?;
     Some(PriceInput {
-        amount_minor: to_minor(amount),
+        amount_minor: to_minor(amount)?,
         currency: "GBP".into(),
-        unit_amount_minor: r.price_per_uom.filter(|p| *p > 0.0).map(to_minor),
+        unit_amount_minor: r.price_per_uom.filter(|p| *p > 0.0).and_then(to_minor),
         unit_measure: r.price_per_uom_formatted.as_deref().and_then(unit_measure),
         region: Some("EN".into()),
     })
