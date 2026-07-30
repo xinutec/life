@@ -7,6 +7,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use life::db;
+use life::products::ids::{Barcode, ExternalId};
 use life::products::nutrition::{Allergen, Nutrition, Presence, ProductFacts};
 use life::products::repo::{self, FactSourceMap};
 use life::products::source::Source;
@@ -138,17 +139,17 @@ async fn reconcile_records_a_fact_source_and_settles() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let barcode = "5000000000902";
+    let barcode: Barcode = "5000000000902".parse().unwrap();
     sqlx::query("DELETE FROM products WHERE barcode = ?")
-        .bind(barcode)
+        .bind(&barcode)
         .execute(&pool)
         .await
         .unwrap();
     let product = repo::upsert_external(
         &pool,
         Source::Off,
-        barcode,
-        Some(barcode),
+        &ExternalId::from(&barcode),
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Oat Drink"),
             ..Default::default()

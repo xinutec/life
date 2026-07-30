@@ -23,6 +23,7 @@ use sqlx::MySqlPool;
 use ts_rs::TS;
 
 use super::asda::AsdaHit;
+use super::ids::{Barcode, ExternalId};
 use super::off;
 use super::source::Source;
 
@@ -33,10 +34,10 @@ use super::source::Source;
 #[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
 pub struct CachedListing {
     pub source: Source,
-    pub external_id: String,
+    pub external_id: ExternalId,
     /// `None` means "we haven't learned it yet", not "it has none" — a Waitrose
     /// search hit carries no barcode until its product page is fetched.
-    pub barcode: Option<String>,
+    pub barcode: Option<Barcode>,
     pub name: Option<String>,
     pub brand: Option<String>,
     pub quantity_label: Option<String>,
@@ -66,6 +67,10 @@ impl CachedListing {
 /// memory fills exactly as it does for the shops the server can query itself.
 /// Everything but the shop's own id is optional — a search hit knows a name and
 /// a lineNumber, and only a product fetch learns the barcode.
+///
+/// Its fields are plain strings, deliberately: this is what the phone *said*,
+/// not yet something we believe. `validate_seen` is where it becomes typed, and
+/// the pair of structs is that boundary made visible.
 #[derive(Debug, Clone, PartialEq, Deserialize, TS)]
 #[ts(export)]
 pub struct SeenListing {
@@ -109,24 +114,18 @@ pub fn validate_seen(source_id: &str, seen: &[SeenListing]) -> Result<Vec<Cached
     }
     seen.iter()
         .map(|s| {
-            let external_id = s.external_id.trim();
-            if external_id.is_empty()
-                || external_id.len() > 64
-                || !external_id
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-            {
-                return Err("external_id must be 1-64 chars of [A-Za-z0-9_-]".to_string());
-            }
-            let barcode = trimmed(&s.barcode);
-            if let Some(bc) = &barcode
-                && !off::is_valid_barcode(bc)
-            {
-                return Err(format!("not a barcode: {bc}"));
-            }
+            let external_id: ExternalId = s.external_id.parse()?;
+            // The shape rule belongs to the type; naming the offending value is
+            // this caller's job — it's the one that knows whose report it is.
+            let barcode = trimmed(&s.barcode)
+                .map(|bc| {
+                    bc.parse::<Barcode>()
+                        .map_err(|_| format!("not a barcode: {bc}"))
+                })
+                .transpose()?;
             Ok(CachedListing {
                 source,
-                external_id: external_id.to_string(),
+                external_id,
                 barcode,
                 name: trimmed(&s.name),
                 brand: trimmed(&s.brand),
@@ -186,7 +185,7 @@ pub async fn remember(pool: &MySqlPool, listings: &[CachedListing]) -> Result<()
 pub async fn find_by_barcode(
     pool: &MySqlPool,
     source: Source,
-    barcode: &str,
+    barcode: &Barcode,
 ) -> Result<Option<CachedListing>> {
     Ok(sqlx::query_as::<_, CachedListing>(
         "SELECT source, external_id, barcode, name, brand, quantity_label, image_url

@@ -6,14 +6,15 @@
 use std::collections::HashMap;
 
 use life::db;
+use life::products::ids::{Barcode, ExternalId, ProductId};
 use life::products::repo::{self, Listing};
 use life::products::source::Source;
 use life::products::types::{Choice, FieldChoice, Product, ReconcileField};
 
 fn product(name: &str, brand: &str, quantity: &str) -> Product {
     Product {
-        id: 1,
-        barcode: Some("5000000000123".into()),
+        id: ProductId(1),
+        barcode: Some("5000000000123".parse().unwrap()),
         name: Some(name.into()),
         brand: Some(brand.into()),
         quantity_label: Some(quantity.into()),
@@ -28,7 +29,7 @@ fn product(name: &str, brand: &str, quantity: &str) -> Product {
 fn listing(source: Source, name: &str, brand: &str, quantity: &str) -> Listing {
     Listing {
         source,
-        external_id: format!("{source}-cin"),
+        external_id: format!("{source}-cin").parse().unwrap(),
         url: None,
         raw_name: Some(name.into()),
         brand: Some(brand.into()),
@@ -100,14 +101,17 @@ async fn reconcile_adopts_keeps_and_settles_against_the_db() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let barcode = "5000000000456";
-    let (off_ext, asda_ext) = ("rectest-off", "rectest-asda");
+    let barcode: Barcode = "5000000000456".parse().unwrap();
+    let (off_ext, asda_ext): (ExternalId, ExternalId) = (
+        "rectest-off".parse().unwrap(),
+        "rectest-asda".parse().unwrap(),
+    );
     sqlx::query("DELETE FROM products WHERE barcode = ?")
-        .bind(barcode)
+        .bind(&barcode)
         .execute(&pool)
         .await
         .unwrap();
-    for ext in [off_ext, asda_ext] {
+    for ext in [&off_ext, &asda_ext] {
         sqlx::query("DELETE FROM product_listings WHERE external_id = ?")
             .bind(ext)
             .execute(&pool)
@@ -119,8 +123,8 @@ async fn reconcile_adopts_keeps_and_settles_against_the_db() {
     let p = repo::upsert_external(
         &pool,
         Source::Off,
-        off_ext,
-        Some(barcode),
+        &off_ext,
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("off crowd name"),
             brand: Some("OFF Brand"),
@@ -135,8 +139,8 @@ async fn reconcile_adopts_keeps_and_settles_against_the_db() {
     repo::upsert_external(
         &pool,
         Source::Asda,
-        asda_ext,
-        Some(barcode),
+        &asda_ext,
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Clean Asda Name"),
             brand: Some("Asda Brand"),
@@ -203,8 +207,8 @@ async fn reconcile_adopts_keeps_and_settles_against_the_db() {
     repo::upsert_external(
         &pool,
         Source::Asda,
-        asda_ext,
-        Some(barcode),
+        &asda_ext,
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Clean Asda Name"),
             brand: Some("Asda Brand Refreshed"),
@@ -235,14 +239,17 @@ async fn our_own_name_wins_over_every_source_and_survives_a_refresh() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let barcode = "5000000000789";
-    let (off_ext, asda_ext) = ("ourtest-off", "ourtest-asda");
+    let barcode: Barcode = "5000000000789".parse().unwrap();
+    let (off_ext, asda_ext): (ExternalId, ExternalId) = (
+        "ourtest-off".parse().unwrap(),
+        "ourtest-asda".parse().unwrap(),
+    );
     sqlx::query("DELETE FROM products WHERE barcode = ?")
-        .bind(barcode)
+        .bind(&barcode)
         .execute(&pool)
         .await
         .unwrap();
-    for ext in [off_ext, asda_ext] {
+    for ext in [&off_ext, &asda_ext] {
         sqlx::query("DELETE FROM product_listings WHERE external_id = ?")
             .bind(ext)
             .execute(&pool)
@@ -254,8 +261,8 @@ async fn our_own_name_wins_over_every_source_and_survives_a_refresh() {
     repo::upsert_external(
         &pool,
         Source::Off,
-        off_ext,
-        Some(barcode),
+        &off_ext,
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("the original oat-ly barista"),
             ..Default::default()
@@ -266,8 +273,8 @@ async fn our_own_name_wins_over_every_source_and_survives_a_refresh() {
     let p = repo::upsert_external(
         &pool,
         Source::Asda,
-        asda_ext,
-        Some(barcode),
+        &asda_ext,
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Oalty Oat Drink Barista Edition 1L"),
             ..Default::default()
@@ -316,8 +323,8 @@ async fn our_own_name_wins_over_every_source_and_survives_a_refresh() {
     repo::upsert_external(
         &pool,
         Source::Asda,
-        asda_ext,
-        Some(barcode),
+        &asda_ext,
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Oalty Oat Drink Barista Edition 1L"),
             ..Default::default()
@@ -342,15 +349,15 @@ async fn our_own_brand_and_pack_win_over_sources_and_survive_a_refresh() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let barcode = "5000000000790";
-    let asda_ext = "ourdetails-asda";
+    let barcode: Barcode = "5000000000790".parse().unwrap();
+    let asda_ext: ExternalId = "ourdetails-asda".parse().unwrap();
     sqlx::query("DELETE FROM products WHERE barcode = ?")
-        .bind(barcode)
+        .bind(&barcode)
         .execute(&pool)
         .await
         .unwrap();
     sqlx::query("DELETE FROM product_listings WHERE external_id = ?")
-        .bind(asda_ext)
+        .bind(&asda_ext)
         .execute(&pool)
         .await
         .unwrap();
@@ -360,8 +367,8 @@ async fn our_own_brand_and_pack_win_over_sources_and_survive_a_refresh() {
     let p = repo::upsert_external(
         &pool,
         Source::Asda,
-        asda_ext,
-        Some(barcode),
+        &asda_ext,
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Some Oat Drink"),
             brand: Some("asda brand"),
@@ -421,8 +428,8 @@ async fn our_own_brand_and_pack_win_over_sources_and_survive_a_refresh() {
     repo::upsert_external(
         &pool,
         Source::Asda,
-        asda_ext,
-        Some(barcode),
+        &asda_ext,
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Some Oat Drink"),
             brand: Some("asda brand"),
@@ -454,9 +461,9 @@ async fn a_barcodeless_source_refresh_keeps_our_own_brand() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let ext = "ourtest-bl-brand";
+    let ext: ExternalId = "ourtest-bl-brand".parse().unwrap();
     sqlx::query("DELETE FROM products WHERE external_id = ?")
-        .bind(ext)
+        .bind(&ext)
         .execute(&pool)
         .await
         .unwrap();
@@ -465,7 +472,7 @@ async fn a_barcodeless_source_refresh_keeps_our_own_brand() {
     let p = repo::upsert_external(
         &pool,
         Source::Waitrose,
-        ext,
+        &ext,
         None,
         &repo::ListingFields {
             raw_name: Some("Shop Name"),
@@ -494,7 +501,7 @@ async fn a_barcodeless_source_refresh_keeps_our_own_brand() {
     let after = repo::upsert_external(
         &pool,
         Source::Waitrose,
-        ext,
+        &ext,
         None,
         &repo::ListingFields {
             raw_name: Some("Shop Name v2"),
@@ -525,9 +532,9 @@ async fn a_barcodeless_source_refresh_keeps_our_own_name() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let ext = "ourtest-bl-1";
+    let ext: ExternalId = "ourtest-bl-1".parse().unwrap();
     sqlx::query("DELETE FROM products WHERE external_id = ?")
-        .bind(ext)
+        .bind(&ext)
         .execute(&pool)
         .await
         .unwrap();
@@ -537,7 +544,7 @@ async fn a_barcodeless_source_refresh_keeps_our_own_name() {
     let p = repo::upsert_external(
         &pool,
         Source::Waitrose,
-        ext,
+        &ext,
         None,
         &repo::ListingFields {
             raw_name: Some("Shop Spelling"),
@@ -564,7 +571,7 @@ async fn a_barcodeless_source_refresh_keeps_our_own_name() {
     let after = repo::upsert_external(
         &pool,
         Source::Waitrose,
-        ext,
+        &ext,
         None,
         &repo::ListingFields {
             raw_name: Some("Shop Spelling v2"),

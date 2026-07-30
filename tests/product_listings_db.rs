@@ -4,6 +4,7 @@
 //! LIFE_TEST_DATABASE_URL is set.
 
 use life::db;
+use life::products::ids::{Barcode, ExternalId};
 use life::products::repo;
 use life::products::source::Source;
 
@@ -16,18 +17,18 @@ async fn two_sources_one_barcode_become_one_product_two_listings() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let barcode = "5740900404465";
-    let asda_cin = "listtest-asda-7690049";
-    let wr_ln = "listtest-wr-812345";
+    let barcode: Barcode = "5740900404465".parse().unwrap();
+    let asda_cin: ExternalId = "listtest-asda-7690049".parse().unwrap();
+    let wr_ln: ExternalId = "listtest-wr-812345".parse().unwrap();
     // Clean slate: deleting the product cascades its listings (FK ON DELETE
     // CASCADE); also clear listings by our external ids in case a prior run left
     // them on some other product.
     sqlx::query("DELETE FROM products WHERE barcode = ?")
-        .bind(barcode)
+        .bind(&barcode)
         .execute(&pool)
         .await
         .unwrap();
-    for ext in [asda_cin, wr_ln] {
+    for ext in [&asda_cin, &wr_ln] {
         sqlx::query("DELETE FROM product_listings WHERE external_id = ?")
             .bind(ext)
             .execute(&pool)
@@ -40,8 +41,8 @@ async fn two_sources_one_barcode_become_one_product_two_listings() {
     let a = repo::upsert_external(
         &pool,
         Source::Asda,
-        asda_cin,
-        Some(barcode),
+        &asda_cin,
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Lurpak Spreadable 400g"),
             brand: Some("Lurpak"),
@@ -53,7 +54,10 @@ async fn two_sources_one_barcode_become_one_product_two_listings() {
     )
     .await
     .unwrap();
-    assert_eq!(a.barcode.as_deref(), Some(barcode));
+    assert_eq!(
+        a.barcode.as_ref().map(Barcode::as_str),
+        Some(barcode.as_str())
+    );
 
     // The listing kept Asda's own account, structured fields and all.
     let asda_listing = repo::listings_for(&pool, a.id)
@@ -71,8 +75,8 @@ async fn two_sources_one_barcode_become_one_product_two_listings() {
     let w = repo::upsert_external(
         &pool,
         Source::Waitrose,
-        wr_ln,
-        Some(barcode),
+        &wr_ln,
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Lurpak Spreadable"),
             brand: Some("Lurpak"),
@@ -105,7 +109,7 @@ async fn two_sources_one_barcode_become_one_product_two_listings() {
 
     // get_by_source_external resolves the same product via EITHER listing.
     assert_eq!(
-        repo::get_by_source_external(&pool, Source::Asda, asda_cin)
+        repo::get_by_source_external(&pool, Source::Asda, &asda_cin)
             .await
             .unwrap()
             .unwrap()
@@ -113,7 +117,7 @@ async fn two_sources_one_barcode_become_one_product_two_listings() {
         a.id
     );
     assert_eq!(
-        repo::get_by_source_external(&pool, Source::Waitrose, wr_ln)
+        repo::get_by_source_external(&pool, Source::Waitrose, &wr_ln)
             .await
             .unwrap()
             .unwrap()
@@ -125,8 +129,8 @@ async fn two_sources_one_barcode_become_one_product_two_listings() {
     repo::upsert_external(
         &pool,
         Source::Asda,
-        asda_cin,
-        Some(barcode),
+        &asda_cin,
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Lurpak Slightly Salted Spreadable 400g"),
             brand: Some("Lurpak"),
@@ -151,10 +155,13 @@ async fn barcodeless_sources_stay_separate_products() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let (e1, e2) = ("listtest-bl-aaa", "listtest-bl-bbb");
+    let (e1, e2): (ExternalId, ExternalId) = (
+        "listtest-bl-aaa".parse().unwrap(),
+        "listtest-bl-bbb".parse().unwrap(),
+    );
     sqlx::query("DELETE FROM products WHERE external_id IN (?, ?)")
-        .bind(e1)
-        .bind(e2)
+        .bind(&e1)
+        .bind(&e2)
         .execute(&pool)
         .await
         .unwrap();
@@ -165,10 +172,10 @@ async fn barcodeless_sources_stay_separate_products() {
         raw_name: Some(n),
         ..Default::default()
     };
-    let p1 = repo::upsert_external(&pool, Source::Waitrose, e1, None, &name_only("Thing A"))
+    let p1 = repo::upsert_external(&pool, Source::Waitrose, &e1, None, &name_only("Thing A"))
         .await
         .unwrap();
-    let p2 = repo::upsert_external(&pool, Source::Waitrose, e2, None, &name_only("Thing B"))
+    let p2 = repo::upsert_external(&pool, Source::Waitrose, &e2, None, &name_only("Thing B"))
         .await
         .unwrap();
 
@@ -178,7 +185,7 @@ async fn barcodeless_sources_stay_separate_products() {
 
     // Re-import of a barcodeless product refreshes its single-source name: it's
     // the sole authority, so nothing can diverge from it.
-    let p1b = repo::upsert_external(&pool, Source::Waitrose, e1, None, &name_only("Thing A v2"))
+    let p1b = repo::upsert_external(&pool, Source::Waitrose, &e1, None, &name_only("Thing A v2"))
         .await
         .unwrap();
     assert_eq!(p1b.id, p1.id);

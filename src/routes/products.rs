@@ -8,6 +8,7 @@ use axum::response::Response;
 use serde::Deserialize;
 
 use crate::error::AppError;
+use crate::products::ids::{Barcode, ExternalId, ProductId};
 use crate::products::prices::PriceInput;
 use crate::products::source::Source;
 use crate::products::types::{Choice, FieldChoice, ReconcileField};
@@ -78,7 +79,7 @@ pub async fn search(
 pub async fn lookup(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
-    Path(barcode): Path<String>,
+    Path(barcode): Path<Barcode>,
 ) -> Result<Json<Product>, AppError> {
     if let Some(p) = repo::get(&app.pool, &barcode).await? {
         tracing::debug!(%barcode, "product cache hit");
@@ -117,7 +118,7 @@ pub async fn lookup(
         &app.pool,
         product.id,
         Source::Off,
-        &barcode,
+        &ExternalId::from(&barcode),
         &repo::ListingFields {
             raw_name: found.name.as_deref(),
             brand: found.brand.as_deref(),
@@ -151,15 +152,10 @@ pub async fn lookup(
 pub async fn set_image(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
-    Path(barcode): Path<String>,
+    Path(barcode): Path<Barcode>,
     headers: axum::http::HeaderMap,
     body: Bytes,
 ) -> Result<StatusCode, AppError> {
-    if !off::is_valid_barcode(&barcode) {
-        return Err(AppError::BadRequest(
-            "barcode must be up to 14 digits".into(),
-        ));
-    }
     let content_type = headers
         .get(header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
@@ -196,8 +192,9 @@ pub struct ImportProduct {
     /// The shop this listing came from. Only a shop may be imported; an
     /// unknown id is refused by deserialization, before any of this runs.
     pub source: Source,
-    /// Source-scoped id (e.g. a Waitrose lineNumber).
-    pub external_id: String,
+    /// Source-scoped id (e.g. a Waitrose lineNumber). Like `source`, a malformed
+    /// one is refused by deserialization, before any of this runs.
+    pub external_id: ExternalId,
     pub name: String,
     pub brand: Option<String>,
     /// The product's EAN, when the source knows it (Asda's IMAGE_ID, a Waitrose
@@ -228,17 +225,7 @@ pub async fn import(
             body.source
         )));
     }
-    let ext = body.external_id.trim();
-    if ext.is_empty()
-        || ext.len() > 64
-        || !ext
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-    {
-        return Err(AppError::BadRequest(
-            "external_id must be 1-64 chars of [A-Za-z0-9_-]".into(),
-        ));
-    }
+    let ext = &body.external_id;
     let name = body.name.trim();
     if name.is_empty() {
         return Err(AppError::BadRequest("name is required".into()));
@@ -249,24 +236,21 @@ pub async fn import(
         .map(str::trim)
         .filter(|v| !v.is_empty());
     // A supplied barcode must be a real EAN before we key a canonical product on
-    // it (same guard as the OFF lookup path).
+    // it. Blank is absence rather than an error — clients send `""` for "the shop
+    // didn't tell us" — but anything non-blank has to be one.
     let barcode = body
         .barcode
         .as_deref()
         .map(str::trim)
-        .filter(|v| !v.is_empty());
-    if let Some(bc) = barcode
-        && !off::is_valid_barcode(bc)
-    {
-        return Err(AppError::BadRequest(
-            "barcode must be up to 14 digits".into(),
-        ));
-    }
+        .filter(|v| !v.is_empty())
+        .map(str::parse::<Barcode>)
+        .transpose()
+        .map_err(AppError::BadRequest)?;
     let product = repo::upsert_external(
         &app.pool,
         body.source,
         ext,
-        barcode,
+        barcode.as_ref(),
         &repo::ListingFields {
             raw_name: Some(name),
             brand,
@@ -310,7 +294,7 @@ pub async fn import(
 pub async fn product_detail(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
-    Path(id): Path<u64>,
+    Path(id): Path<ProductId>,
 ) -> Result<Json<ProductDetail>, AppError> {
     Ok(Json(build_detail(&app.pool, id).await?))
 }
@@ -318,7 +302,7 @@ pub async fn product_detail(
 /// Assemble the product-page aggregate for a product id (404 if it doesn't
 /// exist). Shared by the detail GET and the reconcile POST, which answers with
 /// the re-read detail.
-async fn build_detail(pool: &sqlx::MySqlPool, id: u64) -> Result<ProductDetail, AppError> {
+async fn build_detail(pool: &sqlx::MySqlPool, id: ProductId) -> Result<ProductDetail, AppError> {
     let product = repo::get_by_id(pool, id).await?.ok_or(AppError::NotFound)?;
     let (listings, prices, facts_by_source, fact_prefs, decisions, documents) = tokio::try_join!(
         repo::listings_for(pool, id),
@@ -374,7 +358,7 @@ async fn build_detail(pool: &sqlx::MySqlPool, id: u64) -> Result<ProductDetail, 
 pub async fn reconcile(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
-    Path(id): Path<u64>,
+    Path(id): Path<ProductId>,
     Json(body): Json<Vec<FieldChoice>>,
 ) -> Result<Json<ProductDetail>, AppError> {
     // 404 before touching anything if the product doesn't exist.
@@ -394,7 +378,7 @@ pub async fn reconcile(
     repo::reconcile(&app.pool, id, &scalar)
         .await
         .map_err(|e| AppError::BadRequest(e.to_string()))?;
-    tracing::info!(product = id, decisions = total, "product reconciled");
+    tracing::info!(product = %id, decisions = total, "product reconciled");
     Ok(Json(build_detail(&app.pool, id).await?))
 }
 
@@ -405,7 +389,7 @@ pub async fn reconcile(
 /// picked as "our own" the way a typed name is.
 async fn apply_picture_choice(
     pool: &sqlx::MySqlPool,
-    id: u64,
+    id: ProductId,
     c: &FieldChoice,
 ) -> Result<(), AppError> {
     match c.choice {
@@ -511,7 +495,7 @@ fn cached_as_hit(c: shop_cache::CachedListing) -> asda::AsdaHit {
 pub async fn find_at_shop(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
-    Path((id, source)): Path<(u64, String)>,
+    Path((id, source)): Path<(ProductId, String)>,
 ) -> Result<Json<ShopFind>, AppError> {
     // A path segment is a client's string until it parses; after this line the
     // rest of the handler cannot be looking at a shop that doesn't exist.
@@ -612,10 +596,10 @@ pub struct Remembered {
 /// Which shop listing to pull, for `sync_listing`.
 #[derive(serde::Deserialize)]
 pub struct SyncListing {
-    /// Registered source id — 'asda' today (see below).
-    pub source: String,
+    /// The shop to pull from — 'asda' today (see below).
+    pub source: Source,
     /// The source's id for the product (an Asda CIN).
-    pub external_id: String,
+    pub external_id: ExternalId,
 }
 
 /// POST /api/products/id/{id}/listings → pull this product's listing at a shop
@@ -635,10 +619,10 @@ pub struct SyncListing {
 pub async fn sync_listing(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
-    Path(id): Path<u64>,
+    Path(id): Path<ProductId>,
     Json(body): Json<SyncListing>,
 ) -> Result<Json<Product>, AppError> {
-    if body.source != "asda" {
+    if body.source != Source::Asda {
         return Err(AppError::BadRequest(format!(
             "cannot pull listings from {} server-side",
             body.source
@@ -647,7 +631,7 @@ pub async fn sync_listing(
     let product = repo::get_by_id(&app.pool, id)
         .await?
         .ok_or(AppError::NotFound)?;
-    let Some(hit) = asda::fetch_by_id(&app.http, body.external_id.trim()).await? else {
+    let Some(hit) = asda::fetch_by_id(&app.http, &body.external_id).await? else {
         return Err(AppError::NotFound);
     };
     // The barcode is what makes this listing THIS product; a shop search is only
@@ -666,7 +650,7 @@ pub async fn sync_listing(
         &app.pool,
         Source::Asda,
         &hit.external_id,
-        hit.barcode.as_deref(),
+        hit.barcode.as_ref(),
         &repo::ListingFields {
             raw_name: Some(&hit.name),
             brand: hit.brand.as_deref(),
@@ -705,7 +689,7 @@ pub async fn sync_listing(
         repo::set_image_by_id(&app.pool, updated.id, &bytes, &mime).await?;
         repo::set_image_provenance(&app.pool, updated.id, Source::Asda).await?;
     }
-    tracing::info!(product = updated.id, cin = %hit.external_id, flags = hit.dietary.len(), "asda listing pulled");
+    tracing::info!(product = %updated.id, cin = %hit.external_id, flags = hit.dietary.len(), "asda listing pulled");
     repo::get_by_id(&app.pool, updated.id)
         .await?
         .map(Json)
@@ -714,11 +698,11 @@ pub async fn sync_listing(
 
 #[derive(serde::Deserialize)]
 pub struct SubmitFacts {
-    /// Registered source id — 'asda' today.
-    pub source: String,
+    /// The shop whose page this is — 'asda' today.
+    pub source: Source,
     /// The EAN the fetched page reported (Asda's `c_EAN_GTIN`), for the identity
     /// guard — this must be THIS product's barcode.
-    pub ean: String,
+    pub ean: Barcode,
     /// The source's raw product-content blob (Asda's `c_BRANDBANK_JSON`), parsed
     /// server-side. The client never asserts the facts themselves.
     pub blob: String,
@@ -736,10 +720,10 @@ pub struct SubmitFacts {
 pub async fn submit_facts(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
-    Path(id): Path<u64>,
+    Path(id): Path<ProductId>,
     Json(body): Json<SubmitFacts>,
 ) -> Result<Json<ProductDetail>, AppError> {
-    if body.source != "asda" {
+    if body.source != Source::Asda {
         return Err(AppError::BadRequest(format!(
             "no facts parser for source {}",
             body.source
@@ -751,8 +735,7 @@ pub async fn submit_facts(
     // The page's barcode is what makes its facts THIS product's. Enforce it here
     // so the WebView can't (by mistake or otherwise) post a different product's
     // page onto this one.
-    let ean = body.ean.trim();
-    if ean.is_empty() || product.barcode.as_deref() != Some(ean) {
+    if product.barcode.as_ref() != Some(&body.ean) {
         return Err(AppError::BadRequest(
             "that page's barcode doesn't match this product".into(),
         ));
@@ -764,7 +747,7 @@ pub async fn submit_facts(
     let facts = brandbank::parse(&body.blob).map_err(|e| AppError::BadRequest(e.to_string()))?;
     repo::store_facts(&app.pool, id, &facts, Source::Asda).await?;
     tracing::info!(
-        product = id,
+        product = %id,
         bytes = body.blob.len(),
         nutrition = facts.nutrition.is_some(),
         allergens = facts.allergens.len(),
@@ -780,7 +763,7 @@ pub async fn submit_facts(
 pub async fn image_by_id(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
-    Path(id): Path<u64>,
+    Path(id): Path<ProductId>,
 ) -> Result<Response, AppError> {
     let (bytes, mime) = repo::get_image_by_id(&app.pool, id)
         .await?
@@ -801,7 +784,7 @@ pub async fn image_by_id(
 pub async fn image(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
-    Path(barcode): Path<String>,
+    Path(barcode): Path<Barcode>,
 ) -> Result<Response, AppError> {
     let (bytes, mime) = repo::get_image(&app.pool, &barcode)
         .await?

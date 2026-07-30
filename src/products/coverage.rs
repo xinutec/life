@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use ts_rs::TS;
 
+use super::ids::{Barcode, ProductId};
 use super::source::Source;
 
 /// One row of a Buy list, as the client asks about it. `key` is the client's own
@@ -29,11 +30,13 @@ use super::source::Source;
 #[ts(export)]
 pub struct CoverageQuery {
     pub key: String,
+    /// Whatever the client's row carries — plain text, since a Buy row's barcode
+    /// is what a phone scanned rather than a catalogue key (see [[super::ids]]).
+    /// One that isn't barcode-shaped simply teaches us nothing here.
     #[serde(default)]
     pub barcode: Option<String>,
-    #[ts(type = "number | null")]
     #[serde(default)]
-    pub product_id: Option<u64>,
+    pub product_id: Option<ProductId>,
 }
 
 /// Where one row is known to be sold. `sources` is empty when we know nothing —
@@ -54,12 +57,12 @@ pub const MAX_ROWS: usize = 200;
 /// A shop's own listing for a catalogue product — the strong half of what we
 /// know (`product_listings`).
 ///
-/// Named rather than a `(u64, Source)` tuple because the two halves of a
-/// sighting are also "an id and a shop": as tuples the two kinds are the same
-/// type, and passing one where the other belongs would compile.
+/// Named rather than a tuple because a sighting is also "an identifier and a
+/// shop": as tuples the two kinds would be interchangeable, and passing one
+/// where the other belongs would compile.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AttachedListing {
-    pub product_id: u64,
+    pub product_id: ProductId,
     pub source: Source,
 }
 
@@ -67,7 +70,7 @@ pub struct AttachedListing {
 /// (`shop_listings`). Not a stock check; see the module docs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Sighting {
-    pub barcode: String,
+    pub barcode: Barcode,
     pub source: Source,
 }
 
@@ -81,16 +84,13 @@ pub fn combine(
     attached: &[AttachedListing],
     seen: &[Sighting],
 ) -> Vec<RowCoverage> {
-    let mut by_product: HashMap<u64, Vec<Source>> = HashMap::new();
+    let mut by_product: HashMap<ProductId, Vec<Source>> = HashMap::new();
     for l in attached {
         by_product.entry(l.product_id).or_default().push(l.source);
     }
-    let mut by_barcode: HashMap<&str, Vec<Source>> = HashMap::new();
+    let mut by_barcode: HashMap<&Barcode, Vec<Source>> = HashMap::new();
     for s in seen {
-        by_barcode
-            .entry(s.barcode.as_str())
-            .or_default()
-            .push(s.source);
+        by_barcode.entry(&s.barcode).or_default().push(s.source);
     }
     queries
         .iter()
@@ -103,8 +103,8 @@ pub fn combine(
             {
                 sources.extend(found);
             }
-            if let Some(barcode) = q.barcode.as_deref()
-                && let Some(found) = by_barcode.get(barcode)
+            if let Some(barcode) = q.barcode.as_deref().and_then(as_barcode)
+                && let Some(found) = by_barcode.get(&barcode)
             {
                 sources.extend(found);
             }
@@ -118,20 +118,25 @@ pub fn combine(
 
 /// The product ids worth querying for — deduped, and empty when nothing on the
 /// list is linked (in which case the caller skips the query entirely).
-pub fn product_ids(queries: &[CoverageQuery]) -> Vec<u64> {
-    let set: BTreeSet<u64> = queries.iter().filter_map(|q| q.product_id).collect();
+pub fn product_ids(queries: &[CoverageQuery]) -> Vec<ProductId> {
+    let set: BTreeSet<ProductId> = queries.iter().filter_map(|q| q.product_id).collect();
     set.into_iter().collect()
 }
 
-/// The barcodes worth querying for, deduped. Blank strings are dropped: a row
-/// with an empty barcode knows nothing, and `barcode = ''` would match every
-/// other such row in the cache.
-pub fn barcodes(queries: &[CoverageQuery]) -> Vec<String> {
-    let set: BTreeSet<&str> = queries
+/// A row's barcode, when it is one. Blank and malformed values are dropped
+/// rather than queried: a row carrying something that isn't a barcode knows
+/// nothing about shops, and `barcode = ''` in particular would match every other
+/// such row in the cache.
+fn as_barcode(raw: &str) -> Option<Barcode> {
+    raw.parse().ok()
+}
+
+/// The barcodes worth querying for, deduped. See [`as_barcode`] for what's dropped.
+pub fn barcodes(queries: &[CoverageQuery]) -> Vec<Barcode> {
+    let set: BTreeSet<Barcode> = queries
         .iter()
         .filter_map(|q| q.barcode.as_deref())
-        .map(str::trim)
-        .filter(|b| !b.is_empty())
+        .filter_map(as_barcode)
         .collect();
-    set.into_iter().map(str::to_string).collect()
+    set.into_iter().collect()
 }

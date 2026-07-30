@@ -2,14 +2,21 @@
 //! SQL. Runs only when LIFE_TEST_DATABASE_URL is set.
 
 use life::db;
+use life::products::ids::{Barcode, ExternalId, ProductId};
 use life::products::repo;
 use life::products::shop_cache::{self, CachedListing};
 use life::products::source::Source;
 use sqlx::MySqlPool;
 
-const BARCODE: &str = "5000000000901";
+fn barcode() -> Barcode {
+    "5000000000901".parse().unwrap()
+}
 
-async fn fixture() -> Option<(MySqlPool, u64)> {
+fn ext(id: &str) -> ExternalId {
+    id.parse().unwrap()
+}
+
+async fn fixture() -> Option<(MySqlPool, ProductId)> {
     let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
         eprintln!("LIFE_TEST_DATABASE_URL unset — skipping coverage DB test");
         return None;
@@ -20,7 +27,7 @@ async fn fixture() -> Option<(MySqlPool, u64)> {
     // A product listed at Asda and at Open Food Facts, plus a Waitrose sighting
     // of the same barcode that we have never attached.
     sqlx::query("DELETE FROM products WHERE barcode = ?")
-        .bind(BARCODE)
+        .bind(barcode())
         .execute(&pool)
         .await
         .unwrap();
@@ -31,8 +38,8 @@ async fn fixture() -> Option<(MySqlPool, u64)> {
     let id = repo::upsert_external(
         &pool,
         Source::Asda,
-        "cov-asda-1",
-        Some(BARCODE),
+        &ext("cov-asda-1"),
+        Some(&barcode()),
         &repo::ListingFields {
             raw_name: Some("Coverage Test Product"),
             ..Default::default()
@@ -45,8 +52,8 @@ async fn fixture() -> Option<(MySqlPool, u64)> {
         &pool,
         &[CachedListing {
             source: Source::Waitrose,
-            external_id: "cov-wtr-1".to_string(),
-            barcode: Some(BARCODE.to_string()),
+            external_id: ext("cov-wtr-1"),
+            barcode: Some(barcode()),
             name: Some("Coverage Test Product".to_string()),
             brand: None,
             quantity_label: None,
@@ -77,12 +84,12 @@ async fn a_sighting_is_found_by_barcode_without_any_listing_of_ours() {
     let Some((pool, _)) = fixture().await else {
         return;
     };
-    let seen = repo::shops_seen_carrying(&pool, &[BARCODE.to_string()])
+    let seen = repo::shops_seen_carrying(&pool, &[barcode()])
         .await
         .unwrap();
     assert!(
         seen.iter()
-            .any(|s| s.barcode == BARCODE && s.source == Source::Waitrose),
+            .any(|s| s.barcode == barcode() && s.source == Source::Waitrose),
         "{seen:?}"
     );
 }

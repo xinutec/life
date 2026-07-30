@@ -8,6 +8,7 @@ use sqlx::types::Json;
 use sqlx::{MySqlConnection, MySqlPool};
 
 use super::coverage::{AttachedListing, Sighting};
+use super::ids::{Barcode, ExternalId, ListingId, ProductId};
 use super::nutrition::{
     Allergen, Claim, DietaryFlag, Nutrition, Presence, ProductFacts, fact_rank, merge_allergens,
     merge_dietary, merge_ingredients, merge_nutrition, summarize_nutrition,
@@ -21,9 +22,9 @@ use super::types::{
 
 #[derive(sqlx::FromRow)]
 struct MetaRow {
-    id: u64,
-    barcode: Option<String>,
-    external_id: Option<String>,
+    id: ProductId,
+    barcode: Option<Barcode>,
+    external_id: Option<ExternalId>,
     name: Option<String>,
     brand: Option<String>,
     quantity_label: Option<String>,
@@ -57,7 +58,7 @@ impl From<MetaRow> for Product {
 //  name_source, image_source, (image IS NOT NULL) AS has_image FROM products WHERE …"
 
 /// Cached metadata for a barcode (no image bytes), or None if not cached.
-pub async fn get(pool: &MySqlPool, barcode: &str) -> Result<Option<Product>> {
+pub async fn get(pool: &MySqlPool, barcode: &Barcode) -> Result<Option<Product>> {
     let row: Option<MetaRow> = sqlx::query_as(
         "SELECT id, barcode, external_id, name, brand, quantity_label, source, \
          name_source, image_source, (image IS NOT NULL) AS has_image FROM products WHERE barcode = ?",
@@ -91,7 +92,7 @@ pub async fn search(pool: &MySqlPool, query: &str, limit: u64) -> Result<Vec<Pro
 }
 
 /// Catalog row by surrogate id, or None.
-pub async fn get_by_id(pool: &MySqlPool, id: u64) -> Result<Option<Product>> {
+pub async fn get_by_id(pool: &MySqlPool, id: ProductId) -> Result<Option<Product>> {
     let row: Option<MetaRow> = sqlx::query_as(
         "SELECT id, barcode, external_id, name, brand, quantity_label, source, \
          name_source, image_source, (image IS NOT NULL) AS has_image FROM products WHERE id = ?",
@@ -108,7 +109,7 @@ pub async fn get_by_id(pool: &MySqlPool, id: u64) -> Result<Option<Product>> {
 pub async fn get_by_source_external(
     pool: &MySqlPool,
     source: Source,
-    external_id: &str,
+    external_id: &ExternalId,
 ) -> Result<Option<Product>> {
     let row: Option<MetaRow> = sqlx::query_as(
         "SELECT p.id, p.barcode, p.external_id, p.name, p.brand, p.quantity_label, p.source, \
@@ -129,7 +130,7 @@ pub async fn get_by_source_external(
 #[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
 pub struct Listing {
     pub source: Source,
-    pub external_id: String,
+    pub external_id: ExternalId,
     pub url: Option<String>,
     pub raw_name: Option<String>,
     pub brand: Option<String>,
@@ -138,7 +139,7 @@ pub struct Listing {
 }
 
 /// Every source that lists a canonical product, oldest first.
-pub async fn listings_for(pool: &MySqlPool, product_id: u64) -> Result<Vec<Listing>> {
+pub async fn listings_for(pool: &MySqlPool, product_id: ProductId) -> Result<Vec<Listing>> {
     let rows = sqlx::query_as::<_, Listing>(
         "SELECT source, external_id, url, raw_name, brand, quantity_label, image_url \
          FROM product_listings WHERE product_id = ? ORDER BY created_at, id",
@@ -177,9 +178,9 @@ pub struct ListingFields<'a> {
 /// this source's fields wholesale rather than COALESCE-ing them.
 pub async fn upsert_listing(
     pool: &MySqlPool,
-    product_id: u64,
+    product_id: ProductId,
     source: Source,
-    external_id: &str,
+    external_id: &ExternalId,
     fields: &ListingFields<'_>,
 ) -> Result<()> {
     sqlx::query(
@@ -216,7 +217,7 @@ pub async fn upsert_listing(
 /// back. A blank canonical name (whitespace only, or genuinely empty) counts as
 /// unset. Callers still run this LAST on a listing-touching path so a
 /// freshly-created product gets seeded from the best source present.
-pub async fn refresh_canonical_name(pool: &MySqlPool, product_id: u64) -> Result<()> {
+pub async fn refresh_canonical_name(pool: &MySqlPool, product_id: ProductId) -> Result<()> {
     let current: Option<(Option<String>,)> =
         sqlx::query_as("SELECT name FROM products WHERE id = ?")
             .bind(product_id)
@@ -255,9 +256,9 @@ pub async fn refresh_canonical_name(pool: &MySqlPool, product_id: u64) -> Result
 async fn listing_product_id(
     pool: &MySqlPool,
     source: Source,
-    external_id: &str,
-) -> Result<Option<u64>> {
-    let row: Option<(u64,)> = sqlx::query_as(
+    external_id: &ExternalId,
+) -> Result<Option<ProductId>> {
+    let row: Option<(ProductId,)> = sqlx::query_as(
         "SELECT product_id FROM product_listings WHERE source = ? AND external_id = ?",
     )
     .bind(source)
@@ -273,9 +274,9 @@ async fn listing_product_id(
 pub async fn listing_id(
     pool: &MySqlPool,
     source: Source,
-    external_id: &str,
-) -> Result<Option<u64>> {
-    let row: Option<(u64,)> =
+    external_id: &ExternalId,
+) -> Result<Option<ListingId>> {
+    let row: Option<(ListingId,)> =
         sqlx::query_as("SELECT id FROM product_listings WHERE source = ? AND external_id = ?")
             .bind(source)
             .bind(external_id)
@@ -287,7 +288,7 @@ pub async fn listing_id(
 /// Which shops hold a listing for each of these products — the attached half of
 /// [[super::coverage]]. Excludes 'off' and 'user': neither is somewhere you can
 /// walk into. One query for the whole Buy list.
-pub async fn shops_holding(pool: &MySqlPool, ids: &[u64]) -> Result<Vec<AttachedListing>> {
+pub async fn shops_holding(pool: &MySqlPool, ids: &[ProductId]) -> Result<Vec<AttachedListing>> {
     if ids.is_empty() {
         return Ok(Vec::new());
     }
@@ -307,7 +308,7 @@ pub async fn shops_holding(pool: &MySqlPool, ids: &[u64]) -> Result<Vec<Attached
         sep.push_bind(id);
     }
     qb.push(")");
-    let rows: Vec<(u64, Source)> = qb.build_query_as().fetch_all(pool).await?;
+    let rows: Vec<(ProductId, Source)> = qb.build_query_as().fetch_all(pool).await?;
     Ok(rows
         .into_iter()
         .map(|(product_id, source)| AttachedListing { product_id, source })
@@ -317,7 +318,7 @@ pub async fn shops_holding(pool: &MySqlPool, ids: &[u64]) -> Result<Vec<Attached
 /// Which shops we've *seen* carry each of these barcodes, from the memory of our
 /// own past shop queries (`shop_listings`). Weaker than a held listing and not a
 /// stock check — see [[super::coverage]].
-pub async fn shops_seen_carrying(pool: &MySqlPool, barcodes: &[String]) -> Result<Vec<Sighting>> {
+pub async fn shops_seen_carrying(pool: &MySqlPool, barcodes: &[Barcode]) -> Result<Vec<Sighting>> {
     if barcodes.is_empty() {
         return Ok(Vec::new());
     }
@@ -328,7 +329,7 @@ pub async fn shops_seen_carrying(pool: &MySqlPool, barcodes: &[String]) -> Resul
         sep.push_bind(barcode);
     }
     qb.push(")");
-    let rows: Vec<(String, Source)> = qb.build_query_as().fetch_all(pool).await?;
+    let rows: Vec<(Barcode, Source)> = qb.build_query_as().fetch_all(pool).await?;
     Ok(rows
         .into_iter()
         .map(|(barcode, source)| Sighting { barcode, source })
@@ -406,7 +407,7 @@ fn value_set(spec: &ReconciledField, product: &Product, listings: &[Listing]) ->
 pub type DecisionMap = HashMap<ReconcileField, Vec<String>>;
 
 /// The decisions settled for a product's fields.
-pub async fn field_decisions(pool: &MySqlPool, product_id: u64) -> Result<DecisionMap> {
+pub async fn field_decisions(pool: &MySqlPool, product_id: ProductId) -> Result<DecisionMap> {
     let rows: Vec<(String, Json<Vec<String>>)> = sqlx::query_as(
         "SELECT field, seen_values FROM product_field_decisions WHERE product_id = ?",
     )
@@ -529,7 +530,11 @@ pub fn picture_divergence(
 }
 
 /// Record the picture bytes' provenance (which source it came from, or `user`).
-pub async fn set_image_provenance(pool: &MySqlPool, product_id: u64, source: Source) -> Result<()> {
+pub async fn set_image_provenance(
+    pool: &MySqlPool,
+    product_id: ProductId,
+    source: Source,
+) -> Result<()> {
     sqlx::query("UPDATE products SET image_source = ? WHERE id = ?")
         .bind(source)
         .bind(product_id)
@@ -541,7 +546,7 @@ pub async fn set_image_provenance(pool: &MySqlPool, product_id: u64, source: Sou
 /// Settle the picture divergence: record the value set as it stands NOW (after any
 /// adoption has changed the bytes' provenance), so it stays quiet until a source's
 /// picture — or ours — changes. Call after applying the picture choice.
-pub async fn settle_picture(pool: &MySqlPool, product_id: u64) -> Result<()> {
+pub async fn settle_picture(pool: &MySqlPool, product_id: ProductId) -> Result<()> {
     let product = get_by_id(pool, product_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("no such product: {product_id}"))?;
@@ -553,7 +558,11 @@ pub async fn settle_picture(pool: &MySqlPool, product_id: u64) -> Result<()> {
 /// Apply reconcile decisions: set the canonical row from the chosen source, our
 /// own typed value, or leave it (keep); then record the settled value set so the
 /// divergence stays quiet until a source's value changes.
-pub async fn reconcile(pool: &MySqlPool, product_id: u64, choices: &[FieldChoice]) -> Result<()> {
+pub async fn reconcile(
+    pool: &MySqlPool,
+    product_id: ProductId,
+    choices: &[FieldChoice],
+) -> Result<()> {
     let listings = listings_for(pool, product_id).await?;
     for c in choices {
         match c.field.reconciler() {
@@ -613,7 +622,7 @@ pub async fn reconcile(pool: &MySqlPool, product_id: u64, choices: &[FieldChoice
 /// a source id records that source, if it actually offers the fact. `USER` is
 /// rejected — these facts are chosen among sources, never typed by hand (unlike
 /// the scalar fields), so we never invent a nutrition panel or ingredient list.
-async fn reconcile_fact(pool: &MySqlPool, product_id: u64, c: &FieldChoice) -> Result<()> {
+async fn reconcile_fact(pool: &MySqlPool, product_id: ProductId, c: &FieldChoice) -> Result<()> {
     if c.choice == Choice::User {
         anyhow::bail!("{} is chosen by source, not typed", c.field);
     }
@@ -644,7 +653,7 @@ async fn reconcile_fact(pool: &MySqlPool, product_id: u64, c: &FieldChoice) -> R
 /// Record (or change) the source picked to trust for a fact kind (0035).
 async fn upsert_fact_source(
     pool: &MySqlPool,
-    product_id: u64,
+    product_id: ProductId,
     kind: ReconcileField,
     source: Source,
 ) -> Result<()> {
@@ -668,7 +677,7 @@ async fn upsert_fact_source(
 /// and there is nothing to reject at runtime.
 async fn set_canonical_field(
     pool: &MySqlPool,
-    product_id: u64,
+    product_id: ProductId,
     spec: &ReconciledField,
     value: &str,
     source: Source,
@@ -695,7 +704,7 @@ async fn set_canonical_field(
 
 async fn upsert_decision(
     pool: &MySqlPool,
-    product_id: u64,
+    product_id: ProductId,
     field: ReconcileField,
     set: &[String],
 ) -> Result<()> {
@@ -716,7 +725,11 @@ async fn upsert_decision(
 /// Append a price observation to a listing's history. Prices are a time series —
 /// never overwritten — so "current price" is the latest row, and history is all
 /// of them.
-pub async fn record_price(pool: &MySqlPool, listing_id: u64, price: &PriceInput) -> Result<()> {
+pub async fn record_price(
+    pool: &MySqlPool,
+    listing_id: ListingId,
+    price: &PriceInput,
+) -> Result<()> {
     sqlx::query(
         "INSERT INTO price_observations \
          (listing_id, amount_minor, currency, region, unit_amount_minor, unit_measure) \
@@ -736,7 +749,7 @@ pub async fn record_price(pool: &MySqlPool, listing_id: u64, price: &PriceInput)
 #[derive(sqlx::FromRow)]
 struct ShopPriceRow {
     source: Source,
-    external_id: String,
+    external_id: ExternalId,
     amount_minor: i64,
     currency: String,
     unit_amount_minor: Option<i64>,
@@ -752,7 +765,7 @@ struct ShopPriceRow {
 /// series; the newest row is "current"). A shop listing the product twice —
 /// two Asda CINs on one EAN — collapses to its cheapest listing, so the result
 /// holds exactly one row per source, as `ShopPrice` promises.
-pub async fn latest_prices(pool: &MySqlPool, product_id: u64) -> Result<Vec<ShopPrice>> {
+pub async fn latest_prices(pool: &MySqlPool, product_id: ProductId) -> Result<Vec<ShopPrice>> {
     let rows: Vec<ShopPriceRow> = sqlx::query_as(
         "SELECT l.source, l.external_id, po.amount_minor, po.currency, po.unit_amount_minor, \
          po.unit_measure, po.region, po.observed_at \
@@ -814,7 +827,7 @@ struct NutritionRow {
 /// since 0033, so OFF's and a retailer's panels coexist).
 pub async fn upsert_nutrition(
     pool: &MySqlPool,
-    product_id: u64,
+    product_id: ProductId,
     n: &Nutrition,
     source: Source,
 ) -> Result<()> {
@@ -824,7 +837,7 @@ pub async fn upsert_nutrition(
 
 async fn upsert_nutrition_in(
     conn: &mut MySqlConnection,
-    product_id: u64,
+    product_id: ProductId,
     n: &Nutrition,
     source: Source,
 ) -> Result<()> {
@@ -859,7 +872,11 @@ async fn upsert_nutrition_in(
 }
 
 /// Set the product's pack-size label (e.g. Asda's "22x27G").
-pub async fn set_quantity_label(pool: &MySqlPool, product_id: u64, label: &str) -> Result<()> {
+pub async fn set_quantity_label(
+    pool: &MySqlPool,
+    product_id: ProductId,
+    label: &str,
+) -> Result<()> {
     sqlx::query("UPDATE products SET quantity_label = ? WHERE id = ?")
         .bind(label)
         .bind(product_id)
@@ -871,7 +888,7 @@ pub async fn set_quantity_label(pool: &MySqlPool, product_id: u64, label: &str) 
 /// Upsert this source's ingredients text (one block per product+source, 0033).
 pub async fn set_ingredients(
     pool: &MySqlPool,
-    product_id: u64,
+    product_id: ProductId,
     text: &str,
     source: Source,
 ) -> Result<()> {
@@ -881,7 +898,7 @@ pub async fn set_ingredients(
 
 async fn set_ingredients_in(
     conn: &mut MySqlConnection,
-    product_id: u64,
+    product_id: ProductId,
     text: &str,
     source: Source,
 ) -> Result<()> {
@@ -909,7 +926,7 @@ async fn set_ingredients_in(
 /// wrong is a health question rather than a data-quality one.
 pub async fn replace_allergens(
     pool: &MySqlPool,
-    product_id: u64,
+    product_id: ProductId,
     allergens: &[Allergen],
     source: Source,
 ) -> Result<()> {
@@ -921,7 +938,7 @@ pub async fn replace_allergens(
 
 async fn replace_allergens_in(
     conn: &mut MySqlConnection,
-    product_id: u64,
+    product_id: ProductId,
     allergens: &[Allergen],
     source: Source,
 ) -> Result<()> {
@@ -955,7 +972,7 @@ async fn replace_allergens_in(
 /// as an unopposed "yes".
 pub async fn replace_dietary(
     pool: &MySqlPool,
-    product_id: u64,
+    product_id: ProductId,
     flags: &[DietaryFlag],
     source: Source,
 ) -> Result<()> {
@@ -967,7 +984,7 @@ pub async fn replace_dietary(
 
 async fn replace_dietary_in(
     conn: &mut MySqlConnection,
-    product_id: u64,
+    product_id: ProductId,
     flags: &[DietaryFlag],
     source: Source,
 ) -> Result<()> {
@@ -996,7 +1013,7 @@ async fn replace_dietary_in(
 /// kind); re-fetching the same kind overwrites and re-stamps `fetched_at`.
 pub async fn upsert_document(
     pool: &MySqlPool,
-    product_id: u64,
+    product_id: ProductId,
     source: Source,
     kind: &str,
     body: &str,
@@ -1018,7 +1035,7 @@ pub async fn upsert_document(
 /// without another fetch.
 pub async fn get_document(
     pool: &MySqlPool,
-    product_id: u64,
+    product_id: ProductId,
     source: Source,
     kind: &str,
 ) -> Result<Option<String>> {
@@ -1043,7 +1060,7 @@ struct DocRow {
 
 /// Metadata for every raw payload held for a product (not the bodies) — what the
 /// product detail advertises so the client needn't re-fetch what we already have.
-pub async fn documents_for(pool: &MySqlPool, product_id: u64) -> Result<Vec<SourceDocument>> {
+pub async fn documents_for(pool: &MySqlPool, product_id: ProductId) -> Result<Vec<SourceDocument>> {
     let rows: Vec<DocRow> = sqlx::query_as(
         "SELECT source, kind, \
          CAST(UNIX_TIMESTAMP(fetched_at) * 1000 AS SIGNED) AS fetched_at, \
@@ -1074,7 +1091,7 @@ pub async fn documents_for(pool: &MySqlPool, product_id: u64) -> Result<Vec<Sour
 /// account lands or none of it does.
 pub async fn store_facts(
     pool: &MySqlPool,
-    product_id: u64,
+    product_id: ProductId,
     facts: &ProductFacts,
     source: Source,
 ) -> Result<()> {
@@ -1093,7 +1110,7 @@ pub async fn store_facts(
 
 /// Read back everything we know about a product beyond its identity. Feeds
 /// the product detail (GET /api/products/id/{id}) — the rich product page.
-pub async fn facts_for(pool: &MySqlPool, product_id: u64) -> Result<ProductFacts> {
+pub async fn facts_for(pool: &MySqlPool, product_id: ProductId) -> Result<ProductFacts> {
     let by_source = facts_by_source(pool, product_id).await?;
     let prefs = fact_source_prefs(pool, product_id).await?;
     Ok(merge_facts(&by_source, &prefs))
@@ -1103,7 +1120,7 @@ pub async fn facts_for(pool: &MySqlPool, product_id: u64) -> Result<ProductFacts
 /// that has any. This is the raw material both for the merged display
 /// (`merge_facts`) and for provenance/divergence — fetched once, reasoned over
 /// purely. Sources are returned in precedence order (retailer before crowd).
-pub async fn facts_by_source(pool: &MySqlPool, product_id: u64) -> Result<Vec<SourceFacts>> {
+pub async fn facts_by_source(pool: &MySqlPool, product_id: ProductId) -> Result<Vec<SourceFacts>> {
     let nrows: Vec<NutritionRow> = sqlx::query_as(
         "SELECT source, basis, serving_size, energy_kj, energy_kcal, fat_g, saturates_g, \
          carbohydrate_g, sugars_g, fibre_g, protein_g, salt_g, extra \
@@ -1197,7 +1214,7 @@ pub type FactSourceMap = HashMap<ReconcileField, Source>;
 
 /// The fact-source picks recorded for a product (empty if none — precedence then
 /// decides the merge).
-pub async fn fact_source_prefs(pool: &MySqlPool, product_id: u64) -> Result<FactSourceMap> {
+pub async fn fact_source_prefs(pool: &MySqlPool, product_id: ProductId) -> Result<FactSourceMap> {
     let rows: Vec<(String, Source)> =
         sqlx::query_as("SELECT kind, source FROM product_fact_sources WHERE product_id = ?")
             .bind(product_id)
@@ -1338,11 +1355,11 @@ fn fact_display(field: ReconcileField, facts: &ProductFacts) -> Option<String> {
 /// calling source. Returns the canonical id.
 async fn find_or_create_by_barcode(
     pool: &MySqlPool,
-    barcode: &str,
+    barcode: &Barcode,
     name: Option<&str>,
     brand: Option<&str>,
     source: Source,
-) -> Result<u64> {
+) -> Result<ProductId> {
     sqlx::query(
         "INSERT INTO products (barcode, name, brand, source, name_source) \
          VALUES (?, ?, ?, ?, ?) \
@@ -1355,7 +1372,7 @@ async fn find_or_create_by_barcode(
     .bind(source)
     .execute(pool)
     .await?;
-    let (id,): (u64,) = sqlx::query_as("SELECT id FROM products WHERE barcode = ?")
+    let (id,): (ProductId,) = sqlx::query_as("SELECT id FROM products WHERE barcode = ?")
         .bind(barcode)
         .fetch_one(pool)
         .await?;
@@ -1370,8 +1387,8 @@ async fn find_or_create_by_barcode(
 pub async fn upsert_external(
     pool: &MySqlPool,
     source: Source,
-    external_id: &str,
-    barcode: Option<&str>,
+    external_id: &ExternalId,
+    barcode: Option<&Barcode>,
     fields: &ListingFields<'_>,
 ) -> Result<Product> {
     // The source's own name/brand seed the canonical row (fill-if-empty for the
@@ -1435,6 +1452,7 @@ pub async fn upsert_external(
         .execute(pool)
         .await?
         .last_insert_id()
+        .into()
     };
     upsert_listing(pool, product_id, source, external_id, fields).await?;
     refresh_canonical_name(pool, product_id).await?;
@@ -1444,7 +1462,7 @@ pub async fn upsert_external(
 }
 
 /// Cached image bytes + mime for a catalog id, if present.
-pub async fn get_image_by_id(pool: &MySqlPool, id: u64) -> Result<Option<(Vec<u8>, String)>> {
+pub async fn get_image_by_id(pool: &MySqlPool, id: ProductId) -> Result<Option<(Vec<u8>, String)>> {
     let row: Option<(Option<Vec<u8>>, Option<String>)> =
         sqlx::query_as("SELECT image, image_mime FROM products WHERE id = ?")
             .bind(id)
@@ -1457,7 +1475,12 @@ pub async fn get_image_by_id(pool: &MySqlPool, id: u64) -> Result<Option<(Vec<u8
 }
 
 /// Replace the image bytes for a catalog row by id (leaving metadata as-is).
-pub async fn set_image_by_id(pool: &MySqlPool, id: u64, bytes: &[u8], mime: &str) -> Result<()> {
+pub async fn set_image_by_id(
+    pool: &MySqlPool,
+    id: ProductId,
+    bytes: &[u8],
+    mime: &str,
+) -> Result<()> {
     sqlx::query("UPDATE products SET image = ?, image_mime = ?, fetched_at = CURRENT_TIMESTAMP WHERE id = ?")
         .bind(bytes)
         .bind(mime)
@@ -1468,7 +1491,7 @@ pub async fn set_image_by_id(pool: &MySqlPool, id: u64, bytes: &[u8], mime: &str
 }
 
 /// Cached image bytes + mime for a barcode, if present.
-pub async fn get_image(pool: &MySqlPool, barcode: &str) -> Result<Option<(Vec<u8>, String)>> {
+pub async fn get_image(pool: &MySqlPool, barcode: &Barcode) -> Result<Option<(Vec<u8>, String)>> {
     let row: Option<(Option<Vec<u8>>, Option<String>)> =
         sqlx::query_as("SELECT image, image_mime FROM products WHERE barcode = ?")
             .bind(barcode)
@@ -1487,7 +1510,12 @@ pub async fn get_image(pool: &MySqlPool, barcode: &str) -> Result<Option<(Vec<u8
 /// refresh keeps its own `source`. `image_source='user'` is set on every write:
 /// a hand upload is ours, so picture reconciliation never nags to replace it. The
 /// unique `barcode` key drives the upsert.
-pub async fn set_image(pool: &MySqlPool, barcode: &str, bytes: &[u8], mime: &str) -> Result<()> {
+pub async fn set_image(
+    pool: &MySqlPool,
+    barcode: &Barcode,
+    bytes: &[u8],
+    mime: &str,
+) -> Result<()> {
     sqlx::query(
         "INSERT INTO products (barcode, image, image_mime, source, image_source) \
          VALUES (?, ?, ?, 'user', 'user') \
@@ -1516,7 +1544,7 @@ pub async fn set_image(pool: &MySqlPool, barcode: &str, bytes: &[u8], mime: &str
 /// would claim a provenance it no longer had.
 pub async fn upsert(
     pool: &MySqlPool,
-    barcode: &str,
+    barcode: &Barcode,
     name: Option<&str>,
     brand: Option<&str>,
     quantity_label: Option<&str>,

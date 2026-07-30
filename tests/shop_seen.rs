@@ -4,6 +4,7 @@
 //! enough to enter the `(source, barcode)` identity index, and which parts of a
 //! report can be dropped without losing the row.
 
+use life::products::ids::Barcode;
 use life::products::shop_cache::{MAX_SEEN, SeenListing, validate_seen};
 use life::products::source::Source;
 
@@ -27,7 +28,10 @@ fn a_product_the_phone_fetched_becomes_a_cache_row() {
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].source, Source::Waitrose);
     assert_eq!(rows[0].external_id, "271105");
-    assert_eq!(rows[0].barcode.as_deref(), Some("5000169146767"));
+    assert_eq!(
+        rows[0].barcode.as_ref().map(Barcode::as_str),
+        Some("5000169146767")
+    );
     assert_eq!(rows[0].quantity_label.as_deref(), Some("250ml"));
     assert!(rows[0].image_url.is_some());
 }

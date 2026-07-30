@@ -8,6 +8,7 @@ use chrono::NaiveDate;
 use sqlx::MySqlPool;
 
 use super::types::{Item, ItemCategory, Location, LocationKind, NewItem, NewLocation};
+use crate::products::ids::{Barcode, ProductId};
 
 #[derive(sqlx::FromRow)]
 struct LocationRow {
@@ -40,7 +41,7 @@ impl LocationRow {
 #[derive(sqlx::FromRow)]
 struct ItemRow {
     id: u64,
-    product_id: Option<u64>,
+    product_id: Option<ProductId>,
     name: String,
     brand: Option<String>,
     category: String,
@@ -89,7 +90,7 @@ macro_rules! item_select {
 /// The catalog link for a new/updated item: an explicit `product_id` wins (it's
 /// the only route to a barcodeless shop product), else fall back to matching the
 /// barcode against the cached catalog.
-async fn resolve_product_id(pool: &MySqlPool, new: &NewItem) -> Result<Option<u64>> {
+async fn resolve_product_id(pool: &MySqlPool, new: &NewItem) -> Result<Option<ProductId>> {
     if new.product_id.is_some() {
         return Ok(new.product_id);
     }
@@ -97,9 +98,18 @@ async fn resolve_product_id(pool: &MySqlPool, new: &NewItem) -> Result<Option<u6
 }
 
 /// Resolve the catalog product id for a barcode, if one is cached.
-async fn product_id_for_barcode(pool: &MySqlPool, barcode: Option<&str>) -> Result<Option<u64>> {
-    let Some(bc) = barcode else { return Ok(None) };
-    let row: Option<(u64,)> = sqlx::query_as("SELECT id FROM products WHERE barcode = ?")
+///
+/// An item's barcode is whatever was scanned or typed, so it is parsed rather
+/// than queried directly: something that isn't a barcode matches no product, and
+/// a blank one would otherwise match every barcodeless row in the catalog.
+async fn product_id_for_barcode(
+    pool: &MySqlPool,
+    barcode: Option<&str>,
+) -> Result<Option<ProductId>> {
+    let Some(bc) = barcode.and_then(|b| b.parse::<Barcode>().ok()) else {
+        return Ok(None);
+    };
+    let row: Option<(ProductId,)> = sqlx::query_as("SELECT id FROM products WHERE barcode = ?")
         .bind(bc)
         .fetch_optional(pool)
         .await?;

@@ -13,6 +13,7 @@ use ulid::Ulid;
 
 use super::types::{NewShoppingItem, ShoppingItem, UpdateShoppingItem};
 use crate::inventory::types::ItemCategory;
+use crate::products::ids::ProductId;
 use crate::sync::repo::next_rev;
 
 #[derive(sqlx::FromRow)]
@@ -23,7 +24,7 @@ struct Row {
     unit: Option<String>,
     barcode: Option<String>,
     category: String,
-    product_id: Option<u64>,
+    product_id: Option<ProductId>,
     done: bool,
 }
 

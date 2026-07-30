@@ -1,5 +1,6 @@
 //! Recipe domain types.
 
+use crate::products::ids::ProductId;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -14,9 +15,8 @@ pub struct RecipeIngredient {
     /// The catalog product this line names, if it names one. Optional forever:
     /// an ingredient is a kind of thing and most lines will never be worth
     /// pinning to one barcode.
-    #[ts(type = "number | null")]
     #[serde(default)]
-    pub product_id: Option<u64>,
+    pub product_id: Option<ProductId>,
     /// The linked product's canonical name, joined on read so a client can say
     /// WHAT a line is linked to. Server-derived: the write path never stores it
     /// (there is no such column — `product_id` is the only link), and every

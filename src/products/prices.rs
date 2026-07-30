@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use super::ids::ExternalId;
 use super::source::Source;
 
 /// A price a source reported for a listing. The client sends this on import
@@ -38,7 +39,7 @@ pub struct ShopPrice {
     /// The listing's source. Unique within a response.
     pub source: Source,
     /// Source-scoped id of the listing this price came from.
-    pub external_id: String,
+    pub external_id: ExternalId,
     #[ts(type = "number")]
     pub amount_minor: i64,
     pub currency: String,

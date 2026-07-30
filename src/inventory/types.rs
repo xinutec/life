@@ -4,6 +4,7 @@
 use std::fmt;
 use std::str::FromStr;
 
+use crate::products::ids::ProductId;
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -110,8 +111,7 @@ pub struct Location {
 pub struct Item {
     #[ts(type = "number")]
     pub id: u64,
-    #[ts(type = "number | null")]
-    pub product_id: Option<u64>,
+    pub product_id: Option<ProductId>,
     pub name: String,
     pub brand: Option<String>,
     pub category: ItemCategory,
@@ -152,7 +152,7 @@ pub struct NewItem {
     /// Explicit catalog link. Takes precedence over barcode-based resolution and
     /// is the only way to link a barcodeless shop product (Waitrose etc.).
     #[serde(default)]
-    pub product_id: Option<u64>,
+    pub product_id: Option<ProductId>,
 }
 
 fn default_category() -> ItemCategory {

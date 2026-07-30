@@ -2,6 +2,7 @@
 //! layer). Runs only when LIFE_TEST_DATABASE_URL is set.
 
 use life::db;
+use life::products::ids::{Barcode, ExternalId, ProductId};
 use life::products::repo;
 use life::products::source::Source;
 
@@ -14,20 +15,22 @@ async fn product_cache_against_real_db() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let bc = "test-barcode-0001";
+    // A real EAN shape: `Barcode` is the type of a catalogue key now, so a
+    // test can no longer stand one in that the catalogue could never hold.
+    let bc: Barcode = "9990000000001".parse().unwrap();
     sqlx::query("DELETE FROM products WHERE barcode = ?")
-        .bind(bc)
+        .bind(&bc)
         .execute(&pool)
         .await
         .unwrap();
 
     // Miss.
-    assert!(repo::get(&pool, bc).await.unwrap().is_none());
+    assert!(repo::get(&pool, &bc).await.unwrap().is_none());
 
     // Cache with an image.
     repo::upsert(
         &pool,
-        bc,
+        &bc,
         Some("Test Yog"),
         Some("BrandX"),
         Some("950g"),
@@ -35,59 +38,59 @@ async fn product_cache_against_real_db() {
     )
     .await
     .unwrap();
-    let p = repo::get(&pool, bc).await.unwrap().expect("cached");
+    let p = repo::get(&pool, &bc).await.unwrap().expect("cached");
     assert_eq!(p.name.as_deref(), Some("Test Yog"));
     assert_eq!(p.quantity_label.as_deref(), Some("950g"));
     assert!(p.has_image);
 
-    let (bytes, mime) = repo::get_image(&pool, bc).await.unwrap().expect("image");
+    let (bytes, mime) = repo::get_image(&pool, &bc).await.unwrap().expect("image");
     assert_eq!(bytes, vec![1, 2, 3, 4]);
     assert_eq!(mime, "image/png");
 
     // A second OFF lookup FILLS GAPS, it does not overwrite: the cached name and
     // image stand, because a source disagreeing with what we hold is a divergence
     // to approve (see repo::divergences), not something to apply behind your back.
-    repo::upsert(&pool, bc, Some("Test Yog 2"), None, None, None)
+    repo::upsert(&pool, &bc, Some("Test Yog 2"), None, None, None)
         .await
         .unwrap();
-    let p2 = repo::get(&pool, bc).await.unwrap().expect("cached");
+    let p2 = repo::get(&pool, &bc).await.unwrap().expect("cached");
     assert_eq!(p2.name.as_deref(), Some("Test Yog"), "the held name stands");
     assert!(p2.has_image, "and so does the held image");
 
     // A gap, though, is filled — nothing is lost by learning what we didn't know.
     sqlx::query("UPDATE products SET brand = NULL WHERE barcode = ?")
-        .bind(bc)
+        .bind(&bc)
         .execute(&pool)
         .await
         .unwrap();
-    repo::upsert(&pool, bc, None, Some("BrandY"), None, None)
+    repo::upsert(&pool, &bc, None, Some("BrandY"), None, None)
         .await
         .unwrap();
-    let p2b = repo::get(&pool, bc).await.unwrap().expect("cached");
+    let p2b = repo::get(&pool, &bc).await.unwrap().expect("cached");
     assert_eq!(p2b.brand.as_deref(), Some("BrandY"), "an empty field fills");
 
     // A user upload replaces ONLY the image, leaving metadata untouched.
-    repo::set_image(&pool, bc, &[9, 8, 7], "image/webp")
+    repo::set_image(&pool, &bc, &[9, 8, 7], "image/webp")
         .await
         .unwrap();
-    let p3 = repo::get(&pool, bc).await.unwrap().expect("cached");
+    let p3 = repo::get(&pool, &bc).await.unwrap().expect("cached");
     assert_eq!(p3.name.as_deref(), Some("Test Yog"), "name preserved");
     assert!(p3.has_image);
-    let (bytes, mime) = repo::get_image(&pool, bc).await.unwrap().expect("image");
+    let (bytes, mime) = repo::get_image(&pool, &bc).await.unwrap().expect("image");
     assert_eq!(bytes, vec![9, 8, 7]);
     assert_eq!(mime, "image/webp");
 
     // set_image on an unknown barcode creates a bare catalog row with the image.
-    let fresh = "test-barcode-upload-only";
+    let fresh: Barcode = "9990000000002".parse().unwrap();
     sqlx::query("DELETE FROM products WHERE barcode = ?")
-        .bind(fresh)
+        .bind(&fresh)
         .execute(&pool)
         .await
         .unwrap();
-    repo::set_image(&pool, fresh, &[1], "image/png")
+    repo::set_image(&pool, &fresh, &[1], "image/png")
         .await
         .unwrap();
-    let pf = repo::get(&pool, fresh).await.unwrap().expect("created");
+    let pf = repo::get(&pool, &fresh).await.unwrap().expect("created");
     assert!(pf.name.is_none(), "no metadata, just an image");
     assert!(pf.has_image);
 }
@@ -102,18 +105,19 @@ async fn catalog_search_against_real_db() {
     db::migrate(&pool).await.expect("migrate");
 
     // Fixture rows, isolated by a prefix no other test uses.
-    sqlx::query("DELETE FROM products WHERE barcode LIKE 'test-search-%'")
+    sqlx::query("DELETE FROM products WHERE barcode LIKE '99911%'")
         .execute(&pool)
         .await
         .unwrap();
     // Names/brands carry a token no real catalog row would ('yoghurtzz'), so
     // the assertions hold whatever else the shared DB contains.
     for (bc, name, brand) in [
-        ("test-search-0001", "Greek Style Yoghurtzz", "Fage"),
-        ("test-search-0002", "Natural Yoghurtzz 950g", "Yeo Valley"),
-        ("test-search-0003", "Oat Milk", "Oatlyzz"),
+        ("9991100000001", "Greek Style Yoghurtzz", "Fage"),
+        ("9991100000002", "Natural Yoghurtzz 950g", "Yeo Valley"),
+        ("9991100000003", "Oat Milk", "Oatlyzz"),
     ] {
-        repo::upsert(&pool, bc, Some(name), Some(brand), None, None)
+        let bc: Barcode = bc.parse().unwrap();
+        repo::upsert(&pool, &bc, Some(name), Some(brand), None, None)
             .await
             .unwrap();
     }
@@ -156,17 +160,18 @@ async fn external_import_against_real_db() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let (source, ext) = (Source::Waitrose, "TEST062593");
+    let source = Source::Waitrose;
+    let ext: ExternalId = "TEST062593".parse().unwrap();
     sqlx::query("DELETE FROM products WHERE source = ? AND external_id = ?")
         .bind(source)
-        .bind(ext)
+        .bind(&ext)
         .execute(&pool)
         .await
         .unwrap();
 
     // Miss on the (source, external_id) key.
     assert!(
-        repo::get_by_source_external(&pool, source, ext)
+        repo::get_by_source_external(&pool, source, &ext)
             .await
             .unwrap()
             .is_none()
@@ -176,7 +181,7 @@ async fn external_import_against_real_db() {
     let p = repo::upsert_external(
         &pool,
         source,
-        ext,
+        &ext,
         None, // no EAN — keyed by the shop's external id
         &repo::ListingFields {
             raw_name: Some("Cravendale Semi-Skimmed Milk"),
@@ -187,14 +192,17 @@ async fn external_import_against_real_db() {
     .await
     .unwrap();
     assert_eq!(p.source, Some(Source::Waitrose));
-    assert_eq!(p.external_id.as_deref(), Some(ext));
+    assert_eq!(
+        p.external_id.as_ref().map(ExternalId::as_str),
+        Some(ext.as_str())
+    );
     assert_eq!(p.name.as_deref(), Some("Cravendale Semi-Skimmed Milk"));
     assert!(p.barcode.is_none(), "shop product has no barcode");
     assert!(!p.has_image);
 
     // Reachable by (source, external_id) and by surrogate id.
     assert_eq!(
-        repo::get_by_source_external(&pool, source, ext)
+        repo::get_by_source_external(&pool, source, &ext)
             .await
             .unwrap()
             .unwrap()
@@ -226,7 +234,7 @@ async fn external_import_against_real_db() {
     let p2 = repo::upsert_external(
         &pool,
         source,
-        ext,
+        &ext,
         None,
         &repo::ListingFields {
             raw_name: Some("Cravendale Whole Milk"),
@@ -257,28 +265,28 @@ async fn a_stored_source_outside_the_enum_fails_the_read_loudly() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let ext = "TESTUNKNOWNSRC";
+    let ext: ExternalId = "TESTUNKNOWNSRC".parse().unwrap();
     sqlx::query("DELETE FROM products WHERE external_id = ?")
-        .bind(ext)
+        .bind(&ext)
         .execute(&pool)
         .await
         .unwrap();
     sqlx::query("INSERT INTO products (source, external_id, name) VALUES ('tesco', ?, 'Ghost')")
-        .bind(ext)
+        .bind(&ext)
         .execute(&pool)
         .await
         .unwrap();
 
-    let err = repo::get_by_source_external(&pool, Source::Waitrose, ext).await;
+    let err = repo::get_by_source_external(&pool, Source::Waitrose, &ext).await;
     // Reading it by its own (bogus) source isn't expressible — that is the
     // point — so read the row the way the catalogue does, by id.
     assert!(err.is_ok(), "the miss on a real source is just a miss");
     let id: (u64,) = sqlx::query_as("SELECT id FROM products WHERE external_id = ?")
-        .bind(ext)
+        .bind(&ext)
         .fetch_one(&pool)
         .await
         .unwrap();
-    let read = repo::get_by_id(&pool, id.0).await;
+    let read = repo::get_by_id(&pool, ProductId(id.0)).await;
     assert!(read.is_err(), "an unknown source must not decode silently");
     let msg = read.unwrap_err().to_string();
     assert!(
@@ -287,7 +295,7 @@ async fn a_stored_source_outside_the_enum_fails_the_read_loudly() {
     );
 
     sqlx::query("DELETE FROM products WHERE external_id = ?")
-        .bind(ext)
+        .bind(&ext)
         .execute(&pool)
         .await
         .unwrap();

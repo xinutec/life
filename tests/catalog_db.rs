@@ -6,6 +6,7 @@
 use life::db;
 use life::inventory::repo as inv;
 use life::inventory::types::{ItemCategory, NewItem};
+use life::products::ids::{Barcode, ExternalId};
 use life::products::repo as prod;
 use life::products::source::Source;
 
@@ -32,7 +33,9 @@ async fn item_resolves_through_catalog_product() {
     db::migrate(&pool).await.expect("migrate");
 
     let user = "catalog-test-user";
-    let barcode = "cat-test-9999";
+    // A catalogue key has to be EAN-shaped now; the item side still carries
+    // whatever was scanned, which is why `new_item` keeps taking a `&str`.
+    let barcode: Barcode = "9990000009999".parse().unwrap();
     // Clean any prior run.
     sqlx::query("DELETE FROM items WHERE user_id = ?")
         .bind(user)
@@ -40,7 +43,7 @@ async fn item_resolves_through_catalog_product() {
         .await
         .unwrap();
     sqlx::query("DELETE FROM products WHERE barcode = ?")
-        .bind(barcode)
+        .bind(&barcode)
         .execute(&pool)
         .await
         .unwrap();
@@ -48,7 +51,7 @@ async fn item_resolves_through_catalog_product() {
     // A catalog product (as the OFF lookup would cache it), with an image.
     prod::upsert(
         &pool,
-        barcode,
+        &barcode,
         Some("Catalog Yoghurt"),
         Some("BrandY"),
         Some("950g"),
@@ -59,7 +62,7 @@ async fn item_resolves_through_catalog_product() {
 
     // An item scanned to that barcode — its own name is a scribble that the
     // product name should override on read.
-    let linked = inv::create_item(&pool, user, new_item("scribble", Some(barcode)))
+    let linked = inv::create_item(&pool, user, new_item("scribble", Some(barcode.as_str())))
         .await
         .unwrap();
     assert!(
@@ -71,7 +74,7 @@ async fn item_resolves_through_catalog_product() {
         "display name comes from the product"
     );
     assert_eq!(linked.brand.as_deref(), Some("BrandY"));
-    assert_eq!(linked.barcode.as_deref(), Some(barcode));
+    assert_eq!(linked.barcode.as_deref(), Some(barcode.as_str()));
     assert!(linked.has_image, "product image surfaces on the item");
 
     // A barcode-less one-off stands alone on its own name.
@@ -99,14 +102,14 @@ async fn item_links_to_barcodeless_shop_product_by_id() {
     db::migrate(&pool).await.expect("migrate");
 
     let user = "catalog-shoplink-user";
-    let external_id = "cat-test-ln-777777";
+    let external_id: ExternalId = "cat-test-ln-777777".parse().unwrap();
     sqlx::query("DELETE FROM items WHERE user_id = ?")
         .bind(user)
         .execute(&pool)
         .await
         .unwrap();
     sqlx::query("DELETE FROM products WHERE source = 'waitrose' AND external_id = ?")
-        .bind(external_id)
+        .bind(&external_id)
         .execute(&pool)
         .await
         .unwrap();
@@ -115,7 +118,7 @@ async fn item_links_to_barcodeless_shop_product_by_id() {
     let product = prod::upsert_external(
         &pool,
         Source::Waitrose,
-        external_id,
+        &external_id,
         None, // barcodeless shop product
         &prod::ListingFields {
             raw_name: Some("Waitrose Cheddar"),

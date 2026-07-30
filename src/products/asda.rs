@@ -21,8 +21,8 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use super::ids::{Barcode, ExternalId};
 use super::nutrition::{Claim, DietaryFlag};
-use super::off::is_valid_barcode;
 use super::prices::PriceInput;
 
 /// Algolia application id — also the request host (`{app}-dsn.algolia.net`).
@@ -43,12 +43,12 @@ const IMAGE_BASE: &str = "https://asdagroceries.scene7.com/is/image/asdagrocerie
 #[ts(export)]
 pub struct AsdaHit {
     /// Asda catalogue item number (CIN); the stable per-source id we import by.
-    pub external_id: String,
+    pub external_id: ExternalId,
     pub name: String,
     pub brand: Option<String>,
     /// Primary EAN (from `IMAGE_ID`) when it's barcode-shaped; the shopping row
     /// carries this even though the imported catalogue row stays barcodeless.
-    pub barcode: Option<String>,
+    pub barcode: Option<Barcode>,
     /// Pack size, e.g. "400G".
     pub quantity_label: Option<String>,
     /// Formatted England price for display, e.g. "£3.57".
@@ -235,19 +235,14 @@ pub fn parse_hits(body: &str) -> Result<Vec<AsdaHit>> {
 /// identity we need (a CIN and a name). `raw_value` is the same hit untouched,
 /// carried onto the `AsdaHit` as the lossless record.
 fn normalize(raw: RawHit, raw_value: serde_json::Value) -> Option<AsdaHit> {
-    let external_id = non_empty(raw.cin.or(raw.object_id))?;
-    // Import validates external_id as [A-Za-z0-9_-]{1,64}; a CIN is digits, but
-    // guard here too so a weird id never reaches the import route.
-    if external_id.len() > 64
-        || !external_id
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-    {
-        return None;
-    }
+    // A hit whose CIN isn't a well-formed id is dropped rather than repaired:
+    // an id we can't address the listing by is not an identity.
+    let external_id: ExternalId = non_empty(raw.cin.or(raw.object_id))?.parse().ok()?;
     let name = non_empty(raw.name)?;
     let image_id = non_empty(raw.image_id);
-    let barcode = image_id.clone().filter(|id| is_valid_barcode(id));
+    // IMAGE_ID is usually the EAN but not always; a non-barcode one just means
+    // this hit teaches us no barcode.
+    let barcode = image_id.as_deref().and_then(|id| id.parse().ok());
     let image_url = image_id.map(|id| format!("{IMAGE_BASE}{id}?$ProdList$"));
     // The England region feeds both the display label and the structured price.
     let en = raw.prices.and_then(|p| p.en);
@@ -286,20 +281,20 @@ fn normalize(raw: RawHit, raw_value: serde_json::Value) -> Option<AsdaHit> {
 /// caps or samples the hits.
 ///
 /// Pure, so the rule is tested without a network.
-pub fn match_barcode(hits: Vec<AsdaHit>, barcode: &str) -> Option<AsdaHit> {
+pub fn match_barcode(hits: Vec<AsdaHit>, barcode: &Barcode) -> Option<AsdaHit> {
     hits.into_iter()
-        .find(|h| h.barcode.as_deref() == Some(barcode))
+        .find(|h| h.barcode.as_ref() == Some(barcode))
 }
 
 /// One product by its CIN — the exact-identity fetch behind "refresh this
 /// listing". Asda has no by-id endpoint, but the CIN IS a searchable attribute,
 /// so we query it and then VERIFY the hit's own CIN rather than trusting the
 /// first result: a search is a relevance guess, and this must be an identity.
-pub async fn fetch_by_id(http: &reqwest::Client, cin: &str) -> Result<Option<AsdaHit>> {
-    Ok(search(http, cin, 5)
+pub async fn fetch_by_id(http: &reqwest::Client, cin: &ExternalId) -> Result<Option<AsdaHit>> {
+    Ok(search(http, cin.as_str(), 5)
         .await?
         .into_iter()
-        .find(|h| h.external_id == cin))
+        .find(|h| &h.external_id == cin))
 }
 
 /// Search the Asda storefront by product name. Returns up to `limit` normalized

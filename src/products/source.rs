@@ -20,6 +20,8 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use super::ids::ExternalId;
+
 /// A source of product data: a shop, Open Food Facts, or our own hand-entry.
 ///
 /// **Variants are alphabetical, and that is load-bearing**: the derived `Ord` is
@@ -88,10 +90,10 @@ impl Source {
     /// old groceries.asda.com host just 301s to it; Waitrose redirects any slug
     /// to the canonical one, keyed by the trailing lineNumber).
     ///
-    /// `external_id` is safe to splice: import validates it as
-    /// `[A-Za-z0-9_-]{1,64}`, and OFF's is a validated numeric barcode. `None`
-    /// for a source with no page of its own.
-    pub fn listing_url(self, external_id: &str) -> Option<String> {
+    /// Splicing is safe by construction: an [`ExternalId`] is
+    /// `[A-Za-z0-9_-]{1,64}` and can carry no path segment or query parameter.
+    /// `None` for a source with no page of its own.
+    pub fn listing_url(self, external_id: &ExternalId) -> Option<String> {
         match self {
             Source::Off => Some(format!(
                 "https://world.openfoodfacts.org/product/{external_id}"

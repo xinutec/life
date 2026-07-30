@@ -15,6 +15,7 @@ use ulid::Ulid;
 
 use crate::error::AppError;
 use crate::inventory::types::ItemCategory;
+use crate::products::ids::ProductId;
 use crate::todo::types::{LinkKind, TargetKind, TodoPriority, TodoStatus, TodoType};
 
 use super::types::{
@@ -236,7 +237,7 @@ struct ShoppingDocRow {
     unit: Option<String>,
     barcode: Option<String>,
     category: String,
-    product_id: Option<u64>,
+    product_id: Option<ProductId>,
     done: bool,
     deleted: i64,
     rev: u64,

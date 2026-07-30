@@ -4,17 +4,23 @@
 use life::products::coverage::{
     AttachedListing, CoverageQuery, Sighting, barcodes, combine, product_ids,
 };
+use life::products::ids::{Barcode, ProductId};
 use life::products::source::Source;
 
 /// A shop's own listing for a product.
 fn held(product_id: u64, source: Source) -> AttachedListing {
-    AttachedListing { product_id, source }
+    AttachedListing {
+        product_id: ProductId(product_id),
+        source,
+    }
 }
 
 /// A shop query of ours that once showed this barcode at this shop.
 fn seen(barcode: &str, source: Source) -> Sighting {
     Sighting {
-        barcode: barcode.to_string(),
+        barcode: barcode
+            .parse()
+            .expect("a test sighting must carry a real barcode"),
         source,
     }
 }
@@ -23,7 +29,7 @@ fn row(key: &str, barcode: Option<&str>, product_id: Option<u64>) -> CoverageQue
     CoverageQuery {
         key: key.to_string(),
         barcode: barcode.map(str::to_string),
-        product_id,
+        product_id: product_id.map(ProductId),
     }
 }
 
@@ -114,8 +120,8 @@ fn the_keys_to_query_are_deduped() {
         row("a", Some("5000169146767"), Some(42)),
         row("b", Some("5000169146767"), Some(42)),
     ];
-    assert_eq!(product_ids(&q), [42]);
-    assert_eq!(barcodes(&q), ["5000169146767"]);
+    assert_eq!(product_ids(&q), [ProductId(42)]);
+    assert_eq!(barcodes(&q), ["5000169146767".parse::<Barcode>().unwrap()]);
 }
 
 #[test]

@@ -8,5 +8,9 @@
  * memory fills exactly as it does for the shops the server can query itself.
  * Everything but the shop's own id is optional — a search hit knows a name and
  * a lineNumber, and only a product fetch learns the barcode.
+ *
+ * Its fields are plain strings, deliberately: this is what the phone *said*,
+ * not yet something we believe. `validate_seen` is where it becomes typed, and
+ * the pair of structs is that boundary made visible.
  */
 export type SeenListing = { external_id: string, barcode: string | null, name: string | null, brand: string | null, quantity_label: string | null, image_url: string | null, };

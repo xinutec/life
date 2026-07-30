@@ -592,11 +592,30 @@ through something that resets the NC session.
         `to_minor` saturating `f64 as i64` on money (NaN → 0), now `None` outside
         a sane range. `print_stderr` is deliberately *not* denied: `[lints]`
         covers every target, and the DB tests' skip announcements are the point.
-- [ ] **Type safety, remaining** — identifier newtypes (`Barcode`/`ExternalId`/
-      `ProductId`): `external_id` is a `String` documented as `[A-Za-z0-9_-]{1,64}`
-      and validated at three separate boundaries, each with its own copy of the
-      rule. A newtype makes that structural and stops a barcode being passed where
-      a source-scoped id belongs.
+- [x] **The identifiers became types** (2026-07-30) — `Barcode`, `ExternalId`,
+      `ProductId`, `ListingId` in `src/products/ids.rs`. Two bug classes, both of
+      which had already happened here in the small.
+      - **A rule written down more than once drifts.** `[A-Za-z0-9_-]{1,64}` was
+        re-implemented at three boundaries (import route, shop-sighting report,
+        Asda's normaliser) and the barcode rule at four more. Both are now one
+        `FromStr`, and `off::is_valid_barcode` is gone — there is nothing left for
+        it to guard, because `off::fetch` takes a `Barcode` and the reason
+        splicing into the outbound URL is safe is the parameter type.
+      - **Same shape, different meaning.** `record_price(pool, listing_id, …)` sat
+        beside a dozen `product_id`-taking functions, all `u64`; `ShoppingItem`
+        carried `id` and `product_id` side by side. Those swaps no longer compile.
+      - **Where the rule deliberately does *not* apply.** `shopping_items.barcode`
+        stays a `String`: it is what the phone scanned, arriving over sync, and a
+        push that failed validation would strand an offline edit. `SeenListing`
+        likewise — untrusted text until `validate_seen` turns it into a
+        `CachedListing`, which is that boundary made visible.
+      - Two latent bugs fell out: `product_id_for_barcode` queried whatever an
+        item carried, so a blank barcode would have matched every barcodeless
+        catalogue row (the same trap `coverage::barcodes` already guarded); and
+        several test fixtures used barcodes the catalogue could never hold
+        (`test-barcode-0001`), which the type refused.
+      - Production was checked for out-of-shape values first — `Decode` parses, so
+        one bad row would 500 every read. All four tables were clean.
 - [ ] **Compile-time-checked SQL (decision pending)** — `verify.sh` says it
       plainly: *"the queries are strings, so nothing else checks them"*. 130
       runtime `sqlx::query_as`/`query` calls, zero `query_as!`, though the

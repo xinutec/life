@@ -3,6 +3,7 @@
 //! "cheapest shop" view. Runs only when LIFE_TEST_DATABASE_URL is set.
 
 use life::db;
+use life::products::ids::{Barcode, ExternalId};
 use life::products::prices::PriceInput;
 use life::products::repo;
 use life::products::source::Source;
@@ -26,16 +27,16 @@ async fn latest_price_per_shop_cheapest_first_with_history() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let barcode = "5000000000123";
-    let asda_id = "pricetest-asda-1";
-    let wr_id = "pricetest-wr-1";
+    let barcode: Barcode = "5000000000123".parse().unwrap();
+    let asda_id: ExternalId = "pricetest-asda-1".parse().unwrap();
+    let wr_id: ExternalId = "pricetest-wr-1".parse().unwrap();
     // Deleting the product cascades listings and their price observations.
     sqlx::query("DELETE FROM products WHERE barcode = ?")
-        .bind(barcode)
+        .bind(&barcode)
         .execute(&pool)
         .await
         .unwrap();
-    for ext in [asda_id, wr_id] {
+    for ext in [&asda_id, &wr_id] {
         sqlx::query("DELETE FROM product_listings WHERE external_id = ?")
             .bind(ext)
             .execute(&pool)
@@ -47,8 +48,8 @@ async fn latest_price_per_shop_cheapest_first_with_history() {
     let product = repo::upsert_external(
         &pool,
         Source::Asda,
-        asda_id,
-        Some(barcode),
+        &asda_id,
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Milk"),
             ..Default::default()
@@ -59,8 +60,8 @@ async fn latest_price_per_shop_cheapest_first_with_history() {
     repo::upsert_external(
         &pool,
         Source::Waitrose,
-        wr_id,
-        Some(barcode),
+        &wr_id,
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Milk"),
             ..Default::default()
@@ -68,11 +69,11 @@ async fn latest_price_per_shop_cheapest_first_with_history() {
     )
     .await
     .unwrap();
-    let asda_listing = repo::listing_id(&pool, Source::Asda, asda_id)
+    let asda_listing = repo::listing_id(&pool, Source::Asda, &asda_id)
         .await
         .unwrap()
         .unwrap();
-    let wr_listing = repo::listing_id(&pool, Source::Waitrose, wr_id)
+    let wr_listing = repo::listing_id(&pool, Source::Waitrose, &wr_id)
         .await
         .unwrap()
         .unwrap();
@@ -134,14 +135,17 @@ async fn a_shop_listing_a_product_twice_collapses_to_its_cheapest() {
     // Asda can carry two CINs for one EAN (a relist), so one product ends up with
     // two 'asda' listings. "Where to buy" wants ONE answer per shop — its best
     // price — and the link must point at the listing that quoted it.
-    let barcode = "5000000000987";
-    let (cin_a, cin_b) = ("pricetest-asda-dup-a", "pricetest-asda-dup-b");
+    let barcode: Barcode = "5000000000987".parse().unwrap();
+    let (cin_a, cin_b): (ExternalId, ExternalId) = (
+        "pricetest-asda-dup-a".parse().unwrap(),
+        "pricetest-asda-dup-b".parse().unwrap(),
+    );
     sqlx::query("DELETE FROM products WHERE barcode = ?")
-        .bind(barcode)
+        .bind(&barcode)
         .execute(&pool)
         .await
         .unwrap();
-    for ext in [cin_a, cin_b] {
+    for ext in [&cin_a, &cin_b] {
         sqlx::query("DELETE FROM product_listings WHERE external_id = ?")
             .bind(ext)
             .execute(&pool)
@@ -152,8 +156,8 @@ async fn a_shop_listing_a_product_twice_collapses_to_its_cheapest() {
     let product = repo::upsert_external(
         &pool,
         Source::Asda,
-        cin_a,
-        Some(barcode),
+        &cin_a,
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Butter"),
             ..Default::default()
@@ -164,8 +168,8 @@ async fn a_shop_listing_a_product_twice_collapses_to_its_cheapest() {
     repo::upsert_external(
         &pool,
         Source::Asda,
-        cin_b,
-        Some(barcode),
+        &cin_b,
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Butter"),
             ..Default::default()
@@ -173,11 +177,11 @@ async fn a_shop_listing_a_product_twice_collapses_to_its_cheapest() {
     )
     .await
     .unwrap();
-    let listing_a = repo::listing_id(&pool, Source::Asda, cin_a)
+    let listing_a = repo::listing_id(&pool, Source::Asda, &cin_a)
         .await
         .unwrap()
         .unwrap();
-    let listing_b = repo::listing_id(&pool, Source::Asda, cin_b)
+    let listing_b = repo::listing_id(&pool, Source::Asda, &cin_b)
         .await
         .unwrap()
         .unwrap();

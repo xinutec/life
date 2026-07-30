@@ -4,6 +4,7 @@
 use life::db;
 use life::inventory::repo as inv_repo;
 use life::inventory::types::{ItemCategory, NewItem};
+use life::products::ids::Barcode;
 use life::products::repo as prod_repo;
 use life::recipes::matching::shopping_list;
 use life::recipes::repo;
@@ -175,7 +176,7 @@ async fn a_linked_ingredient_matches_stock_by_product_not_by_name() {
     db::migrate(&pool).await.expect("migrate");
 
     let user = "test-user-recipe-link";
-    let barcode = "5099999900040";
+    let barcode: Barcode = "5099999900040".parse().unwrap();
     for sql in [
         "DELETE FROM recipes WHERE user_id = ?",
         "DELETE FROM items WHERE user_id = ?",
@@ -183,14 +184,14 @@ async fn a_linked_ingredient_matches_stock_by_product_not_by_name() {
         sqlx::query(sql).bind(user).execute(&pool).await.unwrap();
     }
     sqlx::query("DELETE FROM products WHERE barcode = ?")
-        .bind(barcode)
+        .bind(&barcode)
         .execute(&pool)
         .await
         .unwrap();
 
     prod_repo::upsert(
         &pool,
-        barcode,
+        &barcode,
         Some("Bart Ground Cumin 38g"),
         Some("Bart"),
         Some("38g"),
@@ -198,7 +199,7 @@ async fn a_linked_ingredient_matches_stock_by_product_not_by_name() {
     )
     .await
     .unwrap();
-    let product = prod_repo::get(&pool, barcode)
+    let product = prod_repo::get(&pool, &barcode)
         .await
         .unwrap()
         .expect("product");
@@ -214,7 +215,7 @@ async fn a_linked_ingredient_matches_stock_by_product_not_by_name() {
             unit: Some("jar".into()),
             expiry: None,
             location_id: None,
-            barcode: Some(barcode.into()),
+            barcode: Some(barcode.to_string()),
             product_id: Some(product.id),
         },
     )

@@ -7,6 +7,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use super::ids::{Barcode, ExternalId, ProductId};
 use super::nutrition::ProductFacts;
 use super::prices::ShopPrice;
 use super::source::Source;
@@ -15,9 +16,8 @@ use super::source::Source;
 #[ts(export)]
 pub struct Product {
     /// Catalog id (surrogate key). A product may have no barcode (hand-defined).
-    #[ts(type = "number")]
-    pub id: u64,
-    pub barcode: Option<String>,
+    pub id: ProductId,
+    pub barcode: Option<Barcode>,
     pub name: Option<String>,
     pub brand: Option<String>,
     pub quantity_label: Option<String>,
@@ -25,7 +25,7 @@ pub struct Product {
     pub source: Option<Source>,
     /// Source-scoped external id (e.g. a Waitrose lineNumber). Unique per source;
     /// how a shop product with no barcode is addressed and de-duped.
-    pub external_id: Option<String>,
+    pub external_id: Option<ExternalId>,
     /// Which source's title `name` currently is (see repo's canonical-name
     /// refresh) — provenance for display, never hand-assigned.
     pub name_source: Option<Source>,
@@ -44,7 +44,7 @@ pub struct Product {
 #[ts(export)]
 pub struct ProductListing {
     pub source: Source,
-    pub external_id: String,
+    pub external_id: ExternalId,
     /// Deep link to the source's product page, when it has one.
     pub url: Option<String>,
     /// What this source titles the product (the canonical `name` picks among

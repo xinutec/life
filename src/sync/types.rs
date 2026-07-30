@@ -6,6 +6,7 @@
 //! envelopes are generic over the document type so each collection reuses them.
 //! See `docs/proposals/offline-first.md`.
 
+use crate::products::ids::ProductId;
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -30,7 +31,7 @@ pub struct ShoppingDoc {
     pub category: String,
     /// Optional link to the products catalog (mirrors `items.product_id`).
     #[serde(default)]
-    pub product_id: Option<u64>,
+    pub product_id: Option<ProductId>,
     pub done: bool,
     /// RxDB tombstone flag (maps to `deleted_at IS NOT NULL`).
     #[serde(rename = "_deleted", default)]

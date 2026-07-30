@@ -6,6 +6,7 @@
 use std::collections::BTreeMap;
 
 use life::db;
+use life::products::ids::{Barcode, ExternalId};
 use life::products::nutrition::{Allergen, Claim, DietaryFlag, Nutrition, Presence, ProductFacts};
 use life::products::source::Source;
 use life::products::{brandbank, repo};
@@ -38,9 +39,9 @@ async fn store_and_read_facts_then_replace_on_relookup() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let barcode = "5000000000456";
+    let barcode: Barcode = "5000000000456".parse().unwrap();
     sqlx::query("DELETE FROM products WHERE barcode = ?")
-        .bind(barcode)
+        .bind(&barcode)
         .execute(&pool)
         .await
         .unwrap();
@@ -48,8 +49,8 @@ async fn store_and_read_facts_then_replace_on_relookup() {
     let product = repo::upsert_external(
         &pool,
         Source::Off,
-        barcode,
-        Some(barcode),
+        &ExternalId::from(&barcode),
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Porridge Oats"),
             ..Default::default()
@@ -172,17 +173,17 @@ async fn two_sources_dietary_claims_coexist_and_merge() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let barcode = "5000000000654";
+    let barcode: Barcode = "5000000000654".parse().unwrap();
     sqlx::query("DELETE FROM products WHERE barcode = ?")
-        .bind(barcode)
+        .bind(&barcode)
         .execute(&pool)
         .await
         .unwrap();
     let product = repo::upsert_external(
         &pool,
         Source::Off,
-        barcode,
-        Some(barcode),
+        &ExternalId::from(&barcode),
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Oat Drink"),
             ..Default::default()
@@ -292,17 +293,17 @@ async fn two_sources_nutrition_allergens_ingredients_coexist_and_merge() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let barcode = "5000000000655";
+    let barcode: Barcode = "5000000000655".parse().unwrap();
     sqlx::query("DELETE FROM products WHERE barcode = ?")
-        .bind(barcode)
+        .bind(&barcode)
         .execute(&pool)
         .await
         .unwrap();
     let product = repo::upsert_external(
         &pool,
         Source::Off,
-        barcode,
-        Some(barcode),
+        &ExternalId::from(&barcode),
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Oat Drink"),
             ..Default::default()
@@ -417,17 +418,17 @@ async fn real_brandbank_facts_parse_store_and_read_back() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let barcode = "7394376616228"; // the real Oalty EAN from the fixture
+    let barcode: Barcode = "7394376616228".parse().unwrap(); // the real Oalty EAN from the fixture
     sqlx::query("DELETE FROM products WHERE barcode = ?")
-        .bind(barcode)
+        .bind(&barcode)
         .execute(&pool)
         .await
         .unwrap();
     let product = repo::upsert_external(
         &pool,
         Source::Asda,
-        "6163443",
-        Some(barcode),
+        &"6163443".parse::<ExternalId>().unwrap(),
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Oalty Oat Drink Barista Edition 1L Long Life"),
             ..Default::default()
@@ -485,17 +486,17 @@ async fn a_failed_allergen_replace_keeps_the_previous_set() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let barcode = "5000000000459";
+    let barcode: Barcode = "5000000000459".parse().unwrap();
     sqlx::query("DELETE FROM products WHERE barcode = ?")
-        .bind(barcode)
+        .bind(&barcode)
         .execute(&pool)
         .await
         .unwrap();
     let product = repo::upsert_external(
         &pool,
         Source::Off,
-        barcode,
-        Some(barcode),
+        &ExternalId::from(&barcode),
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Nut Bar"),
             ..Default::default()

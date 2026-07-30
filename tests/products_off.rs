@@ -176,35 +176,3 @@ fn sniff_identifies_raster_types_and_rejects_everything_else() {
     assert_eq!(off::sniff_image_mime(b"RIFF\x10\x00\x00\x00WAVE"), None); // RIFF but not WebP
     assert_eq!(off::sniff_image_mime(b"\x00\x00\x00\x20ftypmp42...."), None); // BMFF but not AVIF
 }
-
-#[test]
-fn upload_barcode_guard_matches_lookup() {
-    // The upload handler reuses the lookup barcode guard: numeric, 1..=14 digits.
-    assert!(off::is_valid_barcode("5000112548167"));
-    for bad in ["", "abc", "12345678901234567", "12/34", "../x"] {
-        assert!(
-            !off::is_valid_barcode(bad),
-            "expected {bad:?} to be rejected"
-        );
-    }
-}
-
-#[tokio::test]
-async fn lookup_ignores_non_numeric_barcodes() {
-    // A non-numeric/oversized barcode must not be spliced into the OFF URL: the
-    // guard returns Ok(None) before building any request (so the client here is
-    // never actually used).
-    let client = reqwest::Client::new();
-    for barcode in [
-        "",
-        "abc",
-        "123?fields=all",
-        "../../secret",
-        "123456789012345",
-    ] {
-        let got = off::fetch(&client, barcode)
-            .await
-            .expect("the guard returns Ok(None), never an error");
-        assert!(got.is_none(), "expected barcode {barcode:?} to be ignored");
-    }
-}

@@ -3,6 +3,7 @@
 //! Runs only when LIFE_TEST_DATABASE_URL is set.
 
 use life::db;
+use life::products::ids::{Barcode, ExternalId};
 use life::products::repo;
 use life::products::source::Source;
 
@@ -15,17 +16,17 @@ async fn stores_a_payload_verbatim_overwrites_by_kind_and_cascades() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let barcode = "5000000000901";
+    let barcode: Barcode = "5000000000901".parse().unwrap();
     sqlx::query("DELETE FROM products WHERE barcode = ?")
-        .bind(barcode)
+        .bind(&barcode)
         .execute(&pool)
         .await
         .unwrap();
     let product = repo::upsert_external(
         &pool,
         Source::Asda,
-        "doc-cin-1",
-        Some(barcode),
+        &"doc-cin-1".parse::<ExternalId>().unwrap(),
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Doc Test Product"),
             ..Default::default()

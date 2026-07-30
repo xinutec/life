@@ -6,6 +6,7 @@ use anyhow::Result;
 use sqlx::MySqlPool;
 
 use super::types::{NewRecipe, Recipe, RecipeIngredient};
+use crate::products::ids::ProductId;
 
 #[derive(sqlx::FromRow)]
 struct RecipeRow {
@@ -19,7 +20,7 @@ struct RecipeRow {
 struct IngredientRow {
     recipe_id: u64,
     name: String,
-    product_id: Option<u64>,
+    product_id: Option<ProductId>,
     product_name: Option<String>,
     quantity: Option<f64>,
     unit: Option<String>,

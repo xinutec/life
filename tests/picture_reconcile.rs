@@ -8,14 +8,15 @@
 use std::collections::HashMap;
 
 use life::db;
+use life::products::ids::{Barcode, ExternalId, ProductId};
 use life::products::repo::{self, Listing};
 use life::products::source::Source;
 use life::products::types::{Product, ReconcileField};
 
 fn product(image_source: Option<Source>, has_image: bool) -> Product {
     Product {
-        id: 1,
-        barcode: Some("5000000000789".into()),
+        id: ProductId(1),
+        barcode: Some("5000000000789".parse().unwrap()),
         name: Some("Name".into()),
         brand: Some("Brand".into()),
         quantity_label: Some("500g".into()),
@@ -30,7 +31,7 @@ fn product(image_source: Option<Source>, has_image: bool) -> Product {
 fn listing(source: Source, image_url: Option<&str>) -> Listing {
     Listing {
         source,
-        external_id: format!("{source}-cin"),
+        external_id: format!("{source}-cin").parse().unwrap(),
         url: None,
         raw_name: Some("Name".into()),
         brand: Some("Brand".into()),
@@ -43,7 +44,7 @@ fn listing(source: Source, image_url: Option<&str>) -> Listing {
 /// does), for the round-trip test.
 async fn picture_divergence(
     pool: &sqlx::MySqlPool,
-    id: u64,
+    id: ProductId,
 ) -> Option<life::products::types::FieldDivergence> {
     let listings = repo::listings_for(pool, id).await.unwrap();
     let decisions = repo::field_decisions(pool, id).await.unwrap();
@@ -123,14 +124,17 @@ async fn settle_picture_quiets_it_until_a_url_changes() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let barcode = "5000000000790";
-    let (off_ext, asda_ext) = ("pictest-off", "pictest-asda");
+    let barcode: Barcode = "5000000000790".parse().unwrap();
+    let (off_ext, asda_ext): (ExternalId, ExternalId) = (
+        "pictest-off".parse().unwrap(),
+        "pictest-asda".parse().unwrap(),
+    );
     sqlx::query("DELETE FROM products WHERE barcode = ?")
-        .bind(barcode)
+        .bind(&barcode)
         .execute(&pool)
         .await
         .unwrap();
-    for ext in [off_ext, asda_ext] {
+    for ext in [&off_ext, &asda_ext] {
         sqlx::query("DELETE FROM product_listings WHERE external_id = ?")
             .bind(ext)
             .execute(&pool)
@@ -142,8 +146,8 @@ async fn settle_picture_quiets_it_until_a_url_changes() {
     let p = repo::upsert_external(
         &pool,
         Source::Off,
-        off_ext,
-        Some(barcode),
+        &off_ext,
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("name"),
             image_url: Some("https://off.example/y.jpg"),
@@ -155,8 +159,8 @@ async fn settle_picture_quiets_it_until_a_url_changes() {
     repo::upsert_external(
         &pool,
         Source::Asda,
-        asda_ext,
-        Some(barcode),
+        &asda_ext,
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Name"),
             image_url: Some("https://asda.example/x.jpg"),
@@ -191,8 +195,8 @@ async fn settle_picture_quiets_it_until_a_url_changes() {
     repo::upsert_external(
         &pool,
         Source::Asda,
-        asda_ext,
-        Some(barcode),
+        &asda_ext,
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Name"),
             image_url: Some("https://asda.example/x2.jpg"),

@@ -1,6 +1,7 @@
 //! Pure recipe↔inventory matching: shopping list and cook-now.
 
 use life::inventory::types::{Item, ItemCategory};
+use life::products::ids::ProductId;
 use life::recipes::matching::{can_cook, shopping_list};
 use life::recipes::types::RecipeIngredient;
 
@@ -16,7 +17,7 @@ fn ing(name: &str, qty: Option<f64>, unit: Option<&str>) -> RecipeIngredient {
 
 /// The same line, pinned to a catalog product.
 fn linked(mut ing: RecipeIngredient, product_id: u64) -> RecipeIngredient {
-    ing.product_id = Some(product_id);
+    ing.product_id = Some(ProductId(product_id));
     ing
 }
 
@@ -86,7 +87,7 @@ fn a_product_link_matches_stock_the_name_never_would() {
     // matching sent you out to buy the cumin already on the shelf.
     let recipe = [linked(ing("cumin", None, None), 42)];
     let mut jar = item("Bart Ground Cumin 38g", None, None);
-    jar.product_id = Some(42);
+    jar.product_id = Some(ProductId(42));
     assert!(can_cook(&recipe, &[jar]));
 }
 
@@ -113,7 +114,7 @@ fn quantities_sum_across_both_kinds_of_match() {
     // 300g under the shop's name (linked) + 300g under the cook's name.
     let recipe = [linked(ing("flour", Some(500.0), Some("g")), 7)];
     let mut linked_stock = item("Allinson Plain White Flour", Some(300.0), Some("g"));
-    linked_stock.product_id = Some(7);
+    linked_stock.product_id = Some(ProductId(7));
     let named_stock = item("flour", Some(300.0), Some("g"));
     assert!(can_cook(&recipe, &[linked_stock, named_stock]));
 }
@@ -122,6 +123,6 @@ fn quantities_sum_across_both_kinds_of_match() {
 fn a_link_to_a_different_product_is_not_a_match() {
     let recipe = [linked(ing("cumin", None, None), 42)];
     let mut jar = item("Bart Ground Cumin 38g", None, None);
-    jar.product_id = Some(99);
+    jar.product_id = Some(ProductId(99));
     assert!(!can_cook(&recipe, &[jar]));
 }

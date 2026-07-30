@@ -3,6 +3,7 @@
 //! Runs only when LIFE_TEST_DATABASE_URL is set.
 
 use life::db;
+use life::products::ids::Barcode;
 use life::products::shop_cache::{self, CachedListing};
 use life::products::source::Source;
 use sqlx::MySqlPool;
@@ -10,8 +11,8 @@ use sqlx::MySqlPool;
 fn listing(source: Source, external_id: &str, barcode: Option<&str>) -> CachedListing {
     CachedListing {
         source,
-        external_id: external_id.to_string(),
-        barcode: barcode.map(str::to_string),
+        external_id: external_id.parse().unwrap(),
+        barcode: barcode.map(|b| b.parse().unwrap()),
         name: Some("Natural Yoghurt".to_string()),
         brand: Some("Yeo Valley".to_string()),
         quantity_label: Some("950G".to_string()),
@@ -54,12 +55,12 @@ async fn every_hit_from_one_search_is_remembered_not_just_the_match() {
         ("test-2", "5000000000002"),
         ("test-3", "5000000000003"),
     ] {
-        let found = shop_cache::find_by_barcode(&pool, Source::Asda, barcode)
+        let found = shop_cache::find_by_barcode(&pool, Source::Asda, &barcode.parse().unwrap())
             .await
             .unwrap()
             .expect("a remembered listing");
         assert_eq!(found.external_id, external_id);
-        assert_eq!(found.barcode.as_deref(), Some(barcode));
+        assert_eq!(found.barcode.as_ref().map(Barcode::as_str), Some(barcode));
     }
 }
 
@@ -70,9 +71,13 @@ async fn an_unknown_barcode_is_a_dont_know_not_a_no() {
     };
     // Nothing cached for this barcode → None. Callers must read this as "ask the
     // shop", never as "the shop doesn't carry it".
-    let found = shop_cache::find_by_barcode(&pool, Source::Asda, "9999999999999")
-        .await
-        .unwrap();
+    let found = shop_cache::find_by_barcode(
+        &pool,
+        Source::Asda,
+        &"9999999999999".parse::<Barcode>().unwrap(),
+    )
+    .await
+    .unwrap();
     assert!(found.is_none());
 }
 
@@ -102,10 +107,14 @@ async fn a_thinner_sighting_never_erases_what_we_already_learned() {
     };
     shop_cache::remember(&pool, &[thin]).await.unwrap();
 
-    let found = shop_cache::find_by_barcode(&pool, Source::Waitrose, "5000000000010")
-        .await
-        .unwrap()
-        .expect("the barcode survives a thinner re-sighting");
+    let found = shop_cache::find_by_barcode(
+        &pool,
+        Source::Waitrose,
+        &"5000000000010".parse::<Barcode>().unwrap(),
+    )
+    .await
+    .unwrap()
+    .expect("the barcode survives a thinner re-sighting");
     assert_eq!(found.external_id, "test-w1");
     assert_eq!(found.brand.as_deref(), Some("Yeo Valley"));
 }
@@ -128,10 +137,14 @@ async fn re_seeing_a_listing_updates_its_description() {
     };
     shop_cache::remember(&pool, &[renamed]).await.unwrap();
 
-    let found = shop_cache::find_by_barcode(&pool, Source::Asda, "5000000000020")
-        .await
-        .unwrap()
-        .expect("still one row");
+    let found = shop_cache::find_by_barcode(
+        &pool,
+        Source::Asda,
+        &"5000000000020".parse::<Barcode>().unwrap(),
+    )
+    .await
+    .unwrap()
+    .expect("still one row");
     assert_eq!(found.name.as_deref(), Some("Natural Bio Live Yoghurt"));
 
     // Upsert, not insert: the shop's identity is the key, so re-seeing a listing
@@ -162,14 +175,22 @@ async fn shops_keep_their_own_memories() {
     .await
     .unwrap();
 
-    let a = shop_cache::find_by_barcode(&pool, Source::Asda, "5000000000030")
-        .await
-        .unwrap()
-        .expect("asda");
-    let w = shop_cache::find_by_barcode(&pool, Source::Waitrose, "5000000000030")
-        .await
-        .unwrap()
-        .expect("waitrose");
+    let a = shop_cache::find_by_barcode(
+        &pool,
+        Source::Asda,
+        &"5000000000030".parse::<Barcode>().unwrap(),
+    )
+    .await
+    .unwrap()
+    .expect("asda");
+    let w = shop_cache::find_by_barcode(
+        &pool,
+        Source::Waitrose,
+        &"5000000000030".parse::<Barcode>().unwrap(),
+    )
+    .await
+    .unwrap()
+    .expect("waitrose");
     assert_eq!(a.external_id, "test-s1");
     assert_eq!(w.external_id, "test-s2");
 }

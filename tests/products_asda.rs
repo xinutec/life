@@ -4,6 +4,7 @@
 //! assertions are hermetic: no network, no DB.
 
 use life::products::asda;
+use life::products::ids::Barcode;
 use life::products::nutrition::Claim;
 
 // A real multi-query response: one product hit (Lurpak). IMAGE_ID is the EAN;
@@ -37,7 +38,10 @@ fn maps_a_real_response() {
     );
     assert_eq!(hit.brand.as_deref(), Some("Lurpak"));
     // IMAGE_ID is the primary EAN — a genuine barcode we can carry.
-    assert_eq!(hit.barcode.as_deref(), Some("5740900404465"));
+    assert_eq!(
+        hit.barcode.as_ref().map(Barcode::as_str),
+        Some("5740900404465")
+    );
     assert_eq!(hit.quantity_label.as_deref(), Some("400G"));
     assert_eq!(hit.price_label.as_deref(), Some("£3.57")); // England price, formatted
     // Structured price: minor units (pence), never a float; per-unit for compare.
@@ -198,10 +202,10 @@ fn empty_results_yield_no_hits() {
 
 fn hit(external_id: &str, barcode: Option<&str>, name: &str) -> asda::AsdaHit {
     asda::AsdaHit {
-        external_id: external_id.to_string(),
+        external_id: external_id.parse().unwrap(),
         name: name.to_string(),
         brand: None,
-        barcode: barcode.map(str::to_string),
+        barcode: barcode.map(|b| b.parse().expect("a test hit's barcode must be one")),
         quantity_label: None,
         price_label: None,
         price: None,
@@ -238,7 +242,8 @@ fn takes_the_barcode_match_not_the_shops_top_hit() {
             "Extra Special Balsamic Vinegar of Modena 250ml",
         ),
     ];
-    let m = asda::match_barcode(hits, "5063089281581").expect("the barcode match");
+    let m = asda::match_barcode(hits, &"5063089281581".parse::<Barcode>().unwrap())
+        .expect("the barcode match");
     assert_eq!(m.external_id, "9020290");
     assert_eq!(m.name, "Extra Special Balsamic Vinegar of Modena 250ml");
 }
@@ -255,11 +260,11 @@ fn refuses_look_alikes_no_barcode_match_means_no_match_at_all() {
             "Filippo Berio Extra Virgin Olive Oil 500ml",
         ),
     ];
-    assert!(asda::match_barcode(oils, "8410660200013").is_none());
+    assert!(asda::match_barcode(oils, &"8410660200013".parse::<Barcode>().unwrap()).is_none());
 }
 
 #[test]
 fn never_matches_a_barcodeless_hit() {
     let hits = vec![hit("1", None, "Something")];
-    assert!(asda::match_barcode(hits, "5063089281581").is_none());
+    assert!(asda::match_barcode(hits, &"5063089281581".parse::<Barcode>().unwrap()).is_none());
 }

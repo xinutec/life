@@ -3,27 +3,37 @@
 //! tests run only when LIFE_TEST_DATABASE_URL is set).
 
 use life::db;
+use life::products::ids::{Barcode, ExternalId};
 use life::products::repo;
 use life::products::source::Source;
 
 #[test]
 fn deep_links_derive_from_listing_identity() {
     assert_eq!(
-        Source::Off.listing_url("5000328042732").as_deref(),
+        Source::Off
+            .listing_url(&"5000328042732".parse::<ExternalId>().unwrap())
+            .as_deref(),
         Some("https://world.openfoodfacts.org/product/5000328042732")
     );
     assert_eq!(
-        Source::Asda.listing_url("9346702").as_deref(),
+        Source::Asda
+            .listing_url(&"9346702".parse::<ExternalId>().unwrap())
+            .as_deref(),
         Some("https://www.asda.com/groceries/product/9346702")
     );
     // Waitrose PDP URLs carry a slug, but any slug redirects to the canonical
     // one — the trailing lineNumber is the key.
     assert_eq!(
-        Source::Waitrose.listing_url("271105").as_deref(),
+        Source::Waitrose
+            .listing_url(&"271105".parse::<ExternalId>().unwrap())
+            .as_deref(),
         Some("https://www.waitrose.com/ecom/products/x/271105")
     );
     // Sources without a public product page yield no link.
-    assert_eq!(Source::User.listing_url("anything"), None);
+    assert_eq!(
+        Source::User.listing_url(&"anything".parse::<ExternalId>().unwrap()),
+        None
+    );
 }
 
 #[tokio::test]
@@ -35,9 +45,9 @@ async fn canonical_name_is_sticky_a_new_source_does_not_silently_switch_it() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let barcode = "5000000000789";
+    let barcode: Barcode = "5000000000789".parse().unwrap();
     sqlx::query("DELETE FROM products WHERE barcode = ?")
-        .bind(barcode)
+        .bind(&barcode)
         .execute(&pool)
         .await
         .unwrap();
@@ -54,8 +64,8 @@ async fn canonical_name_is_sticky_a_new_source_does_not_silently_switch_it() {
     let p = repo::upsert_external(
         &pool,
         Source::Off,
-        barcode,
-        Some(barcode),
+        &ExternalId::from(&barcode),
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("quaker oats porridge oats 500 g value pack"),
             ..Default::default()
@@ -77,8 +87,8 @@ async fn canonical_name_is_sticky_a_new_source_does_not_silently_switch_it() {
     let p = repo::upsert_external(
         &pool,
         Source::Asda,
-        "dettest-asda-1",
-        Some(barcode),
+        &"dettest-asda-1".parse::<ExternalId>().unwrap(),
+        Some(&barcode),
         &repo::ListingFields {
             raw_name: Some("Quaker Porridge Oats 500g"),
             brand: Some("Quaker"),
@@ -136,9 +146,9 @@ async fn unranked_sources_keep_their_own_name() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let ext = "dettest-unranked-1";
+    let ext: ExternalId = "dettest-unranked-1".parse().unwrap();
     sqlx::query("DELETE FROM products WHERE external_id = ?")
-        .bind(ext)
+        .bind(&ext)
         .execute(&pool)
         .await
         .unwrap();
@@ -150,7 +160,7 @@ async fn unranked_sources_keep_their_own_name() {
     let p = repo::upsert_external(
         &pool,
         Source::User,
-        ext,
+        &ext,
         None,
         &repo::ListingFields {
             raw_name: Some("Future Thing"),

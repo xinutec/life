@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::inventory::types::ItemCategory;
+use crate::products::ids::ProductId;
 
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
@@ -17,8 +18,7 @@ pub struct ShoppingItem {
     pub unit: Option<String>,
     pub barcode: Option<String>,
     pub category: ItemCategory,
-    #[ts(type = "number | null")]
-    pub product_id: Option<u64>,
+    pub product_id: Option<ProductId>,
     pub done: bool,
 }
 
@@ -38,7 +38,7 @@ pub struct NewShoppingItem {
     #[serde(default = "default_category")]
     pub category: ItemCategory,
     #[serde(default)]
-    pub product_id: Option<u64>,
+    pub product_id: Option<ProductId>,
 }
 
 /// Full update (used for edits and the done toggle).
@@ -52,6 +52,6 @@ pub struct UpdateShoppingItem {
     #[serde(default = "default_category")]
     pub category: ItemCategory,
     #[serde(default)]
-    pub product_id: Option<u64>,
+    pub product_id: Option<ProductId>,
     pub done: bool,
 }

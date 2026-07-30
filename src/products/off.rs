@@ -4,6 +4,7 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
 
+use super::ids::Barcode;
 use super::nutrition::{ProductFacts, RawFacts};
 
 const USER_AGENT: &str = "Life/0.1 (https://life.xinutec.org)";
@@ -46,13 +47,6 @@ struct Raw {
 
 fn non_empty(s: Option<String>) -> Option<String> {
     s.filter(|v| !v.trim().is_empty())
-}
-
-/// Barcodes are numeric (EAN/UPC), at most 14 digits. Validate before we splice
-/// the value into the outbound OFF URL, so it can't add path segments or query
-/// params. (DB lookups are parameterized; this is purely about the outbound URL.)
-pub fn is_valid_barcode(barcode: &str) -> bool {
-    !barcode.is_empty() && barcode.len() <= 14 && barcode.bytes().all(|b| b.is_ascii_digit())
 }
 
 /// Same size cap as the OFF proxy, reused for user uploads. Public so the upload
@@ -132,10 +126,10 @@ pub fn sniff_image_mime(bytes: &[u8]) -> Option<&'static str> {
 }
 
 /// Look up a barcode. `Ok(None)` = OFF has no such product.
-pub async fn fetch(http: &reqwest::Client, barcode: &str) -> Result<Option<OffProduct>> {
-    if !is_valid_barcode(barcode) {
-        return Ok(None);
-    }
+///
+/// Splicing the barcode into the URL needs no guard here: a [`Barcode`] is
+/// digits by construction, so it cannot carry a path segment or query parameter.
+pub async fn fetch(http: &reqwest::Client, barcode: &Barcode) -> Result<Option<OffProduct>> {
     let url = format!(
         "https://world.openfoodfacts.org/api/v2/product/{barcode}.json\
          ?fields=product_name,brands,quantity,image_front_url,\
