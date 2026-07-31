@@ -716,12 +716,28 @@ early rather than leaning on the margin.
       - `item_history.event` became `ItemEvent` — the table is about to start
         earning its keep, so the set it is keyed on should be one the compiler
         knows.
-- [ ] **"I cooked this" → decrement every ingredient** — the second half. Recipe
-      ingredients already carry `quantity` + `unit`, `/api/cookable` already says
-      what you *can* cook, and the matcher already links a line to the stock that
-      satisfies it; what's missing is the verb. Decrement each ingredient whose
-      unit agrees with its matched stock and **report the lines it couldn't**
-      rather than skipping them quietly.
+- [x] **"I cooked this" → the recipe comes out of the cupboard** (2026-07-31) —
+      `POST /api/recipes/{id}/cook`. The pieces all existed (ingredients carry
+      `quantity` + `unit`, the matcher links a line to its stock, `/api/cookable`
+      says what you *can* cook); what was missing was the verb.
+      - **Every line is reported, including the untouched ones.** Most
+        ingredients legitimately can't be settled — "salt" with no amount, a jar
+        against a recipe's grams — and a button that reported only its successes
+        would leave you trusting a cupboard it had updated a third of. The UI
+        dims those lines rather than hiding them.
+      - **Drains soonest-expiry first, then smallest.** Both halves are how you'd
+        actually cook: use the thing about to go off, finish the nearly-empty
+        packet before opening a full one — and it leaves fewer part-used rows,
+        each of which is a row you'd otherwise have to think about later.
+      - **Two lines naming the same thing drain it once between them.** A recipe
+        really can list flour twice (dough and dusting); planning each line
+        against the *original* amount would take 400 g off a 500 g bag twice and
+        report 300 g left both times — a number that was never true. Caught while
+        writing the module's own doc comment, which had talked itself into a
+        contradiction.
+      - Applied as **deltas** with a floor (`GREATEST(quantity - ?, 0)`) in one
+        transaction, so no arithmetic here can leave a negative amount of flour
+        in a cupboard.
 - [ ] **Shopping list refinements** — low-stock auto-suggestions, which are only
       worth building once the two consumption paths above have produced real
       history to derive a rate from — otherwise it is a guess wearing a number.

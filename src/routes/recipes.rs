@@ -7,6 +7,7 @@ use axum::http::StatusCode;
 
 use crate::error::AppError;
 use crate::inventory::repo as inventory_repo;
+use crate::recipes::cooking::{self, CookedLine};
 use crate::recipes::matching;
 use crate::recipes::repo;
 use crate::recipes::types::{NewRecipe, Recipe, RecipeIngredient};
@@ -93,4 +94,28 @@ pub async fn cookable(
         .filter(|r| matching::can_cook(&r.ingredients, &inventory))
         .collect();
     Ok(Json(cookable))
+}
+
+/// POST /api/recipes/{id}/cook → take the recipe out of the cupboard.
+///
+/// Answers with one line per ingredient, including the ones nothing happened to.
+/// That is the whole contract: a cook button that reported only its successes
+/// would leave you believing the cupboard had been updated when a third of it
+/// hadn't (see recipes::cooking).
+pub async fn cook(
+    State(app): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<u64>,
+) -> Result<Json<Vec<CookedLine>>, AppError> {
+    let lines = repo::cook_recipe(&app.pool, &user.user_id, id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let touched = cooking::taken_per_row(&lines).len();
+    tracing::info!(
+        recipe = id,
+        lines = lines.len(),
+        rows = touched,
+        "recipe cooked"
+    );
+    Ok(Json(lines))
 }

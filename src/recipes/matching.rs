@@ -4,7 +4,7 @@
 use super::types::RecipeIngredient;
 use crate::inventory::types::Item;
 
-fn norm(s: &str) -> String {
+pub(crate) fn norm(s: &str) -> String {
     s.trim().to_lowercase()
 }
 
@@ -17,7 +17,7 @@ fn norm(s: &str) -> String {
 /// make the jar you actually own stop counting the day you buy another brand.
 /// Union means a link can only ever find MORE stock than before, never less,
 /// and an unlinked line behaves exactly as it did before links existed.
-fn stock_for<'a>(ingredient: &RecipeIngredient, inventory: &'a [Item]) -> Vec<&'a Item> {
+pub(crate) fn stock_for<'a>(ingredient: &RecipeIngredient, inventory: &'a [Item]) -> Vec<&'a Item> {
     let want_name = norm(&ingredient.name);
     inventory
         .iter()

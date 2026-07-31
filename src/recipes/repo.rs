@@ -5,7 +5,10 @@ use std::collections::HashMap;
 use anyhow::Result;
 use sqlx::MySqlPool;
 
+use super::cooking::{self, CookedLine};
 use super::types::{NewRecipe, Recipe, RecipeIngredient};
+use crate::inventory::repo as inventory_repo;
+use crate::inventory::types::ItemEvent;
 use crate::products::ids::ProductId;
 
 #[derive(sqlx::FromRow)]
@@ -213,6 +216,55 @@ pub async fn update_recipe(
 
 /// Delete a recipe — a tombstone, restorable from the trash; its ingredient
 /// rows stay attached. Returns whether a row was tombstoned.
+/// Cook it: take every ingredient's amount out of the cupboard, and say what
+/// happened to each line.
+///
+/// `Ok(None)` = no such recipe for this user.
+///
+/// The plan is computed from a plain read and then applied as **deltas**
+/// (`GREATEST(quantity - ?, 0)`) inside one transaction, rather than as the
+/// absolute amounts it worked out. Two reasons: a delta can't be wrong by more
+/// than it takes if something changed under us in the millisecond between, and
+/// the floor means no arithmetic here can leave a negative amount of flour in a
+/// cupboard. The returned report is the plan — what it *intended* — which is
+/// what the cook needs to read.
+pub async fn cook_recipe(
+    pool: &MySqlPool,
+    user_id: &str,
+    id: u64,
+) -> Result<Option<Vec<CookedLine>>> {
+    let Some(recipe) = get_recipe(pool, user_id, id).await? else {
+        return Ok(None);
+    };
+    let inventory = inventory_repo::list_items(pool, user_id).await?;
+    let lines = cooking::plan(&recipe, &inventory);
+
+    let mut tx = pool.begin().await?;
+    for (item_id, amount) in cooking::taken_per_row(&lines) {
+        sqlx::query(
+            "UPDATE items SET quantity = GREATEST(COALESCE(quantity, 0) - ?, 0) \
+             WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
+        )
+        .bind(amount)
+        .bind(item_id)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
+            "INSERT INTO item_history (item_id, user_id, location_id, event, quantity) \
+             SELECT id, user_id, location_id, ?, ? FROM items WHERE id = ? AND user_id = ?",
+        )
+        .bind(ItemEvent::Used)
+        .bind(amount)
+        .bind(item_id)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(Some(lines))
+}
+
 pub async fn delete_recipe(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
     let res = sqlx::query(
         "UPDATE recipes SET deleted_at = NOW() \

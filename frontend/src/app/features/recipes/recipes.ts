@@ -10,7 +10,7 @@ import { Feedback } from '../../shared/feedback';
 import { ListState } from '../../shared/list-state';
 import { LifeApi } from '../../life-api';
 import { CookableStore, RecipesStore } from '../../stores/catalog';
-import { ItemCategory, Recipe, RecipeIngredient } from '../../models';
+import { CookedLine, ItemCategory, Recipe, RecipeIngredient } from '../../models';
 import { ShoppingStore } from '../../sync/shopping-store';
 import { RecipeSheet, RecipeSheetData } from './recipe-sheet';
 
@@ -52,6 +52,10 @@ export class Recipes {
   );
   /** Per-recipe "what you're short of", loaded on demand by [[loadShoppingList]]. */
   private readonly missingByRecipe = signal<Map<number, RecipeIngredient[]>>(new Map());
+
+  /** The last cook's report, per recipe — shown until you leave the screen. */
+  private readonly cookedByRecipe = signal<Map<number, CookedLine[]>>(new Map());
+  private readonly cooking = signal<number | null>(null);
 
   readonly cookableCount = computed(() => this.cookableIds().size);
 
@@ -117,6 +121,69 @@ export class Recipes {
 
   shoppingFor(id: number): RecipeIngredient[] | undefined {
     return this.missingByRecipe().get(id);
+  }
+
+  /** Cook it: take the recipe out of the cupboard.
+   *
+   *  The report is rendered in full rather than summarised away, because most
+   *  lines legitimately can't be settled ("salt", a jar against grams) and a
+   *  button that reported only its successes would leave you believing the
+   *  cupboard had been updated when much of it hadn't. */
+  cookIt(recipe: Recipe): void {
+    if (this.cooking() !== null) return;
+    this.cooking.set(recipe.id);
+    this.api.cookRecipe(recipe.id).subscribe({
+      next: (lines) => {
+        this.cooking.set(null);
+        const next = new Map(this.cookedByRecipe());
+        next.set(recipe.id, lines);
+        this.cookedByRecipe.set(next);
+        const took = lines.filter((l) => l.kind !== 'untouched').length;
+        this.feedback.notify(
+          took > 0
+            ? `Took ${took} of ${lines.length} off the shelf.`
+            : `Nothing came off the shelf — see why below.`,
+        );
+        // The cupboard moved, so "can I cook this" is stale. (There is no
+        // reload() — refresh() re-fetches without blanking what's on screen.)
+        this.cookableStore.refresh();
+      },
+      error: (e: unknown) => {
+        this.cooking.set(null);
+        this.feedback.error(`Could not record cooking that${onlineHint(e)}`);
+      },
+    });
+  }
+
+  cookedFor(id: number): CookedLine[] | undefined {
+    return this.cookedByRecipe().get(id);
+  }
+
+  isCooking(id: number): boolean {
+    return this.cooking() === id;
+  }
+
+  /** One line of the report, in words. Exhaustive over the union on purpose —
+   *  a new outcome from the backend becomes a compile error here rather than a
+   *  blank row on the screen. */
+  cookedLabel(line: CookedLine): string {
+    switch (line.kind) {
+      case 'took':
+        return line.from.map((t) => `${t.amount} from ${t.name}`).join(', ');
+      case 'short':
+        return line.from.length
+          ? `used what there was, ${line.short} short`
+          : `nothing there, ${line.short} short`;
+      case 'untouched':
+        switch (line.why) {
+          case 'no_stock':
+            return "you don't have any";
+          case 'no_amount':
+            return 'the recipe gives no amount';
+          case 'no_comparable_stock':
+            return "the cupboard measures it differently";
+        }
+    }
   }
 
   /** The Recipe→Buy bridge: everything this recipe needs and the cupboard hasn't

@@ -55,6 +55,7 @@ pub fn router(state: AppState) -> Router {
                 .delete(recipes::delete),
         )
         .route("/recipes/{id}/shopping-list", get(recipes::shopping_list))
+        .route("/recipes/{id}/cook", post(recipes::cook))
         .route("/cookable", get(recipes::cookable))
         .route("/shopping", get(shopping::list).post(shopping::create))
         .route(

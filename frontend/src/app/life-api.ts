@@ -24,6 +24,7 @@ import {
   Source,
   SuggestEmotionsRequest,
   SuggestEmotionsResponse,
+  CookedLine,
   TelemetryEvent,
   TrashEntry,
   TrashKind,
@@ -275,6 +276,12 @@ export class LifeApi {
   }
   deleteRecipe(id: number): Observable<unknown> {
     return this.http.delete(`/api/recipes/${id}`);
+  }
+  /** Cook it: take every ingredient out of the cupboard. Answers with one line
+   *  per ingredient — INCLUDING the ones nothing happened to, which is the whole
+   *  contract (see recipes::cooking). */
+  cookRecipe(id: number): Observable<CookedLine[]> {
+    return this.http.post<CookedLine[]>(`/api/recipes/${id}/cook`, {});
   }
   cookable(): Observable<Recipe[]> {
     return this.http.get<Recipe[]>('/api/cookable');
