@@ -107,6 +107,15 @@ SIGTERM, then completed — signal at `.644`, answered at `.154` half a second
 later, clean exit. In production: the first pod carrying the fix logged
 `SIGTERM — draining in-flight requests` and went away without an `Error`.
 
+**Still open — the handover window.** A request that lands *during* a rollout
+can still get a 502 (observed 2026-07-31): the outgoing pod stops accepting new
+connections the moment SIGTERM arrives, while Kubernetes may take a moment
+longer to drop it from the service endpoints, so the ingress can route to a pod
+that has already closed the door. Not caused by the drain — the same window
+existed when the process died outright — but the drain makes it visible. The
+standard fix is a `preStop` sleep of a few seconds, so endpoint removal
+propagates *before* the process stops accepting.
+
 **Worth knowing.** `terminationGracePeriodSeconds` is the default 30s and the
 long-poll is 25s, so the drain fits with ~5s to spare. If that poll ever
 lengthens, the pod will be SIGKILLed mid-drain and we are back where we started.
