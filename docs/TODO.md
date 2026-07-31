@@ -86,6 +86,33 @@ recovery — the user must clear cookies for the NC host by hand. Fixing that pr
 means fixing it upstream in Nextcloud, or having Life's `/login` route bounce
 through something that resets the NC session.
 
+## Solved 2026-07-31: every deploy killed whatever was mid-request
+
+**Symptom.** After a `kubectl rollout restart` the outgoing pod showed `0/1
+Error` rather than a clean exit — routine enough to look like noise.
+
+**Cause.** `axum::serve(listener, app)` ran with no `.with_graceful_shutdown(…)`
+and the process installed no signal handler at all, so SIGTERM took its default
+action and killed it outright. Nothing drained. The emotion worker's
+`/emotion-worker/next` long-poll runs **25 seconds**, so a deploy landing in one
+cut it dead; the exit status was 143, which Kubernetes renders as `Error`.
+
+**Fix.** `shutdown_signal()` in `main.rs` selects over SIGTERM and ctrl-c, and
+`serve` finishes the requests already accepted. A handler that fails to install
+is logged and its arm never fires, rather than panicking — losing the ability to
+stop cleanly is not a reason to refuse to start.
+
+**Verified twice, not assumed.** Locally: a request held half-sent on the wire,
+SIGTERM, then completed — signal at `.644`, answered at `.154` half a second
+later, clean exit. In production: the first pod carrying the fix logged
+`SIGTERM — draining in-flight requests` and went away without an `Error`.
+
+**Worth knowing.** `terminationGracePeriodSeconds` is the default 30s and the
+long-poll is 25s, so the drain fits with ~5s to spare. If that poll ever
+lengthens, the pod will be SIGKILLed mid-drain and we are back where we started.
+The durable fix is for the long-poll handler to notice shutdown and return
+early rather than leaning on the margin.
+
 ## Backup — DONE (nightly restic)
 
 - [x] **Back up the Life DB** — the `life-db` pod is dumped nightly and
