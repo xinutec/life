@@ -78,8 +78,51 @@ async fn main() -> Result<()> {
 
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
     tracing::info!("life listening on {bind_addr}");
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
+    tracing::info!("life stopped");
     Ok(())
+}
+
+/// Resolves when the platform asks us to stop, so `serve` can finish the
+/// requests already in flight instead of dropping them.
+///
+/// Without this the process had no SIGTERM handler at all, so the signal took
+/// its default action and killed it outright: every `kubectl rollout restart`
+/// cut whatever was mid-request, and the pod exited 143 — which Kubernetes
+/// reports as `Error`, the kind of routine red that teaches you to ignore red.
+///
+/// A failure to install a handler is logged and that arm simply never fires,
+/// rather than panicking: losing the *ability* to shut down cleanly is not a
+/// reason to refuse to run.
+async fn shutdown_signal() {
+    use tokio::signal::unix::{SignalKind, signal};
+
+    let sigterm = async {
+        match signal(SignalKind::terminate()) {
+            // `recv()` yields None only if the handler is dropped, which it
+            // isn't here; treat it as "never" either way.
+            Ok(mut s) => {
+                s.recv().await;
+            }
+            Err(e) => {
+                tracing::error!("cannot listen for SIGTERM, shutdown will not be graceful: {e:#}");
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+    let sigint = async {
+        if let Err(e) = tokio::signal::ctrl_c().await {
+            tracing::error!("cannot listen for ctrl-c: {e:#}");
+            std::future::pending::<()>().await;
+        }
+    };
+
+    tokio::select! {
+        () = sigterm => tracing::info!("SIGTERM — draining in-flight requests"),
+        () = sigint => tracing::info!("interrupted — draining in-flight requests"),
+    }
 }
 
 /// Queue a preload of today's emotion prompt, built from the vocabulary the
