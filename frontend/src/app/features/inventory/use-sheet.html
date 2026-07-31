@@ -1,0 +1,39 @@
+<div class="sheet-form">
+  <app-sheet-header [title]="'Used some ' + item.name" (closed)="close()" />
+
+  @if (have > 0) {
+    <p class="have">You have {{ have }}{{ unit }}.</p>
+  } @else {
+    <p class="have">This one doesn't track an amount yet.</p>
+  }
+
+  @if (shares().length) {
+    <div class="shares">
+      @for (s of shares(); track s.label) {
+        <button mat-stroked-button (click)="pick(s.amount)">{{ s.label }}</button>
+      }
+    </div>
+  }
+
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>How much did you use?</mat-label>
+    <input
+      matInput
+      type="number"
+      inputmode="decimal"
+      min="0"
+      [ngModel]="amount()"
+      (ngModelChange)="amount.set($event)"
+      (keyup.enter)="save()"
+    />
+    @if (unit) {
+      <span matTextSuffix>{{ unit }}</span>
+    }
+  </mat-form-field>
+
+  <div class="actions">
+    <button mat-flat-button (click)="save()" [disabled]="!valid() || saving()">
+      Take it off
+    </button>
+  </div>
+</div>

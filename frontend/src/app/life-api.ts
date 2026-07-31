@@ -76,6 +76,12 @@ export class LifeApi {
   deleteItem(id: number): Observable<unknown> {
     return this.http.delete(`/api/items/${id}`);
   }
+  /** Take an amount out of a stock row ("I used 200g of flour"). `unit` must be
+   *  the row's own — the server refuses a mismatch rather than converting, so
+   *  send what the item says, not what the recipe said. */
+  useItem(id: number, quantity: number, unit: string | null): Observable<Item> {
+    return this.http.post<Item>(`/api/items/${id}/use`, { quantity, unit });
+  }
   moveItem(id: number, locationId: number | null): Observable<Item> {
     return this.http.post<Item>(`/api/items/${id}/move`, { location_id: locationId });
   }

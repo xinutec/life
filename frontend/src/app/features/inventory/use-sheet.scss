@@ -1,0 +1,24 @@
+// Layout comes from the shared .sheet-form scaffold (styles.scss); these are the
+// two pieces this sheet adds.
+
+// "You have 950g." — context for the number you are about to type, so the field
+// isn't asking a question you'd have to leave the sheet to answer.
+.have {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-medium);
+}
+
+// Quick shares of what's on hand. Equal-width so they read as one control
+// rather than three unrelated buttons, and they wrap rather than shrink on a
+// narrow phone.
+.shares {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+
+  > button {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}

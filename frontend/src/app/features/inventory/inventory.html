@@ -42,6 +42,14 @@
         <button
           matListItemMeta
           mat-icon-button
+          (click)="useItem(it)"
+          [attr.aria-label]="'Record using some ' + it.name"
+        >
+          <mat-icon>remove_circle_outline</mat-icon>
+        </button>
+        <button
+          matListItemMeta
+          mat-icon-button
           (click)="addToBuy(it)"
           aria-label="Add to Buy list"
         >

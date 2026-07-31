@@ -7,7 +7,8 @@ use anyhow::{Context, Result, anyhow};
 use chrono::NaiveDate;
 use sqlx::MySqlPool;
 
-use super::types::{Item, ItemCategory, Location, LocationKind, NewItem, NewLocation};
+use super::consume::{self, Taken};
+use super::types::{Item, ItemCategory, ItemEvent, Location, LocationKind, NewItem, NewLocation};
 use crate::products::ids::{Barcode, ProductId};
 
 #[derive(sqlx::FromRow)]
@@ -202,7 +203,15 @@ pub async fn create_item(pool: &MySqlPool, user_id: &str, new: NewItem) -> Resul
     .execute(pool)
     .await?;
     let id = res.last_insert_id();
-    record_history(pool, id, user_id, new.location_id, "added", new.quantity).await?;
+    record_history(
+        pool,
+        id,
+        user_id,
+        new.location_id,
+        ItemEvent::Added,
+        new.quantity,
+    )
+    .await?;
     get_item(pool, user_id, id)
         .await?
         .ok_or_else(|| anyhow!("created item {id} not found"))
@@ -225,7 +234,15 @@ pub async fn move_item(
         .bind(user_id)
         .execute(pool)
         .await?;
-    record_history(pool, item_id, user_id, new_location_id, "moved", None).await?;
+    record_history(
+        pool,
+        item_id,
+        user_id,
+        new_location_id,
+        ItemEvent::Moved,
+        None,
+    )
+    .await?;
     get_item(pool, user_id, item_id).await
 }
 
@@ -259,9 +276,103 @@ pub async fn update_item(
     .execute(pool)
     .await?;
     if existing.location_id != new.location_id {
-        record_history(pool, id, user_id, new.location_id, "moved", new.quantity).await?;
+        record_history(
+            pool,
+            id,
+            user_id,
+            new.location_id,
+            ItemEvent::Moved,
+            new.quantity,
+        )
+        .await?;
     }
     get_item(pool, user_id, id).await
+}
+
+/// Take an amount out of a stock row: "I used 200g of flour."
+///
+/// The read and the write happen in one transaction, with the row locked, so
+/// two phones cooking at once can't both read 950 and both write 750. The
+/// decision itself is [`consume::take`] — pure, and the only place the rule
+/// lives.
+///
+/// `Ok(None)` = no such (live) item for this user. The [`Taken`] outcome is
+/// handed back rather than turned into an error here: the route is what knows
+/// how to say "that's measured in jars" to a person.
+pub async fn use_item(
+    pool: &MySqlPool,
+    user_id: &str,
+    id: u64,
+    want: f64,
+    want_unit: Option<&str>,
+) -> Result<Option<(Taken, Option<Item>)>> {
+    let mut tx = pool.begin().await?;
+    // FOR UPDATE: the whole point of the transaction. Without it the subtraction
+    // is a read-modify-write race and stock quietly drifts upward.
+    let row: Option<(Option<f64>, Option<String>, Option<u64>)> = sqlx::query_as(
+        "SELECT quantity, unit, location_id FROM items \
+         WHERE id = ? AND user_id = ? AND deleted_at IS NULL FOR UPDATE",
+    )
+    .bind(id)
+    .bind(user_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some((quantity, unit, location_id)) = row else {
+        return Ok(None);
+    };
+
+    // `take` reads an Item; only these three fields matter to it, so build the
+    // smallest honest one rather than re-reading the resolved row inside the
+    // lock.
+    let held = Item {
+        id,
+        product_id: None,
+        name: String::new(),
+        brand: None,
+        category: ItemCategory::Other,
+        quantity,
+        unit,
+        expiry: None,
+        location_id,
+        barcode: None,
+        has_image: false,
+    };
+    let outcome = consume::take(&held, want, want_unit);
+    let left = match outcome {
+        Taken::Left(n) => n,
+        Taken::Emptied { .. } => 0.0,
+        // Nothing to write: the row keeps whatever it had.
+        Taken::UnitMismatch | Taken::Untracked => {
+            tx.rollback().await?;
+            return Ok(Some((outcome, get_item(pool, user_id, id).await?)));
+        }
+    };
+    sqlx::query("UPDATE items SET quantity = ? WHERE id = ? AND user_id = ?")
+        .bind(left)
+        .bind(id)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    // The history row records the DELTA, not the new level — "200g went" is the
+    // fact a consumption rate is later computed from, and it survives an edit
+    // that resets the quantity by hand.
+    let took = match outcome {
+        Taken::Emptied { short } => want - short,
+        _ => want,
+    };
+    sqlx::query(
+        "INSERT INTO item_history (item_id, user_id, location_id, event, quantity) \
+         VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(id)
+    .bind(user_id)
+    .bind(location_id)
+    .bind(ItemEvent::Used)
+    .bind(took)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(Some((outcome, get_item(pool, user_id, id).await?)))
 }
 
 /// Delete an item — a tombstone, restorable from the trash; history is kept.
@@ -277,7 +388,7 @@ pub async fn delete_item(pool: &MySqlPool, user_id: &str, id: u64) -> Result<boo
     .await?;
     let deleted = res.rows_affected() > 0;
     if deleted {
-        record_history(pool, id, user_id, None, "removed", None).await?;
+        record_history(pool, id, user_id, None, ItemEvent::Removed, None).await?;
     }
     Ok(deleted)
 }
@@ -294,7 +405,7 @@ pub async fn restore_item(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bo
     .await?;
     let restored = res.rows_affected() > 0;
     if restored {
-        record_history(pool, id, user_id, None, "restored", None).await?;
+        record_history(pool, id, user_id, None, ItemEvent::Restored, None).await?;
     }
     Ok(restored)
 }
@@ -385,7 +496,7 @@ async fn record_history(
     item_id: u64,
     user_id: &str,
     location_id: Option<u64>,
-    event: &str,
+    event: ItemEvent,
     quantity: Option<f64>,
 ) -> Result<()> {
     sqlx::query(

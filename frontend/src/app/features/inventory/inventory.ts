@@ -15,6 +15,7 @@ import { ShoppingStore } from "../../sync/shopping-store";
 import { Item } from "../../models";
 import { ItemSheet, ItemSheetData } from "./item-sheet";
 import { PlaceSheet, PlaceSheetData } from "./place-sheet";
+import { UseSheet, UseSheetData } from "./use-sheet";
 
 @Component({
   selector: "app-inventory",
@@ -97,6 +98,19 @@ export class Inventory {
       .afterDismissed()
       .subscribe((saved) => {
         if (saved) this.reloadItems();
+      });
+  }
+
+  /** "I used some of this" — decrement the row by what you actually took, and
+   *  leave an item_history row saying so. The amount is always in the item's own
+   *  unit; the server refuses a mismatch rather than converting. */
+  useItem(it: Item): void {
+    const data: UseSheetData = { item: it };
+    this.sheet
+      .open<UseSheet, UseSheetData, boolean>(UseSheet, { data })
+      .afterDismissed()
+      .subscribe((used) => {
+        if (used) this.reloadItems();
       });
   }
 

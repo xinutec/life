@@ -46,6 +46,7 @@ pub fn router(state: AppState) -> Router {
             patch(inventory::update_item).delete(inventory::delete_item),
         )
         .route("/items/{id}/move", post(inventory::move_item))
+        .route("/items/{id}/use", post(inventory::use_item))
         .route("/recipes", get(recipes::list).post(recipes::create))
         .route(
             "/recipes/{id}",
