@@ -141,3 +141,126 @@ async fn shopping_sync_pull_push_conflict_tombstone() {
             .all(|s| s.id != milk.id)
     );
 }
+
+/// The boot-time backfills — `sync::backfill`, run on **every** start, and until
+/// now the only sync path no test walked. Both halves are "fix rows that predate
+/// a rule", so both are tested the only way that means anything: create the
+/// pre-rule shape by raw SQL, run the real entry point, and check the rows the
+/// clients would then pull.
+#[tokio::test]
+async fn boot_backfill_gives_pre_sync_rows_an_identity() {
+    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
+        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping backfill DB test");
+        return;
+    };
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    let user = "test-user-backfill";
+    sqlx::query("DELETE FROM shopping_items WHERE user_id = ?")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // A row as it looked before sync existed: no ulid, no rev. A client can't
+    // see it at all until the backfill gives it an identity.
+    sqlx::query(
+        "INSERT INTO shopping_items (user_id, name, category, done, rev, created_at, updated_at) \
+         VALUES (?, 'Pre-sync oats', 'food', 0, 0, NOW(), NOW())",
+    )
+    .bind(user)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    assert!(
+        life::sync::backfill(&pool).await.is_ok(),
+        "backfill runs at boot; it must never fail on a legacy row"
+    );
+
+    let pulled = sync::pull_shopping(&pool, user, 0, 100).await.unwrap();
+    let row = pulled
+        .documents
+        .iter()
+        .find(|d| d.name == "Pre-sync oats")
+        .expect("the backfilled row is now pullable");
+    assert_eq!(row.ulid.len(), 26, "a real ULID, not a placeholder");
+    assert!(row.rev > 0, "and a revision, so it propagates");
+
+    // Idempotent: it runs on every boot, so a second pass must not churn revs
+    // (which would re-push every row to every device, forever).
+    let before = row.rev;
+    life::sync::backfill(&pool).await.unwrap();
+    let again = sync::pull_shopping(&pool, user, 0, 100).await.unwrap();
+    let same = again
+        .documents
+        .iter()
+        .find(|d| d.name == "Pre-sync oats")
+        .unwrap();
+    assert_eq!(same.ulid, row.ulid, "identity is assigned once");
+    assert_eq!(same.rev, before, "a clean second pass is a no-op");
+}
+
+/// The other half of the boot backfill: duplicate live edges (made before the
+/// push-time twin guard, or by a race) are tombstoned down to one. Deliberately
+/// asserts WHICH survives — "the lowest id" is the rule that makes the cleanup
+/// deterministic across devices.
+#[tokio::test]
+async fn boot_backfill_tombstones_duplicate_todo_links() {
+    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
+        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping todo-link dedupe DB test");
+        return;
+    };
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    let user = "test-user-link-dedupe";
+    sqlx::query("DELETE FROM todo_links WHERE user_id = ?")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // Two live edges saying the same thing under different ulids.
+    let from = Ulid::new().to_string();
+    let (first, second) = (Ulid::new().to_string(), Ulid::new().to_string());
+    for ulid in [&first, &second] {
+        sqlx::query(
+            "INSERT INTO todo_links \
+             (user_id, from_ulid, kind, target_kind, target_ref, ulid, rev, created_at) \
+             VALUES (?, ?, 'blocks', 'todo', 'target-ulid', ?, 1, NOW())",
+        )
+        .bind(user)
+        .bind(&from)
+        .bind(ulid)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    life::sync::backfill(&pool).await.unwrap();
+
+    let pulled = sync::pull_todo_link(&pool, user, 0, 100).await.unwrap();
+    let live: Vec<&str> = pulled
+        .documents
+        .iter()
+        .filter(|d| !d.deleted)
+        .map(|d| d.ulid.as_str())
+        .collect();
+    assert_eq!(
+        live,
+        [first.as_str()],
+        "the older edge is the one that stays"
+    );
+    let tombstoned = pulled
+        .documents
+        .iter()
+        .find(|d| d.ulid == second)
+        .expect("the duplicate is tombstoned, not deleted outright");
+    assert!(tombstoned.deleted);
+    assert!(
+        tombstoned.rev > 1,
+        "a fresh rev, so the delete reaches every device"
+    );
+}

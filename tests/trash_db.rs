@@ -12,6 +12,8 @@ use life::shopping::repo as shopping_repo;
 use life::shopping::types::NewShoppingItem;
 use life::sync::repo as sync_repo;
 use life::sync::types::PushEntry;
+use life::todo::repo as todo_repo;
+use life::todo::types::{NewTodo, TodoType};
 use life::trash::{TrashKind, repo as trash_repo};
 
 async fn connect() -> Option<sqlx::MySqlPool> {
@@ -298,5 +300,76 @@ async fn sync_push_cannot_resurrect_a_tombstone_but_restore_can() {
     assert!(
         restored_doc.rev > rev_before,
         "restore must advance the rev"
+    );
+}
+
+/// A binned to-do comes back. The one restorable kind the trash tests didn't
+/// cover, and the only deliberate undelete a to-do has — a sync push can never
+/// clear its tombstone, so if this path is broken the row is gone for good.
+#[tokio::test]
+async fn todo_delete_lists_in_trash_and_restores() {
+    let Some(pool) = connect().await else { return };
+    let user = "test-user-trash-todo";
+    wipe(&pool, user).await;
+
+    let todo = todo_repo::create(
+        &pool,
+        user,
+        NewTodo {
+            title: "Binned errand".into(),
+            todo_type: TodoType::Task,
+            priority: None,
+            notes: None,
+            not_before: None,
+            due: None,
+            shared: false,
+        },
+    )
+    .await
+    .unwrap();
+    // Restore is keyed by ulid (the synced identity), not the row id.
+    let ulid = sync_repo::pull_todo(&pool, user, 0, 100)
+        .await
+        .unwrap()
+        .documents
+        .into_iter()
+        .find(|d| d.title == "Binned errand")
+        .expect("created to-do is pullable")
+        .ulid;
+
+    assert!(todo_repo::delete(&pool, user, todo.id).await.unwrap());
+    assert!(
+        todo_repo::get(&pool, user, todo.id)
+            .await
+            .unwrap()
+            .is_none(),
+        "a tombstoned to-do is invisible to the normal read"
+    );
+    let trash = trash_repo::list(&pool, user).await.unwrap();
+    assert!(
+        trash
+            .iter()
+            .any(|e| e.kind == TrashKind::Todo && e.name == "Binned errand" && e.ref_ == ulid),
+        "{trash:?}"
+    );
+
+    assert!(
+        trash_repo::restore(&pool, user, TrashKind::Todo, &ulid)
+            .await
+            .unwrap()
+    );
+    let back = todo_repo::get(&pool, user, todo.id).await.unwrap();
+    assert_eq!(back.expect("restored").title, "Binned errand");
+    assert!(
+        !trash_repo::restore(&pool, user, TrashKind::Todo, &ulid)
+            .await
+            .unwrap(),
+        "restoring a live to-do is a no-op, not a second undelete"
+    );
+    assert!(
+        !trash_repo::restore(&pool, user, TrashKind::Todo, "not-a-ulid")
+            .await
+            .unwrap(),
+        "an unknown ref is false, never an error"
     );
 }

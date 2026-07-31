@@ -299,3 +299,140 @@ async fn a_linked_ingredient_matches_stock_by_product_not_by_name() {
     assert_eq!(orphaned.ingredients[0].name, "cumin");
     assert_eq!(orphaned.ingredients[0].product_id, None);
 }
+
+/// The recipes LIST — `GET /api/recipes`, the screen's first fetch, and until
+/// now the one recipe path no test walked. Its ingredient query is a three-table
+/// join, so what it pins is mostly about the joins: an unlinked line must
+/// survive the LEFT JOIN to products (an inner one would silently drop it), and
+/// the ingredients must land on the right recipe.
+#[tokio::test]
+async fn list_recipes_returns_live_recipes_with_their_ingredients() {
+    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
+        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping recipe-list DB test");
+        return;
+    };
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    let user = "test-user-recipe-list";
+    let other = "test-user-recipe-list-other";
+    for u in [user, other] {
+        sqlx::query("DELETE FROM recipes WHERE user_id = ?")
+            .bind(u)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    let barcode: Barcode = "9992200000001".parse().unwrap();
+    sqlx::query("DELETE FROM products WHERE barcode = ?")
+        .bind(&barcode)
+        .execute(&pool)
+        .await
+        .unwrap();
+    prod_repo::upsert(
+        &pool,
+        &barcode,
+        Some("Bart Ground Cumin 38g"),
+        Some("Bart"),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    let product = prod_repo::get(&pool, &barcode).await.unwrap().unwrap();
+
+    // Named out of alphabetical order, so the ORDER BY has something to do.
+    let tagine = repo::create_recipe(
+        &pool,
+        user,
+        NewRecipe {
+            name: "Tagine".into(),
+            instructions: None,
+            servings: Some(4),
+            ingredients: vec![
+                RecipeIngredient {
+                    name: "cumin".into(),
+                    product_id: Some(product.id),
+                    product_name: None,
+                    quantity: Some(2.0),
+                    unit: Some("tsp".into()),
+                },
+                // Deliberately unlinked: this is the row a JOIN (rather than a
+                // LEFT JOIN) to products would swallow.
+                ing("apricots", Some(200.0), Some("g")),
+            ],
+        },
+    )
+    .await
+    .unwrap();
+    let dal = repo::create_recipe(
+        &pool,
+        user,
+        NewRecipe {
+            name: "Dal".into(),
+            instructions: Some("Simmer.".into()),
+            servings: None,
+            ingredients: vec![ing("red lentils", Some(300.0), Some("g"))],
+        },
+    )
+    .await
+    .unwrap();
+    // A deleted one, and one belonging to somebody else: neither may appear.
+    let gone = repo::create_recipe(
+        &pool,
+        user,
+        NewRecipe {
+            name: "Abandoned".into(),
+            instructions: None,
+            servings: None,
+            ingredients: vec![ing("regret", None, None)],
+        },
+    )
+    .await
+    .unwrap();
+    assert!(repo::delete_recipe(&pool, user, gone.id).await.unwrap());
+    repo::create_recipe(
+        &pool,
+        other,
+        NewRecipe {
+            name: "Aubergine".into(),
+            instructions: None,
+            servings: None,
+            ingredients: vec![ing("aubergine", None, None)],
+        },
+    )
+    .await
+    .unwrap();
+
+    let listed = repo::list_recipes(&pool, user).await.unwrap();
+    let names: Vec<&str> = listed.iter().map(|r| r.name.as_str()).collect();
+    assert_eq!(
+        names,
+        ["Dal", "Tagine"],
+        "name-ordered, tombstoned and other users' recipes excluded"
+    );
+
+    let dal_listed = listed.iter().find(|r| r.id == dal.id).expect("Dal");
+    assert_eq!(dal_listed.instructions.as_deref(), Some("Simmer."));
+    assert_eq!(dal_listed.servings, None);
+    assert_eq!(dal_listed.ingredients.len(), 1, "no cross-recipe bleed");
+    assert_eq!(dal_listed.ingredients[0].name, "red lentils");
+
+    let tagine_listed = listed.iter().find(|r| r.id == tagine.id).expect("Tagine");
+    assert_eq!(tagine_listed.servings, Some(4));
+    let ings = &tagine_listed.ingredients;
+    assert_eq!(ings.len(), 2, "the unlinked line survives the LEFT JOIN");
+    // Insertion order, not alphabetical — the list is the cook's own sequence.
+    assert_eq!(ings[0].name, "cumin");
+    assert_eq!(ings[0].product_id, Some(product.id));
+    assert_eq!(
+        ings[0].product_name.as_deref(),
+        Some("Bart Ground Cumin 38g"),
+        "the catalogue name rides along for the linked line"
+    );
+    assert_eq!(ings[0].quantity, Some(2.0));
+    assert_eq!(ings[0].unit.as_deref(), Some("tsp"));
+    assert_eq!(ings[1].name, "apricots");
+    assert_eq!(ings[1].product_id, None);
+    assert_eq!(ings[1].product_name, None);
+}

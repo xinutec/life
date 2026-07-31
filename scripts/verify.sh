@@ -6,7 +6,9 @@
 # only when LIFE_TEST_DATABASE_URL points at one (./scripts/dev-db.sh starts one);
 # without it they are SKIPPED and this says so, loudly. It used to omit them
 # silently, which let a rename of a column land green here and fail in CI — the
-# queries are strings, so nothing else checks them. Keep them in the gate:
+# queries are runtime strings, so running them IS the check on them, and 126 of
+# the 128 query sites are executed by some test here (measured 2026-07-30; the
+# two exceptions need a live Nextcloud). Keep them in the gate:
 #
 #   ./scripts/dev-db.sh &
 #   LIFE_TEST_DATABASE_URL=mysql://life:life@127.0.0.1:3307/life ./scripts/verify.sh

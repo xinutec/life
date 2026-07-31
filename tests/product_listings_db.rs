@@ -191,3 +191,67 @@ async fn barcodeless_sources_stay_separate_products() {
     assert_eq!(p1b.id, p1.id);
     assert_eq!(p1b.name.as_deref(), Some("Thing A v2"));
 }
+
+/// The pack-size label a shop supplies. `sync_listing` writes it only when the
+/// product has none — Open Food Facts' `quantity` is the product's own ("500g"),
+/// while Asda's `PACK_SIZE` describes the pack it happens to sell ("22x27G"), so
+/// a shop may fill the gap but never overrule what we already hold.
+#[tokio::test]
+async fn a_shop_pack_size_fills_the_gap_and_survives_a_reread() {
+    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
+        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping pack-size DB test");
+        return;
+    };
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    let barcode: Barcode = "9993300000001".parse().unwrap();
+    sqlx::query("DELETE FROM products WHERE barcode = ?")
+        .bind(&barcode)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let product = repo::upsert_external(
+        &pool,
+        Source::Asda,
+        &"packsize-cin-1".parse::<ExternalId>().unwrap(),
+        Some(&barcode),
+        &repo::ListingFields {
+            raw_name: Some("Fruit Bar Multipack"),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(product.quantity_label, None, "nothing has supplied one yet");
+
+    repo::set_quantity_label(&pool, product.id, "22x27G")
+        .await
+        .unwrap();
+    let read = repo::get_by_id(&pool, product.id)
+        .await
+        .unwrap()
+        .expect("product");
+    assert_eq!(read.quantity_label.as_deref(), Some("22x27G"));
+
+    // A later re-pull of the same listing must not wipe it: the label lives on
+    // the canonical row, and re-importing only rewrites the source's own line.
+    repo::upsert_external(
+        &pool,
+        Source::Asda,
+        &"packsize-cin-1".parse::<ExternalId>().unwrap(),
+        Some(&barcode),
+        &repo::ListingFields {
+            raw_name: Some("Fruit Bar Multipack 22 pack"),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    let after = repo::get_by_id(&pool, product.id)
+        .await
+        .unwrap()
+        .expect("product");
+    assert_eq!(after.quantity_label.as_deref(), Some("22x27G"));
+}
