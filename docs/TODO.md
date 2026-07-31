@@ -695,7 +695,37 @@ early rather than leaning on the margin.
       honest options are `!` assertions or restructuring a golden-tested chart.
       Reverted rather than left half-applied. The survey is itself the finding:
       index access here is already disciplined.
-- [ ] **Shopping list refinements** — low-stock auto-suggestions. ~~Add a
+- [x] **Stock that goes down when you use it** (2026-07-31) — `POST
+      /api/items/{id}/use`. Nothing ever decremented an item, so the cupboard
+      only recorded what you once *bought*; "how much is left" was unanswerable
+      by construction. Now a row goes down by what you took and `item_history`
+      records the **delta** (not the new level — a rate is computed from deltas,
+      and a delta survives a hand edit that resets the quantity).
+      - **Units are compared, never converted.** `200 g` out of a row measured in
+        `jar` is not 199 of anything, and guessing how many grams are in a jar
+        would put a number in the cupboard nobody ever measured — so a mismatch
+        takes nothing and names the unit the row *is* in. `kg` is not `g` either:
+        a conversion table is a real feature with real edge cases (does `oz` mean
+        weight or fluid?) and half of one is worse than none. What's left is the
+        case that matters daily, where the recipe and the cupboard already agree
+        because the same person typed both.
+      - Emptying a row **keeps it at zero** rather than deleting it: "we have
+        none" is the knowledge that makes a thing worth rebuying.
+      - Read and write are one transaction with the row locked, so two phones
+        can't both read 950 and both write 750.
+      - `item_history.event` became `ItemEvent` — the table is about to start
+        earning its keep, so the set it is keyed on should be one the compiler
+        knows.
+- [ ] **"I cooked this" → decrement every ingredient** — the second half. Recipe
+      ingredients already carry `quantity` + `unit`, `/api/cookable` already says
+      what you *can* cook, and the matcher already links a line to the stock that
+      satisfies it; what's missing is the verb. Decrement each ingredient whose
+      unit agrees with its matched stock and **report the lines it couldn't**
+      rather than skipping them quietly.
+- [ ] **Shopping list refinements** — low-stock auto-suggestions, which are only
+      worth building once the two consumption paths above have produced real
+      history to derive a rate from — otherwise it is a guess wearing a number.
+      Originally scoped as ~~Add a
       recipe's missing ingredients to the Buy list in one tap~~ DONE 2026-07-27
       (the shopping-list panel on a recipe card grows an "Add N to Buy" button;
       local-first, carries quantity + product link, deduped against the un-done
