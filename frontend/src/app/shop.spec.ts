@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { ShopProvider, Shops } from './shop';
+import { PriceInput } from './models';
+import { ShopProduct, ShopProvider, Shops, penceFromLabel, shopPrice } from './shop';
 import { WAITROSE } from './shops/waitrose';
 
 // The native bridge lives on window; fake it per-test.
@@ -107,4 +108,87 @@ describe('Waitrose provider', () => {
     expect(js).toContain('window.__authToken');
     expect(() => WAITROSE.product('not-a-number')).toThrow(/invalid/);
   });
+
+  it('the extractor carries the formatted price, not just the number', () => {
+    // Without it there is nothing to check the amount's unit against, and
+    // shopPrice would (rightly) refuse to record anything at all.
+    const { js } = WAITROSE.product('062593');
+    expect(js).toContain('display_price_label');
+    expect(js).toContain('pr.displayPrice');
+  });
 });
+
+describe('penceFromLabel', () => {
+  it('reads both shapes a UK shop renders', () => {
+    expect(penceFromLabel('£2.50')).toBe(250);
+    expect(penceFromLabel('£12')).toBe(1200);
+    expect(penceFromLabel('£1.05')).toBe(105);
+    expect(penceFromLabel('£0.85')).toBe(85);
+    expect(penceFromLabel('85p')).toBe(85);
+    expect(penceFromLabel(' £2.50 ')).toBe(250);
+  });
+
+  it('refuses to guess at anything else', () => {
+    // A per-unit price, a range or a bare number is not this product's price,
+    // and reading one as if it were would be worse than having none.
+    for (const junk of ['', 'free', '2.50', '$2.50', '£2.50/kg', '£2.50 - £4.00', '250']) {
+      expect(penceFromLabel(junk), junk).toBeNull();
+    }
+  });
+});
+
+describe('shopPrice', () => {
+  function product(over: Partial<ShopProduct> = {}): ShopProduct {
+    return {
+      source: 'waitrose',
+      external_id: '062593',
+      name: 'Cheddar',
+      brand: null,
+      barcodes: [],
+      image_url: null,
+      display_price: { amount: 2.5, currencyCode: 'GBP' },
+      display_price_label: '£2.50',
+      categories: [],
+      ...over,
+    };
+  }
+
+  it("records the quote when the shop's own two fields agree", () => {
+    expect(shopPrice(product())).toEqual<PriceInput>({
+      amount_minor: 250,
+      currency: 'GBP',
+      unit_amount_minor: null,
+      unit_measure: null,
+      region: null,
+    });
+  });
+
+  it('records nothing when the shop quoted nothing', () => {
+    expect(shopPrice(product({ display_price: null }))).toBeNull();
+    expect(shopPrice(product({ display_price: { amount: 0, currencyCode: 'GBP' } }))).toBeNull();
+  });
+
+  it('records nothing when the amount is in the other unit', () => {
+    // The whole point: `amount` carries no unit, so 250 could mean £250 or
+    // £2.50. The shop's own label says which, and here it disagrees by 100×.
+    expect(shopPrice(product({ display_price: { amount: 250, currencyCode: 'GBP' } }))).toBeNull();
+  });
+
+  it('records nothing when there is no label to check against', () => {
+    // An unconfirmable price is not a price. Missing is visible; wrong is not.
+    expect(shopPrice(product({ display_price_label: null }))).toBeNull();
+    expect(shopPrice(product({ display_price_label: '£2.50/kg' }))).toBeNull();
+  });
+
+  it('still rounds the float that a decimal price really is', () => {
+    expect(
+      shopPrice(
+        product({
+          display_price: { amount: 8.93, currencyCode: 'GBP' },
+          display_price_label: '£8.93',
+        }),
+      )?.amount_minor,
+    ).toBe(893);
+  });
+});
+

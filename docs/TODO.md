@@ -153,9 +153,19 @@ through something that resets the NC session.
       float), region-tagged, per-unit for fair comparison. `record_price` +
       `latest_prices` (cheapest-per-shop); `GET /api/products/id/{id}/prices`.
       Asda hits carry a structured price (amount + per-unit + region) and record
-      an observation on import. Waitrose price capture deferred until its
-      amount unit (pounds vs pence) is confirmed in-app — precision over a 100×
-      risk. Subsumes the old "Purchases: shop + price observations" item.
+      an observation on import. Subsumes the old "Purchases: shop + price
+      observations" item.
+      - **Waitrose's amount is confirmed against its own label, not by hand**
+        (2026-07-31). The deferral here used to read "until the unit (pounds vs
+        pence) is confirmed in-app", but the extractor had already gone ahead and
+        recorded `round(amount * 100)` on every link — and production had never
+        exercised it (6 observations, all Asda), so the assumption was live and
+        untested. Waitrose's `pricing` block carries the number *and* its own
+        rendered `displayPrice` ("£2.50", "85p"); the extractor now carries both
+        and `shopPrice` records only when they agree. Disagreement, or no label,
+        records nothing and logs why. Better than a one-off confirmation: it
+        still holds if Waitrose ever changes the unit, and a missing price is
+        visible where a wrong one isn't.
 - [x] **Product data model, increment 3 — nutrition + ingredients + allergens +
       dietary flags** (2026-07-16) — `product_nutrition` (migration 0027): the UK
       "big 8" per 100g/ml wide (energy kJ+kcal, fat, saturates, carbs, sugars,

@@ -99,6 +99,7 @@ describe('ProductPicker', () => {
         barcodes: [],
         image_url: 'https://cdn/img.jpg',
         display_price: { amount: 2.65, currencyCode: 'GBP' },
+        display_price_label: '£2.65',
         categories: [],
       }),
     };

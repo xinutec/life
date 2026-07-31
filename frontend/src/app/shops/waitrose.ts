@@ -67,6 +67,9 @@ function productJs(lineNumber: string): string {
       source: "waitrose", external_id: p.lineNumber, name: p.name || null, brand: p.brand || null,
       barcodes: p.barCodes || [], image_url: im.large || im.medium || im.extraLarge || im.small || null,
       display_price: (pr.currentSaleUnitRetailPrice && pr.currentSaleUnitRetailPrice.price) || null,
+      // Carried ONLY so the number above can be checked against it: the pricing
+      // block gives that amount no unit, and Waitrose renders this string itself.
+      display_price_label: (typeof pr.displayPrice === "string" && pr.displayPrice) || null,
       categories: (p.categories || []).map(function (c) { return c.name; })
     } }));
   } catch (e) { AndroidShop.result(JSON.stringify({ ok: false, error: String(e) })); }

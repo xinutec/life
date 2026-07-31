@@ -346,6 +346,7 @@ describe('ProductPage', () => {
     barcodes,
     image_url: 'https://ecom-su-static-prod.wtrecom.com/x.jpg',
     display_price: { amount: 2.65, currencyCode: 'GBP' },
+    display_price_label: '£2.65',
     categories: [],
   });
 

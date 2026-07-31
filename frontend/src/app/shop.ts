@@ -11,11 +11,42 @@ export interface ShopProduct {
   barcodes: string[];
   image_url: string | null;
   display_price: { amount: number; currencyCode: string } | null;
+  /** The shop's OWN formatted price for the same quote ("£2.50", "85p"), kept
+   *  beside the number so the number's unit can be checked rather than assumed —
+   *  see `shopPrice`. `null` when the shop didn't render one. */
+  display_price_label: string | null;
   categories: string[];
 }
 
+/** Pence read out of a shop's formatted price. `null` if it isn't a shape we
+ *  recognise — a refusal to guess, not a parse failure to paper over.
+ *
+ *  Both UK shapes are here because Waitrose renders both: "£2.50" at or above a
+ *  pound, bare "85p" below it. */
+export function penceFromLabel(label: string): number | null {
+  const pounds = /^£\s*(\d+)(?:\.(\d{1,2}))?$/.exec(label.trim());
+  if (pounds) {
+    const frac = (pounds[2] ?? '').padEnd(2, '0');
+    return Number(pounds[1]) * 100 + Number(frac);
+  }
+  const pence = /^(\d{1,2})\s*p$/.exec(label.trim());
+  return pence ? Number(pence[1]) : null;
+}
+
 /** What a shop's own quote becomes on our side: integer minor units, never a
- *  float (see products::prices). `null` when the shop quoted nothing.
+ *  float (see products::prices). `null` when the shop quoted nothing — and also
+ *  when it quoted something whose unit we can't confirm.
+ *
+ *  **Why the confirmation.** `amount` is a bare number: nothing in the payload
+ *  says whether it means pounds or pence, and reading it wrong stores money off
+ *  by 100×. That error is a quiet one — £2.50 filed as £250 still looks like a
+ *  price, and only surfaces later as "which shop is cheaper" answering wrongly.
+ *  So the shop's own formatted price is the second opinion. If the two disagree,
+ *  or there is no label to check against, nothing is recorded: a missing price
+ *  is visibly missing, a wrong one isn't.
+ *
+ *  This beats confirming the unit by hand once, because it keeps holding if the
+ *  shop ever changes it.
  *
  *  Shared rather than repeated: the picker imports shop products and so does the
  *  product page's shop lookup, and a price recorded by one path but not the
@@ -23,8 +54,26 @@ export interface ShopProduct {
 export function shopPrice(product: ShopProduct): PriceInput | null {
   const p = product.display_price;
   if (!p || !(p.amount > 0)) return null;
+  const minor = Math.round(p.amount * 100);
+  const label = product.display_price_label;
+  const shown = label === null ? null : penceFromLabel(label);
+  // Dropped rather than stored, and logged rather than dropped silently — the
+  // same rule the shop-cache report follows for an image URL it won't trust.
+  if (shown === null) {
+    console.warn(
+      `[shop:price] ${product.external_id}: no formatted price to check ${minor}p against; not recording`,
+      label,
+    );
+    return null;
+  }
+  if (shown !== minor) {
+    console.warn(
+      `[shop:price] ${product.external_id}: the shop shows ${label} (${shown}p) but its amount reads ${minor}p; not recording`,
+    );
+    return null;
+  }
   return {
-    amount_minor: Math.round(p.amount * 100),
+    amount_minor: minor,
     currency: p.currencyCode,
     // The SUMMARY payload's per-unit price sits behind a different view; until
     // we read it, saying nothing beats guessing a measure.
