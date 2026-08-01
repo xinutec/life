@@ -67,8 +67,8 @@ prod is served by the backend.
 
 ```sh
 cd frontend && npm install
-npm start            # ng serve on :4200, proxies /api,/login,... to :8080
-npm run build        # → frontend/dist/life-web/browser
+pnpm start           # ng serve on :4200, proxies /api,/login,... to :8080
+pnpm run build       # → frontend/dist/life-web/browser
 ```
 
 Serve the built bundle from the backend by pointing `STATIC_DIR` at it:

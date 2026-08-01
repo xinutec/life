@@ -341,5 +341,5 @@ interleave.
 
 Testing per increment follows the existing patterns: Rust `tests/*_db.rs` for
 new sync entities/fields, vitest specs for the graph timing states, the merge
-fields, `<app-list-state>`, and the Today composition; `npm run e2e` offline
+fields, `<app-list-state>`, and the Today composition; `pnpm run e2e` offline
 smoke still passing.

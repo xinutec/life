@@ -50,13 +50,14 @@ nix develop -c bash -c '
   # Frontend deps must exist before lint/build. verify.sh has to run from a clean
   # checkout (a fresh clone, or the tree the fleetwatch collector runs in) — not
   # just a warm dev machine — so install them when absent or the lockfile moved.
-  if [ ! -d frontend/node_modules ] || [ frontend/package-lock.json -nt frontend/node_modules ]; then
-    ( cd frontend && npm ci )
+  # --frozen-lockfile is pnpm ci: install exactly pnpm-lock.yaml, or fail.
+  if [ ! -d frontend/node_modules ] || [ frontend/pnpm-lock.yaml -nt frontend/node_modules ]; then
+    ( cd frontend && pnpm install --frozen-lockfile )
   fi
   # ui-check (L2 phone-width layout harness) runs after the build — it serves
   # the freshly-built dist and asserts no overlap/overflow at Pixel width.
   # See @xinutec/ui-harness + dev-lint/docs/layout-quality-architecture.md.
-  ( cd frontend && npm run lint && npx ng build && npm test && npm run ui-check )
+  ( cd frontend && pnpm run lint && pnpm exec ng build && pnpm test && pnpm run ui-check )
 '
 dev_lint_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/dev-lint"
 [ -d "$dev_lint_dir" ] || dev_lint_dir="$HOME/Code/dev-lint"

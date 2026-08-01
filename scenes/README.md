@@ -62,7 +62,7 @@ live local preview:
   `http://localhost:4280` (LAN-reachable, so you can watch it on a phone). It
   re-reads `house.json` on **every request**, so editing the scene + reloading
   shows the change instantly — no DB, no backend, no auth. Build the dev
-  frontend once first: `cd frontend && npm run build`.
+  frontend once first: `cd frontend && pnpm run build`.
 - **Red = a guess.** Give an estimated furniture box `"color": "#ff5252"`, then
   swap it to its real colour once the measurement lands. `?red=14,5` tints those
   *walls* red the same way (see Dev aids). Furniture honours its own colour;

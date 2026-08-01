@@ -7,7 +7,7 @@
 // no backend, no auth. Everything else under /api returns [] (the House tab
 // ignores it).
 //
-//   1. Build the dev frontend once:  (cd frontend && npm run build)   # dev config, no SW
+//   1. Build the dev frontend once:  (cd frontend && pnpm run build)  # dev config, no SW
 //   2. node scripts/house-preview.mjs [port]                          # default 4280
 //   3. Open http://<this-machine>:<port>/house                        # LAN-reachable → phone
 //

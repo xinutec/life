@@ -71,6 +71,6 @@ jobs:
           build-args: |
             GIT_SHA=${{ github.sha }}
           cache-from: type=registry,ref=xinutec/life:cache
-          # mode=max also persists the builder-stage layers (npm ci, cargo deps),
+          # mode=max also persists the builder-stage layers (pnpm install, cargo deps),
           # not just the final image — so those expensive layers survive across runs.
           cache-to: type=registry,ref=xinutec/life:cache,mode=max

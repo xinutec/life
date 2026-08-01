@@ -8,7 +8,7 @@ import { swipeUp } from '@xinutec/ui-harness';
  * committed baseline lives under e2e/__screenshots__/; regenerate it after an
  * intended visual change with:
  *
- *     npm run ui-golden:update
+ *     pnpm run ui-golden:update
  *
  * and eyeball the diff in the commit before you keep it.
  *

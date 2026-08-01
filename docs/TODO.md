@@ -522,7 +522,7 @@ early rather than leaning on the margin.
       TYPES/PRIORITIES deduped into `todo-meta.ts`); **I** M3 type scale
       everywhere + one global `.pill`/`.expiry` grammar; **J** actionable
       Today rows (tick with Undo, tap → detail sheet) + a Playwright
-      rendered-pixels gate (`npm run ui-check`, e2e/ui-pages.spec.ts: 390px,
+      rendered-pixels gate (`pnpm run ui-check`, e2e/ui-pages.spec.ts: 390px,
       mocked busy data, no-text-overlap assertion — caught the `nutrition`
       mat-icon rendering as literal text on day one; classic Material Icons
       has no such glyph).
@@ -786,7 +786,7 @@ early rather than leaning on the margin.
       `/api/me`, items, locations, recipes, cookable, house, product images. App
       warm-fetches those on login so they're cached even for unvisited tabs. So
       the app opens with no signal and shows your inventory/recipes/house — the
-      Tube case. Verified by `frontend/e2e/offline*.spec.ts` (npm run e2e) + on
+      Tube case. Verified by `frontend/e2e/offline*.spec.ts` (pnpm run e2e) + on
       prod. Still online-only (writes/fresh data): editing.
 - [ ] **PWA polish** — full icon set (png/maskable/favicon, not just svg).
 
