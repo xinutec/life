@@ -2,7 +2,6 @@ package org.xinutec.life
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.app.AlarmManager
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -15,7 +14,6 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
-import android.os.Bundle
 import android.util.Base64
 import android.util.Log
 import android.view.Gravity
@@ -33,30 +31,39 @@ import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.TextView
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
+import androidx.activity.result.contract.ActivityResultContracts
 import org.json.JSONObject
+import org.xinutec.shell.ShellConfig
+import org.xinutec.shell.WebDebugging
+import org.xinutec.shell.WebShellActivity
 import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * A full-screen [WebView] onto life — the personal home-OS app, an Angular SPA
- * served at [LIFE_URL]. No address bar, no tabs, a home-screen icon: the app
- * presented as a native one, avoiding browser chrome. It's behind a login
- * (Nextcloud identity); the WebView keeps the session cookie, so it's a one-time
- * sign-in.
+ * life — the personal home-OS app, an Angular SPA served at [LIFE_URL], shown in
+ * the fleet's shared [WebShellActivity]. It's behind a login (Nextcloud identity);
+ * the WebView keeps the session cookie, so it's a one-time sign-in.
  *
- * Deliberately tiny — a plain Activity holding one WebView, no Compose/AppCompat.
- * `configChanges` keeps the WebView (and its route + scroll) across rotation.
- *
- * The WebView is inset from the system bars by padding a wrapper (see onCreate),
- * and the strips behind the bars are painted with the page's own surface colour.
+ * What the shell does not do, and this file does: three JavaScript bridges (the
+ * clipboard, shop enrichment, reminders), the file chooser and camera grant, and
+ * the recovery from Nextcloud refusing a login with a stale cookie.
  */
-class MainActivity : Activity() {
-    private lateinit var web: WebView
-    private lateinit var root: FrameLayout
+class MainActivity : WebShellActivity() {
+    override val shell =
+        ShellConfig(
+            url = LIFE_URL,
+            // The app itself plus the Nextcloud login hop; everything else goes to
+            // the real browser.
+            allowedHosts = setOf("life.xinutec.org", NC_HOST),
+            consoleTag = "life-web",
+            // Make both WebViews inspectable over adb (chrome://inspect / CDP). The
+            // app is a personal, sideloaded debug build; this is how in-app web + the
+            // hidden Waitrose fetch get diagnosed (the view isn't otherwise
+            // remote-debuggable).
+            webDebugging = WebDebugging.ALWAYS,
+        )
 
     // A pending web camera request, held while the OS permission dialog is up.
     private var pendingCameraRequest: PermissionRequest? = null
@@ -81,6 +88,184 @@ class MainActivity : Activity() {
 
     // The explanation strip, if one is showing.
     private var banner: TextView? = null
+
+    override fun onWebViewCreated(web: WebView) {
+        // Expose the system clipboard's image to the web app (its "Paste copied
+        // image" action — e.g. an image copied in Chrome). The bridge object is
+        // attached to the WebView as a whole, so every call re-checks that the
+        // *current page* is the life app (see readClipboardImageDataUrl) — a
+        // foreign page can't read the clipboard even if it somehow ends up here.
+        web.addJavascriptInterface(ClipboardImageBridge(), "AndroidClipboard")
+        // Shop enrichment: the web app drives a hidden WebView on a shop site (a
+        // real browser passes the bot wall a server-side client can't) to fetch
+        // product data, supplying the shop-specific URLs + extractor JS. See
+        // ShopBridge — nothing shop-specific lives here.
+        web.addJavascriptInterface(ShopBridge(), "ShopBridge")
+        // Reminders: the web app schedules device-local notifications (e.g. the
+        // daily wellbeing check-in nudge) at a wall-clock time, fired by
+        // AlarmManager → ReminderReceiver even when the app is closed. Generic —
+        // nothing wellbeing-specific lives here; the web app owns the "when", the
+        // copy, and the deep-link target.
+        web.addJavascriptInterface(ReminderBridge(), "ReminderBridge")
+    }
+
+    override fun createWebViewClient() = LifeWebViewClient()
+
+    override fun createWebChromeClient() = LifeWebChromeClient()
+
+    inner class LifeWebViewClient : ShellWebViewClient() {
+        // Recover from Nextcloud refusing the login with 403 "State token does not
+        // match".
+        //
+        // NC writes the login's state token into the session named by whatever
+        // session cookie you arrive with. This WebView keeps NC's cookies for
+        // months, while NC sweeps its sessions — so by the time we sign in again
+        // the cookie names a session the server has forgotten, the token dies with
+        // it, and the grant step refuses. A cookie-LESS browser skips the whole
+        // path (NC's same-site middleware only engages when cookies exist), which
+        // is why a fresh install works and a long-lived one does not. Reproduced in
+        // desktop Chrome too, so this is NC's behaviour, not a WebView quirk.
+        //
+        // Dropping NC's cookies and starting over is exactly the state that works.
+        // Once per launch, so a genuinely broken login can't loop.
+        override fun onReceivedHttpError(
+            view: WebView,
+            request: WebResourceRequest,
+            errorResponse: WebResourceResponse,
+        ) {
+            super.onReceivedHttpError(view, request, errorResponse)
+            if (!request.isForMainFrame) return
+            if (errorResponse.statusCode != HTTP_FORBIDDEN) return
+            if (request.url.host != NC_HOST || staleLoginRecovered) return
+            staleLoginRecovered = true
+            Log.w(TAG, "NC refused the login (403) — clearing its stale cookies and retrying")
+            // Don't let NC's "Access denied" page paint. We are about to fix it, and
+            // someone who sees that flash past has no way to tell whether anything
+            // is wrong or whether trying again is pointless.
+            view.stopLoading()
+            clearNextcloudCookies()
+            // And say WHY the login is being asked for twice. A silent retry still
+            // leaves you guessing: the recovery worked, but only the log knew it.
+            showBanner(
+                "Your Nextcloud sign-in had expired, so it was refused. " +
+                    "Cleared it — signing in again should work now.",
+            )
+            view.loadUrl("${LIFE_URL}login")
+        }
+    }
+
+    inner class LifeWebChromeClient : ShellWebChromeClient() {
+        // The barcode scanner calls getUserMedia; a WebView denies camera access
+        // unless we explicitly grant it. Grant video capture, asking the OS for the
+        // runtime CAMERA permission first if we lack it.
+        override fun onPermissionRequest(request: PermissionRequest) {
+            if (PermissionRequest.RESOURCE_VIDEO_CAPTURE !in request.resources) {
+                request.deny()
+                return
+            }
+            if (hasCameraPermission()) {
+                request.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE))
+            } else {
+                pendingCameraRequest = request
+                requestPermissions(arrayOf(Manifest.permission.CAMERA), CAMERA_REQ)
+            }
+        }
+
+        // A WebView ignores <input type=file> unless we launch the picker ourselves
+        // and hand the chosen URIs back — without this, tapping the app's image
+        // picker does nothing (it works in Chrome, which supplies its own file
+        // dialog). The intent from createIntent() honours the input's `accept`
+        // (image/*) and `multiple`, so it opens straight to the photo picker.
+        override fun onShowFileChooser(
+            webView: WebView,
+            filePathCallback: ValueCallback<Array<Uri>>,
+            fileChooserParams: FileChooserParams,
+        ): Boolean {
+            // Abandon any earlier pick that never resolved.
+            fileChooserCallback?.onReceiveValue(null)
+            fileChooserCallback = filePathCallback
+            return try {
+                filePicker.launch(fileChooserParams.createIntent())
+                true
+            } catch (_: ActivityNotFoundException) {
+                fileChooserCallback = null
+                false // let the WebView know no chooser was shown
+            }
+        }
+    }
+
+    /** The in-app URL a reminder's notification wants opened, or null if this intent
+     *  carries none. Confined to the life app: a relative path is resolved against
+     *  [LIFE_URL], and an absolute URL is honoured only if it's already an app URL —
+     *  a reminder can never point the WebView off-origin. */
+    override fun startUrl(intent: Intent?): String? {
+        val raw = intent?.getStringExtra(EXTRA_OPEN_URL)?.trim().orEmpty()
+        if (raw.isEmpty()) return null
+        if (raw.startsWith(LIFE_URL)) return raw
+        if ("://" in raw) return null // an off-origin absolute URL — refuse it
+        return LIFE_URL.trimEnd('/') + "/" + raw.trimStart('/')
+    }
+
+    // The Waitrose connect overlay swallows back first: walk its history, then
+    // close it, before the main app's back behaviour.
+    override fun onBackBeforeHistory(): Boolean {
+        val cw = connectWeb
+        if (connectOverlay == null) return false
+        if (cw != null && cw.canGoBack()) cw.goBack() else closeShopConnect()
+        return true
+    }
+
+    // While the overlay is up, back belongs to us even at the SPA's root.
+    override fun hasExtraBackTargets(): Boolean = connectOverlay != null
+
+    // The shell releases the main WebView; the ones this app made are ours.
+    override fun onDestroy() {
+        shopWeb?.let {
+            root.removeView(it)
+            it.destroy()
+        }
+        connectOverlay?.let { root.removeView(it) }
+        connectWeb?.destroy()
+        super.onDestroy()
+    }
+
+    // Deliver the picked image URIs back to the waiting <input type=file>. The
+    // callback MUST be answered even on cancel, or the input stays blocked and
+    // won't reopen the picker on the next tap — a cancelled pick still arrives
+    // here, and parseResult turns it into the null the WebView is waiting for.
+    private val filePicker =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val callback = fileChooserCallback ?: return@registerForActivityResult
+            fileChooserCallback = null
+            callback.onReceiveValue(
+                WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data),
+            )
+        }
+
+    // Resolve the held web camera request once the user answers the OS dialog.
+    // Still the request-code API rather than the Activity Result one: the request
+    // it answers comes from the WebView's onPermissionRequest, which is not a
+    // launcher call, so there is no contract to register against.
+    @Deprecated("Deprecated in Java")
+    @Suppress("DEPRECATION")
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != CAMERA_REQ) return
+        val request = pendingCameraRequest ?: return
+        pendingCameraRequest = null
+        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            request.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE))
+        } else {
+            request.deny()
+        }
+    }
+
+    private fun hasCameraPermission() =
+        checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
     /** Explain, over the page, why the app is doing something the user didn't ask
      *  for. Native rather than injected: the page underneath at that moment belongs
@@ -135,285 +320,6 @@ class MainActivity : Activity() {
         }
         cm.flush()
     }
-
-    @SuppressLint("SetJavaScriptEnabled")
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        // Make both WebViews inspectable over adb (chrome://inspect / CDP). The app
-        // is a personal, sideloaded debug build; this is how in-app web + the hidden
-        // Waitrose fetch get diagnosed (the view isn't otherwise remote-debuggable).
-        WebView.setWebContentsDebuggingEnabled(true)
-        val prefs = getSharedPreferences("viewer", Context.MODE_PRIVATE)
-        web =
-            WebView(this).apply {
-                layoutParams =
-                    ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                    )
-                settings.javaScriptEnabled = true // Angular needs JS
-                settings.domStorageEnabled = true // localStorage / sessionStorage
-                settings.useWideViewPort = true
-                settings.loadWithOverviewMode = true
-                // Expose the system clipboard's image to the web app (its "Paste
-                // copied image" action — e.g. an image copied in Chrome). The
-                // bridge object is attached to the WebView as a whole, so every
-                // call re-checks that the *current page* is the life app (see
-                // readClipboardImageDataUrl) — a foreign page can't read the
-                // clipboard even if it somehow ends up in this view.
-                addJavascriptInterface(ClipboardImageBridge(), "AndroidClipboard")
-                // Shop enrichment: the web app drives a hidden WebView on a shop
-                // site (a real browser passes the bot wall a server-side client
-                // can't) to fetch product data, supplying the shop-specific URLs +
-                // extractor JS. See ShopBridge — nothing shop-specific lives here.
-                addJavascriptInterface(ShopBridge(), "ShopBridge")
-                // Reminders: the web app schedules device-local notifications
-                // (e.g. the daily wellbeing check-in nudge) at a wall-clock time,
-                // fired by AlarmManager → ReminderReceiver even when the app is
-                // closed. Generic — nothing wellbeing-specific lives here; the web
-                // app owns the "when", the copy, and the deep-link target.
-                addJavascriptInterface(ReminderBridge(), "ReminderBridge")
-                // Keep life (and its Nextcloud login hop) inside this WebView;
-                // hand every other origin to the real browser. A chromeless view
-                // has no URL bar, so an external link opening in-place would look
-                // like the app — confine navigation instead. Also remember the
-                // current in-app page so a cold reopen returns to it (SPA route
-                // changes fire doUpdateVisitedHistory too).
-                webViewClient =
-                    object : WebViewClient() {
-                        override fun shouldOverrideUrlLoading(
-                            view: WebView,
-                            request: WebResourceRequest,
-                        ): Boolean {
-                            val url = request.url
-                            if (url.scheme == "https" && url.host in ALLOWED_HOSTS) {
-                                return false // in-app
-                            }
-                            try {
-                                startActivity(Intent(Intent.ACTION_VIEW, url))
-                            } catch (_: ActivityNotFoundException) {
-                                // No handler for this URL — drop the navigation.
-                            }
-                            return true
-                        }
-
-                        override fun doUpdateVisitedHistory(
-                            view: WebView,
-                            url: String,
-                            isReload: Boolean,
-                        ) {
-                            super.doUpdateVisitedHistory(view, url, isReload)
-                            if (Restore.isRestorable(LIFE_URL, url)) {
-                                prefs.edit().putString(KEY_LAST_URL, url).apply()
-                            }
-                        }
-
-                        // Recover from Nextcloud refusing the login with 403 "State
-                        // token does not match".
-                        //
-                        // NC writes the login's state token into the session named by
-                        // whatever session cookie you arrive with. This WebView keeps
-                        // NC's cookies for months, while NC sweeps its sessions — so
-                        // by the time we sign in again the cookie names a session the
-                        // server has forgotten, the token dies with it, and the grant
-                        // step refuses. A cookie-LESS browser skips the whole path
-                        // (NC's same-site middleware only engages when cookies exist),
-                        // which is why a fresh install works and a long-lived one does
-                        // not. Reproduced in desktop Chrome too, so this is NC's
-                        // behaviour, not a WebView quirk.
-                        //
-                        // Dropping NC's cookies and starting over is exactly the state
-                        // that works. Once per launch, so a genuinely broken login
-                        // can't loop.
-                        override fun onReceivedHttpError(
-                            view: WebView,
-                            request: WebResourceRequest,
-                            errorResponse: WebResourceResponse,
-                        ) {
-                            super.onReceivedHttpError(view, request, errorResponse)
-                            if (!request.isForMainFrame) return
-                            if (errorResponse.statusCode != HTTP_FORBIDDEN) return
-                            if (request.url.host != NC_HOST || staleLoginRecovered) return
-                            staleLoginRecovered = true
-                            Log.w(
-                                TAG,
-                                "NC refused the login (403) — clearing its stale cookies and retrying",
-                            )
-                            // Don't let NC's "Access denied" page paint. We are about to
-                            // fix it, and someone who sees that flash past has no way to
-                            // tell whether anything is wrong or whether trying again is
-                            // pointless.
-                            view.stopLoading()
-                            clearNextcloudCookies()
-                            // And say WHY the login is being asked for twice. A silent
-                            // retry still leaves you guessing: the recovery worked, but
-                            // only the log knew it.
-                            showBanner(
-                                "Your Nextcloud sign-in had expired, so it was refused. " +
-                                    "Cleared it — signing in again should work now.",
-                            )
-                            view.loadUrl("${LIFE_URL}login")
-                        }
-
-                        // Paint the strips behind the system bars with the web UI's
-                        // own surface colour instead of a hardcoded black; it follows
-                        // the page's light/dark theme, so read its body background.
-                        override fun onPageFinished(view: WebView, url: String) {
-                            super.onPageFinished(view, url)
-                            view.evaluateJavascript(
-                                "getComputedStyle(document.body).backgroundColor",
-                            ) { result -> parseCssColor(result)?.let(root::setBackgroundColor) }
-                        }
-                    }
-                // The barcode scanner calls getUserMedia; a WebView denies camera
-                // access unless we explicitly grant it. Grant video capture, asking
-                // the OS for the runtime CAMERA permission first if we lack it.
-                webChromeClient =
-                    object : WebChromeClient() {
-                        // Mirror the web app's console to logcat (tag "life-web") so the
-                        // in-WebView flow — e.g. the scanner's "[scan]" traces — is
-                        // visible via `adb logcat -s life-web`.
-                        override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
-                            Log.d(
-                                "life-web",
-                                "${msg.message()} (${msg.sourceId()}:${msg.lineNumber()})",
-                            )
-                            return true
-                        }
-
-                        override fun onPermissionRequest(request: PermissionRequest) {
-                            if (PermissionRequest.RESOURCE_VIDEO_CAPTURE !in request.resources) {
-                                request.deny()
-                                return
-                            }
-                            if (hasCameraPermission()) {
-                                request.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE))
-                            } else {
-                                pendingCameraRequest = request
-                                requestPermissions(arrayOf(Manifest.permission.CAMERA), CAMERA_REQ)
-                            }
-                        }
-
-                        // A WebView ignores <input type=file> unless we launch the
-                        // picker ourselves and hand the chosen URIs back — without
-                        // this, tapping the app's image picker does nothing (it works
-                        // in Chrome, which supplies its own file dialog). The intent
-                        // from createIntent() honours the input's `accept` (image/*)
-                        // and `multiple`, so it opens straight to the photo picker.
-                        override fun onShowFileChooser(
-                            webView: WebView,
-                            filePathCallback: ValueCallback<Array<Uri>>,
-                            fileChooserParams: FileChooserParams,
-                        ): Boolean {
-                            // Abandon any earlier pick that never resolved.
-                            fileChooserCallback?.onReceiveValue(null)
-                            fileChooserCallback = filePathCallback
-                            return try {
-                                startActivityForResult(fileChooserParams.createIntent(), FILE_REQ)
-                                true
-                            } catch (_: ActivityNotFoundException) {
-                                fileChooserCallback = null
-                                false // let the WebView know no chooser was shown
-                            }
-                        }
-                    }
-                // Black until the page loads and reports its surface colour; avoids a
-                // white flash on launch.
-                setBackgroundColor(Color.BLACK)
-            }
-        // Inset the WebView from the system bars by padding a wrapper ViewGroup
-        // (WebView.setPadding() doesn't offset content under wide-viewport mode).
-        // Once the WebView no longer underlaps the bars its env(safe-area-inset-*)
-        // collapse to 0, so the page's own safe-area CSS adds nothing on top.
-        root =
-            FrameLayout(this).apply {
-                addView(web)
-                setBackgroundColor(Color.BLACK)
-            }
-        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
-            // ime() included: with enforced edge-to-edge (targetSdk 35+) the window
-            // no longer auto-resizes for the keyboard — without this the IME just
-            // draws over the page and bottom sheets stay buried under it.
-            val bars =
-                insets.getInsets(
-                    WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime(),
-                )
-            v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
-            WindowInsetsCompat.CONSUMED
-        }
-        setContentView(root)
-        // A notification tap launches us with a deep-link target; honour it over the
-        // reopen-where-you-left-off default. Otherwise reopen the last in-app page
-        // (the hardcoded URL is only the first-run default).
-        web.loadUrl(
-            reminderTargetUrl(intent) ?: prefs.getString(KEY_LAST_URL, null) ?: LIFE_URL,
-        )
-    }
-
-    // A notification tapped while we're already running arrives here (SINGLE_TOP),
-    // not through a fresh onCreate — navigate the live WebView to its target.
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        reminderTargetUrl(intent)?.let { web.loadUrl(it) }
-    }
-
-    /** The in-app URL a reminder's notification wants opened, or null if this intent
-     *  carries none. Confined to the life app: a relative path is resolved against
-     *  [LIFE_URL], and an absolute URL is honoured only if it's already an app URL —
-     *  a reminder can never point the WebView off-origin. */
-    private fun reminderTargetUrl(intent: Intent?): String? {
-        val raw = intent?.getStringExtra(EXTRA_OPEN_URL)?.trim().orEmpty()
-        if (raw.isEmpty()) return null
-        if (raw.startsWith(LIFE_URL)) return raw
-        if ("://" in raw) return null // an off-origin absolute URL — refuse it
-        return LIFE_URL.trimEnd('/') + "/" + raw.trimStart('/')
-    }
-
-    // `configChanges` keeps the Activity across rotation, so this only fires on a
-    // real finish — release the WebView instead of leaking it.
-    override fun onDestroy() {
-        shopWeb?.let {
-            root.removeView(it)
-            it.destroy()
-        }
-        connectOverlay?.let { root.removeView(it) }
-        connectWeb?.destroy()
-        root.removeView(web)
-        web.destroy()
-        super.onDestroy()
-    }
-
-    // Back walks the SPA's history; it only leaves the app once there's nothing
-    // left to go back to.
-    @Deprecated("Deprecated in Java")
-    @Suppress("DEPRECATION")
-    override fun onBackPressed() {
-        // The Waitrose connect overlay swallows back first: walk its history, then
-        // close it, before the main app's back behaviour.
-        val cw = connectWeb
-        if (connectOverlay != null) {
-            if (cw != null && cw.canGoBack()) cw.goBack() else closeShopConnect()
-            return
-        }
-        if (web.canGoBack()) web.goBack() else super.onBackPressed()
-    }
-
-    // Deliver the picked image URIs back to the waiting <input type=file>. The
-    // callback MUST be answered even on cancel (null), or the input stays blocked
-    // and won't reopen the picker on the next tap.
-    @Deprecated("Deprecated in Java")
-    @Suppress("DEPRECATION")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != FILE_REQ) return
-        val callback = fileChooserCallback ?: return
-        fileChooserCallback = null
-        callback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data))
-    }
-
-    private fun hasCameraPermission() =
-        checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
     /**
      * Bridge for the web app's "Paste copied image": returns the image on the
@@ -730,6 +636,8 @@ class MainActivity : Activity() {
             }
         connectOverlay = overlay
         root.addView(overlay)
+        // Back now belongs to the overlay, even at the SPA's root.
+        syncBack()
         cw.loadUrl(loginUrl)
     }
 
@@ -739,6 +647,7 @@ class MainActivity : Activity() {
         root.removeView(overlay)
         connectWeb?.destroy()
         connectWeb = null
+        syncBack()
         val id = connectRequestId
         connectRequestId = null
         // Let the web app re-check / retry now a session may exist.
@@ -749,32 +658,6 @@ class MainActivity : Activity() {
     private fun notifyShopConnected(requestId: String?) {
         val arg = requestId?.let { JSONObject.quote(it) } ?: "null"
         web.evaluateJavascript("window.__shopConnected && window.__shopConnected($arg)", null)
-    }
-
-    // Resolve the held web camera request once the user answers the OS dialog.
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray,
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode != CAMERA_REQ) return
-        val request = pendingCameraRequest ?: return
-        pendingCameraRequest = null
-        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
-            request.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE))
-        } else {
-            request.deny()
-        }
-    }
-
-    // evaluateJavascript hands back the JSON-encoded result, e.g. the string
-    // "rgb(18, 18, 18)" (with quotes) or "rgba(18, 18, 18, 1)". Pull out the RGB
-    // triple; alpha is ignored (the surface is opaque). null if it can't be read.
-    private fun parseCssColor(raw: String?): Int? {
-        val m = raw?.let { Regex("""rgba?\((\d+),\s*(\d+),\s*(\d+)""").find(it) } ?: return null
-        val (r, g, b) = m.destructured
-        return Color.rgb(r.toInt(), g.toInt(), b.toInt())
     }
 
     /**
@@ -849,7 +732,6 @@ class MainActivity : Activity() {
 
     companion object {
         private const val CAMERA_REQ = 1
-        private const val FILE_REQ = 2
         private const val NOTIF_REQ = 3
 
         /** Intent extra: the in-app URL/path a tapped reminder should open. */
@@ -861,11 +743,8 @@ class MainActivity : Activity() {
         // The life app (HTTPS, behind a Nextcloud-identity login).
         private const val LIFE_URL = "https://life.xinutec.org/"
 
-        // Hosts allowed to load inside this WebView: the app itself plus the
-        // Nextcloud login hop. Everything else goes to the real browser.
+        // The Nextcloud login hop.
         private const val NC_HOST = "dash.xinutec.org"
-        private val ALLOWED_HOSTS = setOf("life.xinutec.org", NC_HOST)
-        private const val KEY_LAST_URL = "last_url"
 
         private const val TAG = "life-app"
         private const val HTTP_FORBIDDEN = 403
