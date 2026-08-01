@@ -2,69 +2,44 @@ import { DOCUMENT } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { NavigationEnd, Router } from '@angular/router';
 import { Subject } from 'rxjs';
-import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { LifeApi } from './life-api';
-import { Telemetry, labelFor } from './telemetry';
+import { Telemetry } from './telemetry';
 
-describe('labelFor', () => {
-  function el(html: string): Element {
-    const host = document.createElement('div');
-    host.innerHTML = html;
-    return host.firstElementChild!;
-  }
-
-  it('reads a button’s visible text, whitespace collapsed', () => {
-    const b = el('<button>  Find at\n  Asda </button>');
-    expect(labelFor(b)).toBe('Find at Asda');
-  });
-
-  it('prefers an explicit aria-label over the text', () => {
-    const b = el('<button aria-label="Add Asda listing">Add</button>');
-    expect(labelFor(b)).toBe('Add Asda listing');
-  });
-
-  it('climbs to the enclosing control when the tap lands on an inner icon', () => {
-    // Material buttons wrap an icon + label; a tap often hits the icon span.
-    const b = el('<button><mat-icon>store</mat-icon><span>Find at Asda</span></button>');
-    const icon = b.querySelector('mat-icon')!;
-    expect(labelFor(icon)).toBe('Find at Asda');
-  });
-
-  it('returns null for a tap on nothing interactive', () => {
-    const p = el('<p>just some copy</p>');
-    expect(labelFor(p)).toBeNull();
-    expect(labelFor(null)).toBeNull();
-  });
-
-  it('recognises role-based controls, not just <button>', () => {
-    expect(labelFor(el('<div role="button">Save</div>'))).toBe('Save');
-    expect(labelFor(el('<a role="tab">Today</a>'))).toBe('Today');
-  });
-});
-
-describe('Telemetry', () => {
+/**
+ * The activity trace's wiring, at a real consumer.
+ *
+ * The label rules and the flattener live in `@xinutec/ui-harness/telemetry`
+ * and are tested there, once for the fleet — they are pure functions and need
+ * no framework. What can only be checked from inside an app is the rest: that
+ * the service actually reaches the router and the document it was given, that
+ * the queue flushes on its timer, and that a send failure stays silent.
+ *
+ * life is the reference consumer, so this is the one place it is checked.
+ */
+describe('Telemetry (wiring)', () => {
   let events: Subject<unknown>;
-  let sent: unknown[][];
   let router: { events: Subject<unknown>; url: string };
+  let sent: { url: string; body: unknown }[];
 
   beforeEach(() => {
     vi.useFakeTimers();
     events = new Subject();
-    sent = [];
     router = { events, url: '/today' };
-    const api = {
-      sendTelemetry: vi.fn((batch: unknown[]) => {
-        sent.push(batch);
-        return of(undefined);
+    sent = [];
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init: { body: string }) => {
+        sent.push({ url, body: JSON.parse(init.body) });
+        return Promise.resolve(new Response(null, { status: 204 }));
       }),
-    };
+    );
+
     TestBed.configureTestingModule({
       providers: [
         Telemetry,
         { provide: Router, useValue: router },
-        { provide: LifeApi, useValue: api },
         { provide: DOCUMENT, useValue: document },
       ],
     });
@@ -73,6 +48,7 @@ describe('Telemetry', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
     TestBed.resetTestingModule();
   });
 
@@ -82,12 +58,13 @@ describe('Telemetry', () => {
     vi.advanceTimersByTime(5000);
 
     expect(sent).toHaveLength(1);
-    const batch = sent[0] as { kind: string; path: string; label: string | null }[];
+    expect(sent[0].url).toBe('/api/telemetry');
+    const batch = sent[0].body as { kind: string; path: string; label: string | null }[];
     expect(batch).toHaveLength(1);
     expect(batch[0]).toMatchObject({ kind: 'nav', path: '/product/56', label: null });
   });
 
-  it('records a tap with the control’s label at the current route', () => {
+  it("records a tap with the control's label at the current route", () => {
     router.url = '/product/56';
     const btn = document.createElement('button');
     btn.textContent = 'Find at Asda';
@@ -96,7 +73,7 @@ describe('Telemetry', () => {
     vi.advanceTimersByTime(5000);
     document.body.removeChild(btn);
 
-    const batch = sent[0] as { kind: string; path: string; label: string | null }[];
+    const batch = sent[0].body as { kind: string; path: string; label: string | null }[];
     expect(batch[0]).toMatchObject({ kind: 'tap', path: '/product/56', label: 'Find at Asda' });
   });
 
@@ -116,6 +93,18 @@ describe('Telemetry', () => {
     events.next(new NavigationEnd(1, '/todo', '/todo'));
     vi.advanceTimersByTime(5000);
 
-    expect(sent[0]).toHaveLength(1); // one nav, not two
+    expect(sent[0].body).toHaveLength(1); // one nav, not two
+  });
+
+  it('swallows a failed send — a trace must never surface its own errors', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('offline'))),
+    );
+    events.next(new NavigationEnd(1, '/todo', '/todo'));
+    // The rejection is handled inside flush(); nothing escapes to the caller,
+    // and an unhandled rejection here would fail the run.
+    expect(() => vi.advanceTimersByTime(5000)).not.toThrow();
+    await Promise.resolve();
   });
 });
