@@ -44,8 +44,8 @@ importers:
         specifier: ^5.2.10
         version: 5.2.10
       '@xinutec/ui-harness':
-        specifier: github:xinutec/ui-harness#1a7b61dad398158611f109964c9778df28e35626
-        version: https://codeload.github.com/xinutec/ui-harness/tar.gz/1a7b61dad398158611f109964c9778df28e35626(@playwright/test@1.61.1)
+        specifier: github:xinutec/ui-harness#8d8340ff672392ac472c1fb16e0d8fdfecbd710d
+        version: https://codeload.github.com/xinutec/ui-harness/tar.gz/8d8340ff672392ac472c1fb16e0d8fdfecbd710d(@playwright/test@1.61.1)
       dexie:
         specifier: ^4.4.4
         version: 4.4.4
@@ -1425,6 +1425,9 @@ packages:
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
 
+  '@types/node@24.13.3':
+    resolution: {integrity: sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q==}
+
   '@types/node@26.0.1':
     resolution: {integrity: sha512-fc3KiUoBt6kie0N9bIW3E47vZsuaMf0PM2AaUpLCLT0s/LvX1nxAim6Fc049cNxODPpGm6qRAuUOB86SkRuPQw==}
 
@@ -1537,8 +1540,8 @@ packages:
   '@vitest/utils@4.1.9':
     resolution: {integrity: sha512-A51o8ymO5PpqlWNnBP9ZHPXDIpuMtTLlGSjN7la4US+LJzoUMyhwjA5QXlm39JexgwHKW4Xjs8Z2d3dLCXOeuA==}
 
-  '@xinutec/ui-harness@https://codeload.github.com/xinutec/ui-harness/tar.gz/1a7b61dad398158611f109964c9778df28e35626':
-    resolution: {gitHosted: true, integrity: sha512-LswjYyzbhvUByzIf8usWbw0p6kBToBQjPnfeFMV6wClT/DPHZf8wsV3Q7dYJ01PoExzAVqzWNByFBiwSzP+ypQ==, tarball: https://codeload.github.com/xinutec/ui-harness/tar.gz/1a7b61dad398158611f109964c9778df28e35626}
+  '@xinutec/ui-harness@https://codeload.github.com/xinutec/ui-harness/tar.gz/8d8340ff672392ac472c1fb16e0d8fdfecbd710d':
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/xinutec/ui-harness/tar.gz/8d8340ff672392ac472c1fb16e0d8fdfecbd710d}
     version: 0.1.0
     peerDependencies:
       '@playwright/test': '>=1.61.0'
@@ -3014,6 +3017,9 @@ packages:
     resolution: {integrity: sha512-yu26mwteFYzBAot7KVMqFGCVpsF6g8wXfJzQUHvu1no3+rRRSFcSV2nKeYvNPLD2J4b08jYBDhHUjeH0ygIl9w==}
     hasBin: true
 
+  undici-types@7.18.2:
+    resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
+
   undici-types@8.3.0:
     resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
 
@@ -4446,6 +4452,10 @@ snapshots:
 
   '@types/json-schema@7.0.15': {}
 
+  '@types/node@24.13.3':
+    dependencies:
+      undici-types: 7.18.2
+
   '@types/node@26.0.1':
     dependencies:
       undici-types: 8.3.0
@@ -4607,7 +4617,9 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
 
-  '@xinutec/ui-harness@https://codeload.github.com/xinutec/ui-harness/tar.gz/1a7b61dad398158611f109964c9778df28e35626(@playwright/test@1.61.1)':
+  '@xinutec/ui-harness@https://codeload.github.com/xinutec/ui-harness/tar.gz/8d8340ff672392ac472c1fb16e0d8fdfecbd710d(@playwright/test@1.61.1)':
+    dependencies:
+      '@types/node': 24.13.3
     optionalDependencies:
       '@playwright/test': 1.61.1
 
@@ -6216,6 +6228,8 @@ snapshots:
   typescript@6.0.3: {}
 
   ulid@3.0.2: {}
+
+  undici-types@7.18.2: {}
 
   undici-types@8.3.0: {}
 
