@@ -101,6 +101,19 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             name: 'Savouring',
             desc: 'Taking in something small and good while it lasts, and noticing that you are.',
           },
+          {
+            // A species of Joyful rather than a sibling of it: the feeling IS
+            // gladness, and the work going is what the gladness is about.
+            // Deliberately not under Powerful, where it first went — capability
+            // is the occasion here, not the experience, and filing it as agency
+            // loses the only part that makes it worth recording. Not Savouring,
+            // which is noticing something small and good and could be about
+            // anything; not `Proud/Successful`, which is satisfaction at a
+            // finished thing, afterwards. This one is glad while it is still
+            // going.
+            name: 'Productive',
+            desc: 'The particular gladness of things getting done.',
+          },
         ],
       },
       {
@@ -137,18 +150,6 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
           { name: 'Courageous', desc: 'Willing to face difficulty or fear with resolve.' },
           { name: 'Creative', desc: 'Inventive and generative; full of ideas.' },
           { name: 'Determined', desc: 'Set on seeing something through, however hard it gets.' },
-          {
-            // The day yielding while you are still in it. Not Successful, which
-            // is satisfaction at a finished thing, looking back at it; not
-            // Absorbed, which is attention swallowed by a task and says nothing
-            // about anything moving; not Determined, which is resolve against
-            // friction — here there is none, which is the whole feeling.
-            // Present-tense and felt, not a verdict on the day's output: the
-            // word describes what it is like while the work goes, and that is
-            // why it belongs to a wheel of feelings rather than to the note.
-            name: 'Productive',
-            desc: 'Things are getting done, and you can feel it happening.',
-          },
           {
             // The rest of Powerful is agency; this is the body. The wheel could
             // record the fatigue (Bad › Tired) but not the morning it lifts.
