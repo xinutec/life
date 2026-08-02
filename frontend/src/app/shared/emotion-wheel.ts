@@ -138,6 +138,18 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
           { name: 'Creative', desc: 'Inventive and generative; full of ideas.' },
           { name: 'Determined', desc: 'Set on seeing something through, however hard it gets.' },
           {
+            // The day yielding while you are still in it. Not Successful, which
+            // is satisfaction at a finished thing, looking back at it; not
+            // Absorbed, which is attention swallowed by a task and says nothing
+            // about anything moving; not Determined, which is resolve against
+            // friction — here there is none, which is the whole feeling.
+            // Present-tense and felt, not a verdict on the day's output: the
+            // word describes what it is like while the work goes, and that is
+            // why it belongs to a wheel of feelings rather than to the note.
+            name: 'Productive',
+            desc: 'Things are getting done, and you can feel it happening.',
+          },
+          {
             // The rest of Powerful is agency; this is the body. The wheel could
             // record the fatigue (Bad › Tired) but not the morning it lifts.
             name: 'Energised',
