@@ -17,7 +17,8 @@
     "ui-check": "playwright test e2e/ui-pages.spec.ts",
     "ui-golden": "playwright test e2e/ui-golden.spec.ts",
     "ui-golden:update": "playwright test e2e/ui-golden.spec.ts --update-snapshots",
-    "lint": "eslint src"
+    "lint": "eslint src e2e playwright.config.ts",
+    "typecheck:e2e": "tsc -p tsconfig.e2e.json"
   },
   "dependencies": {
     "@angular/cdk": "^22.0.3",

@@ -57,7 +57,7 @@ nix develop -c bash -c '
   # ui-check (L2 phone-width layout harness) runs after the build — it serves
   # the freshly-built dist and asserts no overlap/overflow at Pixel width.
   # See @xinutec/ui-harness + dev-lint/docs/layout-quality-architecture.md.
-  ( cd frontend && pnpm run lint && pnpm exec ng build && pnpm test && pnpm run ui-check )
+  ( cd frontend && pnpm run lint && pnpm run typecheck:e2e && pnpm exec ng build && pnpm test && pnpm run ui-check )
 '
 dev_lint_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/dev-lint"
 [ -d "$dev_lint_dir" ] || dev_lint_dir="$HOME/Code/dev-lint"
