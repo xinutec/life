@@ -33,8 +33,16 @@ test('a signed-in app opened offline stays signed in', async ({ page, context })
   });
   await page.waitForFunction(
     async () => {
-      const manifest = await (await fetch('/ngsw.json')).json();
-      const want = manifest.assetGroups.find((g: { name: string }) => g.name === 'app').urls.length;
+      // `Response.json()` is `any` by the DOM lib's design, so the shape is
+      // named here rather than inherited.
+      const manifest = (await (await fetch('/ngsw.json')).json()) as {
+        assetGroups?: { name: string; urls: string[] }[];
+      };
+      // A missing app group means the manifest is not what this test assumes.
+      // `Infinity` makes the wait time out and say so; `0` would satisfy
+      // `length >= want` immediately and pass without ever caching anything.
+      const want =
+        manifest.assetGroups?.find((g) => g.name === 'app')?.urls.length ?? Infinity;
       for (const key of await caches.keys()) {
         if (key.includes('assets:app:cache')) {
           return (await (await caches.open(key)).keys()).length >= want;

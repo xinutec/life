@@ -222,7 +222,7 @@ async function mockApi(page: Page): Promise<void> {
     const since = Number(new URL(r.request().url()).searchParams.get('since') ?? '0');
     // Incremental protocol: only send the seed once, else the pull loops forever.
     const fresh = docs.filter((d) => (d as { rev: number }).rev > since);
-    const top = docs.reduce((m, d) => Math.max(m, (d as { rev: number }).rev), since);
+    const top = docs.reduce<number>((m, d) => Math.max(m, (d as { rev: number }).rev), since);
     return r.fulfill({ json: { documents: fresh, checkpoint: { rev: top } } });
   };
   await page.route('**/api/sync/todo?*', sync(TODOS));
