@@ -84,7 +84,11 @@ export class ScannerDialog implements OnDestroy {
       this.probeTorch();
       void this.scanLoop();
     } catch (e) {
-      this.log('camera error', String(e));
+      // Narrowed, and the object kept when it is not an Error: `String(e)` on a
+      // plain object is "[object Object]", which is the one thing a diagnostic
+      // must not be. A DOMException's name is the useful half — NotAllowedError
+      // (refused) and NotReadableError (in use elsewhere) need different answers.
+      this.log('camera error', e instanceof Error ? `${e.name}: ${e.message}` : e);
       this.error.set('Couldn’t access the camera.');
     }
   }
@@ -148,7 +152,7 @@ export class ScannerDialog implements OnDestroy {
         // Detect can throw transiently; log only the first so it doesn't spam.
         if (!this.detectErrorLogged) {
           this.detectErrorLogged = true;
-          this.log('detect error', String(e));
+          this.log('detect error', e instanceof Error ? `${e.name}: ${e.message}` : e);
         }
       }
       // Heartbeat (~1/s at 60fps) so a non-detecting camera is distinguishable

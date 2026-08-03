@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -183,9 +183,9 @@ export class ShoppingItemSheet {
 
   /** Whether "View product" has somewhere to go: a linked product, or a barcode
    *  it can resolve to one. */
-  canViewProduct(): boolean {
-    return this.productId() != null || !!this.barcode().trim();
-  }
+  readonly canViewProduct = computed(
+    () => this.productId() != null || !!this.barcode().trim(),
+  );
 
   /** Leave the sheet for the linked product's page — the scan → payoff-screen
    *  path. A barcode without an established link is looked up first. */
