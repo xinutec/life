@@ -1,7 +1,9 @@
 //! Restorable deletion against a real MariaDB: every delete tombstones, the
 //! trash lists it, restore brings it back — and a sync push can NEVER clear a
 //! tombstone (set-only; the trash restore is the one undelete path). Runs only
-//! when LIFE_TEST_DATABASE_URL is set; skips otherwise.
+//! when LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on the SQL reads as a passing one.
+
+mod common;
 
 use life::db;
 use life::inventory::repo as inv_repo;
@@ -16,14 +18,11 @@ use life::todo::repo as todo_repo;
 use life::todo::types::{NewTodo, TodoType};
 use life::trash::{TrashKind, repo as trash_repo};
 
-async fn connect() -> Option<sqlx::MySqlPool> {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping trash DB test");
-        return None;
-    };
+async fn connect() -> sqlx::MySqlPool {
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
-    Some(pool)
+    pool
 }
 
 async fn wipe(pool: &sqlx::MySqlPool, user: &str) {
@@ -41,7 +40,7 @@ async fn wipe(pool: &sqlx::MySqlPool, user: &str) {
 
 #[tokio::test]
 async fn item_delete_lists_in_trash_and_restores() {
-    let Some(pool) = connect().await else { return };
+    let pool = connect().await;
     let user = "test-user-trash-item";
     wipe(&pool, user).await;
 
@@ -107,7 +106,7 @@ async fn item_delete_lists_in_trash_and_restores() {
 
 #[tokio::test]
 async fn location_delete_takes_subtree_and_restores_it() {
-    let Some(pool) = connect().await else { return };
+    let pool = connect().await;
     let user = "test-user-trash-loc";
     wipe(&pool, user).await;
 
@@ -181,7 +180,7 @@ async fn location_delete_takes_subtree_and_restores_it() {
 
 #[tokio::test]
 async fn recipe_delete_and_restore_roundtrip() {
-    let Some(pool) = connect().await else { return };
+    let pool = connect().await;
     let user = "test-user-trash-recipe";
     wipe(&pool, user).await;
 
@@ -222,7 +221,7 @@ async fn recipe_delete_and_restore_roundtrip() {
 
 #[tokio::test]
 async fn sync_push_cannot_resurrect_a_tombstone_but_restore_can() {
-    let Some(pool) = connect().await else { return };
+    let pool = connect().await;
     let user = "test-user-trash-sync";
     wipe(&pool, user).await;
 
@@ -308,7 +307,7 @@ async fn sync_push_cannot_resurrect_a_tombstone_but_restore_can() {
 /// clear its tombstone, so if this path is broken the row is gone for good.
 #[tokio::test]
 async fn todo_delete_lists_in_trash_and_restores() {
-    let Some(pool) = connect().await else { return };
+    let pool = connect().await;
     let user = "test-user-trash-todo";
     wipe(&pool, user).await;
 

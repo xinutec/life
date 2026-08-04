@@ -1,5 +1,7 @@
 //! Offline-first sync (shopping) against a real MariaDB. Runs only when
-//! LIFE_TEST_DATABASE_URL is set; skips otherwise.
+//! LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on the SQL reads as a passing one.
+
+mod common;
 
 use life::db;
 use life::inventory::types::ItemCategory;
@@ -27,10 +29,7 @@ fn doc(ulid: &str, name: &str, rev: u64) -> ShoppingDoc {
 
 #[tokio::test]
 async fn shopping_sync_pull_push_conflict_tombstone() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping sync DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -149,10 +148,7 @@ async fn shopping_sync_pull_push_conflict_tombstone() {
 /// clients would then pull.
 #[tokio::test]
 async fn boot_backfill_gives_pre_sync_rows_an_identity() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping backfill DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -208,10 +204,7 @@ async fn boot_backfill_gives_pre_sync_rows_an_identity() {
 /// deterministic across devices.
 #[tokio::test]
 async fn boot_backfill_tombstones_duplicate_todo_links() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping todo-link dedupe DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 

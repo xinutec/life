@@ -2,6 +2,8 @@
 //! product_listing, and the latest-price-per-shop query that feeds the
 //! "cheapest shop" view. Runs only when LIFE_TEST_DATABASE_URL is set.
 
+mod common;
+
 use life::db;
 use life::products::ids::{Barcode, ExternalId};
 use life::products::prices::PriceInput;
@@ -20,10 +22,7 @@ fn gbp(amount_minor: i64, unit: Option<(i64, &str)>) -> PriceInput {
 
 #[tokio::test]
 async fn latest_price_per_shop_cheapest_first_with_history() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping prices DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -125,10 +124,7 @@ async fn latest_price_per_shop_cheapest_first_with_history() {
 
 #[tokio::test]
 async fn a_shop_listing_a_product_twice_collapses_to_its_cheapest() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping shop-collapse DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 

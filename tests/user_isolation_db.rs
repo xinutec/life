@@ -2,7 +2,9 @@
 //! invisible and untouchable to every other user is a core invariant of the
 //! open-to-any-Nextcloud-user model, so it gets tests, not audits. One
 //! sequential test (parallel tests contend on sync_rev and can deadlock).
-//! Runs only when LIFE_TEST_DATABASE_URL is set; skips otherwise.
+//! Runs only when LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on the SQL reads as a passing one.
+
+mod common;
 
 use chrono::{TimeZone, Utc};
 use life::db;
@@ -87,10 +89,7 @@ fn entry<D>(doc: D) -> PushEntry<D> {
 
 #[tokio::test]
 async fn two_users_cannot_see_or_touch_each_others_data() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping isolation DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 

@@ -3,6 +3,8 @@
 //! a barcode-less item stands alone on its own name. Gated on
 //! LIFE_TEST_DATABASE_URL.
 
+mod common;
+
 use life::db;
 use life::inventory::repo as inv;
 use life::inventory::types::{ItemCategory, NewItem};
@@ -25,10 +27,7 @@ fn new_item(name: &str, barcode: Option<&str>) -> NewItem {
 
 #[tokio::test]
 async fn item_resolves_through_catalog_product() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping catalog DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -94,10 +93,7 @@ async fn item_resolves_through_catalog_product() {
 
 #[tokio::test]
 async fn item_links_to_barcodeless_shop_product_by_id() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping catalog DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 

@@ -3,6 +3,8 @@
 //! whole-product REPLACE semantics of a re-lookup. Runs only when
 //! LIFE_TEST_DATABASE_URL is set.
 
+mod common;
+
 use std::collections::BTreeMap;
 
 use life::db;
@@ -32,10 +34,7 @@ fn nutrition() -> Nutrition {
 
 #[tokio::test]
 async fn store_and_read_facts_then_replace_on_relookup() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping nutrition DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -166,10 +165,7 @@ async fn store_and_read_facts_then_replace_on_relookup() {
 
 #[tokio::test]
 async fn two_sources_dietary_claims_coexist_and_merge() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping multi-source dietary test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -286,10 +282,7 @@ async fn two_sources_dietary_claims_coexist_and_merge() {
 
 #[tokio::test]
 async fn two_sources_nutrition_allergens_ingredients_coexist_and_merge() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping multi-source facts test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -411,10 +404,7 @@ async fn two_sources_nutrition_allergens_ingredients_coexist_and_merge() {
 
 #[tokio::test]
 async fn real_brandbank_facts_parse_store_and_read_back() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping Brandbank end-to-end test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -479,10 +469,7 @@ async fn real_brandbank_facts_parse_store_and_read_back() {
 /// a connection reset or a pod eviction would land.
 #[tokio::test]
 async fn a_failed_allergen_replace_keeps_the_previous_set() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping allergen atomicity test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 

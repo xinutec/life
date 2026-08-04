@@ -1,10 +1,12 @@
 //! The emotion-suggestion cache and job queue against a real MariaDB. Runs only
-//! when LIFE_TEST_DATABASE_URL is set; skips otherwise.
+//! when LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on the SQL reads as a passing one.
 //!
 //! What's worth pinning down here is the behaviour a person actually feels:
 //! reopening the picker doesn't restart the clock, editing the note does, and an
 //! answer that arrives after the note moved on is discarded rather than shown as
 //! if it described the new text.
+
+mod common;
 
 use life::db;
 use life::wellbeing::suggest;
@@ -38,10 +40,7 @@ async fn wipe(pool: &sqlx::MySqlPool, user: &str) {
 
 #[tokio::test]
 async fn suggestion_cache_and_queue_against_real_db() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping emotion suggestion DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -192,10 +191,7 @@ async fn suggestion_cache_and_queue_against_real_db() {
 /// yesterday tagging is in; a today tagging is out until tomorrow.
 #[tokio::test]
 async fn fetch_examples_excludes_today_to_keep_the_prefix_stable() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping few-shot cutoff DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -251,10 +247,7 @@ async fn fetch_examples_excludes_today_to_keep_the_prefix_stable() {
 /// proof, and it is what keeps `pending` true past the poll-liveness window.
 #[tokio::test]
 async fn a_claimed_job_reads_as_being_worked_until_the_claim_goes_stale() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping being-worked DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -320,10 +313,7 @@ async fn a_claimed_job_reads_as_being_worked_until_the_claim_goes_stale() {
 /// can rebuild the day's prompt with nobody waiting (0038).
 #[tokio::test]
 async fn the_picker_vocabulary_is_remembered_and_replaced_in_place() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping vocabulary test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 

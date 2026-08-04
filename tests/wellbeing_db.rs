@@ -1,7 +1,9 @@
 //! Wellbeing check-ins against a real MariaDB. Runs only when
-//! LIFE_TEST_DATABASE_URL is set; skips otherwise. Covers the sync pull/push
+//! LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on the SQL reads as a passing one. Covers the sync pull/push
 //! round-trip (offline insert → pull → update → stale-conflict → tombstone) plus
 //! the trash restore.
+
+mod common;
 
 use chrono::{TimeZone, Utc};
 use life::db;
@@ -26,10 +28,7 @@ fn doc(ulid: &str, score: u8, rev: u64, deleted: bool) -> WellbeingDoc {
 
 #[tokio::test]
 async fn wellbeing_sync_and_restore_against_real_db() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping wellbeing DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -153,10 +152,7 @@ async fn wellbeing_sync_and_restore_against_real_db() {
 /// a bit lower at the gym" silently becomes a plain 4 or a plain 3.
 #[tokio::test]
 async fn half_steps_round_trip_through_the_db() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping wellbeing DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -201,10 +197,7 @@ async fn half_steps_round_trip_through_the_db() {
 
 #[tokio::test]
 async fn corrupt_emotions_fails_the_pull_loudly() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping wellbeing DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 

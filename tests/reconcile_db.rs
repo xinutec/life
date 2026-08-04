@@ -3,6 +3,8 @@
 //! value. The `divergences` rule is pure (no DB); the reconcile round-trip runs
 //! against a real MariaDB only when LIFE_TEST_DATABASE_URL is set.
 
+mod common;
+
 use std::collections::HashMap;
 
 use life::db;
@@ -94,10 +96,7 @@ fn a_settled_field_stays_quiet_until_the_value_set_changes() {
 
 #[tokio::test]
 async fn reconcile_adopts_keeps_and_settles_against_the_db() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping reconcile DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -232,10 +231,7 @@ async fn reconcile_adopts_keeps_and_settles_against_the_db() {
 
 #[tokio::test]
 async fn our_own_name_wins_over_every_source_and_survives_a_refresh() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping our-own-name DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -342,10 +338,7 @@ async fn our_own_name_wins_over_every_source_and_survives_a_refresh() {
 
 #[tokio::test]
 async fn our_own_brand_and_pack_win_over_sources_and_survive_a_refresh() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping our-own-brand/pack DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -454,10 +447,7 @@ async fn our_own_brand_and_pack_win_over_sources_and_survive_a_refresh() {
 
 #[tokio::test]
 async fn a_barcodeless_source_refresh_keeps_our_own_brand() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping barcodeless-brand-override DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -525,10 +515,7 @@ async fn a_barcodeless_source_refresh_keeps_our_own_brand() {
 
 #[tokio::test]
 async fn a_barcodeless_source_refresh_keeps_our_own_name() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping barcodeless-override DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 

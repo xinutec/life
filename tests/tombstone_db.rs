@@ -4,7 +4,9 @@
 //! `trash_db.rs`; with pull/push now shared over `SyncSpec`, these prove the
 //! remaining collections ride the same implementation. One sequential test
 //! (parallel tests contend on sync_rev and can deadlock). Runs only when
-//! LIFE_TEST_DATABASE_URL is set; skips otherwise.
+//! LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on the SQL reads as a passing one.
+
+mod common;
 
 use chrono::{TimeZone, Utc};
 use life::db;
@@ -129,10 +131,7 @@ macro_rules! assert_set_only {
 
 #[tokio::test]
 async fn tombstones_are_set_only_in_every_collection() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping tombstone DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 

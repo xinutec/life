@@ -1,5 +1,7 @@
 //! Shopping list against a real MariaDB. Runs only when LIFE_TEST_DATABASE_URL
-//! is set; skips otherwise.
+//! is set; fails otherwise, because a skipped check on the SQL reads as a passing one.
+
+mod common;
 
 use life::db;
 use life::inventory::repo as inv_repo;
@@ -9,10 +11,7 @@ use life::shopping::types::{NewShoppingItem, UpdateShoppingItem};
 
 #[tokio::test]
 async fn shopping_crud_and_buy_against_real_db() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping shopping DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 

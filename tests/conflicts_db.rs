@@ -1,15 +1,14 @@
 //! The sync-conflict log against a real MariaDB. Runs only when
-//! LIFE_TEST_DATABASE_URL is set; skips otherwise.
+//! LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on the SQL reads as a passing one.
+
+mod common;
 
 use life::conflicts::{ConflictKind, NewConflict, repo};
 use life::db;
 
 #[tokio::test]
 async fn conflict_report_list_resolve_roundtrip() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping conflicts DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 

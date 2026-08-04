@@ -1,7 +1,9 @@
 //! Push-boundary validation against a real MariaDB (B5): a doc the typed REST
 //! boundary could not read back is rejected with a 400-class error and nothing
 //! is stored — accepted-then-500-on-read is the inverse of fail-loudly. Runs
-//! only when LIFE_TEST_DATABASE_URL is set; skips otherwise.
+//! only when LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on the SQL reads as a passing one.
+
+mod common;
 
 use chrono::{TimeZone, Utc};
 use life::db;
@@ -85,10 +87,7 @@ fn assert_invalid<T: std::fmt::Debug>(res: Result<T, PushError>, what: &str) {
 
 #[tokio::test]
 async fn invalid_docs_are_rejected_and_nothing_is_stored() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping push-validation DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 

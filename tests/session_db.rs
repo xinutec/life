@@ -5,7 +5,9 @@
 //! never touched, so a session died exactly 7 days after login however much the
 //! app was used in between (2026-07-13: signed out on the phone after a week of
 //! daily use). Runs only when LIFE_TEST_DATABASE_URL is set (see
-//! scripts/dev-db.sh); skips otherwise.
+//! scripts/dev-db.sh); fails otherwise, because a skipped check on the SQL reads as a passing one.
+
+mod common;
 
 use chrono::{Duration, NaiveDateTime, Utc};
 use life::db;
@@ -52,10 +54,7 @@ async fn exists(pool: &MySqlPool, signed: &str) -> bool {
 
 #[tokio::test]
 async fn session_lifetime_against_real_db() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping DB integration test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
     sqlx::query("DELETE FROM sessions WHERE user_id = ?")

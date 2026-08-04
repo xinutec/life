@@ -1,6 +1,8 @@
 //! Integration test against a real MariaDB. Runs only when
-//! LIFE_TEST_DATABASE_URL is set (see scripts/dev-db.sh); skips otherwise so
+//! LIFE_TEST_DATABASE_URL is set (see scripts/dev-db.sh); FAILS otherwise so
 //! the default `cargo test` needs no database.
+
+mod common;
 
 use life::db;
 use life::inventory::repo;
@@ -18,10 +20,7 @@ fn loc(kind: LocationKind, name: &str, parent: Option<u64>, sort_order: i32) -> 
 
 #[tokio::test]
 async fn inventory_crud_against_real_db() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping DB integration test");
-        return;
-    };
+    let url = common::test_db_url();
 
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");

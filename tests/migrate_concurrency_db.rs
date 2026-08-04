@@ -1,5 +1,7 @@
 //! Migrations must be safe to run concurrently. Runs only when
-//! LIFE_TEST_DATABASE_URL is set; skips otherwise.
+//! LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on the SQL reads as a passing one.
+
+mod common;
 
 use life::db;
 
@@ -11,10 +13,7 @@ use life::db;
 /// run) and would bite for real the moment the backend ran with more than one replica.
 #[tokio::test]
 async fn concurrent_migrations_do_not_race() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping migration-race test");
-        return;
-    };
+    let url = common::test_db_url();
 
     // Fresh pools, as separate processes would have — a shared pool would serialise
     // on its own and hide the race.

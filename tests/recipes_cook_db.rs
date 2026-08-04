@@ -1,6 +1,8 @@
 //! Cooking a recipe against a real MariaDB: the cupboard really goes down, the
 //! audit really records it, and the lines it couldn't settle really come back.
-//! Runs only when LIFE_TEST_DATABASE_URL is set; skips otherwise.
+//! Runs only when LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on the SQL reads as a passing one.
+
+mod common;
 
 use life::db;
 use life::inventory::repo as inv;
@@ -9,14 +11,11 @@ use life::recipes::cooking::{LineOutcome, Take, Untouched};
 use life::recipes::repo;
 use life::recipes::types::{NewRecipe, RecipeIngredient};
 
-async fn connect() -> Option<sqlx::MySqlPool> {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping cook DB test");
-        return None;
-    };
+async fn connect() -> sqlx::MySqlPool {
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
-    Some(pool)
+    pool
 }
 
 fn stock(name: &str, quantity: Option<f64>, unit: Option<&str>) -> NewItem {
@@ -44,7 +43,7 @@ fn ing(name: &str, quantity: Option<f64>, unit: Option<&str>) -> RecipeIngredien
 
 #[tokio::test]
 async fn cooking_takes_the_recipe_out_of_the_cupboard() {
-    let Some(pool) = connect().await else { return };
+    let pool = connect().await;
     let user = "test-user-cook";
     for sql in [
         "DELETE FROM items WHERE user_id = ?",
@@ -149,7 +148,7 @@ async fn cooking_takes_the_recipe_out_of_the_cupboard() {
 
 #[tokio::test]
 async fn cooking_never_leaves_a_negative_amount() {
-    let Some(pool) = connect().await else { return };
+    let pool = connect().await;
     let user = "test-user-cook-short";
     for sql in [
         "DELETE FROM items WHERE user_id = ?",
@@ -206,7 +205,7 @@ async fn cooking_never_leaves_a_negative_amount() {
 
 #[tokio::test]
 async fn you_cannot_cook_someone_elses_recipe() {
-    let Some(pool) = connect().await else { return };
+    let pool = connect().await;
     let (mine, theirs) = ("test-user-cook-mine", "test-user-cook-theirs");
     for u in [mine, theirs] {
         sqlx::query("DELETE FROM recipes WHERE user_id = ?")

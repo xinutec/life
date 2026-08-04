@@ -1,6 +1,8 @@
 //! The two coverage queries against a real MariaDB — the only check on their
 //! SQL. Runs only when LIFE_TEST_DATABASE_URL is set.
 
+mod common;
+
 use life::db;
 use life::products::ids::{Barcode, ExternalId, ProductId};
 use life::products::repo;
@@ -16,11 +18,8 @@ fn ext(id: &str) -> ExternalId {
     id.parse().unwrap()
 }
 
-async fn fixture() -> Option<(MySqlPool, ProductId)> {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping coverage DB test");
-        return None;
-    };
+async fn fixture() -> (MySqlPool, ProductId) {
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -62,14 +61,12 @@ async fn fixture() -> Option<(MySqlPool, ProductId)> {
     )
     .await
     .expect("seed sighting");
-    Some((pool, id))
+    (pool, id)
 }
 
 #[tokio::test]
 async fn a_held_listing_is_found_and_off_is_not_a_shop() {
-    let Some((pool, id)) = fixture().await else {
-        return;
-    };
+    let (pool, id) = fixture().await;
     let held = repo::shops_holding(&pool, &[id]).await.unwrap();
     let sources: Vec<Source> = held.iter().map(|l| l.source).collect();
     assert!(sources.contains(&Source::Asda), "{sources:?}");
@@ -81,9 +78,7 @@ async fn a_held_listing_is_found_and_off_is_not_a_shop() {
 
 #[tokio::test]
 async fn a_sighting_is_found_by_barcode_without_any_listing_of_ours() {
-    let Some((pool, _)) = fixture().await else {
-        return;
-    };
+    let (pool, _) = fixture().await;
     let seen = repo::shops_seen_carrying(&pool, &[barcode()])
         .await
         .unwrap();
@@ -96,9 +91,7 @@ async fn a_sighting_is_found_by_barcode_without_any_listing_of_ours() {
 
 #[tokio::test]
 async fn asking_about_nothing_queries_nothing() {
-    let Some((pool, _)) = fixture().await else {
-        return;
-    };
+    let (pool, _) = fixture().await;
     // Guarded in the repo rather than the caller: an empty IN () is a SQL syntax
     // error, so the empty case has to be a real answer, not a crash.
     assert!(repo::shops_holding(&pool, &[]).await.unwrap().is_empty());

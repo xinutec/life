@@ -1,6 +1,8 @@
 //! To-do list against a real MariaDB. Runs only when LIFE_TEST_DATABASE_URL is
-//! set; skips otherwise. Covers repo CRUD (types + status + soft-delete) and a
+//! set; fails otherwise, because a skipped check on the SQL reads as a passing one. Covers repo CRUD (types + status + soft-delete) and a
 //! sync pull/push round-trip (the offline path).
+
+mod common;
 
 use chrono::NaiveDate;
 use life::db;
@@ -15,10 +17,7 @@ fn date(y: i32, m: u32, d: u32) -> NaiveDate {
 
 #[tokio::test]
 async fn todo_crud_and_sync_against_real_db() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping todo DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -156,10 +155,7 @@ async fn todo_crud_and_sync_against_real_db() {
 /// — the verb said PATCH but the payload had to be a whole to-do.
 #[tokio::test]
 async fn patch_leaves_absent_fields_alone_and_clears_on_null() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping partial-update test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.unwrap();
     db::migrate(&pool).await.unwrap();
     let user = "patch-partial-user";
@@ -248,10 +244,7 @@ async fn patch_leaves_absent_fields_alone_and_clears_on_null() {
 /// the stale row; a locking read blocks until the writer commits and sees the truth.
 #[tokio::test]
 async fn patch_does_not_revert_a_concurrent_write_to_an_untouched_field() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping patch-race test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.unwrap();
     db::migrate(&pool).await.unwrap();
     const USER: &str = "patch-race-user";

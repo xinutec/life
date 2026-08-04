@@ -1,6 +1,8 @@
 //! Product cache against a real MariaDB (no Open Food Facts call — pure cache
 //! layer). Runs only when LIFE_TEST_DATABASE_URL is set.
 
+mod common;
+
 use life::db;
 use life::products::ids::{Barcode, ExternalId, ProductId};
 use life::products::repo;
@@ -8,10 +10,7 @@ use life::products::source::Source;
 
 #[tokio::test]
 async fn product_cache_against_real_db() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping products DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -97,10 +96,7 @@ async fn product_cache_against_real_db() {
 
 #[tokio::test]
 async fn catalog_search_against_real_db() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping catalog-search DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -153,10 +149,7 @@ async fn catalog_search_against_real_db() {
 
 #[tokio::test]
 async fn external_import_against_real_db() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping external-import DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -258,10 +251,7 @@ async fn a_stored_source_outside_the_enum_fails_the_read_loudly() {
     // This also guards the mapping itself: `#[derive(sqlx::Type)]` would declare
     // these columns as SQL `ENUM` while they are `VARCHAR`, which failed every
     // read of a real row.
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping unknown-source DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 

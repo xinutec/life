@@ -2,6 +2,8 @@
 //! the canonical-name preference across sources against a real MariaDB (those
 //! tests run only when LIFE_TEST_DATABASE_URL is set).
 
+mod common;
+
 use life::db;
 use life::products::ids::{Barcode, ExternalId};
 use life::products::repo;
@@ -38,10 +40,7 @@ fn deep_links_derive_from_listing_identity() {
 
 #[tokio::test]
 async fn canonical_name_is_sticky_a_new_source_does_not_silently_switch_it() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping canonical-name DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -139,10 +138,7 @@ async fn canonical_name_is_sticky_a_new_source_does_not_silently_switch_it() {
 
 #[tokio::test]
 async fn unranked_sources_keep_their_own_name() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping unranked-name DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 

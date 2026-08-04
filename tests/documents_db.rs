@@ -2,6 +2,8 @@
 //! payload verbatim, one per (product, source, kind), so we never fetch it twice.
 //! Runs only when LIFE_TEST_DATABASE_URL is set.
 
+mod common;
+
 use life::db;
 use life::products::ids::{Barcode, ExternalId};
 use life::products::repo;
@@ -9,10 +11,7 @@ use life::products::source::Source;
 
 #[tokio::test]
 async fn stores_a_payload_verbatim_overwrites_by_kind_and_cascades() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping documents DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 

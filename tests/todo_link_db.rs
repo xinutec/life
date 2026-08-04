@@ -1,6 +1,8 @@
 //! To-do connections against a real MariaDB. Runs only when LIFE_TEST_DATABASE_URL
-//! is set; skips otherwise. Covers link CRUD (kinds + soft refs) and a sync
+//! is set; fails otherwise, because a skipped check on the SQL reads as a passing one. Covers link CRUD (kinds + soft refs) and a sync
 //! pull/push round-trip.
+
+mod common;
 
 use life::db;
 use life::sync::repo as sync_repo;
@@ -10,10 +12,7 @@ use life::todo::types::{LinkKind, NewTodoLink, TargetKind};
 
 #[tokio::test]
 async fn todo_link_crud_and_sync_against_real_db() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping todo_link DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -96,10 +95,7 @@ async fn todo_link_crud_and_sync_against_real_db() {
 /// tombstoned, so the list shows one.
 #[tokio::test]
 async fn duplicate_edges_from_two_devices_are_deduped_on_push() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping todo_link dedupe test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 

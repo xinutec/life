@@ -1,5 +1,7 @@
 //! Recipes against a real MariaDB. Runs only when LIFE_TEST_DATABASE_URL is
-//! set (see scripts/dev-db.sh); skips otherwise.
+//! set (see scripts/dev-db.sh); fails otherwise, because a skipped check on the SQL reads as a passing one.
+
+mod common;
 
 use life::db;
 use life::inventory::repo as inv_repo;
@@ -22,10 +24,7 @@ fn ing(name: &str, qty: Option<f64>, unit: Option<&str>) -> RecipeIngredient {
 
 #[tokio::test]
 async fn recipe_create_and_shopping_list_against_real_db() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping recipes DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -168,10 +167,7 @@ async fn a_linked_ingredient_matches_stock_by_product_not_by_name() {
     // real DB can answer — that the link survives the write, the re-read, and
     // the delete-all-and-re-insert an edit performs, and that losing the product
     // leaves the line intact and matching by name again (ON DELETE SET NULL).
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping recipe product-link test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
@@ -307,10 +303,7 @@ async fn a_linked_ingredient_matches_stock_by_product_not_by_name() {
 /// the ingredients must land on the right recipe.
 #[tokio::test]
 async fn list_recipes_returns_live_recipes_with_their_ingredients() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping recipe-list DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 

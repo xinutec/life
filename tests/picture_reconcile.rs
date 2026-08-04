@@ -5,6 +5,8 @@
 //! only when LIFE_TEST_DATABASE_URL is set. Adopting a picture re-fetches through
 //! the SSRF gate and is exercised at the route layer, not here.
 
+mod common;
+
 use std::collections::HashMap;
 
 use life::db;
@@ -117,10 +119,7 @@ fn a_listing_without_a_picture_offers_nothing() {
 
 #[tokio::test]
 async fn settle_picture_quiets_it_until_a_url_changes() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping picture DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 

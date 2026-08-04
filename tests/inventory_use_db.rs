@@ -1,20 +1,19 @@
 //! "I used some of this" against a real MariaDB — the decrement, the audit row
 //! it leaves, and the cases that must leave the cupboard alone. Runs only when
-//! LIFE_TEST_DATABASE_URL is set; skips otherwise.
+//! LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on the SQL reads as a passing one.
+
+mod common;
 
 use life::db;
 use life::inventory::consume::Taken;
 use life::inventory::repo;
 use life::inventory::types::{ItemCategory, NewItem};
 
-async fn connect() -> Option<sqlx::MySqlPool> {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping inventory-use DB test");
-        return None;
-    };
+async fn connect() -> sqlx::MySqlPool {
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
-    Some(pool)
+    pool
 }
 
 fn flour(quantity: Option<f64>, unit: Option<&str>) -> NewItem {
@@ -43,7 +42,7 @@ async fn used(pool: &sqlx::MySqlPool, item_id: u64) -> (i64, Option<f64>) {
 
 #[tokio::test]
 async fn using_some_decrements_the_row_and_records_what_went() {
-    let Some(pool) = connect().await else { return };
+    let pool = connect().await;
     let user = "test-user-use";
     sqlx::query("DELETE FROM items WHERE user_id = ?")
         .bind(user)
@@ -85,7 +84,7 @@ async fn using_some_decrements_the_row_and_records_what_went() {
 
 #[tokio::test]
 async fn using_the_last_of_it_leaves_a_zero_row_not_a_hole() {
-    let Some(pool) = connect().await else { return };
+    let pool = connect().await;
     let user = "test-user-use-empty";
     sqlx::query("DELETE FROM items WHERE user_id = ?")
         .bind(user)
@@ -111,7 +110,7 @@ async fn using_the_last_of_it_leaves_a_zero_row_not_a_hole() {
 
 #[tokio::test]
 async fn a_mismatched_unit_leaves_the_cupboard_exactly_as_it_was() {
-    let Some(pool) = connect().await else { return };
+    let pool = connect().await;
     let user = "test-user-use-mismatch";
     sqlx::query("DELETE FROM items WHERE user_id = ?")
         .bind(user)
@@ -144,7 +143,7 @@ async fn a_mismatched_unit_leaves_the_cupboard_exactly_as_it_was() {
 
 #[tokio::test]
 async fn you_cannot_use_someone_elses_stock() {
-    let Some(pool) = connect().await else { return };
+    let pool = connect().await;
     let (mine, theirs) = ("test-user-use-mine", "test-user-use-theirs");
     for u in [mine, theirs] {
         sqlx::query("DELETE FROM items WHERE user_id = ?")

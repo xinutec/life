@@ -2,6 +2,8 @@
 //! showed us, and answering "does this shop carry this barcode?" from memory.
 //! Runs only when LIFE_TEST_DATABASE_URL is set.
 
+mod common;
+
 use life::db;
 use life::products::ids::Barcode;
 use life::products::shop_cache::{self, CachedListing};
@@ -20,25 +22,20 @@ fn listing(source: Source, external_id: &str, barcode: Option<&str>) -> CachedLi
     }
 }
 
-async fn fresh_pool() -> Option<MySqlPool> {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping shop cache DB test");
-        return None;
-    };
+async fn fresh_pool() -> MySqlPool {
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
     sqlx::query("DELETE FROM shop_listings WHERE external_id LIKE 'test-%'")
         .execute(&pool)
         .await
         .unwrap();
-    Some(pool)
+    pool
 }
 
 #[tokio::test]
 async fn every_hit_from_one_search_is_remembered_not_just_the_match() {
-    let Some(pool) = fresh_pool().await else {
-        return;
-    };
+    let pool = fresh_pool().await;
 
     // The whole point: a search returns many hits, each carrying its own EAN.
     // All of them are stored, so a later lookup for ANY of these barcodes is
@@ -66,9 +63,7 @@ async fn every_hit_from_one_search_is_remembered_not_just_the_match() {
 
 #[tokio::test]
 async fn an_unknown_barcode_is_a_dont_know_not_a_no() {
-    let Some(pool) = fresh_pool().await else {
-        return;
-    };
+    let pool = fresh_pool().await;
     // Nothing cached for this barcode → None. Callers must read this as "ask the
     // shop", never as "the shop doesn't carry it".
     let found = shop_cache::find_by_barcode(
@@ -83,9 +78,7 @@ async fn an_unknown_barcode_is_a_dont_know_not_a_no() {
 
 #[tokio::test]
 async fn a_thinner_sighting_never_erases_what_we_already_learned() {
-    let Some(pool) = fresh_pool().await else {
-        return;
-    };
+    let pool = fresh_pool().await;
 
     // A Waitrose product fetch taught us the barcode...
     shop_cache::remember(
@@ -121,9 +114,7 @@ async fn a_thinner_sighting_never_erases_what_we_already_learned() {
 
 #[tokio::test]
 async fn re_seeing_a_listing_updates_its_description() {
-    let Some(pool) = fresh_pool().await else {
-        return;
-    };
+    let pool = fresh_pool().await;
     shop_cache::remember(
         &pool,
         &[listing(Source::Asda, "test-r1", Some("5000000000020"))],
@@ -160,9 +151,7 @@ async fn re_seeing_a_listing_updates_its_description() {
 
 #[tokio::test]
 async fn shops_keep_their_own_memories() {
-    let Some(pool) = fresh_pool().await else {
-        return;
-    };
+    let pool = fresh_pool().await;
     // Same barcode, two shops: each is its own listing, and a lookup is always
     // scoped to the shop being asked about.
     shop_cache::remember(

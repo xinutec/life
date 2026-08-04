@@ -4,6 +4,8 @@
 //! (pick a source → it drives the merge and settles the divergence) runs only
 //! when LIFE_TEST_DATABASE_URL is set.
 
+mod common;
+
 use std::collections::{BTreeMap, HashMap};
 
 use life::db;
@@ -132,10 +134,7 @@ fn merge_prefers_the_picked_source_else_precedence() {
 
 #[tokio::test]
 async fn reconcile_records_a_fact_source_and_settles() {
-    let Ok(url) = std::env::var("LIFE_TEST_DATABASE_URL") else {
-        eprintln!("LIFE_TEST_DATABASE_URL unset — skipping facts reconcile DB test");
-        return;
-    };
+    let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
