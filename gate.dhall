@@ -98,7 +98,7 @@ in  { name = "life"
         -}
         G.Check::{
         , name = "generated types are current"
-        , argv = G.inDevShell [ "scripts/check-types.sh" ]
+        , argv = G.inDevShell [ "scripts/gen-types.sh", "--check" ]
         , timeout_s = 900
         }
       , G.Check::{
