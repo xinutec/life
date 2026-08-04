@@ -16,14 +16,29 @@ const w = window as unknown as TestWin;
 let lastRun: { url: string; js: string; id: string } | undefined;
 let lastConnect: { loginUrl: string; id: string } | undefined;
 
+/** The native side is a message port now — origin-scoped, so it can't be reached
+ *  from an embedded frame the way the old injected object could. Requests arrive
+ *  as JSON; results still come back through `window.__shopResolve`, because a
+ *  hidden WebView's answer lands long after the message that asked for it. */
 function fakeBridge() {
   lastRun = undefined;
   lastConnect = undefined;
   w.ShopBridge = {
-    available: () => true,
-    connect: (loginUrl: string, id: string) => (lastConnect = { loginUrl, id }),
-    run: (url: string, js: string, id: string) => (lastRun = { url, js, id }),
+    postMessage: (raw: string) => {
+      const req: unknown = JSON.parse(raw);
+      if (!isRecord(req)) return;
+      const id = String(req['requestId']);
+      if (req['op'] === 'run') {
+        lastRun = { url: String(req['url']), js: String(req['extractorJs']), id };
+      } else if (req['op'] === 'connect') {
+        lastConnect = { loginUrl: String(req['loginUrl']), id };
+      }
+    },
   };
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null;
 }
 
 // A stand-in for the bridge mechanics, not for Waitrose itself — but its `id`

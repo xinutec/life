@@ -388,10 +388,10 @@ test('inventory — items + places: lays out cleanly @ phone width', async ({ pa
 // stub it so the shop tier renders too.
 test('product-picker dialog — the Search label is not sheared @ phone width', async ({ page }, testInfo) => {
   await page.addInitScript(() => {
+    // The native side is an origin-scoped message port now; its presence is what
+    // makes the shop tier render, so the stub only has to be able to receive.
     (window as unknown as { ShopBridge: unknown }).ShopBridge = {
-      available: () => true,
-      connect: () => {},
-      run: () => {},
+      postMessage: () => {},
     };
   });
   await mockApi(page);

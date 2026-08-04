@@ -131,12 +131,27 @@ export interface ShopProvider {
   product(externalId: string): { url: string; js: string };
 }
 
-/** The native interface injected by the Android wrapper (absent in a browser). */
+/**
+ * The native port injected by the Android wrapper (absent in a browser).
+ *
+ * A message port rather than the three plain methods it used to be. The wrapper
+ * injects it with `WebViewCompat.addWebMessageListener`, whose origin rules keep
+ * it out of any frame that isn't this app — the API it replaced was injected into
+ * every frame in the WebView, including iframes, and this bridge takes a URL
+ * *and JavaScript to run against it*.
+ *
+ * Only the outbound direction changed: results still arrive through
+ * `window.__shopResolve` / `__shopConnected`, because a hidden WebView's answer
+ * comes back long after the message that asked for it.
+ */
 interface Bridge {
-  available(): boolean;
-  connect(loginUrl: string, requestId: string): void;
-  run(url: string, extractorJs: string, requestId: string): void;
+  postMessage(message: string): void;
 }
+
+/** What the native side will do for us. */
+type BridgeRequest =
+  | { op: 'run'; url: string; extractorJs: string; requestId: string }
+  | { op: 'connect'; loginUrl: string; requestId: string };
 
 type BridgeResult =
   | { ok: true; product?: ShopProduct; candidates?: ShopCandidate[]; facts?: ShopFacts }
@@ -167,31 +182,36 @@ export class Shops {
     };
   }
 
-  /** True only inside the Android app (the native bridge is present). */
+  /** True only inside the Android app.
+   *
+   *  The port's presence *is* the answer now: the wrapper only injects it for
+   *  this app's own origin, so there is nothing for an `available()` call to
+   *  establish that being able to ask hasn't already established. An app older
+   *  than this page injects the previous shape, which has no `postMessage` — that
+   *  reads as no bridge, and shop features are quietly absent until it's updated,
+   *  rather than throwing on the first call. */
   get available(): boolean {
-    try {
-      return !!this.bridge?.available();
-    } catch {
-      return false;
-    }
+    return typeof this.bridge?.postMessage === 'function';
   }
 
   /** Show the shop's sign-in overlay; resolves when it closes. */
   connect(provider: ShopProvider): Promise<void> {
-    if (!this.bridge) return Promise.reject(new Error(UNAVAILABLE));
-    return this.request((id) => this.bridge!.connect(provider.loginUrl, id)).then(() => undefined);
+    if (!this.available) return Promise.reject(new Error(UNAVAILABLE));
+    return this.request((requestId) =>
+      this.send({ op: 'connect', loginUrl: provider.loginUrl, requestId }),
+    ).then(() => undefined);
   }
 
   /** Search a shop by product name. */
   search(provider: ShopProvider, query: string): Promise<ShopCandidate[]> {
     const { url, js } = provider.search(query);
-    return this.request((id) => this.bridge!.run(url, js, id)).then((r) => r.candidates ?? []);
+    return this.run(url, js).then((r) => r.candidates ?? []);
   }
 
   /** Fetch full detail for a product by its shop external id. */
   fetchProduct(provider: ShopProvider, externalId: string): Promise<ShopProduct> {
     const { url, js } = provider.product(externalId);
-    return this.request((id) => this.bridge!.run(url, js, id)).then((r) => {
+    return this.run(url, js).then((r) => {
       if (!r.product) throw new Error('no product returned');
       return r.product;
     });
@@ -201,10 +221,19 @@ export class Shops {
    *  parse. Only meaningful for a shop whose page is bot-walled (Asda). */
   fetchFacts(provider: FactsProvider, externalId: string): Promise<ShopFacts> {
     const { url, js } = provider.facts(externalId);
-    return this.request((id) => this.bridge!.run(url, js, id)).then((r) => {
+    return this.run(url, js).then((r) => {
       if (!r.facts) throw new Error('no facts returned');
       return r.facts;
     });
+  }
+
+  /** Load `url` in the hidden WebView and run `extractorJs` there. */
+  private run(url: string, extractorJs: string): Promise<Extract<BridgeResult, { ok: true }>> {
+    return this.request((requestId) => this.send({ op: 'run', url, extractorJs, requestId }));
+  }
+
+  private send(request: BridgeRequest): void {
+    this.bridge?.postMessage(JSON.stringify(request));
   }
 
   private settle(requestId: string, result: BridgeResult): void {
@@ -216,7 +245,7 @@ export class Shops {
   }
 
   private request(invoke: (requestId: string) => void): Promise<Extract<BridgeResult, { ok: true }>> {
-    if (!this.bridge) return Promise.reject(new Error(UNAVAILABLE));
+    if (!this.available) return Promise.reject(new Error(UNAVAILABLE));
     const requestId = crypto.randomUUID();
     return new Promise((resolve, reject) => {
       this.pending.set(requestId, (result) => {

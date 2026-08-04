@@ -59,6 +59,17 @@ nix develop -c bash -c '
   # See @xinutec/ui-harness + dev-lint/docs/layout-quality-architecture.md.
   ( cd frontend && pnpm run lint && pnpm run typecheck:e2e && pnpm exec ng build && pnpm test && pnpm run ui-check )
 '
+# The Android app is not a bookmark: it holds the clipboard bridge, the reminder
+# alarms, and the shop-enrichment WebView — the native half of features the web
+# app can only ask for. It compiles here rather than when someone remembers, the
+# same gate the other Android apps in the fleet use (coach, fleetwatch, heatcam,
+# observe, scanner).
+#
+# Toolchain comes from recall's android dev shell, the same one android/deploy.sh
+# uses; a missing shell fails the gate rather than skipping it, because a gate
+# that skips is a gate that lies. There are no unit tests on this side yet, so
+# `assembleDebug` is the whole check — it is what proves the bridges still build.
+( cd android && nix develop ~/Code/recall#android --command ./gradlew --console=plain :app:assembleDebug )
 dev_lint_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/dev-lint"
 [ -d "$dev_lint_dir" ] || dev_lint_dir="$HOME/Code/dev-lint"
 [ -d "$dev_lint_dir" ] || dev_lint_dir="$HOME/code/dev-lint"

@@ -32,12 +32,14 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.webkit.JavaScriptReplyProxy
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import org.json.JSONObject
 import org.xinutec.shell.ShellConfig
 import org.xinutec.shell.WebDebugging
 import org.xinutec.shell.WebShellActivity
-import java.util.concurrent.FutureTask
-import java.util.concurrent.TimeUnit
+import org.xinutec.shell.sameOrigin
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -89,24 +91,114 @@ class MainActivity : WebShellActivity() {
     // The explanation strip, if one is showing.
     private var banner: TextView? = null
 
+    /**
+     * The three native capabilities the web app drives, exposed to the life app's
+     * own pages and to nothing else in the WebView.
+     *
+     * These were `addJavascriptInterface`, which Android documents as "available
+     * to every frame within the WebView, including iframes. It lacks origin-based
+     * access control." Two of them re-checked `web.url` per call, which is the
+     * *main frame* and so still says "life" when the caller is a sub-frame; the
+     * reminders bridge checked nothing at all. Nothing untrusted is embedded here
+     * today — but what sat behind that is the clipboard, arbitrary notifications,
+     * and a shop bridge that takes a URL **and JavaScript to run against it**. One
+     * embedded widget is all it would take, and by then the hole is old.
+     *
+     * `addWebMessageListener` is origin-scoped: the WebView guarantees each object
+     * is injected only into frames matching [ALLOWED_ORIGINS]. Each listener also
+     * checks `sourceOrigin` and `isMainFrame`, which is what Android's guidance
+     * recommends rather than trusting the rules alone — so the per-call `web.url`
+     * gates are gone, replaced by one that is actually about the caller.
+     *
+     * Without [WebViewFeature.WEB_MESSAGE_LISTENER] the bridges are absent and the
+     * web app feature-detects its way to the browser behaviour, which every one of
+     * these already does. Falling back to `addJavascriptInterface` would re-open
+     * the hole on the devices least able to afford it.
+     */
     override fun onWebViewCreated(web: WebView) {
-        // Expose the system clipboard's image to the web app (its "Paste copied
-        // image" action — e.g. an image copied in Chrome). The bridge object is
-        // attached to the WebView as a whole, so every call re-checks that the
-        // *current page* is the life app (see readClipboardImageDataUrl) — a
-        // foreign page can't read the clipboard even if it somehow ends up here.
-        web.addJavascriptInterface(ClipboardImageBridge(), "AndroidClipboard")
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return
+        // The system clipboard's image, for the web app's "Paste copied image"
+        // action (e.g. an image copied in Chrome). A WebView can't read a clipboard
+        // image itself, so the page asks us.
+        listen(web, "AndroidClipboard", ::onClipboardMessage)
         // Shop enrichment: the web app drives a hidden WebView on a shop site (a
         // real browser passes the bot wall a server-side client can't) to fetch
-        // product data, supplying the shop-specific URLs + extractor JS. See
-        // ShopBridge — nothing shop-specific lives here.
-        web.addJavascriptInterface(ShopBridge(), "ShopBridge")
+        // product data, supplying the shop-specific URLs + extractor JS. Nothing
+        // shop-specific lives here.
+        listen(web, "ShopBridge", ::onShopMessage)
         // Reminders: the web app schedules device-local notifications (e.g. the
         // daily wellbeing check-in nudge) at a wall-clock time, fired by
         // AlarmManager → ReminderReceiver even when the app is closed. Generic —
-        // nothing wellbeing-specific lives here; the web app owns the "when", the
-        // copy, and the deep-link target.
-        web.addJavascriptInterface(ReminderBridge(), "ReminderBridge")
+        // the web app owns the "when", the copy, and the deep-link target.
+        listen(web, "ReminderBridge", ::onReminderMessage)
+    }
+
+    /** Register [name] for the app's own origin, refusing anything else before the
+     *  handler ever sees it. */
+    private fun listen(
+        web: WebView,
+        name: String,
+        handle: (JSONObject, JavaScriptReplyProxy) -> Unit,
+    ) {
+        WebViewCompat.addWebMessageListener(
+            web,
+            name,
+            ALLOWED_ORIGINS,
+        ) { _, message, origin, isMainFrame, proxy ->
+            // The origin rules already did this. Checked again because a bridge
+            // that depends on one line being right elsewhere is a bridge that
+            // breaks when that line is edited by someone who doesn't know it is
+            // load-bearing.
+            if (isMainFrame && sameOrigin(LIFE_ORIGIN, origin.toString())) {
+                val body = message.data?.let { runCatching { JSONObject(it) }.getOrNull() }
+                if (body != null) handle(body, proxy)
+            }
+        }
+    }
+
+    /** `{op:"readImage"}` → the clipboard image as a `data:` URL, or `""` when
+     *  there isn't one. Read on the UI thread, which is where this already runs. */
+    private fun onClipboardMessage(body: JSONObject, proxy: JavaScriptReplyProxy) {
+        if (body.optString("op") != "readImage") return
+        proxy.postMessage(readClipboardImageDataUrl() ?: "")
+    }
+
+    /** `{op:"run", url, extractorJs, requestId}` / `{op:"connect", loginUrl,
+     *  requestId}`. Both answer through `window.__shopResolve` /
+     *  `window.__shopConnected` as they always did — a hidden WebView's result
+     *  arrives long after the message that asked for it. */
+    private fun onShopMessage(body: JSONObject, proxy: JavaScriptReplyProxy) {
+        val requestId = body.optString("requestId")
+        when (body.optString("op")) {
+            "run" -> {
+                shopRun(body.optString("url"), body.optString("extractorJs"), requestId)
+            }
+
+            "connect" -> {
+                showShopConnect(body.optString("loginUrl"), requestId)
+            }
+        }
+    }
+
+    /** `{op:"schedule", id, whenMs, title, body, url}` / `{op:"cancel", id}`. */
+    private fun onReminderMessage(body: JSONObject, proxy: JavaScriptReplyProxy) {
+        val id = body.optString("id")
+        if (id.isEmpty()) return
+        when (body.optString("op")) {
+            "schedule" -> {
+                scheduleReminder(
+                    id = id,
+                    whenMs = body.optDouble("whenMs"),
+                    title = body.optString("title"),
+                    text = body.optString("body"),
+                    url = body.optString("url").ifEmpty { null },
+                )
+            }
+
+            "cancel" -> {
+                cancelReminder(id)
+            }
+        }
     }
 
     override fun createWebViewClient() = LifeWebViewClient()
@@ -322,30 +414,16 @@ class MainActivity : WebShellActivity() {
     }
 
     /**
-     * Bridge for the web app's "Paste copied image": returns the image on the
-     * system clipboard as a `data:` URL, or null if there's no image. A WebView
-     * can't read a clipboard image itself, so the page asks us. Reading happens
-     * on the UI thread (ClipboardManager requires it) even though @JavascriptInterface
-     * calls arrive on a binder thread.
+     * The image on the system clipboard as a `data:` URL, or null if there isn't
+     * one. A WebView can't read a clipboard image itself, so the page asks us.
+     *
+     * No thread hop and no origin check of its own any more: a web-message
+     * listener is called on the UI thread, which is what `ClipboardManager`
+     * requires, and only for the app's own origin — so the `FutureTask` that used
+     * to bounce a binder-thread call onto the UI thread, and the `web.url` test
+     * that asked about the main frame rather than the caller, are both gone.
      */
-    inner class ClipboardImageBridge {
-        @JavascriptInterface
-        fun readImage(): String? {
-            val task = FutureTask { readClipboardImageDataUrl() }
-            runOnUiThread(task)
-            return try {
-                task.get(2, TimeUnit.SECONDS)
-            } catch (_: Exception) {
-                null
-            }
-        }
-    }
-
     private fun readClipboardImageDataUrl(): String? {
-        // Origin gate (runs on the UI thread, so web.url is safe to read): only
-        // the life app itself may read the clipboard — not the NC login page,
-        // and not any page that might slip past navigation confinement.
-        if (web.url?.startsWith(LIFE_URL) != true) return null
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = clipboard.primaryClip ?: return null
         for (i in 0 until clip.itemCount) {
@@ -359,33 +437,6 @@ class MainActivity : WebShellActivity() {
     }
 
     /**
-     * Generic shop-enrichment bridge. The web app supplies per-shop URLs and
-     * extractor JS (Waitrose, Asda, …); this layer knows nothing shop-specific. It
-     * loads a shop URL in a hidden WebView — a real browser, so it passes the
-     * shop's bot-wall a server-side client can't — captures any Bearer token the
-     * page attaches (into window.__authToken), runs the supplied JS, and reports
-     * its `AndroidShop.result(json)` back via window.__shopResolve(requestId, …).
-     * `available()` lets the web app feature-detect (absent in a plain browser).
-     */
-    inner class ShopBridge {
-        @JavascriptInterface fun available(): Boolean = true
-
-        // Load `url`, run `extractorJs` once loaded, resolve window.__shopResolve.
-        @JavascriptInterface
-        fun run(url: String, extractorJs: String, requestId: String) {
-            runOnUiThread { shopRun(url, extractorJs, requestId) }
-        }
-
-        // Show the visible shop login so a session is established (cookies persist
-        // in the shared jar; a hidden fetch needs a logged-in SPA). Notifies
-        // window.__shopConnected(requestId) when the overlay closes.
-        @JavascriptInterface
-        fun connect(loginUrl: String, requestId: String) {
-            runOnUiThread { showShopConnect(loginUrl, requestId) }
-        }
-    }
-
-    /**
      * Load a shop page in a throwaway offscreen WebView and run the web-app-
      * supplied [extractorJs] once it finishes. Why a WebView, not an HTTP client:
      * shop sites sit behind bot managers (Akamai etc.) that reject non-browser
@@ -396,10 +447,10 @@ class MainActivity : WebShellActivity() {
      */
     @SuppressLint("SetJavaScriptEnabled")
     private fun shopRun(url: String, extractorJs: String, requestId: String) {
-        if (web.url?.startsWith(LIFE_URL) != true) {
-            resolveShop(requestId, """{"ok":false,"error":"forbidden"}""")
-            return
-        }
+        // No origin gate here any more: the only caller is the web-message
+        // listener, which refuses anything that isn't the app's own main frame
+        // before this is reached. The test that stood here asked whether the *main
+        // frame* was life, which is not the same question as who called.
         if (!isShopUrl(url)) {
             resolveShop(requestId, """{"ok":false,"error":"host not allowed"}""")
             return
@@ -661,48 +712,48 @@ class MainActivity : WebShellActivity() {
     }
 
     /**
-     * Bridge for the web app's reminders: schedule a device-local notification to
-     * fire at a wall-clock time, or cancel one. Generic over `id` — a stable string
-     * key the web app owns (e.g. "wellbeing-daily"); re-scheduling the same id
-     * overwrites its pending alarm, so the web app re-arms idempotently on each open.
-     * Alarms survive the app being closed but not a reboot — the web app re-arms
-     * after one. Nothing wellbeing-specific lives here.
+     * Fire notification [title]/[text] at [whenMs] (epoch ms); tapping it opens the
+     * app at [url] (a path or an app URL).
+     *
+     * Generic over [id] — a stable string key the web app owns (e.g.
+     * "wellbeing-daily"); scheduling the same id again overwrites its pending
+     * alarm, so the web app re-arms idempotently on each open. Alarms survive the
+     * app being closed but not a reboot — the web app re-arms after one. Nothing
+     * wellbeing-specific lives here.
      */
-    inner class ReminderBridge {
-        @JavascriptInterface fun available(): Boolean = true
-
-        /** Fire notification [title]/[body] at [whenMs] (epoch ms); tapping it opens
-         *  the app at [url] (a path or an app URL). Re-scheduling [id] replaces it. */
-        @JavascriptInterface
-        fun schedule(id: String, whenMs: Double, title: String, body: String, url: String?) {
-            ReminderReceiver.ensureChannel(this@MainActivity)
-            ensureNotificationsAllowed()
-            val intent =
-                Intent(this@MainActivity, ReminderReceiver::class.java).apply {
-                    putExtra(ReminderReceiver.EXTRA_ID, id)
-                    putExtra(ReminderReceiver.EXTRA_TITLE, title)
-                    putExtra(ReminderReceiver.EXTRA_BODY, body)
-                    if (url != null) putExtra(ReminderReceiver.EXTRA_URL, url)
-                }
-            val am = getSystemService(AlarmManager::class.java)
-            val at = whenMs.toLong()
-            // Exact where allowed (USE_EXACT_ALARM is auto-granted for this sideloaded
-            // app); fall back to an inexact idle-tolerant alarm if a future OS/policy
-            // revokes it — a reminder should be late, never lost.
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || am.canScheduleExactAlarms()) {
-                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, broadcastFor(id, intent))
-            } else {
-                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, broadcastFor(id, intent))
+    private fun scheduleReminder(
+        id: String,
+        whenMs: Double,
+        title: String,
+        text: String,
+        url: String?,
+    ) {
+        ReminderReceiver.ensureChannel(this)
+        ensureNotificationsAllowed()
+        val intent =
+            Intent(this, ReminderReceiver::class.java).apply {
+                putExtra(ReminderReceiver.EXTRA_ID, id)
+                putExtra(ReminderReceiver.EXTRA_TITLE, title)
+                putExtra(ReminderReceiver.EXTRA_BODY, text)
+                if (url != null) putExtra(ReminderReceiver.EXTRA_URL, url)
             }
+        val am = getSystemService(AlarmManager::class.java)
+        val at = whenMs.toLong()
+        // Exact where allowed (USE_EXACT_ALARM is auto-granted for this sideloaded
+        // app); fall back to an inexact idle-tolerant alarm if a future OS/policy
+        // revokes it — a reminder should be late, never lost.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || am.canScheduleExactAlarms()) {
+            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, broadcastFor(id, intent))
+        } else {
+            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, broadcastFor(id, intent))
         }
+    }
 
-        /** Cancel a pending reminder and dismiss any notification it already posted. */
-        @JavascriptInterface
-        fun cancel(id: String) {
-            val intent = Intent(this@MainActivity, ReminderReceiver::class.java)
-            getSystemService(AlarmManager::class.java).cancel(broadcastFor(id, intent))
-            getSystemService(NotificationManager::class.java).cancel(id.hashCode())
-        }
+    /** Cancel a pending reminder and dismiss any notification it already posted. */
+    private fun cancelReminder(id: String) {
+        val intent = Intent(this, ReminderReceiver::class.java)
+        getSystemService(AlarmManager::class.java).cancel(broadcastFor(id, intent))
+        getSystemService(NotificationManager::class.java).cancel(id.hashCode())
     }
 
     /** A PendingIntent addressing the reminder receiver, keyed by the reminder id so a
@@ -742,6 +793,16 @@ class MainActivity : WebShellActivity() {
 
         // The life app (HTTPS, behind a Nextcloud-identity login).
         private const val LIFE_URL = "https://life.xinutec.org/"
+
+        /** The same app as an **origin** — `scheme://host[:port]`, no trailing
+         *  slash, which is the only form `addWebMessageListener` accepts as a rule
+         *  (a malformed one throws when the WebView is built). Derived from
+         *  [LIFE_URL] rather than written twice, so the bridges cannot end up
+         *  scoped to a different place than the app loads. */
+        private val LIFE_ORIGIN = LIFE_URL.trimEnd('/')
+
+        /** The only origin the native bridges are injected into. */
+        private val ALLOWED_ORIGINS = setOf(LIFE_ORIGIN)
 
         // The Nextcloud login hop.
         private const val NC_HOST = "dash.xinutec.org"

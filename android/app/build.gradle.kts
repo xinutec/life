@@ -53,4 +53,5 @@ dependencies {
     // WebView is part of the framework — the only other dependency is core-ktx. No
     // Compose, no AppCompat: this app is a single WebView.
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.webkit)
 }

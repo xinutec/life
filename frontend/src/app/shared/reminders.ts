@@ -1,17 +1,29 @@
 import { Injectable } from '@angular/core';
 
-/** The native interface injected by the Android wrapper (absent in a browser).
- *  `whenMs` is epoch milliseconds; scheduling the same `id` replaces its pending
- *  reminder. All methods are fire-and-forget. */
+/**
+ * The native port injected by the Android wrapper (absent in a browser).
+ *
+ * A message port rather than the three plain methods it used to be. The wrapper
+ * injects it with `WebViewCompat.addWebMessageListener`, whose origin rules keep
+ * it out of any frame that isn't this app — the API it replaced was injected into
+ * every frame in the WebView, including iframes, and this one could schedule a
+ * notification saying anything and deep-linking anywhere.
+ *
+ * Everything here is fire-and-forget, so nothing needs a reply.
+ */
 interface ReminderBridge {
-  available(): boolean;
-  schedule(id: string, whenMs: number, title: string, body: string, url: string): void;
-  cancel(id: string): void;
+  postMessage(message: string): void;
 }
 
 interface ReminderWindow extends Window {
   ReminderBridge?: ReminderBridge;
 }
+
+/** A reminder to schedule, or one to cancel. `whenMs` is epoch milliseconds;
+ *  scheduling an `id` again replaces its pending reminder. */
+type ReminderRequest =
+  | { op: 'schedule'; id: string; whenMs: number; title: string; body: string; url: string }
+  | { op: 'cancel'; id: string };
 
 /**
  * Schedules device-local Android notifications through the native ReminderBridge.
@@ -24,31 +36,35 @@ interface ReminderWindow extends Window {
 export class Reminders {
   private readonly bridge = (window as ReminderWindow).ReminderBridge;
 
-  /** True only inside the Android app (the native bridge is present). */
+  /** True only inside the Android app.
+   *
+   *  The port's presence *is* the answer now: the wrapper only injects it for
+   *  this app's own origin, so there is nothing left for an `available()` call to
+   *  establish that being able to ask hasn't already established. An app older
+   *  than this page injects the previous shape, which has no `postMessage` — that
+   *  reads as no bridge, and reminders are quietly unavailable until it's
+   *  updated, rather than throwing on the first call. */
   get available(): boolean {
-    try {
-      return !!this.bridge?.available();
-    } catch {
-      return false;
-    }
+    return typeof this.bridge?.postMessage === 'function';
   }
 
   /** Schedule (or replace) reminder `id` to fire at `whenMs` (epoch ms). Tapping the
    *  notification opens the app at `url` (an in-app path, e.g. '/today'). */
   schedule(id: string, whenMs: number, title: string, body: string, url: string): void {
-    try {
-      this.bridge?.schedule(id, whenMs, title, body, url);
-    } catch {
-      /* bridge vanished mid-call — nothing to do */
-    }
+    this.send({ op: 'schedule', id, whenMs, title, body, url });
   }
 
   /** Cancel a pending reminder and dismiss any notification it already posted. */
   cancel(id: string): void {
+    this.send({ op: 'cancel', id });
+  }
+
+  private send(request: ReminderRequest): void {
+    if (!this.available) return;
     try {
-      this.bridge?.cancel(id);
+      this.bridge?.postMessage(JSON.stringify(request));
     } catch {
-      /* no-op */
+      /* bridge vanished mid-call — nothing to do */
     }
   }
 }
