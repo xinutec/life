@@ -2,18 +2,20 @@ import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, vi } from 'vitest';
 
 import { BUILD_INFO } from '../../build-info';
+import { Feedback } from '../../shared/feedback';
 import { WellbeingReminder } from '../../shared/wellbeing-reminder';
-import { SwUpdates } from '../../sw-updates';
+import { SwUpdates, UpdateOutcome } from '../../sw-updates';
 import { Settings } from './settings';
 
 interface MountOpts {
-  checkNow?: () => Promise<'current' | 'updating' | 'unavailable'>;
+  checkNow?: () => Promise<UpdateOutcome>;
   reminderAvailable?: boolean;
 }
 
 async function mount(opts: MountOpts = {}) {
   const checkNow = opts.checkNow ?? vi.fn(() => Promise.resolve('current' as const));
   const setConfig = vi.fn();
+  const feedback = { notify: vi.fn(), error: vi.fn(), undo: vi.fn() };
   // A plain stub for WellbeingReminder so the settings screen doesn't pull in the
   // real RxDB-backed wellbeing store.
   const reminder = {
@@ -26,12 +28,13 @@ async function mount(opts: MountOpts = {}) {
     providers: [
       { provide: SwUpdates, useValue: { checkNow } },
       { provide: WellbeingReminder, useValue: reminder },
+      { provide: Feedback, useValue: feedback },
     ],
   });
   const fixture = TestBed.createComponent(Settings);
   fixture.autoDetectChanges();
   await fixture.whenStable();
-  return { fixture, checkNow, setConfig };
+  return { fixture, checkNow, setConfig, feedback };
 }
 
 describe('Settings', () => {
@@ -48,6 +51,16 @@ describe('Settings', () => {
     button!.click();
     await fixture.whenStable();
     expect(checkNow).toHaveBeenCalledOnce();
+  });
+
+  it('says so when the update check fails, rather than going quiet', async () => {
+    const { fixture, feedback } = await mount({
+      checkNow: () => Promise.resolve('failed' as const),
+    });
+    const button = (fixture.nativeElement as HTMLElement).querySelector('button');
+    button!.click();
+    await fixture.whenStable();
+    expect(feedback.error).toHaveBeenCalledWith('Couldn’t update — try again.');
   });
 
   it('shows the wellbeing reminders section', async () => {

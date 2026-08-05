@@ -89,6 +89,10 @@ export class Settings {
         this.feedback.notify('New version found — updating…');
       } else if (result === 'current') {
         this.feedback.notify('You’re on the latest version.');
+      } else if (result === 'failed') {
+        // Covers both halves of checkNow: the check itself failing (offline, the
+        // usual cause) and a staged build refusing to activate. Says neither.
+        this.feedback.error('Couldn’t update — try again.');
       } else {
         this.feedback.error('Updates aren’t available in this build.');
       }
