@@ -50,9 +50,12 @@ MAX_TOKENS = 128
 # Longer than the server's poll window, so a held-open poll is never mistaken for
 # a dead connection; short enough that a genuinely wedged one is noticed.
 POLL_TIMEOUT = 40
-# The holder may have to load the weights first (~60s cold) and it serialises
-# callers, so a request can queue behind recall's. Nobody is waiting on this.
+# The holder may have to load the weights first and it serialises callers, so a
+# request can queue behind recall's. Nobody is waiting on this.
 GENERATE_TIMEOUT = 300
+# The holder answers /health without taking its lock, so this is quick even when
+# a generation or a load is in flight. Only a wedged daemon makes it wait.
+HEALTH_TIMEOUT = 5
 # Backoff after a network failure. The server being down is normal (deploys), not
 # an error worth spinning on.
 RETRY_SECS = 10
@@ -104,6 +107,30 @@ class Model:
         self.name = name
         self.host = host.rstrip("/")
 
+    def loading(self) -> str | None:
+        """A description of the load in flight, or None if there isn't one.
+
+        Asked BEFORE generating, because a request that arrives mid-load simply
+        queues on the holder's lock and gets nothing until the load finishes. On
+        this machine a load has been measured at 25 minutes, so that wait used to
+        burn a full GENERATE_TIMEOUT and then another, and another — the worker
+        stopped polling life for the whole time, its claim went stale, and the
+        picker gave up on an answer that was still coming. Cheap to ask: /health
+        is lock-free. Best-effort — an unreachable or old holder reads as "not
+        loading", so we go on and let generate() find out properly.
+        """
+        req = urllib.request.Request(f"{self.host}/health", method="GET")
+        try:
+            with urllib.request.urlopen(req, timeout=HEALTH_TIMEOUT) as resp:
+                health = json.loads(resp.read())
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+            return None
+        model = health.get("loading")
+        if not model:
+            return None
+        secs = health.get("loading_secs")
+        return f"{model} ({secs:.0f}s so far)" if isinstance(secs, (int, float)) else str(model)
+
     def generate(self, system: str, user: str) -> str:
         body = json.dumps(
             {
@@ -132,11 +159,20 @@ class Model:
                 raise HolderDown(f"llm-host is failing: HTTP {e.code}") from e
             raise RuntimeError(f"llm-host refused the job: HTTP {e.code}") from e
         except (urllib.error.URLError, TimeoutError, OSError) as e:
+            # Say which it was. "no llm-host" for a request that had in fact
+            # reached a perfectly healthy daemon busy reading weights sent a
+            # later reader hunting a dead process for an hour.
+            busy = self.loading()
+            if busy is not None:
+                raise HolderDown(f"llm-host is loading {busy}") from e
             raise HolderDown(f"no llm-host at {self.host}: {e}") from e
         return answer
 
 
 def run(base: str, token: str, model: Model) -> None:
+    # When we started waiting on a load, so the wait is logged once rather than
+    # once per poll — a 25-minute load would otherwise write 150 identical lines.
+    waiting_since: float | None = None
     while True:
         try:
             job = next_job(base, token)
@@ -155,6 +191,25 @@ def run(base: str, token: str, model: Model) -> None:
             continue
 
         prompt = job.get("prompt") or {}
+
+        # A load already in flight will not go faster for being asked again, and
+        # asking costs a full GENERATE_TIMEOUT of not polling — during which
+        # life's claim goes stale and it declares this worker dead, so the picker
+        # stops waiting for an answer that is still on its way. Same shape of bug
+        # as the 90s poll heartbeat in 2026-07-24, one layer down. Come back
+        # round the loop instead: the poll keeps the claim fresh, and the job is
+        # handed straight back to us.
+        busy = model.loading()
+        if busy is not None:
+            if waiting_since is None:
+                waiting_since = time.monotonic()
+                LOG.info("waiting: llm-host is loading %s", busy)  # once per load, not per poll
+            time.sleep(RETRY_SECS)
+            continue
+        if waiting_since is not None:
+            LOG.info("llm-host finished loading after %.0fs", time.monotonic() - waiting_since)
+            waiting_since = None
+
         if job.get("warm"):
             # A preload, not a job: run the model on the day's system prompt to
             # load the weights and build its prefix cache, then drop the output.
