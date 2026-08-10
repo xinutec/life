@@ -13,6 +13,7 @@ use super::nutrition::{
     Allergen, Claim, DietaryFlag, Nutrition, Presence, ProductFacts, fact_rank, merge_allergens,
     merge_dietary, merge_ingredients, merge_nutrition, summarize_nutrition,
 };
+use super::packsize;
 use super::prices::{PriceInput, ShopPrice};
 use super::source::Source;
 use super::types::{
@@ -41,6 +42,10 @@ impl From<MetaRow> for Product {
             barcode: r.barcode,
             name: r.name,
             brand: r.brand,
+            // Every getter selects through this one mapping, so a product read
+            // anywhere carries its pack size without each caller remembering to
+            // ask for it.
+            pack: r.quantity_label.as_deref().and_then(packsize::parse),
             quantity_label: r.quantity_label,
             source: r.source,
             external_id: r.external_id,

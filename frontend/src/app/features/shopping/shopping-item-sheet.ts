@@ -138,6 +138,8 @@ export class ShoppingItemSheet {
         this.barcode.set(pick.barcode ?? '');
         this.productId.set(pick.product_id);
         if (pick.unit != null && !this.unit()?.trim()) this.unit.set(pick.unit);
+        // `pick.quantity` is deliberately ignored: a Buy row's quantity is how
+        // many to bring home, and a 950g tub is one of them, not 950 of them.
         if (pick.category != null) this.category.set(pick.category);
       });
   }

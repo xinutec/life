@@ -9,6 +9,7 @@ use ts_rs::TS;
 
 use super::ids::{Barcode, ExternalId, ProductId};
 use super::nutrition::ProductFacts;
+use super::packsize::PackSize;
 use super::prices::ShopPrice;
 use super::source::Source;
 
@@ -21,6 +22,14 @@ pub struct Product {
     pub name: Option<String>,
     pub brand: Option<String>,
     pub quantity_label: Option<String>,
+    /// `quantity_label` read as an amount — see [`super::packsize`]. What lets
+    /// stock linked to this product start out knowing how much it holds.
+    ///
+    /// Derived on read, never stored: the label is reconcilable between sources
+    /// and hand-editable, so a stored copy would be one more thing that can
+    /// disagree with it. `None` when there is no label, or none we would rather
+    /// guess at than refuse.
+    pub pack: Option<PackSize>,
     /// Where the row came from. `None` only for rows predating provenance.
     pub source: Option<Source>,
     /// Source-scoped external id (e.g. a Waitrose lineNumber). Unique per source;

@@ -9,7 +9,7 @@ import { LifeApi } from '../life-api';
 import { AsdaHit, Item, PriceInput, Product } from '../models';
 import { Shops } from '../shop';
 import { ItemsStore } from '../stores/catalog';
-import { ProductPicker, localHits, withoutLocalDupes } from './product-picker';
+import { ProductPicker, localHits, packPrefill, withoutLocalDupes } from './product-picker';
 
 const item = (over: Partial<Item>): Item => ({
   id: 1,
@@ -32,6 +32,7 @@ const product = (over: Partial<Product>): Product => ({
   name: 'Yoghurt',
   brand: null,
   quantity_label: null,
+  pack: null,
   source: 'off',
   external_id: null,
   name_source: 'off',
@@ -79,6 +80,26 @@ describe('withoutLocalDupes', () => {
 
   it('two barcodeless rows never collide (null is not a key)', () => {
     expect(withoutLocalDupes([product({ id: 12 })], [item({ id: 1 })])).toHaveLength(1);
+  });
+});
+
+describe('packPrefill', () => {
+  it('fills a measured pack as a quantity and its unit', () => {
+    expect(packPrefill({ value: 950, unit: 'g' })).toEqual({ quantity: 950, unit: 'g' });
+    expect(packPrefill({ value: 330, unit: 'ml' })).toEqual({ quantity: 330, unit: 'ml' });
+  });
+
+  it('fills a countable pack as a bare number', () => {
+    // "1", not "1 count": the item model spells a countable thing with the unit
+    // left empty, and anything in that box would stop it matching a line that
+    // says the same thing by leaving it empty too.
+    expect(packPrefill({ value: 1, unit: 'count' })).toEqual({ quantity: 1, unit: null });
+  });
+
+  it('fills nothing for a pack that could not be read', () => {
+    // The raw label goes on being displayed; what it must not do is put a
+    // number nobody measured into the cupboard.
+    expect(packPrefill(null)).toEqual({ quantity: null, unit: null });
   });
 });
 
@@ -142,6 +163,9 @@ describe('ProductPicker', () => {
       name: 'Greek Yoghurt',
       barcode: '5000000000001',
       product_id: 9,
+      // The unit an existing row measures itself in, but never its quantity:
+      // how much is left of the pot you own is not how much a new one holds.
+      quantity: null,
       unit: 'pot',
       category: 'food',
     });
@@ -242,6 +266,24 @@ describe('ProductPicker', () => {
     );
     expect(ref.close).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'Waitrose Cheddar', product_id: 99 }),
+    );
+  });
+
+  it('a picked catalog product carries its pack size to the form', async () => {
+    // The point of parsing the label: a product knew its pack size all along
+    // and could not hand it over, so stock linked to it started out untracked.
+    const { fixture, ref } = setup({
+      catalog: [product({ id: 7, name: 'Greek Yoghurt', quantity_label: '950g', pack: { value: 950, unit: 'g' } })],
+    });
+    fixture.detectChanges();
+    await new Promise((r) => setTimeout(r));
+
+    fixture.componentInstance.pickProduct(
+      product({ id: 7, name: 'Greek Yoghurt', quantity_label: '950g', pack: { value: 950, unit: 'g' } }),
+    );
+
+    expect(ref.close).toHaveBeenCalledWith(
+      expect.objectContaining({ product_id: 7, quantity: 950, unit: 'g' }),
     );
   });
 });

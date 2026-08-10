@@ -12,6 +12,8 @@ export type { ItemCategory } from './generated/ItemCategory';
 export type { Item } from './generated/Item';
 export type { Source } from './generated/Source';
 export type { Product } from './generated/Product';
+export type { PackSize } from './generated/PackSize';
+export type { PackUnit } from './generated/PackUnit';
 export type { ProductListing } from './generated/ProductListing';
 export type { ProductDetail } from './generated/ProductDetail';
 export type { SourceDocument } from './generated/SourceDocument';

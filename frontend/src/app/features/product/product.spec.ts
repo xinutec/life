@@ -15,6 +15,7 @@ const DETAIL: ProductDetail = {
     name: 'Quaker Oat So Simple Original',
     brand: 'Quaker',
     quantity_label: '22x27G',
+    pack: { value: 594, unit: 'g' },
     source: 'off',
     external_id: '5000328042732',
     name_source: 'asda',

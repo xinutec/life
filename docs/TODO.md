@@ -767,13 +767,25 @@ early rather than leaning on the margin.
       list screens). Remaining stragglers that bypass it (House error-as-empty,
       Today's hydration false-empty) are tracked as B2/D5 in the 2026-07-08
       review findings below.
-- [ ] **Parsed net weight/volume → "how much is left at home"** — today the
-      product's pack size is stored only as OFF's free-text `quantity_label`
-      (e.g. `"950g"`), which is the right call *for now* (no parsing, no calc).
-      Later, parse it into a numeric value + canonical unit so we can track
-      **remaining amount** of an owned item (open a 950g tub, deduct as it's
-      used) — and, as a side benefit, price-per-unit. Deferred until we actually
-      want consumption tracking; keep storing the raw OFF label until then.
+- [x] **Parsed net weight/volume → "how much is left at home"** (2026-08-10) —
+      `src/products/packsize.rs` reads a shop's free-text `quantity_label` into
+      a number and one canonical unit per dimension (mass→g, volume→ml, and
+      `EACH`→a count), so `Product.pack` rides along on every read. Derived, not
+      stored: the label is reconcilable and hand-editable, and a stored copy
+      would be one more thing that can disagree with it. Linking stock to a
+      product now fills the item's quantity AND unit from the pack — the tub
+      starts at 950g, which is what makes "how much is left" answerable. Only
+      when the field is empty, and only on the inventory sheet: a Buy row's
+      quantity is how many to bring home, and a recipe line's is how much it
+      needs, neither of which is the pack size. It **refuses rather than
+      guesses** — `oz` (mass or fluid?), `gr`, `ltr` and anything with extra
+      words in it read as `None` and the raw label goes on being displayed. All
+      45 distinct labels in the live catalogue parse.
+      Not done here, and worth its own entry: the numbers are not yet used to
+      COMPARE — `src/inventory/consume.rs` still matches units by string, so
+      `1kg` of stock does not serve a `500g` line. That is a conversion feature
+      with its own edge cases, and nothing in the data asks for it yet (0
+      recipes, and 3 of 84 items measured at the time of writing).
 - [ ] **Whole-house inventory** — surface non-food categories in the UI (tools,
       documents, meds); the engine is already generic.
 - [ ] **Meds / supplements** — expiry + refill-soon (fits the generic engine).

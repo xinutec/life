@@ -9,6 +9,7 @@ use std::collections::HashMap;
 
 use life::db;
 use life::products::ids::{Barcode, ExternalId, ProductId};
+use life::products::packsize;
 use life::products::repo::{self, Listing};
 use life::products::source::Source;
 use life::products::types::{Choice, FieldChoice, Product, ReconcileField};
@@ -20,6 +21,7 @@ fn product(name: &str, brand: &str, quantity: &str) -> Product {
         name: Some(name.into()),
         brand: Some(brand.into()),
         quantity_label: Some(quantity.into()),
+        pack: packsize::parse(quantity),
         source: Some(Source::Off),
         external_id: None,
         name_source: Some(Source::Off),

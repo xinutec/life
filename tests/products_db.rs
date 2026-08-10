@@ -5,6 +5,7 @@ mod common;
 
 use life::db;
 use life::products::ids::{Barcode, ExternalId, ProductId};
+use life::products::packsize::{PackSize, PackUnit};
 use life::products::repo;
 use life::products::source::Source;
 
@@ -40,6 +41,16 @@ async fn product_cache_against_real_db() {
     let p = repo::get(&pool, &bc).await.unwrap().expect("cached");
     assert_eq!(p.name.as_deref(), Some("Test Yog"));
     assert_eq!(p.quantity_label.as_deref(), Some("950g"));
+    // The label read as an amount, on the way out of the DB. Derived in the one
+    // row→Product mapping every getter goes through, so this holds for a product
+    // read anywhere — which is the only reason callers need not ask for it.
+    assert_eq!(
+        p.pack,
+        Some(PackSize {
+            value: 950.0,
+            unit: PackUnit::Gram
+        })
+    );
     assert!(p.has_image);
 
     let (bytes, mime) = repo::get_image(&pool, &bc).await.unwrap().expect("image");

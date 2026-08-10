@@ -53,6 +53,7 @@ describe('ItemSheet product linking', () => {
         name: 'Waitrose Cheddar',
         barcode: '5000169005125',
         product_id: 99,
+        quantity: null,
         unit: 'g',
         category: 'food',
       },
@@ -67,12 +68,58 @@ describe('ItemSheet product linking', () => {
 
   it('a pick never overwrites a unit the user already chose', async () => {
     const { cmp } = setup({
-      pick: { name: 'Cheddar', barcode: null, product_id: 99, unit: 'g', category: null },
+      pick: {
+        name: 'Cheddar',
+        barcode: null,
+        product_id: 99,
+        quantity: null,
+        unit: 'g',
+        category: null,
+      },
     });
     cmp.patch({ unit: 'block' });
     cmp.findProduct();
     await flush();
     expect(cmp.form().unit).toBe('block');
+  });
+
+  it('a pack size fills the quantity, so a linked row starts out measured', async () => {
+    // 75 of 84 rows in the cupboard are linked to a product and 3 carry a
+    // quantity: the label held the number all along and had no way to hand it
+    // over. This is that way.
+    const { cmp } = setup({
+      pick: {
+        name: 'Greek Yoghurt',
+        barcode: null,
+        product_id: 7,
+        quantity: 950,
+        unit: 'g',
+        category: null,
+      },
+    });
+    cmp.findProduct();
+    await flush();
+    expect(cmp.form().quantity).toBe(950);
+    expect(cmp.form().unit).toBe('g');
+  });
+
+  it('a pick never overwrites a quantity the user already typed', async () => {
+    // A number already in the box is a measurement of THIS row — half a tub —
+    // and the pack size is only what it held when it was new.
+    const { cmp } = setup({
+      pick: {
+        name: 'Greek Yoghurt',
+        barcode: null,
+        product_id: 7,
+        quantity: 950,
+        unit: 'g',
+        category: null,
+      },
+    });
+    cmp.patch({ quantity: 400 });
+    cmp.findProduct();
+    await flush();
+    expect(cmp.form().quantity).toBe(400);
   });
 
   it('does nothing when the picker is cancelled', async () => {

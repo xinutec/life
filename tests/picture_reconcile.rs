@@ -11,6 +11,7 @@ use std::collections::HashMap;
 
 use life::db;
 use life::products::ids::{Barcode, ExternalId, ProductId};
+use life::products::packsize;
 use life::products::repo::{self, Listing};
 use life::products::source::Source;
 use life::products::types::{Product, ReconcileField};
@@ -22,6 +23,7 @@ fn product(image_source: Option<Source>, has_image: bool) -> Product {
         name: Some("Name".into()),
         brand: Some("Brand".into()),
         quantity_label: Some("500g".into()),
+        pack: packsize::parse("500g"),
         source: Some(Source::Off),
         external_id: None,
         name_source: Some(Source::Off),

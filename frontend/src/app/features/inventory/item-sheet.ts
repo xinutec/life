@@ -160,6 +160,13 @@ export class ItemSheet {
         if (!pick) return;
         this.patch({ name: pick.name, barcode: pick.barcode, product_id: pick.product_id });
         if (pick.unit != null && !this.form().unit?.trim()) this.patch({ unit: pick.unit });
+        // The pack size is how much this row holds — a 950g tub starts at 950g,
+        // which is what makes "how much is left" answerable at all. Only when
+        // the field is empty: a number already typed is a real measurement of
+        // this row (half a tub), and the label is only what it held when new.
+        if (pick.quantity != null && this.form().quantity == null) {
+          this.patch({ quantity: pick.quantity });
+        }
       });
   }
 

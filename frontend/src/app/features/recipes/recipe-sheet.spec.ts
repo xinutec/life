@@ -42,6 +42,7 @@ const catalogPick: ProductPick = {
   name: 'Bart Ground Cumin 38g',
   barcode: '5099999900040',
   product_id: 42,
+  quantity: null,
   unit: 'g',
   category: 'food',
 };
@@ -76,12 +77,31 @@ describe('RecipeSheet product linking', () => {
     expect(cmp.form().ingredients[0].unit).toBe('tsp');
   });
 
+  it('takes the linked product’s unit but never its pack size', async () => {
+    // A 38g jar of cumin is what the shop sells; it is not how much cumin the
+    // recipe wants. The unit IS worth taking — it is how a line gets one
+    // without anyone typing it, and comparable stock depends on having one.
+    const { cmp } = setup({ pick: { ...catalogPick, quantity: 38, unit: 'g' } });
+    cmp.patchIngredient(0, { name: 'cumin' });
+    cmp.linkProduct(0);
+    await flush();
+    expect(cmp.form().ingredients[0].unit).toBe('g');
+    expect(cmp.form().ingredients[0].quantity).toBeNull();
+  });
+
   it('says so when the pick has no product behind it, instead of looking linked', async () => {
     // The picker's inventory tier can hand back an item you typed in yourself,
     // which has no catalog product. A row left claiming a link it doesn't have
     // would match by name while showing the link icon.
     const { cmp, feedback } = setup({
-      pick: { name: 'Homemade stock', barcode: null, product_id: null, unit: null, category: null },
+      pick: {
+        name: 'Homemade stock',
+        barcode: null,
+        product_id: null,
+        quantity: null,
+        unit: null,
+        category: null,
+      },
     });
     cmp.linkProduct(0);
     await flush();

@@ -7,6 +7,7 @@ pub mod coverage;
 pub mod ids;
 pub mod nutrition;
 pub mod off;
+pub mod packsize;
 pub mod prices;
 pub mod repo;
 pub mod shop_cache;

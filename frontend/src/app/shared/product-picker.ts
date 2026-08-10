@@ -19,7 +19,7 @@ import {
 } from 'rxjs';
 
 import { LifeApi } from '../life-api';
-import { AsdaHit, Item, ItemCategory, Product } from '../models';
+import { AsdaHit, Item, ItemCategory, PackSize, Product } from '../models';
 import { ShopCandidate, ShopProvider, Shops, shopPrice } from '../shop';
 import { WAITROSE } from '../shops/waitrose';
 import { ItemsStore } from '../stores/catalog';
@@ -32,14 +32,30 @@ export interface ProductPickData {
   initialQuery: string;
 }
 
-/** What a pick hands back: enough to fill an add/edit form. `unit`/`category`
- *  ride along only from an inventory hit (a catalog product knows neither). */
+/** What a pick hands back: enough to fill an add/edit form. `category` rides
+ *  along only from an inventory hit (a catalog product has no such notion);
+ *  `unit`/`quantity` come from an inventory hit's own measure or, for a catalog
+ *  product, from its pack size — see `packPrefill`. */
 export interface ProductPick {
   name: string;
   barcode: string | null;
   product_id: number | null;
+  /** How much one of these holds — a pack size, not a number to buy. Only the
+   *  inventory sheet takes it; see `packPrefill`. */
+  quantity: number | null;
   unit: string | null;
   category: ItemCategory | null;
+}
+
+/** What a product's pack size fills into a form.
+ *
+ *  A `count` pack becomes a quantity with NO unit, deliberately: the item model
+ *  spells "3 eggs" as a bare number, so a literal `"count"` in the unit box
+ *  would fail to match every line that says the same thing by leaving it empty.
+ *  An unparsed pack (`null`) fills nothing and leaves the label on display. */
+export function packPrefill(pack: PackSize | null): Pick<ProductPick, 'quantity' | 'unit'> {
+  if (!pack) return { quantity: null, unit: null };
+  return { quantity: pack.value, unit: pack.unit === 'count' ? null : pack.unit };
 }
 
 /** Inventory items whose name or brand contains the query (case-insensitive):
@@ -182,6 +198,9 @@ export class ProductPicker {
       name: it.name,
       barcode: it.barcode,
       product_id: it.product_id,
+      // The unit an existing row measures itself in, but NOT its quantity: how
+      // much is left of the tub you already own says nothing about the new one.
+      quantity: null,
       unit: it.unit,
       category: it.category,
     });
@@ -192,7 +211,7 @@ export class ProductPicker {
       name: p.name ?? this.query(),
       barcode: p.barcode,
       product_id: p.id,
-      unit: null,
+      ...packPrefill(p.pack),
       category: null,
     });
   }
@@ -220,7 +239,7 @@ export class ProductPicker {
           name: product.name ?? hit.name,
           barcode: hit.barcode ?? product.barcode,
           product_id: product.id,
-          unit: null,
+          ...packPrefill(product.pack),
           category: null,
         }),
       )
@@ -276,7 +295,7 @@ export class ProductPicker {
           name: product.name ?? candidate.name,
           barcode: product.barcode,
           product_id: product.id,
-          unit: null,
+          ...packPrefill(product.pack),
           category: null,
         }),
       )
