@@ -7,6 +7,9 @@ import { MatInputModule } from '@angular/material/input';
 import { MatListModule } from '@angular/material/list';
 
 import { BUILD_INFO } from '../../build-info';
+import { LifeApi } from '../../life-api';
+import { ConnectionStatus } from '../../models';
+import { onlineHint } from '../../shared/api-error';
 import { Feedback } from '../../shared/feedback';
 import {
   createRule,
@@ -14,6 +17,12 @@ import {
   WellbeingReminderRule,
 } from '../../shared/wellbeing-reminder';
 import { SwUpdates } from '../../sw-updates';
+
+/** How often to ask whether the grant has landed, and how many times. The
+ *  backend gives up after five minutes; matching that means the watcher dies
+ *  with the flow it is watching rather than outliving it. */
+const NC_POLL_MS = 3000;
+const NC_POLLS = 100;
 
 /** Settings — the natural home for app-level bits (the build version today; NC
  *  link, preferences, etc. later). The version is stamped into the bundle at
@@ -35,6 +44,7 @@ import { SwUpdates } from '../../sw-updates';
   ],
 })
 export class Settings {
+  private api = inject(LifeApi);
   private swUpdates = inject(SwUpdates);
   private feedback = inject(Feedback);
   private wellbeingReminder = inject(WellbeingReminder);
@@ -46,6 +56,30 @@ export class Settings {
     : '';
   protected readonly checking = signal(false);
 
+  // The Nextcloud calendar link (app password, Login Flow v2). Separate from
+  // signing in: identity OAuth cannot reach the DAV endpoints, so the calendar
+  // needs its own long-lived credential (docs/design/overview.md §2b). The
+  // backend has served this flow since before there was a button for it, which
+  // is why nothing was ever linked.
+  protected readonly ncStatus = signal<ConnectionStatus | null>(null);
+  protected readonly ncBusy = signal(false);
+  /** The approval URL, kept so it stays tappable if the popup was blocked —
+   *  a WebView or a strict browser can refuse `window.open` even from a click,
+   *  and losing the URL would strand the flow with no way back to it. */
+  protected readonly ncUrl = signal<string | null>(null);
+
+  constructor() {
+    // Read the link's state on arrival rather than assuming "not connected":
+    // the card's whole job is to say which it is, and defaulting to the wrong
+    // one would invite a re-link that replaces a working credential.
+    this.api.nextcloudStatus().subscribe({
+      next: ({ status }) => this.ncStatus.set(status),
+      // Unknown stays unknown — see the template: it offers no button rather
+      // than guessing, because both guesses are actionable and wrong.
+      error: () => this.ncStatus.set(null),
+    });
+  }
+
   // Daily wellbeing-check-in reminders (device-local Android notifications). Each
   // rule is a time + a quiet window ("remind at 9am if I haven't checked in for 3
   // hours"); add as many as you like. The editor always shows so the config is
@@ -54,6 +88,54 @@ export class Settings {
   protected readonly rules = signal<WellbeingReminderRule[]>(
     this.wellbeingReminder.getConfig().rules,
   );
+
+  /** Ask where to approve the grant, open it, and watch for it landing.
+   *
+   *  The backend polls Nextcloud itself and stores the password when granted,
+   *  so this only has to notice that it happened. Bounded: the server gives up
+   *  after five minutes, and a watcher that outlived it would spin forever
+   *  against a flow nobody is going to complete. */
+  protected connectNextcloud(): void {
+    if (this.ncBusy()) return;
+    this.ncBusy.set(true);
+    this.api.nextcloudConnect().subscribe({
+      next: ({ login_url }) => {
+        this.ncUrl.set(login_url);
+        window.open(login_url, '_blank', 'noopener');
+        this.watchForLink();
+      },
+      error: (e: unknown) => {
+        this.ncBusy.set(false);
+        this.feedback.error(`Could not reach Nextcloud${onlineHint(e)}`);
+      },
+    });
+  }
+
+  private watchForLink(): void {
+    let left = NC_POLLS;
+    const timer = setInterval(() => {
+      if (left-- <= 0) {
+        clearInterval(timer);
+        this.ncBusy.set(false);
+        this.ncUrl.set(null);
+        this.feedback.error('Nextcloud wasn’t approved in time — try again.');
+        return;
+      }
+      this.api.nextcloudStatus().subscribe({
+        next: ({ status }) => {
+          if (status === 'not_linked') return;
+          clearInterval(timer);
+          this.ncStatus.set(status);
+          this.ncBusy.set(false);
+          this.ncUrl.set(null);
+          this.feedback.notify('Nextcloud calendar connected.');
+        },
+        // A blip mid-poll is not a failure of the flow: keep watching, and let
+        // the bounded count end it if the connection is really gone.
+        error: () => {},
+      });
+    }, NC_POLL_MS);
+  }
 
   protected addRule(): void {
     this.rules.update((rs) => [...rs, createRule()]);

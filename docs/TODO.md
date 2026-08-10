@@ -561,8 +561,15 @@ early rather than leaning on the margin.
         password, and `nc_credentials` is EMPTY. The Login-Flow-v2 backend is
         built and routed (`POST /api/nextcloud/connect/init`,
         `GET /api/nextcloud/connect/status`, overview §2b) but nothing in the
-        frontend calls it, so the flow has never been run. A Connect button is
-        the prerequisite; the CalDAV `PUT` comes after.
+        frontend calls it, so the flow has never been run. A **Connect button
+        now exists** (Settings → Nextcloud calendar, 2026-08-10): it starts the
+        flow, opens the approval page, and watches for the grant landing, with
+        the watcher bounded to the server's own five-minute deadline. An
+        unreachable status endpoint reads as UNKNOWN and offers no button —
+        "connected" would hide a broken link and "not connected" would invite a
+        re-link that replaces a working password. The CalDAV `PUT` comes after
+        somebody actually completes the grant; until then there is no
+        credential to test a write against.
 - [x] **Frontend test runner** — vitest via `ng test` (43 specs as of
       2026-07-02: sw-updates, conflict merge, trash/conflicts screens, todo
       graph, stores, settings, shopping scan).

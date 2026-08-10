@@ -34,3 +34,10 @@
     --mat-form-field-subscript-text-line-height: 0;
   }
 }
+
+// The Nextcloud link's "connected" tick: the one place on this screen where a
+// state is good news rather than neutral, so it is the one place with colour.
+.linked-ok {
+  color: var(--mat-sys-primary);
+  vertical-align: middle;
+}

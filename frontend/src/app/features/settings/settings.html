@@ -30,6 +30,49 @@
   </mat-card-actions>
 </mat-card>
 
+<mat-card>
+  <mat-card-header>
+    <mat-card-title>Nextcloud calendar</mat-card-title>
+    <mat-card-subtitle>
+      So Life can put shop trips on your calendar and read what’s already on it.
+    </mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-content>
+    @switch (ncStatus()) {
+      @case ('active') {
+        <p class="hint"><mat-icon class="linked-ok">check_circle</mat-icon> Connected.</p>
+      }
+      @case ('needs_reauth') {
+        <p class="hint">The app password stopped working — connect again.</p>
+      }
+      @case ('not_linked') {
+        <p class="hint">
+          Not connected. This is separate from signing in: the calendar needs its own
+          app password, which Nextcloud grants on its own page.
+        </p>
+      }
+      @default {
+        <p class="hint">Couldn’t check whether this is connected — are you online?</p>
+      }
+    }
+    @if (ncUrl(); as url) {
+      <p class="hint">
+        Waiting for approval.
+        <a [href]="url" target="_blank" rel="noopener">Open Nextcloud</a>
+        if the page didn’t open by itself.
+      </p>
+    }
+  </mat-card-content>
+  @if (ncStatus() !== null && ncStatus() !== 'active') {
+    <mat-card-actions align="end">
+      <button mat-stroked-button [disabled]="ncBusy()" (click)="connectNextcloud()">
+        <mat-icon>link</mat-icon>
+        Connect
+      </button>
+    </mat-card-actions>
+  }
+</mat-card>
+
 <mat-card class="reminder-card">
   <mat-card-header>
     <mat-card-title>Wellbeing reminders</mat-card-title>

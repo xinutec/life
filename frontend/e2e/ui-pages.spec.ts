@@ -5,6 +5,7 @@ import {
   expectNoTextOverlaps,
   expectNoHorizontalOverflow,
   expectNoClippedText,
+  expectNoOccludedControls,
   expectViewportIsPhone,
 } from '@xinutec/ui-harness';
 
@@ -220,6 +221,10 @@ async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/items*', (r) => r.fulfill({ json: ITEMS }));
   await page.route('**/api/items/*/history', (r) => r.fulfill({ json: ITEM_HISTORY }));
   await page.route('**/api/bins', (r) => r.fulfill({ json: BINS }));
+  // Not linked: the state that actually renders a card with a button in it.
+  await page.route('**/api/nextcloud/connect/status', (r) =>
+    r.fulfill({ json: { status: 'not_linked' } }),
+  );
   await page.route('**/api/locations*', (r) => r.fulfill({ json: LOCATIONS }));
   await page.route('**/api/recipes', (r) => r.fulfill({ json: RECIPES }));
   await page.route('**/api/cookable*', (r) => r.fulfill({ json: [RECIPES[1]] }));
@@ -394,8 +399,21 @@ test('settings — about card: lays out cleanly @ phone width', async ({ page },
   await mockApi(page);
   await page.goto('/settings');
   await page.getByRole('button', { name: 'Check for updates' }).waitFor();
-  await expectNoTextOverlaps(page, testInfo);
+  // The Nextcloud card carries the longest prose on the screen, in a paragraph
+  // that has to wrap inside a card inside a phone.
+  await page.getByText('separate from signing in', { exact: false }).waitFor();
+  await page.getByRole('button', { name: 'Connect' }).waitFor();
+  // Scoped to `.content`, the same reason the dialog cases scope to their
+  // container: the check is pure geometry and cannot see that the bottom nav is
+  // opaque, so on any page long enough to run under it every line below the
+  // fold reads as a collision. `.content` already reserves the nav's height as
+  // padding, so what is under the bar at rest is reachable by scrolling.
+  await expectNoTextOverlaps(page, testInfo, '.content');
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoClippedText(page, testInfo, '.content');
+  // And the question scoping just gave up — is anything actually UNREACHABLE
+  // behind that bar — asked properly, of the buttons that matter.
+  await expectNoOccludedControls(page, testInfo);
 });
 
 test('inventory — items + places: lays out cleanly @ phone width', async ({ page }, testInfo) => {
