@@ -1,6 +1,7 @@
 //! life backend library. The binary (`src/main.rs`) is a thin wrapper; tests
 //! live in `tests/` and exercise this public surface.
 
+pub mod calendar;
 pub mod config;
 pub mod conflicts;
 pub mod db;

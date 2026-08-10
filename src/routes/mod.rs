@@ -2,6 +2,7 @@
 
 pub mod api;
 pub mod auth;
+pub mod calendar;
 pub mod conflicts;
 pub mod emotion_worker;
 pub mod inventory;
@@ -30,6 +31,9 @@ pub fn router(state: AppState) -> Router {
     let api = Router::new()
         .route("/me", get(api::me))
         .route("/house", get(api::house))
+        // An ambient household fact like the house geometry, not an entity of
+        // ours: read from the council, owned by nobody here.
+        .route("/bins", get(calendar::bins))
         .route("/nextcloud/connect/init", post(auth::connect_init))
         .route("/nextcloud/connect/status", get(auth::connect_status))
         .route(

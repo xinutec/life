@@ -75,6 +75,7 @@ thiserror = "2"
 ts-rs = { version = "12", features = ["serde-compat", "chrono-impl", "serde-json-impl"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+icalendar = "0.17"
 
 [dev-dependencies]
 # Router-level tests drive the app via ServiceExt::oneshot (no live socket).

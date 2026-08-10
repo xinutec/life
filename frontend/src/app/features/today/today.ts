@@ -10,9 +10,10 @@ import { MatListModule } from '@angular/material/list';
 
 import { map } from 'rxjs';
 
+import { nextCollections } from '../../bins';
 import { ExpiryInfo, expiryInfo } from '../../expiry';
 import { Feedback } from '../../shared/feedback';
-import { ItemsStore } from '../../stores/catalog';
+import { BinsStore, ItemsStore } from '../../stores/catalog';
 import { ListState } from '../../shared/list-state';
 import { WellbeingCheckin } from '../../shared/wellbeing-checkin';
 import { ShoppingDoc, ShoppingStore } from '../../sync/shopping-store';
@@ -55,6 +56,7 @@ export class Today {
   private sheet = inject(MatBottomSheet);
   private feedback = inject(Feedback);
   private itemsStore = inject(ItemsStore);
+  private binsStore = inject(BinsStore);
 
   // Shared with Inventory / All-items — already warm when you land here.
   private readonly items = computed(() => this.itemsStore.value() ?? []);
@@ -68,6 +70,7 @@ export class Today {
 
   constructor() {
     this.itemsStore.refresh();
+    this.binsStore.refresh();
   }
 
   /** The to-dos worth surfacing: anything overdue / due / due-soon, or "ready"
@@ -89,6 +92,12 @@ export class Today {
       .slice(0, 5)
       .map((x) => ({ todo: x.todo, chip: this.chip(x.todo, x.urgency) }));
   });
+
+  /** The next two bin mornings. Two rather than one because the useful
+   *  question is often "is it tonight, and if not when" — and rather than all
+   *  of them because the feed reaches three months out and Today is not a
+   *  calendar. */
+  readonly bins = computed(() => nextCollections(this.binsStore.value() ?? []).slice(0, 2));
 
   /** Food that's expired or expiring within 3 days, soonest first. */
   readonly expiring = computed(() => {

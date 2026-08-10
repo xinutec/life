@@ -46,3 +46,31 @@
     }
   }
 }
+
+// When the bins go out. Quiet by default — it is a standing fact, not a task —
+// and emphasised only for today/tomorrow, which is the night you have to act.
+.when {
+  opacity: 0.7;
+
+  &.imminent {
+    opacity: 1;
+    font-weight: 600;
+  }
+}
+
+// Three bins go out on one morning, and their joined names are the longest
+// line Today renders. Material's list title is `nowrap` + ellipsis, which on a
+// phone hid the third one — precisely the morning the card exists for. Two
+// classes deep so this beats Material's single-class rule on the same element
+// rather than relying on stylesheet order; the row grows to fit rather than
+// shearing, which is what the height rules are for.
+.bins {
+  .kinds {
+    white-space: normal;
+  }
+
+  mat-list-item {
+    height: auto;
+    padding-block: 0.5rem;
+  }
+}

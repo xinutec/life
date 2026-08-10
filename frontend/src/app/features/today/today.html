@@ -45,6 +45,23 @@
   }
 </mat-card>
 
+@if (bins().length > 0) {
+  <mat-card appearance="outlined" class="block bins">
+    <div class="block-head">
+      <h3><mat-icon>delete_outline</mat-icon> Bins</h3>
+    </div>
+    <mat-list>
+      @for (b of bins(); track b.date) {
+        <mat-list-item lines="2">
+          <mat-icon matListItemIcon>delete_outline</mat-icon>
+          <span matListItemTitle class="kinds">{{ b.kinds.join(' · ') }}</span>
+          <span matListItemLine class="when" [class.imminent]="b.imminent">{{ b.when }}</span>
+        </mat-list-item>
+      }
+    </mat-list>
+  </mat-card>
+}
+
 @if (expiring().length > 0) {
   <mat-card appearance="outlined" class="block">
     <div class="block-head">

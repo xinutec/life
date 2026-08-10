@@ -35,6 +35,8 @@ fn state_with_static(static_dir: Option<String>) -> AppState {
         static_dir,
         dev_login_user: None,
         house_scene: "scenes/house.json".into(),
+        // No council feed in a test: the bins route answers with an empty list.
+        bins_ical_url: None,
         emotion_worker_token: None,
     };
     let http = reqwest::Client::new();

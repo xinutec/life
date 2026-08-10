@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
   AsdaHit,
+  BinDay,
   ConflictEntry,
   ConflictKind,
   CoverageQuery,
@@ -98,6 +99,13 @@ export class LifeApi {
 
   house(): Observable<HouseScene> {
     return this.http.get<HouseScene>('/api/house');
+  }
+
+  /** Upcoming bin collections from the council's public calendar, soonest
+   *  first. Empty when no feed is configured — which is indistinguishable from
+   *  "nothing scheduled", and renders the same either way. */
+  bins(): Observable<BinDay[]> {
+    return this.http.get<BinDay[]>('/api/bins');
   }
 
   shopping(): Observable<ShoppingItem[]> {

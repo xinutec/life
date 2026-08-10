@@ -42,6 +42,16 @@ pub struct Config {
     /// OPTIONAL: unset means no worker channel exists, the queue is never drained,
     /// and the picker quietly shows the plain wheel.
     pub emotion_worker_token: Option<String>,
+
+    /// The council's public bin-collection iCal subscription, e.g. Brent's
+    /// `https://recyclingservices.brent.gov.uk/waste/<property>/calendar.ics`.
+    ///
+    /// Configuration and never a constant in the source: the URL carries a
+    /// property id that identifies one address, and this repository is public
+    /// about its code. OPTIONAL — unset means the app simply has no bin
+    /// collections to show, which is the right answer for anyone whose council
+    /// does not publish one.
+    pub bins_ical_url: Option<String>,
 }
 
 fn env(key: &str) -> Result<String> {
@@ -74,6 +84,9 @@ impl Config {
             dev_login_user: std::env::var("DEV_LOGIN_USER").ok(),
             house_scene: env_or("HOUSE_SCENE", "scenes/house.json"),
             emotion_worker_token: std::env::var("EMOTION_WORKER_TOKEN").ok(),
+            bins_ical_url: std::env::var("BINS_ICAL_URL")
+                .ok()
+                .filter(|u| !u.trim().is_empty()),
         })
     }
 }

@@ -89,6 +89,15 @@ const ITEM_HISTORY = [
   { id: 3, event: 'added', quantity: 950, location: 'Spice cupboard', at: Date.now() - 9 * 86_400_000 },
 ];
 
+// Three bins on one morning, which is what the real feed does — and the row
+// that has to fit a phone: three names joined on one line.
+const BINS = [
+  { kind: 'Food waste collection', date: iso(1) },
+  { kind: 'Rubbish collection', date: iso(1) },
+  { kind: 'Paper and cardboard (blue sacks) collection', date: iso(1) },
+  { kind: 'Recycling collection', date: iso(8) },
+];
+
 const LOCATIONS = [
   { id: 1, kind: 'room', name: 'Kitchen', parent_id: null, sort_order: 0, position: null },
   { id: 2, kind: 'fridge', name: 'Fridge', parent_id: 1, sort_order: 0, position: null },
@@ -210,6 +219,7 @@ async function mockApi(page: Page): Promise<void> {
   );
   await page.route('**/api/items*', (r) => r.fulfill({ json: ITEMS }));
   await page.route('**/api/items/*/history', (r) => r.fulfill({ json: ITEM_HISTORY }));
+  await page.route('**/api/bins', (r) => r.fulfill({ json: BINS }));
   await page.route('**/api/locations*', (r) => r.fulfill({ json: LOCATIONS }));
   await page.route('**/api/recipes', (r) => r.fulfill({ json: RECIPES }));
   await page.route('**/api/cookable*', (r) => r.fulfill({ json: [RECIPES[1]] }));
@@ -256,8 +266,15 @@ test('today — busy composition: lays out cleanly @ phone width', async ({ page
   await page.getByText('Needs you').waitFor();
   await page.getByText('Call the GP', { exact: false }).waitFor();
   await page.getByText('Expiring soon').waitFor();
+  // Three collections joined onto one line is the longest text Today renders,
+  // and the row most likely to spill off a phone.
+  await page
+    .getByText('Food waste · Rubbish · Paper and cardboard (blue sacks)')
+    .waitFor();
+  await page.getByText('tomorrow', { exact: true }).waitFor();
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoClippedText(page, testInfo);
 });
 
 test('to-do list — pills in rows: lays out cleanly @ phone width', async ({ page }, testInfo) => {

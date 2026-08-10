@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Feedback } from '../../shared/feedback';
 import { LifeApi } from '../../life-api';
+import { BinDay } from '../../models';
 import { ShoppingStore } from '../../sync/shopping-store';
 import { TodoStore } from '../../sync/todo-store';
 import { TodoGraph } from '../todo/todo-graph';
@@ -31,9 +32,13 @@ describe('Today', () => {
     urgency?: Record<string, string>;
     items?: unknown[];
     shopping?: { done: boolean }[];
+    bins?: BinDay[];
   }) {
     const todos = opts.todos ?? [];
-    const api = { items: vi.fn(() => of(opts.items ?? [])) };
+    const api = {
+      items: vi.fn(() => of(opts.items ?? [])),
+      bins: vi.fn(() => of(opts.bins ?? [])),
+    };
     const shopping = { items$: of(opts.shopping ?? []) };
     const todoStore = { items$: of(todos), setStatus: vi.fn().mockResolvedValue(undefined) };
     const graph = {

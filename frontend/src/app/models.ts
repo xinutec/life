@@ -4,6 +4,7 @@
 // → ./generated/) so they can't drift — do not hand-edit ./generated. A drift
 // gate (scripts/check-types.sh, in the pre-push hook) fails if the Rust types
 // change without regenerating.
+export type { BinDay } from './generated/BinDay';
 export type { ConnectionStatus } from './generated/ConnectionStatus';
 export type { Me } from './generated/Me';
 export type { LocationKind } from './generated/LocationKind';

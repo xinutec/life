@@ -25,6 +25,8 @@ fn state() -> AppState {
         static_dir: None,
         dev_login_user: None,
         house_scene: "scenes/house.json".into(),
+        // No council feed in a test: the bins route answers with an empty list.
+        bins_ical_url: None,
         emotion_worker_token: None,
     };
     AppState::new(pool, cfg, reqwest::Client::new())

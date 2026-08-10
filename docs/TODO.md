@@ -544,8 +544,25 @@ early rather than leaning on the margin.
       both removed — 2026-07-02). Rebuild the lookup together with the highlight;
       decide how DB locations map to scene geometry. `ancestor_path` (the 2D
       breadcrumb helper) was removed with search; reinstate it here if needed.
-- [ ] **CalDAV** — read the Brent bins feed; write "shop trip" `VEVENT`s with a
-      location. Needs the Login-Flow-v2 app-password link (overview §2b, §5).
+- [~] **CalDAV** — read the Brent bins feed (DONE 2026-08-10); write "shop trip"
+      `VEVENT`s with a location (NOT done — see below).
+      - **Bins read.** `src/calendar/bins.rs` parses the council's public iCal
+        subscription (no auth) with the `icalendar` crate rather than a line
+        reader, because iCal folds at 75 octets and escapes `,` `;` in text.
+        `GET /api/bins` serves upcoming collections, hourly-cached in memory
+        against the feed's own `X-PUBLISHED-TTL:P1D`, filtered against *today*
+        per request so the cache can outlive midnight. Surfaced as a Bins card
+        on Today, one row per morning (three bins really do go out together),
+        emphasised only for today/tomorrow. The feed URL is **`BINS_ICAL_URL`,
+        configuration and never a constant**: it carries a property id that
+        identifies one address. Unset = no card, which is the right answer for
+        a council that publishes nothing.
+      - **Shop-trip write.** Still to do, and blocked: it needs the NC app
+        password, and `nc_credentials` is EMPTY. The Login-Flow-v2 backend is
+        built and routed (`POST /api/nextcloud/connect/init`,
+        `GET /api/nextcloud/connect/status`, overview §2b) but nothing in the
+        frontend calls it, so the flow has never been run. A Connect button is
+        the prerequisite; the CalDAV `PUT` comes after.
 - [x] **Frontend test runner** — vitest via `ng test` (43 specs as of
       2026-07-02: sw-updates, conflict merge, trash/conflicts screens, todo
       graph, stores, settings, shopping scan).

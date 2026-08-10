@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 
 import { CachedResource } from '../shared/cached-resource';
 import { LifeApi } from '../life-api';
-import { ConflictEntry, Item, Loc, Recipe, TrashEntry } from '../models';
+import { BinDay, ConflictEntry, Item, Loc, Recipe, TrashEntry } from '../models';
 
 /** Root-scoped caches for the server read-catalogs that more than one view shows.
  *  Being singletons, they retain their data across a tab switch (the component is
@@ -16,6 +16,17 @@ export class ItemsStore extends CachedResource<Item[]> {
   constructor() {
     const api = inject(LifeApi);
     super(() => api.items());
+  }
+}
+
+/** The council's bin collections. A read-catalog like the rest, even though
+ *  nothing here owns the data — the server holds it behind an hour's cache, so
+ *  refreshing on view entry costs one local request and never the council one. */
+@Injectable({ providedIn: 'root' })
+export class BinsStore extends CachedResource<BinDay[]> {
+  constructor() {
+    const api = inject(LifeApi);
+    super(() => api.bins());
   }
 }
 

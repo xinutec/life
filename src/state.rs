@@ -59,7 +59,21 @@ pub struct AppState {
     /// the moment it polls again, so the ordinary clock takes over and this can
     /// never keep a dead worker alive beyond one [`PRELOAD_GRACE`].
     warm_taken: Arc<Mutex<Option<Instant>>>,
+    /// The council's bin calendar as last fetched, and when.
+    ///
+    /// In-memory, and the feed's own text rather than the parsed days: it is a
+    /// copy of somebody else's data with a published daily TTL, so a restart
+    /// re-fetching it costs one request, and a second copy in our database
+    /// would be a second place for it to be wrong. Keeping the text means the
+    /// day it is read on is decided per request — the cache is about not
+    /// pestering the council, not about freezing what "upcoming" means.
+    bins: Arc<Mutex<Option<(Instant, String)>>>,
 }
+
+/// How long a fetched bin calendar is reused. The feed asks for daily
+/// (`X-PUBLISHED-TTL:P1D`), and a collection schedule is not news; an hour is
+/// well inside that and still picks up a correction the same morning.
+const BINS_TTL: Duration = Duration::from_secs(3600);
 
 impl AppState {
     pub fn new(pool: MySqlPool, cfg: Config, http: reqwest::Client) -> Self {
@@ -71,7 +85,23 @@ impl AppState {
             job_queued: Arc::new(tokio::sync::Notify::new()),
             warm_system: Arc::new(Mutex::new(None)),
             warm_taken: Arc::new(Mutex::new(None)),
+            bins: Arc::new(Mutex::new(None)),
         }
+    }
+
+    /// The cached bin calendar, if it is still fresh.
+    pub fn cached_bins(&self) -> Option<String> {
+        self.bins
+            .lock()
+            .expect("bins cache poisoned")
+            .as_ref()
+            .filter(|(at, _)| at.elapsed() < BINS_TTL)
+            .map(|(_, ics)| ics.clone())
+    }
+
+    /// Remember a freshly fetched bin calendar.
+    pub fn cache_bins(&self, ics: String) {
+        *self.bins.lock().expect("bins cache poisoned") = Some((Instant::now(), ics));
     }
 
     /// A suggestion job was just queued.
