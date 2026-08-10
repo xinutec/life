@@ -229,6 +229,7 @@ export class ProductPicker {
         external_id: hit.external_id,
         name: hit.name,
         brand: hit.brand,
+        quantity_label: hit.quantity_label, // the pack, so the pick can measure it
         barcode: hit.barcode, // Asda's IMAGE_ID is the EAN — merge onto it
         image_url: hit.image_url,
         price: hit.price, // record what Asda charges

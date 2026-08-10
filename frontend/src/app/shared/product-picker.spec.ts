@@ -105,7 +105,13 @@ describe('packPrefill', () => {
 
 describe('ProductPicker', () => {
   function setup(
-    opts: { items?: Item[]; catalog?: Product[]; asda?: AsdaHit[]; shopAvailable?: boolean } = {},
+    opts: {
+      items?: Item[];
+      catalog?: Product[];
+      asda?: AsdaHit[];
+      shopAvailable?: boolean;
+      imported?: Product;
+    } = {},
   ) {
     const ref = { close: vi.fn() };
     const shops = {
@@ -127,7 +133,9 @@ describe('ProductPicker', () => {
     const api = {
       searchProducts: vi.fn(() => of(opts.catalog ?? [])),
       searchAsda: vi.fn(() => of(opts.asda ?? [])),
-      importProduct: vi.fn(() => of(product({ id: 99, name: 'Waitrose Cheddar' }))),
+      importProduct: vi.fn(() =>
+        of(opts.imported ?? product({ id: 99, name: 'Waitrose Cheddar' })),
+      ),
       productImageUrl: (b: string) => `/api/products/${b}/image`,
       productImageByIdUrl: (id: number) => `/api/products/id/${id}/image`,
     };
@@ -201,14 +209,50 @@ describe('ProductPicker', () => {
     fixture.componentInstance.pickAsda(hit);
     await new Promise((r) => setTimeout(r));
 
-    // The price rides along to be recorded as an observation.
+    // The price rides along to be recorded as an observation, and so does the
+    // pack — dropping it here left the imported row unmeasured, so a pick from
+    // the shop tier could not fill a quantity the hit had been carrying all along.
     expect(api.importProduct).toHaveBeenCalledWith(
-      expect.objectContaining({ source: 'asda', external_id: '7690049', price: hit.price }),
+      expect.objectContaining({
+        source: 'asda',
+        external_id: '7690049',
+        quantity_label: '400G',
+        price: hit.price,
+      }),
     );
     // The imported catalogue row is barcodeless; the hit's EAN must still ride
     // back so the shopping row is barcoded.
     expect(ref.close).toHaveBeenCalledWith(
       expect.objectContaining({ product_id: 99, barcode: '5740900404465' }),
+    );
+  });
+
+  it('an imported shop product hands its pack size straight to the form', async () => {
+    // The round trip the shop tier depends on: the hit's label goes up, the
+    // server stores it and reads it back as an amount, and the pick carries the
+    // amount. Asserted through the import so a server that stopped promoting
+    // the label would show up here rather than as a quietly empty form field.
+    const hit: AsdaHit = {
+      external_id: '7690049',
+      name: 'Lurpak Spreadable 400g',
+      brand: 'Lurpak',
+      barcode: '5740900404465',
+      quantity_label: '400G',
+      price_label: null,
+      price: null,
+      image_url: null,
+      dietary: [],
+    };
+    const { fixture, ref } = setup({
+      asda: [hit],
+      imported: product({ id: 99, quantity_label: '400G', pack: { value: 400, unit: 'g' } }),
+    });
+    fixture.detectChanges();
+    fixture.componentInstance.pickAsda(hit);
+    await new Promise((r) => setTimeout(r));
+
+    expect(ref.close).toHaveBeenCalledWith(
+      expect.objectContaining({ quantity: 400, unit: 'g' }),
     );
   });
 

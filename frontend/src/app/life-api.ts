@@ -177,6 +177,9 @@ export class LifeApi {
     external_id: string;
     name: string;
     brand?: string | null;
+    /** The pack the shop sells, as the shop writes it ("400G"). Comes back
+     *  parsed as `Product.pack`, which is what fills a new stock row's amount. */
+    quantity_label?: string | null;
     /** The EAN when the source knows it — merges shop + Open Food Facts data
      *  onto one canonical product by barcode. */
     barcode?: string | null;

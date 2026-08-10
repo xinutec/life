@@ -197,6 +197,11 @@ pub struct ImportProduct {
     pub external_id: ExternalId,
     pub name: String,
     pub brand: Option<String>,
+    /// The pack the shop sells, as the shop writes it ("400G"). Read as an
+    /// amount on the way back out (see products::packsize), which is what lets
+    /// stock linked from here start out knowing how much it holds. Optional:
+    /// not every shop's search result carries one.
+    pub quantity_label: Option<String>,
     /// The product's EAN, when the source knows it (Asda's IMAGE_ID, a Waitrose
     /// barCode). Reconciles this listing onto the canonical product for that
     /// barcode, so shop + Open Food Facts data merge into one product.
@@ -246,7 +251,12 @@ pub async fn import(
         .map(str::parse::<Barcode>)
         .transpose()
         .map_err(AppError::BadRequest)?;
-    let product = repo::upsert_external(
+    let pack = body
+        .quantity_label
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty());
+    let mut product = repo::upsert_external(
         &app.pool,
         body.source,
         ext,
@@ -254,12 +264,27 @@ pub async fn import(
         &repo::ListingFields {
             raw_name: Some(name),
             brand,
+            quantity_label: pack,
             image_url: body.image_url.as_deref().filter(|s| !s.is_empty()),
             ..Default::default()
         },
     )
     .await?;
     tracing::info!(source = %body.source, external_id = %ext, ?barcode, name, "product imported");
+
+    // Pack size only if we have none, the same rule as attaching a listing from
+    // the product page: OFF's quantity is the product's own, while a shop's is
+    // the pack it sells. Re-read rather than patch the value in, so what we hand
+    // back carries the amount parsed FROM the label and not just the label — the
+    // caller fills a new stock row from it the moment this returns.
+    if product.quantity_label.is_none()
+        && let Some(q) = pack
+    {
+        repo::set_quantity_label(&app.pool, product.id, q).await?;
+        product = repo::get_by_id(&app.pool, product.id)
+            .await?
+            .ok_or(AppError::NotFound)?;
+    }
 
     // Optional price: append an observation to this listing's history. Best-effort
     // relative to the import — a missing listing id (shouldn't happen) just skips it.

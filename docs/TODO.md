@@ -777,8 +777,13 @@ early rather than leaning on the margin.
       starts at 950g, which is what makes "how much is left" answerable. Only
       when the field is empty, and only on the inventory sheet: a Buy row's
       quantity is how many to bring home, and a recipe line's is how much it
-      needs, neither of which is the pack size. It **refuses rather than
-      guesses** — `oz` (mass or fluid?), `gr`, `ltr` and anything with extra
+      needs, neither of which is the pack size. `POST /api/products/import`
+      grew a `quantity_label` so a product created from a shop hit is measured
+      at creation — it was dropping one Asda had sent, and only the attach-a-
+      listing path on the product page ever promoted it, so the picker's shop
+      tiers handed back a product with nothing to fill from. Waitrose still
+      supplies none: its search scrape does not extract the `size` key.
+      It **refuses rather than guesses** — `oz` (mass or fluid?), `gr`, `ltr` and anything with extra
       words in it read as `None` and the raw label goes on being displayed. All
       45 distinct labels in the live catalogue parse.
       Not done here, and worth its own entry: the numbers are not yet used to

@@ -218,6 +218,23 @@ async fn external_import_against_real_db() {
         p.id
     );
 
+    // A shop's pack size, promoted onto the canonical row and read back as an
+    // amount. This composition is what POST /api/products/import performs: set
+    // the label, then RE-READ, because the row it handed back a moment earlier
+    // still says `pack: None` — and a caller that links stock from the returned
+    // product would fill a form from that stale answer.
+    assert!(p.pack.is_none(), "nothing was imported with a pack size");
+    repo::set_quantity_label(&pool, p.id, "400G").await.unwrap();
+    let measured = repo::get_by_id(&pool, p.id).await.unwrap().unwrap();
+    assert_eq!(measured.quantity_label.as_deref(), Some("400G"));
+    assert_eq!(
+        measured.pack,
+        Some(PackSize {
+            value: 400.0,
+            unit: PackUnit::Gram
+        })
+    );
+
     // Image is stored/served by id (there's no barcode to key it on).
     assert!(repo::get_image_by_id(&pool, p.id).await.unwrap().is_none());
     repo::set_image_by_id(&pool, p.id, &[7, 7, 7], "image/jpeg")
