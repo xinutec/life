@@ -57,7 +57,8 @@
     }
     @if (ncUrl(); as url) {
       <p class="hint">
-        Waiting for approval.
+        Approve it on Nextcloud, then come back here — this updates itself when you
+        return. Nextcloud can’t close its own tab, so close it yourself.
         <a [href]="url" target="_blank" rel="noopener">Open Nextcloud</a>
         if the page didn’t open by itself.
       </p>

@@ -32,7 +32,12 @@ async function mount(opts: MountOpts = {}) {
     available: opts.reminderAvailable ?? true,
     setConfig,
   };
-  const status = opts.ncStatus ?? 'not_linked';
+  // Mutable so a test can change what the server says between reads — which is
+  // the whole point of the flow: the answer changes while the user is away.
+  let status = opts.ncStatus ?? 'not_linked';
+  const setStatus = (s: ConnectionStatus | 'fail') => {
+    status = s;
+  };
   const api = {
     nextcloudStatus: vi.fn(() =>
       status === 'fail'
@@ -54,7 +59,7 @@ async function mount(opts: MountOpts = {}) {
   const fixture = TestBed.createComponent(Settings);
   fixture.autoDetectChanges();
   await fixture.whenStable();
-  return { fixture, checkNow, setConfig, feedback, api };
+  return { fixture, checkNow, setConfig, feedback, api, setStatus };
 }
 
 describe('Settings', () => {
@@ -147,6 +152,49 @@ describe('Settings', () => {
       await fixture.whenStable();
       const link = (fixture.nativeElement as HTMLElement).querySelector('a[target="_blank"]');
       expect(link?.getAttribute('href')).toBe('https://nc.example/login/v2/flow/abc');
+    });
+
+    it('settles itself when the page comes back, without any timer', async () => {
+      // The bug this replaced: approving happens on NEXTCLOUD'S page, which on
+      // a phone takes over the foreground — so a timer in this app is not
+      // running while the only interesting thing happens. On 2026-08-10 the
+      // credential landed server-side and the card sat on "Waiting for
+      // approval" forever, having made exactly one status request.
+      vi.spyOn(window, 'open').mockReturnValue(null);
+      const { fixture, feedback, setStatus } = await mount({ ncStatus: 'not_linked' });
+      connectButton(fixture)?.click();
+      await fixture.whenStable();
+
+      setStatus('active');
+      document.dispatchEvent(new Event('visibilitychange'));
+      await fixture.whenStable();
+
+      expect((fixture.nativeElement as HTMLElement).textContent).toContain('Connected');
+      expect(feedback.notify).toHaveBeenCalledWith('Nextcloud calendar connected.');
+      expect(connectButton(fixture)).toBeNull();
+    });
+
+    it('coming back still unlinked re-enables the button rather than trapping you', async () => {
+      // Abandoning the grant used to leave "waiting" on screen with the button
+      // disabled, and nothing would ever end it — a dead end with no way out.
+      vi.spyOn(window, 'open').mockReturnValue(null);
+      const { fixture } = await mount({ ncStatus: 'not_linked' });
+      connectButton(fixture)?.click();
+      await fixture.whenStable();
+
+      document.dispatchEvent(new Event('visibilitychange'));
+      await fixture.whenStable();
+
+      expect(connectButton(fixture)?.disabled).toBe(false);
+    });
+
+    it('does not announce a link on every return to the tab', async () => {
+      // Already connected, coming back: nothing has changed, so nothing is
+      // worth saying.
+      const { fixture, feedback } = await mount({ ncStatus: 'active' });
+      document.dispatchEvent(new Event('visibilitychange'));
+      await fixture.whenStable();
+      expect(feedback.notify).not.toHaveBeenCalled();
     });
 
     it('says so when Nextcloud cannot be reached to start the flow', async () => {

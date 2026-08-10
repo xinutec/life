@@ -563,8 +563,16 @@ early rather than leaning on the margin.
         `GET /api/nextcloud/connect/status`, overview §2b) but nothing in the
         frontend calls it, so the flow has never been run. A **Connect button
         now exists** (Settings → Nextcloud calendar, 2026-08-10): it starts the
-        flow, opens the approval page, and watches for the grant landing, with
-        the watcher bounded to the server's own five-minute deadline. An
+        flow and opens the approval page. It does NOT poll — approving happens
+        on Nextcloud's page, which on a phone takes over the foreground, so a
+        timer in the app that started the flow is not running while the only
+        interesting thing happens. First cut did poll, and on the very first
+        real run the credential landed server-side while the card sat on
+        "Waiting for approval" indefinitely, having made exactly one status
+        request. It now re-reads on `visibilitychange`/focus, which fires
+        whether the page was backgrounded, replaced, or never left.
+        (health's `reauth-banner.component.ts` has the same 2s-poll design and
+        so the same latent bug — see the follow-up task.) An
         unreachable status endpoint reads as UNKNOWN and offers no button —
         "connected" would hide a broken link and "not connected" would invite a
         re-link that replaces a working password. The CalDAV `PUT` comes after
