@@ -795,7 +795,22 @@ early rather than leaning on the margin.
       documents, meds); the engine is already generic.
 - [ ] **Meds / supplements** — expiry + refill-soon (fits the generic engine).
 - [ ] **Warranties / receipts / manuals** — attach a file + purchase/expiry date.
-- [ ] **Item history view** — the `item_history` audit is recorded but unshown.
+- [x] **Item history view** (2026-08-10) — the `item_history` audit had three
+      writers and no reader since migration 0002 ("cheap now, impossible to
+      backfill"). `GET /api/items/{id}/history` reads it back newest-first, with
+      the location NAMED via a join rather than numbered, and an event outside
+      `ItemEvent` fails the read loudly instead of rendering as a blank row.
+      Shown by `features/inventory/history-dialog` — a **dialog** over the item
+      sheet, not a second bottom sheet, because Material holds one sheet at a
+      time and a second would dismiss the edit form under it and take any
+      unsaved typing with it (same reason the product picker is a dialog).
+      The one trap in the data, and the reason the rendering says it in words:
+      `quantity` is a DELTA on a `used` row ("Used 200 g") and a LEVEL on every
+      other one ("950 g on hand"). The number alone cannot carry that.
+      Scoped on the history row's own `user_id`, not reached through the item.
+      Note it is thin today by construction: at the time of writing the live
+      table holds 84 `added` rows and nothing else, so every item shows one
+      line. It fills as the cupboard is actually used.
 - [ ] **House polish** — camera/lighting, per-cupboard layer visualisation,
       tap-a-cupboard-to-list-its-items.
 - [x] **Offline support** — Angular service worker (ngsw, `registerImmediately`)

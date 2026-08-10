@@ -6,6 +6,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 
+import { amount } from '../../shared/amount';
 import { onlineHint } from '../../shared/api-error';
 import { Feedback } from '../../shared/feedback';
 import { SheetHeader } from '../../shared/sheet-header';
@@ -58,8 +59,18 @@ export class UseSheet {
   /** The unit shown as the field's suffix; blank for countable things. */
   readonly unit = this.item.unit ?? '';
 
-  /** What's on hand, for the "you have N" line and the share buttons. */
+  /** An amount written the way the rest of the app writes one — "950 g", but
+   *  "1 bottle" rather than "1bottle". This sheet used to concatenate them, so
+   *  every word-unit row read as a typo. */
+  private how(quantity: number): string {
+    return amount(quantity, this.item.unit);
+  }
+
+  /** What's on hand, for the share buttons' arithmetic. */
   readonly have = this.item.quantity ?? 0;
+
+  /** The same, written out for the "you have N" line. */
+  readonly haveLabel = amount(this.have, this.item.unit);
 
   readonly shares = computed(() =>
     this.have > 0
@@ -85,7 +96,7 @@ export class UseSheet {
         const left = updated.quantity ?? 0;
         this.feedback.notify(
           left > 0
-            ? `Used ${quantity}${this.unit} — ${round(left)}${this.unit} left.`
+            ? `Used ${this.how(quantity)} — ${this.how(round(left))} left.`
             : `Used the last of the ${this.item.name.toLowerCase()}.`,
         );
         this.ref.dismiss(true);

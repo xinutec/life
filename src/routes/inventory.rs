@@ -8,7 +8,7 @@ use serde::Deserialize;
 use crate::error::AppError;
 use crate::inventory::consume::Taken;
 use crate::inventory::repo;
-use crate::inventory::types::{Item, Location, NewItem, NewLocation, UseItem};
+use crate::inventory::types::{Item, ItemHistoryEntry, Location, NewItem, NewLocation, UseItem};
 use crate::session::AuthUser;
 use crate::state::AppState;
 
@@ -85,6 +85,24 @@ pub async fn delete_location(
     } else {
         Err(AppError::NotFound)
     }
+}
+
+/// GET /api/items/{id}/history → what has happened to this stock row, newest
+/// first.
+///
+/// An unknown id answers with an empty list rather than a 404: the audit is
+/// append-only and nothing guarantees a row has one — items added before the
+/// table existed have none — so "no history" and "no such item" are the same
+/// answer here, and distinguishing them would tell a caller whether somebody
+/// else's item id exists.
+pub async fn item_history(
+    State(app): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<u64>,
+) -> Result<Json<Vec<ItemHistoryEntry>>, AppError> {
+    Ok(Json(
+        repo::item_history(&app.pool, &user.user_id, id).await?,
+    ))
 }
 
 pub async fn move_item(

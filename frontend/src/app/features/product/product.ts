@@ -17,6 +17,7 @@ import {
   SeenListing,
   Source,
 } from '../../models';
+import { ago } from '../../shared/ago';
 import { assertNever, classifyApiError, onlineHint } from '../../shared/api-error';
 import { Feedback } from '../../shared/feedback';
 import { ListState } from '../../shared/list-state';
@@ -152,16 +153,6 @@ function money(amountMinor: number, currency: string): string {
 function priceLabel(product: ShopProduct): string | null {
   const price = shopPrice(product);
   return price ? money(price.amount_minor, price.currency) : null;
-}
-
-/** Epoch millis → "today" / "yesterday" / "n days ago" / a date. Price freshness
- *  is the point: a shelf price observed weeks ago should read as stale. */
-function ago(epochMs: number): string {
-  const days = Math.floor((Date.now() - epochMs) / 86_400_000);
-  if (days <= 0) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days < 7) return `${days} days ago`;
-  return new Date(epochMs).toLocaleDateString();
 }
 
 /** The product payoff screen (/product/:id): hero image, clean name, where to

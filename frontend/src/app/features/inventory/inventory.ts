@@ -4,6 +4,7 @@ import { MatButtonModule } from "@angular/material/button";
 import { MatIconModule } from "@angular/material/icon";
 import { MatListModule } from "@angular/material/list";
 
+import { amount } from "../../shared/amount";
 import { onlineHint } from "../../shared/api-error";
 import { Feedback } from "../../shared/feedback";
 import { ListState } from "../../shared/list-state";
@@ -137,8 +138,7 @@ export class Inventory {
   }
 
   qty(item: Item): string {
-    if (item.quantity == null) return "";
-    return item.unit ? `${item.quantity} ${item.unit}` : `${item.quantity}`;
+    return amount(item.quantity, item.unit);
   }
 
   /** Urgency-aware expiry display (expired / soon / date). */

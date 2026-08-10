@@ -97,6 +97,15 @@
     </div>
   }
 
+  @if (editing) {
+    <div class="shop-row">
+      <button mat-button (click)="viewHistory()">
+        <mat-icon>history</mat-icon>
+        History
+      </button>
+    </div>
+  }
+
   <div class="actions">
     <button mat-flat-button (click)="save()" [disabled]="!form().name.trim() || saving()">
       {{ editing ? 'Save' : 'Add item' }}

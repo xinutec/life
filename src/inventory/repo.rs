@@ -8,7 +8,9 @@ use chrono::NaiveDate;
 use sqlx::MySqlPool;
 
 use super::consume::{self, Taken};
-use super::types::{Item, ItemCategory, ItemEvent, Location, LocationKind, NewItem, NewLocation};
+use super::types::{
+    Item, ItemCategory, ItemEvent, ItemHistoryEntry, Location, LocationKind, NewItem, NewLocation,
+};
 use crate::products::ids::{Barcode, ProductId};
 
 #[derive(sqlx::FromRow)]
@@ -489,6 +491,55 @@ pub async fn restore_location(pool: &MySqlPool, user_id: &str, id: u64) -> Resul
     qb.push(")");
     let res = qb.build().execute(pool).await?;
     Ok(res.rows_affected() > 0)
+}
+
+#[derive(sqlx::FromRow)]
+struct HistoryRow {
+    id: u64,
+    event: String,
+    quantity: Option<f64>,
+    location: Option<String>,
+    at: chrono::NaiveDateTime,
+}
+
+/// Everything that has happened to one stock row, newest first.
+///
+/// Scoped on `h.user_id` and not merely on the item's: the history table
+/// carries its own copy of who did it, and reading through the item would hand
+/// back another user's rows if an item ever changed hands. Empty is a real
+/// answer — a row added before the audit existed has no history, and so does
+/// an id belonging to somebody else, which is the same thing as far as this
+/// caller is allowed to know.
+pub async fn item_history(
+    pool: &MySqlPool,
+    user_id: &str,
+    item_id: u64,
+) -> Result<Vec<ItemHistoryEntry>> {
+    let rows: Vec<HistoryRow> = sqlx::query_as(
+        "SELECT h.id, h.event, h.quantity, l.name AS location, h.at \
+         FROM item_history h \
+         LEFT JOIN locations l ON l.id = h.location_id \
+         WHERE h.item_id = ? AND h.user_id = ? \
+         ORDER BY h.at DESC, h.id DESC",
+    )
+    .bind(item_id)
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter()
+        .map(|r| {
+            Ok(ItemHistoryEntry {
+                id: r.id,
+                // A stored event outside the enum fails the read loudly rather
+                // than being dropped or shown as a blank line — the same rule
+                // products::Source is read under.
+                event: ItemEvent::from_str(&r.event).map_err(|e| anyhow!(e))?,
+                quantity: r.quantity,
+                location: r.location,
+                at: r.at.and_utc().timestamp_millis(),
+            })
+        })
+        .collect()
 }
 
 async fn record_history(

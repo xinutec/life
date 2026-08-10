@@ -146,6 +146,33 @@ pub enum ItemEvent {
     Used,
 }
 
+/// One thing that happened to a stock row — a line of its history.
+///
+/// The table has been written on every add, move, remove and use since the
+/// schema's first migration ("cheap now, impossible to backfill") and read by
+/// nothing. This is the read.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct ItemHistoryEntry {
+    #[ts(type = "number")]
+    pub id: u64,
+    pub event: ItemEvent,
+    /// How much, in the item's own unit — and it means two different things.
+    /// For [`ItemEvent::Used`] it is the amount that WENT; for every other
+    /// event it is what the row held at the time. That is not an inconsistency
+    /// to iron out: a use is the one event that is a change rather than a
+    /// state, and recording it as a delta is what makes a consumption rate
+    /// computable later. Whoever renders this has to say which it is.
+    pub quantity: Option<f64>,
+    /// Where the row was when this happened, named rather than numbered — a
+    /// history that says "moved" without saying where to is not worth reading.
+    /// `None` for an event with no place recorded, or a place since deleted.
+    pub location: Option<String>,
+    /// When, Unix milliseconds (UTC).
+    #[ts(type = "number")]
+    pub at: i64,
+}
+
 impl ItemEvent {
     pub fn as_str(self) -> &'static str {
         match self {

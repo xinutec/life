@@ -1,0 +1,13 @@
+// The timeline is the whole dialog, so it gets the width rather than hugging
+// its longest line — a list of one-word verbs in a box half the screen wide
+// reads as broken rather than tidy.
+mat-list {
+  padding: 0;
+  width: 100%;
+}
+
+// When it happened is context, not the event: quieter than the verb above it,
+// and the same weight as the amount-and-place line beside it.
+.when {
+  opacity: 0.7;
+}

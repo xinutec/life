@@ -10,6 +10,8 @@ export type { LocationKind } from './generated/LocationKind';
 export type { Loc } from './generated/Loc';
 export type { ItemCategory } from './generated/ItemCategory';
 export type { Item } from './generated/Item';
+export type { ItemEvent } from './generated/ItemEvent';
+export type { ItemHistoryEntry } from './generated/ItemHistoryEntry';
 export type { Source } from './generated/Source';
 export type { Product } from './generated/Product';
 export type { PackSize } from './generated/PackSize';

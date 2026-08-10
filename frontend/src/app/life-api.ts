@@ -9,6 +9,7 @@ import {
   FieldChoice,
   HouseScene,
   Item,
+  ItemHistoryEntry,
   Loc,
   Me,
   PriceInput,
@@ -82,6 +83,11 @@ export class LifeApi {
    *  send what the item says, not what the recipe said. */
   useItem(id: number, quantity: number, unit: string | null): Observable<Item> {
     return this.http.post<Item>(`/api/items/${id}/use`, { quantity, unit });
+  }
+  /** What has happened to one stock row, newest first. Empty for a row added
+   *  before the audit existed — "no history" is an answer, not a failure. */
+  itemHistory(id: number): Observable<ItemHistoryEntry[]> {
+    return this.http.get<ItemHistoryEntry[]>(`/api/items/${id}/history`);
   }
   moveItem(id: number, locationId: number | null): Observable<Item> {
     return this.http.post<Item>(`/api/items/${id}/move`, { location_id: locationId });

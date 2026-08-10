@@ -77,7 +77,9 @@ describe('UseSheet', () => {
     const { c, feedback } = setup({}, vi.fn(() => of(item({ quantity: 750 }))));
     c.pick(200);
     c.save();
-    expect(feedback.notify).toHaveBeenCalledWith('Used 200g — 750g left.');
+    // Spaced, because an item's unit is free text: "200 g" is the same as
+    // "200g" but "1 bottle" is not the same as "1bottle" (see shared/amount).
+    expect(feedback.notify).toHaveBeenCalledWith('Used 200 g — 750 g left.');
   });
 
   it('says it differently when there is none left', () => {

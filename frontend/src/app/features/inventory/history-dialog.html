@@ -1,0 +1,28 @@
+<app-dialog [title]="'History of ' + item.name">
+  <app-list-state
+    [loading]="!loaded()"
+    [error]="!!error()"
+    [errorText]="error() ?? ''"
+    (retry)="load()"
+    [empty]="loaded() && lines().length === 0"
+    emptyIcon="history"
+    emptyText="Nothing recorded for this one — it was added before the app kept a history."
+  />
+
+  @if (lines().length) {
+    <mat-list>
+      @for (line of lines(); track line.id) {
+        <mat-list-item [lines]="line.detail ? 3 : 2">
+          <mat-icon matListItemIcon aria-hidden="true">{{ line.icon }}</mat-icon>
+          <span matListItemTitle>{{ line.title }}</span>
+          @if (line.detail) {
+            <span matListItemLine>{{ line.detail }}</span>
+          }
+          <span matListItemLine class="when">{{ line.when }}</span>
+        </mat-list-item>
+      }
+    </mat-list>
+  }
+
+  <button dialogActions mat-button (click)="close()">Close</button>
+</app-dialog>

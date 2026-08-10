@@ -81,6 +81,14 @@ const ITEMS = [
     quantity: 500, unit: 'g', expiry: iso(1), location_id: 2, barcode: null, has_image: false },
 ];
 
+// An item's audit, as the server orders it: newest first, and mixing the two
+// readings of `quantity` — a delta on the `used` row, a level on the others.
+const ITEM_HISTORY = [
+  { id: 12, event: 'used', quantity: 200, location: 'Fridge', at: Date.now() - 3_600_000 },
+  { id: 8, event: 'moved', quantity: null, location: 'Fridge', at: Date.now() - 2 * 86_400_000 },
+  { id: 3, event: 'added', quantity: 950, location: 'Spice cupboard', at: Date.now() - 9 * 86_400_000 },
+];
+
 const LOCATIONS = [
   { id: 1, kind: 'room', name: 'Kitchen', parent_id: null, sort_order: 0, position: null },
   { id: 2, kind: 'fridge', name: 'Fridge', parent_id: 1, sort_order: 0, position: null },
@@ -201,6 +209,7 @@ async function mockApi(page: Page): Promise<void> {
     r.fulfill({ json: { suggestions: [], stale: false, pending: false, thinkingSecs: null } }),
   );
   await page.route('**/api/items*', (r) => r.fulfill({ json: ITEMS }));
+  await page.route('**/api/items/*/history', (r) => r.fulfill({ json: ITEM_HISTORY }));
   await page.route('**/api/locations*', (r) => r.fulfill({ json: LOCATIONS }));
   await page.route('**/api/recipes', (r) => r.fulfill({ json: RECIPES }));
   await page.route('**/api/cookable*', (r) => r.fulfill({ json: [RECIPES[1]] }));
@@ -406,6 +415,28 @@ test('product-picker dialog — the Search label is not sheared @ phone width', 
   // rendered too.
   await dialog.locator('mat-form-field').waitFor();
   await dialog.getByRole('button', { name: /Search Waitrose/ }).waitFor();
+
+  await expectNoClippedText(page, testInfo, '.mat-mdc-dialog-container');
+  await expectNoTextOverlaps(page, testInfo, '.mat-mdc-dialog-container');
+  await expectNoHorizontalOverflow(page, testInfo, '.mat-mdc-dialog-container');
+});
+
+// The item history: a dialog OVER the item sheet, which is the composition
+// worth measuring — two stacked surfaces, and a list whose longest line is a
+// sentence ("950g on hand · Spice cupboard") inside a phone-width box.
+test('item history dialog — the timeline lays out cleanly @ phone width', async ({ page }, testInfo) => {
+  await mockApi(page);
+  await page.goto('/inventory');
+  await page.getByText('Milk (semi-skimmed)').click();
+  await page.getByRole('button', { name: 'History' }).click();
+
+  const dialog = page.locator('.mat-mdc-dialog-container');
+  await dialog.waitFor();
+  // All three readings on screen before measuring: the delta wording, the
+  // move's destination, and the level wording with a long place name after it.
+  await dialog.getByText('Used 200 bottle').waitFor();
+  await dialog.getByText('to Fridge').waitFor();
+  await dialog.getByText('950 bottle on hand · Spice cupboard').waitFor();
 
   await expectNoClippedText(page, testInfo, '.mat-mdc-dialog-container');
   await expectNoTextOverlaps(page, testInfo, '.mat-mdc-dialog-container');

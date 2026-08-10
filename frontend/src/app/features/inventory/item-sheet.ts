@@ -19,6 +19,7 @@ import { SheetHeader } from '../../shared/sheet-header';
 import { LifeApi } from '../../life-api';
 import { ITEM_CATEGORIES, Item, ItemCategory } from '../../models';
 import { ScannerDialog } from '../scanner/scanner-dialog';
+import { HistoryDialog, HistoryDialogData } from './history-dialog';
 
 export interface ItemSheetData {
   /** Present = edit; absent = add. */
@@ -197,6 +198,18 @@ export class ItemSheet {
           isNotFound(e) ? `No product found for ${barcode}.` : 'Lookup failed — are you online?',
         );
       },
+    });
+  }
+
+  /** Everything that has happened to this row. A dialog OVER the sheet, not a
+   *  second bottom sheet — Material holds one of those at a time, so opening
+   *  one here would dismiss this form and lose whatever had been typed into it. */
+  viewHistory(): void {
+    const item = this.data.item;
+    if (!item) return;
+    this.dialog.open<HistoryDialog, HistoryDialogData, void>(HistoryDialog, {
+      data: { item },
+      ariaLabel: `History of ${item.name}`,
     });
   }
 

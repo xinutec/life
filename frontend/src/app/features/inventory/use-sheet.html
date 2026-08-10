@@ -2,7 +2,7 @@
   <app-sheet-header [title]="'Used some ' + item.name" (closed)="close()" />
 
   @if (have > 0) {
-    <p class="have">You have {{ have }}{{ unit }}.</p>
+    <p class="have">You have {{ haveLabel }}.</p>
   } @else {
     <p class="have">This one doesn't track an amount yet.</p>
   }
