@@ -131,6 +131,15 @@ fn a_nonsense_duration_is_refused_rather_than_written() {
 }
 
 #[test]
+fn the_event_says_which_app_wrote_it() {
+    // A household calendar has more than one writer in it. The crate's default
+    // PRODID names the Rust library instead, and exactly one may appear.
+    let ics = render(&trip_of("Asda", &[]));
+    assert!(ics.contains("PRODID:-//Xinutec//life//EN"), "{ics}");
+    assert_eq!(ics.matches("PRODID:").count(), 1, "{ics}");
+}
+
+#[test]
 fn the_stamp_is_the_one_we_passed_in() {
     // DTSTAMP is "when this was written", and a test that could not fix it would
     // be asserting against the clock.

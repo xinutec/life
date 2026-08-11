@@ -11,7 +11,7 @@
 
 use anyhow::{Result, bail};
 use chrono::{DateTime, Duration, Utc};
-use icalendar::{Alarm, Calendar, Component, Event, EventLike};
+use icalendar::{Alarm, Calendar, Component, Event, EventLike, Property};
 
 /// A planned trip to one shop.
 pub struct ShopTrip {
@@ -35,6 +35,14 @@ const REMIND_BEFORE_MINUTES: i64 = 30;
 /// number that arrives from a client, so a fat-fingered field can't write an
 /// event across next week.
 const MAX_MINUTES: i64 = 8 * 60;
+
+/// Who wrote the event, in the `PRODID` every calendar client can read.
+///
+/// The `icalendar` crate defaults this to its own name, which would tell anyone
+/// looking at a shared calendar that the event came from a Rust library — true
+/// and useless. This is a household calendar with more than one writer in it, so
+/// an event should say which of them put it there.
+const PRODID: &str = "-//Xinutec//life//EN";
 
 /// The most items to spell out in the description. A Buy list is a trolley, not
 /// a catalogue; past this the event stops being readable on a lock screen and
@@ -83,7 +91,14 @@ pub fn ics(trip: &ShopTrip, uid: &str, now: DateTime<Utc>) -> Result<String> {
         -Duration::minutes(REMIND_BEFORE_MINUTES),
     ));
 
-    Ok(Calendar::new().push(event.done()).done().to_string())
+    let mut calendar = Calendar::new();
+    calendar.push(event.done());
+    // Replaced rather than appended: `PRODID` appears exactly once in a
+    // VCALENDAR, and a second one would be a malformed document that some
+    // clients accept and others reject.
+    calendar.properties.retain(|p| p.key() != "PRODID");
+    calendar.append_property(Property::new("PRODID", PRODID));
+    Ok(calendar.done().to_string())
 }
 
 /// The Buy list as description text, or `None` when there is nothing to say.
