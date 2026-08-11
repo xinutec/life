@@ -34,6 +34,8 @@ pub fn router(state: AppState) -> Router {
         // An ambient household fact like the house geometry, not an entity of
         // ours: read from the council, owned by nobody here.
         .route("/bins", get(calendar::bins))
+        // Out, not in: the diary is Nextcloud's, and this writes one event to it.
+        .route("/calendar/shop-trip", post(calendar::plan_shop_trip))
         .route("/nextcloud/connect/init", post(auth::connect_init))
         .route("/nextcloud/connect/status", get(auth::connect_status))
         .route(

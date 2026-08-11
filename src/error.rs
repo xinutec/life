@@ -25,6 +25,14 @@ pub enum AppError {
     #[error("nextcloud app password no longer valid — relink required")]
     NcReauthRequired,
 
+    /// A service outside life failed, in a way the message can usefully name.
+    /// 502 rather than 500 because nothing here is broken, and unlike
+    /// [`Other`](AppError::Other) the text is shown: "no calendar on this
+    /// account accepts events" is the user's to act on, and "internal error"
+    /// would send them to read this codebase instead.
+    #[error("{0}")]
+    Upstream(String),
+
     /// Anything unexpected → 500, body is generic, detail is logged.
     #[error(transparent)]
     Other(#[from] anyhow::Error),
@@ -50,6 +58,7 @@ impl IntoResponse for AppError {
             AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, self.to_string()),
             AppError::NcNotLinked => (StatusCode::CONFLICT, self.to_string()),
             AppError::NcReauthRequired => (StatusCode::CONFLICT, self.to_string()),
+            AppError::Upstream(_) => (StatusCode::BAD_GATEWAY, self.to_string()),
             AppError::Other(e) => {
                 tracing::error!("internal error: {e:#}");
                 (

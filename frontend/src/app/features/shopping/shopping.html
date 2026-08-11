@@ -21,6 +21,18 @@
   <p class="coverage-summary fine">Can’t check which shops sell these right now.</p>
 }
 
+<!-- Directly under the coverage line, because that line is what decides which
+     shop: you read "Asda 6/8" and then schedule Asda. The trip goes to the
+     Nextcloud calendar and is not kept here. -->
+@if (canPlanTrip()) {
+  <div class="trip-actions">
+    <button mat-stroked-button (click)="planTrip()">
+      <mat-icon>event</mat-icon>
+      Plan a trip
+    </button>
+  </div>
+}
+
 <app-list-state
   [loading]="!loaded()"
   [empty]="items().length === 0"

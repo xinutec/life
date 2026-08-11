@@ -544,8 +544,8 @@ early rather than leaning on the margin.
       both removed — 2026-07-02). Rebuild the lookup together with the highlight;
       decide how DB locations map to scene geometry. `ancestor_path` (the 2D
       breadcrumb helper) was removed with search; reinstate it here if needed.
-- [~] **CalDAV** — read the Brent bins feed (DONE 2026-08-10); write "shop trip"
-      `VEVENT`s with a location (NOT done — see below).
+- [x] **CalDAV** — read the Brent bins feed (2026-08-10); write "shop trip"
+      `VEVENT`s with a location and a reminder (2026-08-11).
       - **Bins read.** `src/calendar/bins.rs` parses the council's public iCal
         subscription (no auth) with the `icalendar` crate rather than a line
         reader, because iCal folds at 75 octets and escapes `,` `;` in text.
@@ -557,27 +557,47 @@ early rather than leaning on the margin.
         configuration and never a constant**: it carries a property id that
         identifies one address. Unset = no card, which is the right answer for
         a council that publishes nothing.
-      - **Shop-trip write.** Still to do, and blocked: it needs the NC app
-        password, and `nc_credentials` is EMPTY. The Login-Flow-v2 backend is
-        built and routed (`POST /api/nextcloud/connect/init`,
-        `GET /api/nextcloud/connect/status`, overview §2b) but nothing in the
-        frontend calls it, so the flow has never been run. A **Connect button
-        now exists** (Settings → Nextcloud calendar, 2026-08-10): it starts the
-        flow and opens the approval page. It does NOT poll — approving happens
-        on Nextcloud's page, which on a phone takes over the foreground, so a
-        timer in the app that started the flow is not running while the only
-        interesting thing happens. First cut did poll, and on the very first
-        real run the credential landed server-side while the card sat on
+      - **The app password** (the prerequisite, 2026-08-10). Login Flow v2 is
+        reachable from Settings → Nextcloud calendar. The Connect button starts
+        the flow and opens the approval page, and does NOT poll — approving
+        happens on Nextcloud's page, which on a phone takes over the foreground,
+        so a timer in the app that started the flow is not running while the
+        only interesting thing happens. The first cut did poll, and on the very
+        first real run the credential landed server-side while the card sat on
         "Waiting for approval" indefinitely, having made exactly one status
         request. It now re-reads on `visibilitychange`/focus, which fires
-        whether the page was backgrounded, replaced, or never left.
-        (health's `reauth-banner.component.ts` has the same 2s-poll design and
-        so the same latent bug — see the follow-up task.) An
+        whether the page was backgrounded, replaced, or never left. Generalised
+        into dev-lint's `DL-ANGULAR-OFFSITE-POLL`, which finds both this and
+        health's `reauth-banner.component.ts` in their original form. An
         unreachable status endpoint reads as UNKNOWN and offers no button —
         "connected" would hide a broken link and "not connected" would invite a
-        re-link that replaces a working password. The CalDAV `PUT` comes after
-        somebody actually completes the grant; until then there is no
-        credential to test a write against.
+        re-link that replaces a working password.
+      - **Shop-trip write.** "Plan a trip" on the Buy list, under the coverage
+        line that decides which shop. `POST /api/calendar/shop-trip` builds the
+        `VEVENT` (`src/calendar/trip.rs`: summary, `LOCATION`, a 30-minute
+        `VALARM`, and the un-done Buy list in the description) and `PUT`s it over
+        CalDAV (`src/calendar/caldav.rs`). Nothing is stored on this side — the
+        event is the record, per overview §5.
+        - The **PROPFIND before the PUT** is the part with the judgement in it.
+          The calendar *home* is a known path, but which collection inside it
+          takes events is not: a subscription lives in the same home and answers
+          "yes, I am a calendar" — including, plausibly, the very bins feed this
+          app reads — and shared calendars can be read-only. So the server is
+          asked, and every test is phrased so silence permits (a server that
+          declines to answer must not lose you a good calendar). Reachable as
+          `caldav::writable_from(xml)` so the whole choice is testable without a
+          Nextcloud; `tests/caldav_calendars.rs`.
+        - life **chooses** the calendar (`personal`, else first by name) rather
+          than asking, and the reply **names** the one it used, so a wrong guess
+          is visible instead of being a setting you must find before the feature
+          works. A picker is the follow-up if that choice is ever wrong.
+        - The Buy list is sent **from the screen**, not read from the server's
+          rows: the list is local-first, so the phone's copy can be ahead of the
+          sync, and the event is read in a shop.
+        - A rejected app password flips `nc_credentials` to `needs_reauth` on the
+          way past, so /api/me stops claiming a calendar that cannot be written
+          to. The sheet shows that state in place with a route to Settings,
+          rather than a toast that vanishes while you read it.
 - [x] **Frontend test runner** — vitest via `ng test` (43 specs as of
       2026-07-02: sw-updates, conflict merge, trash/conflicts screens, todo
       graph, stores, settings, shopping scan).

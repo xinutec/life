@@ -5,6 +5,7 @@
 // gate (scripts/check-types.sh, in the pre-push hook) fails if the Rust types
 // change without regenerating.
 export type { BinDay } from './generated/BinDay';
+export type { PlannedTrip } from './generated/PlannedTrip';
 export type { ConnectionStatus } from './generated/ConnectionStatus';
 export type { Me } from './generated/Me';
 export type { LocationKind } from './generated/LocationKind';

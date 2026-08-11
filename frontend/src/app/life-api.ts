@@ -14,6 +14,7 @@ import {
   ItemHistoryEntry,
   Loc,
   Me,
+  PlannedTrip,
   PriceInput,
   Product,
   ProductDetail,
@@ -119,6 +120,21 @@ export class LifeApi {
    *  "nothing scheduled", and renders the same either way. */
   bins(): Observable<BinDay[]> {
     return this.http.get<BinDay[]>('/api/bins');
+  }
+
+  /** Put a shop trip in the Nextcloud calendar. `startsAt` is an ISO instant;
+   *  `items` is the Buy list as it stands, which rides along in the event's
+   *  description so the shop is read from the calendar, not from here.
+   *
+   *  A 409 means the calendar isn't linked (or the link has lapsed) — the one
+   *  failure the caller has to handle differently, because the fix is in
+   *  Settings rather than a retry. */
+  planShopTrip(shop: string, startsAt: string, items: string[]): Observable<PlannedTrip> {
+    return this.http.post<PlannedTrip>('/api/calendar/shop-trip', {
+      shop,
+      starts_at: startsAt,
+      items,
+    });
   }
 
   shopping(): Observable<ShoppingItem[]> {

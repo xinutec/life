@@ -14,6 +14,7 @@ import { MatInputModule } from '@angular/material/input';
 import { EMOTION_NODES, emotionColor, emotionDesc, emotionLabel } from '../../shared/emotion-wheel';
 import { LifeApi } from '../../life-api';
 import { Feedback } from '../../shared/feedback';
+import { toLocalInput } from '../../shared/local-time';
 import { SheetHeader } from '../../shared/sheet-header';
 import {
   ENERGY_LEVELS,
@@ -27,13 +28,6 @@ import {
 } from '../../shared/wellbeing-checkin';
 import { WellbeingDoc, WellbeingStore } from '../../sync/wellbeing-store';
 import { EmotionPicker } from './emotion-picker';
-
-/** ISO instant → the value a <input type="datetime-local"> expects (local). */
-function toLocalInput(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 /** Edit one check-in: change the score, add/edit a note, adjust the time (to
  *  backdate "this morning"), or delete it. */

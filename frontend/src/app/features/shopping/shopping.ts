@@ -18,6 +18,7 @@ import { sourceLabel } from "../../shared/sources";
 import { ProductThumb } from "../../product-thumb";
 import { ShoppingDoc, ShoppingStore } from "../../sync/shopping-store";
 import { ShoppingItemSheet } from "./shopping-item-sheet";
+import { TripSheet } from "./trip-sheet";
 
 @Component({
   selector: "app-shopping",
@@ -136,6 +137,18 @@ export class Shopping {
   readonly coverageOffline = computed(
     () => this.coverageUnavailable() && this.askable().length > 0,
   );
+
+  /** Whether there is a trip to plan. An empty list has nothing to go and get,
+   *  and the button would be offering to schedule a walk. */
+  readonly canPlanTrip = computed(() => this.items().some((i) => !i.done));
+
+  /** Put the trip in the calendar. Pre-filled with the shop that covers most of
+   *  the list — the coverage line right above this button is what the answer
+   *  came from, so the sheet opens on the shop you just read about. */
+  planTrip(): void {
+    const best = this.tripSummary()?.shops[0]?.label;
+    this.sheet.open(TripSheet, { data: { shop: best } });
+  }
 
   /** The FAB's action: the add sheet (stays open for burst entry). */
   openAdd(): void {

@@ -395,6 +395,55 @@ test('buy — list + bought bar: lays out cleanly @ phone width', async ({ page 
   await expectNoHorizontalOverflow(page, testInfo);
 });
 
+test('plan-a-trip sheet — shop, time and list lay out cleanly @ phone width', async ({
+  page,
+}, testInfo) => {
+  await mockApi(page);
+  await page.goto('/shopping');
+  await page.getByRole('button', { name: 'Plan a trip' }).click();
+
+  const sheet = page.locator('app-trip-sheet');
+  await sheet.waitFor();
+  // The date field is the one at risk: `datetime-local` renders a browser
+  // widget whose intrinsic width is not ours to set, and it is the thing most
+  // likely to push past the right edge of a 412px screen.
+  await sheet.locator('input[type="datetime-local"]').waitFor();
+  await sheet.getByText('list along', { exact: false }).waitFor();
+  // Measured with the form filled, which is the state it is submitted in — and
+  // the state where the button carries its longest label.
+  await sheet.getByLabel('Shop').fill('Waitrose');
+  await expect(sheet.getByRole('button', { name: 'Add to calendar' })).toBeEnabled();
+
+  await expectNoClippedText(page, testInfo, 'app-trip-sheet');
+  await expectNoTextOverlaps(page, testInfo, 'app-trip-sheet');
+  await expectNoHorizontalOverflow(page, testInfo, 'app-trip-sheet');
+});
+
+test('plan-a-trip sheet — the unlinked-calendar way out lays out cleanly @ phone width', async ({
+  page,
+}, testInfo) => {
+  // The dead end is the state worth measuring: it adds a filled panel and a
+  // second button to a sheet that was already the height of the screen.
+  await mockApi(page);
+  await page.route('**/api/calendar/shop-trip', (r) =>
+    r.fulfill({ status: 409, json: { error: 'nextcloud not linked' } }),
+  );
+  await page.goto('/shopping');
+  await page.getByRole('button', { name: 'Plan a trip' }).click();
+
+  const sheet = page.locator('app-trip-sheet');
+  await sheet.waitFor();
+  await sheet.getByLabel('Shop').fill('Asda');
+  await sheet.getByRole('button', { name: 'Add to calendar' }).click();
+
+  await sheet.getByText('isn’t connected', { exact: false }).waitFor();
+  await expect(sheet.getByRole('button', { name: 'Connect it in Settings' })).toBeVisible();
+
+  await expectNoClippedText(page, testInfo, 'app-trip-sheet');
+  await expectNoTextOverlaps(page, testInfo, 'app-trip-sheet');
+  await expectNoHorizontalOverflow(page, testInfo, 'app-trip-sheet');
+});
+
 test('settings — about card: lays out cleanly @ phone width', async ({ page }, testInfo) => {
   await mockApi(page);
   await page.goto('/settings');

@@ -51,6 +51,12 @@
   }
 }
 
+// Sits between the coverage line and the list, so it reads as an action on the
+// whole list rather than a header ornament.
+.trip-actions {
+  margin: 0 0 0.75rem;
+}
+
 // The row's own shops. Quiet by design: it is provenance, not an instruction,
 // and it must not compete with the thing you came here to read.
 .row-shops {

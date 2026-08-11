@@ -1,0 +1,54 @@
+<div class="sheet-form">
+  <app-sheet-header title="Plan a shop trip" (closed)="close()" />
+
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>Shop</mat-label>
+    <input
+      matInput
+      [ngModel]="shop()"
+      (ngModelChange)="shop.set($event)"
+      (keyup.enter)="save()"
+      placeholder="e.g. Asda"
+    />
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>When</mat-label>
+    <input
+      matInput
+      type="datetime-local"
+      [ngModel]="when()"
+      (ngModelChange)="when.set($event)"
+    />
+  </mat-form-field>
+
+  <!-- What the event will actually say, before it is written. The trip is
+       read in a shop from a calendar app, so the one chance to notice it is
+       wrong is here. -->
+  <p class="preview">
+    @if (items().length) {
+      Takes your {{ items().length }}-item list along.
+    } @else {
+      Nothing on the Buy list yet — the trip goes in without one.
+    }
+  </p>
+
+  @if (needsLinking()) {
+    <div class="needs-linking">
+      <p>
+        Your Nextcloud calendar isn’t connected, so there’s nowhere to put this
+        yet.
+      </p>
+      <button mat-flat-button (click)="openSettings()">
+        <mat-icon>link</mat-icon>
+        Connect it in Settings
+      </button>
+    </div>
+  }
+
+  <div class="actions">
+    <button mat-flat-button (click)="save()" [disabled]="!canSave()">
+      {{ saving() ? 'Adding…' : 'Add to calendar' }}
+    </button>
+  </div>
+</div>
