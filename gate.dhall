@@ -152,6 +152,15 @@ in  { name = "life"
             shell FAILS this row rather than skipping it, because a gate that
             skips is a gate that lies. No unit tests on this side yet, so
             `assembleDebug` is the whole check.
+
+            `--no-daemon` is load-bearing. A Gradle daemon outlives the shell
+            that started it and is reused by env, so one started outside this
+            devshell — with no ANDROID_HOME — serves later builds from inside
+            it and they fail with "SDK location not found" while
+            `echo $ANDROID_HOME` in the very same shell prints the path. That
+            cost a red gate on a commit touching only frontend/public. The
+            daemon buys a few seconds; not lying about why a build failed is
+            worth more.
         -}
         G.Check::{
         , name = "android :app assembleDebug"
@@ -164,6 +173,7 @@ in  { name = "life"
             , "--command"
             , "./gradlew"
             , "--console=plain"
+            , "--no-daemon"
             , ":app:assembleDebug"
             ]
         , timeout_s = 1800

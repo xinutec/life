@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Maskable variant of icon.svg: full-bleed square (no rounded corners) so a
+     launcher's own mask applies cleanly; the house sits inside the safe zone
+     (the centred circle of 80% diameter that every mask shape contains).
+     Generated PNG: icon-512-maskable.png (see frontend/gen-icons.sh).
+
+     The house is drawn smaller than in icon.svg, and smaller than looks
+     necessary: the safe zone bounds the STROKE, not the path. At 30px wide the
+     outer edge of a mitred bottom corner sits ~21px diagonally beyond its own
+     coordinate, so a house whose corners are inside the circle can still be
+     clipped by a round launcher mask. Corners are kept at r≈177 to leave room
+     for it. gen-icons.sh's output is checked against this. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#2e7d32"/>
+  <g fill="none" stroke="#ffffff" stroke-width="30" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M256 128 L381 236 V381 H131 V236 Z"/>
+    <path d="M220 381 V293 H292 V381"/>
+  </g>
+</svg>

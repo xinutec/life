@@ -1,12 +1,15 @@
 {
   "name": "Life",
   "short_name": "Life",
-  "description": "Personal home organiser — inventory, recipes, and where everything is.",
+  "description": "Personal organiser — wellbeing check-ins, to-dos, and what's in the cupboard.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#2e7d32",
   "theme_color": "#2e7d32",
   "icons": [
-    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
