@@ -449,9 +449,33 @@ test('wellbeing — the charts pan back through history, and the axis stays put'
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo, null, CHART_SCROLLERS);
 
+  // Changing zoom while panned must re-seat the scroller. The window's end is a
+  // timestamp, so it survives the change and the charts still look right — but
+  // scrollLeft is still measured against the old rail. The symptom is that the
+  // NEXT touch teleports the window, so the assertion is: a scroll event that
+  // moves nothing changes nothing.
+  //
+  // The sequencing matters, and got this wrong once: read the caption while a pan
+  // update is still in flight and the wait below resolves on THAT transition
+  // instead of the zoom's, which makes the test pass or fail for the wrong reason.
+  // So let each change land before provoking the next.
+  const caption = page.locator('.caption').first();
+  const atOldest = (await caption.textContent())!;
+  await pan.evaluate((el) => (el.scrollLeft = (el.scrollWidth - el.clientWidth) * 0.5));
+  await expect(caption).not.toHaveText(atOldest); // the pan has landed
+  const panned = (await caption.textContent())!;
+
+  await page.locator('mat-button-toggle', { hasText: '14d' }).click();
+  await expect(caption).not.toHaveText(panned); // the zoom has landed
+  const settled = (await caption.textContent())!;
+
+  await pan.evaluate((el) => el.dispatchEvent(new Event('scroll')));
+  await page.waitForTimeout(100); // give a change, if there is one, time to render
+  expect(await caption.textContent()).toBe(settled);
+
   // And back. Panned away, "Now" is the only way home.
   await page.getByRole('button', { name: 'Now' }).click();
-  await page.getByText('Mood · last 7 days').waitFor();
+  await page.getByText('Mood · last 14 days').waitFor();
   expect(await xs()).toEqual(before);
 });
 

@@ -6,6 +6,7 @@ import {
   effect,
   inject,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -85,11 +86,7 @@ interface Series {
 /** In a newest-first list of instants, the first index at or below `ms` — or
  *  strictly below it, which is what the older edge of a half-open window wants.
  *  Returns `times.length` when every reading is newer. */
-export function firstAtOrBefore(
-  times: readonly number[],
-  ms: number,
-  strict = false,
-): number {
+function firstAtOrBefore(times: readonly number[], ms: number, strict = false): number {
   let lo = 0;
   let hi = times.length;
   while (lo < hi) {
@@ -159,14 +156,32 @@ export class Wellbeing {
       this.items();
       this.now.set(Date.now());
     });
-    // Hold the scroller at its right edge while pinned to now. After render,
-    // because the rail's width only exists once --pan-factor has been applied,
-    // and a scrollLeft written against the old width lands in the wrong place.
+    // Seat the scroller where the model says the window is. After render, because
+    // the rail's width only exists once --pan-factor has been applied, and a
+    // scrollLeft written against the old width lands in the wrong place.
+    //
+    // Runs when the rail is RESIZED (a zoom change, or new data widening the
+    // range) or the pin flips — not on every pan, which is the user's to drive.
+    // Resizing is the case that bites: the window's end is a timestamp and
+    // survives a zoom change, so the charts still look right, while scrollLeft
+    // silently still refers to the old rail. Left alone, the next touch reads that
+    // stale position against the new width and teleports the window.
     afterRenderEffect(() => {
       const el = this.panEl()?.nativeElement;
       if (!el) return;
-      this.panFactor(); // re-run when a zoom change resizes the rail
-      if (this.atNow()) el.scrollLeft = el.scrollWidth;
+      this.panFactor();
+      const pinned = this.atNow();
+      untracked(() => {
+        const max = el.scrollWidth - el.clientWidth;
+        const want =
+          pinned || max <= 0
+            ? max
+            : ((this.endMs() - this.earliestEnd()) / this.pannableMs()) * max;
+        // Only when genuinely out of step. Writing back a position we just derived
+        // FROM scrollLeft fires another scroll event, and the two chase each
+        // other's rounding.
+        if (Math.abs(el.scrollLeft - want) > 1) el.scrollLeft = want;
+      });
     });
   }
 
