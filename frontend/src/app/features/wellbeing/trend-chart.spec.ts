@@ -43,6 +43,29 @@ describe('monotonePath', () => {
     }
   });
 
+  // The property that makes panning possible: the host draws only a window's
+  // worth of points, so the curve it draws there must be the curve the whole
+  // history would have drawn. Two points of halo either side is what buys it —
+  // drop HALO to 1 in wellbeing.ts and the segments entering the window change
+  // shape, which is the wobble this guards against.
+  it('draws a windowed slice exactly as the full series draws it (scroll invariance)', () => {
+    const all = Array.from({ length: 40 }, (_, i) => dot(i * 10, 45 + 25 * Math.sin(i / 2)));
+    const full = coords(monotonePath(all));
+    const HALO = 2;
+    const [first, last] = [12, 24]; // the visible window
+    const slice = coords(monotonePath(all.slice(first - HALO, last + 1 + HALO)));
+    // coords are [P0, c1, c2, P1, c1, c2, P2, …], so vertex i sits at 3i and the
+    // segment leading to it at 3i-2 … 3i. Every segment that touches a visible
+    // point must match the full series' own, control points included.
+    for (let i = first; i <= last; i++) {
+      for (let k = -2; k <= 2; k++) {
+        const inFull = full[3 * i + k];
+        const inSlice = slice[3 * (i - first + HALO) + k];
+        expect(inSlice, `coord ${k} of visible point ${i}`).toEqual(inFull);
+      }
+    }
+  });
+
   it('handles co-timed points without dividing by zero', () => {
     // Two entries at the same x (same instant) must not produce NaN/Infinity.
     const d = monotonePath([dot(10, 30), dot(10, 50), dot(20, 20)]);

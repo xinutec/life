@@ -55,6 +55,19 @@ const SHOPPING = [
     unit: 'tins', barcode: null, done: true, rev: 2, _deleted: false },
 ];
 
+/** The two places on the wellbeing screen whose geometry is deliberately wider
+ *  than the phone, and which therefore have to be exempted from the page-overflow
+ *  oracle — narrowly, by element, so the check stays strict on everything else in
+ *  the chart (axis words sliding off the left edge is exactly what it caught once).
+ *
+ *  `.pan` is the scroll rail: a horizontal scroller is wider than its viewport by
+ *  definition, and it holds no content. `path.line` is the trend line, which runs
+ *  through readings either side of the window so the curve enters and leaves the
+ *  viewport correctly; it is clipped to the plot, so none of that is visible — but
+ *  a bounding box measures geometry, not paint. The dots are NOT exempt: they only
+ *  ever come from inside the window, so one escaping would be a real fault. */
+const CHART_SCROLLERS = ['.pan', 'path.line'];
+
 const now = new Date();
 const at = (daysAgo: number, h: number): string => {
   const d = new Date(now);
@@ -73,6 +86,16 @@ const WELLBEING = [
     emotions: [], note: null, rev: 2, _deleted: false },
   { ulid: '01WELLC0000000000000000003', id: 3, recordedAt: at(1, 20), scoreTenths: 35, energyTenths: null,
     emotions: [], note: null, rev: 3, _deleted: false },
+  // Older than the widest window, so the charts have somewhere to pan back TO.
+  // Without these the rail is exactly one screen long and the pan test is vacuous.
+  { ulid: '01WELLD0000000000000000004', id: 4, recordedAt: hoursAgo(12 * 24), scoreTenths: 30, energyTenths: 30,
+    emotions: [], note: null, rev: 4, _deleted: false },
+  { ulid: '01WELLE0000000000000000005', id: 5, recordedAt: hoursAgo(18 * 24), scoreTenths: 50, energyTenths: 40,
+    emotions: [], note: null, rev: 5, _deleted: false },
+  { ulid: '01WELLF0000000000000000006', id: 6, recordedAt: hoursAgo(24 * 24), scoreTenths: 10, energyTenths: 10,
+    emotions: [], note: null, rev: 6, _deleted: false },
+  { ulid: '01WELLG0000000000000000007', id: 7, recordedAt: hoursAgo(30 * 24), scoreTenths: 40, energyTenths: 20,
+    emotions: [], note: null, rev: 7, _deleted: false },
 ];
 
 const ITEMS = [
@@ -298,7 +321,7 @@ test('wellbeing — chart + timeline: lays out cleanly @ phone width', async ({ 
   await page.getByText('Mood · last 7 days').waitFor();
   await page.getByText('Energy · last 7 days').waitFor();
   await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo, null, CHART_SCROLLERS);
 });
 
 test('wellbeing — the two charts agree on where the days are', async ({ page }) => {
@@ -381,6 +404,55 @@ test('wellbeing — each axis word sits level with the dot it names', async ({ p
     const b = (await words.nth(i).boundingBox())!;
     expect(Math.abs(b.y + b.height / 2 - levels[i])).toBeLessThan(1.5);
   }
+});
+
+// Panning is the one part of the chart that source can't show is right: the SVG
+// keeps a fixed viewBox and redraws the window in place, so what has to be proven
+// on a real render is that the axis words DON'T move with the content, and that
+// the drawing doesn't grow as history scrolls through it.
+test('wellbeing — the charts pan back through history, and the axis stays put', async ({
+  page,
+}, testInfo) => {
+  await mockApi(page);
+  await page.goto('/wellbeing');
+  await page.getByText('Mood · last 7 days').waitFor();
+
+  const chart = page.locator('svg.chart').first();
+  const words = chart.locator('text.axis-word');
+  const xs = () => words.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().x)));
+  const before = await xs();
+  const dotsBefore = await chart.locator('circle.dot').count();
+  expect(dotsBefore).toBeGreaterThan(0);
+
+  // The history runs a month back, so the rail is several screens long.
+  const pan = page.locator('.pan');
+  const factor = await pan.evaluate((el) => el.scrollWidth / el.clientWidth);
+  expect(factor).toBeGreaterThan(3);
+
+  // All the way back to the first check-in.
+  await pan.evaluate((el) => (el.scrollLeft = 0));
+  await expect(page.getByText('Mood · last 7 days')).toHaveCount(0);
+  await expect(page.locator('.caption').first()).toContainText('–'); // a named range
+
+  // The axis words have not moved a pixel: they belong to the chart, not to the
+  // content scrolling under it. This is what the whole design turns on.
+  expect(await xs()).toEqual(before);
+  // ...and the drawing is still a window's worth, not a month's.
+  expect(await chart.locator('circle.dot').count()).toBeLessThanOrEqual(dotsBefore + 2);
+  // Both charts moved together — one scroller drives both, so their day rules
+  // must still agree (the same assertion as the pinned case, now off in the past).
+  const rules = (n: number) =>
+    page.locator('svg.chart').nth(n).locator('line.day')
+      .evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().x)));
+  expect(await rules(1)).toEqual(await rules(0));
+
+  await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo, null, CHART_SCROLLERS);
+
+  // And back. Panned away, "Now" is the only way home.
+  await page.getByRole('button', { name: 'Now' }).click();
+  await page.getByText('Mood · last 7 days').waitFor();
+  expect(await xs()).toEqual(before);
 });
 
 test('buy — list + bought bar: lays out cleanly @ phone width', async ({ page }, testInfo) => {

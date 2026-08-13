@@ -4,9 +4,22 @@
   role="img"
   [attr.aria-label]="label()"
 >
+  <!-- The plot, everything right of the axis words. The line runs through points
+       outside the window (see TrendData.line), so without this it would be drawn
+       straight across "great"/"okay"/"awful" on its way off the left edge. -->
+  <defs>
+    <clipPath [attr.id]="clipId">
+      <rect
+        [attr.x]="chart().plotX"
+        [attr.y]="0"
+        [attr.width]="chart().w - chart().plotX"
+        [attr.height]="chart().h"
+      />
+    </clipPath>
+  </defs>
   <line
     class="mid"
-    [attr.x1]="chart().axisX + 6"
+    [attr.x1]="chart().plotX"
     [attr.x2]="chart().w"
     [attr.y1]="chart().levelY[1]"
     [attr.y2]="chart().levelY[1]"
@@ -22,8 +35,12 @@
       {{ word }}
     </text>
   }
-  @if (chart().dots.length > 1) {
-    <path class="line" [attr.d]="linePath()" />
+  <!-- Only the line is clipped: it runs through the halo, so its geometry reaches
+       well outside the plot (invisibly — but a bounding box still measures it, so
+       e2e's overflow oracle is told to allow this one element). The dots are the
+       window's own and cannot leave it, so they stay measured. -->
+  @if (chart().line.length > 1) {
+    <path class="line" [attr.d]="linePath()" [attr.clip-path]="'url(#' + clipId + ')'" />
   }
   @for (dot of chart().dots; track $index) {
     <circle class="dot" [attr.cx]="dot.cx" [attr.cy]="dot.cy" r="3.5" [style.fill]="dot.fill" />

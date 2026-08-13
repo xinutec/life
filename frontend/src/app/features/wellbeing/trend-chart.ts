@@ -81,14 +81,29 @@ export interface TrendData {
   h: number;
   /** x the axis words are right-aligned against, inside the plot's own coordinates. */
   axisX: number;
+  /** x the plot starts at — where the mid line begins and the clip opens, just
+   *  right of the axis words. */
+  plotX: number;
   /** y of the top, middle and bottom of the scale — where a 5, a 3 and a 1 plot.
    *  The mid line is drawn on the middle one and the three axis words sit on all
    *  three, so a word is level with the dot it names by construction. */
   levelY: [number, number, number];
+  /** The readings inside the window — one circle each. x-ascending. */
   dots: TrendDot[];
+  /** Every point the trend line passes through, x-ascending: the `dots` plus a
+   *  couple of readings beyond each edge, so the curve enters and leaves the
+   *  viewport drawn the way the whole history would draw it rather than stopping
+   *  dead at the last visible dot. Those outer points lie outside the plot — which
+   *  is why the line is clipped, or it would run over the axis words. */
+  line: TrendDot[];
   midnights: number[];
   dayLabels: DayLabel[];
 }
+
+/** Per-instance suffix for the clip path's id. SVG ids are document-global and
+ *  this page draws two charts, so a fixed id would have the second silently
+ *  reuse — or overwrite — the first one's clip. */
+let nextClipId = 0;
 
 /** A wellbeing trend chart: dots on the shared 1..5 colour ramp, three axis
  *  words down the left edge, a caption below. Purely presentational — the host
@@ -107,6 +122,9 @@ export class TrendChart {
   /** Accessible description of the whole plot. */
   readonly label = input.required<string>();
 
-  /** The smooth trend line through the dots; empty (hidden) below two points. */
-  readonly linePath = computed(() => monotonePath(this.chart().dots));
+  readonly clipId = `trend-plot-${nextClipId++}`;
+
+  /** The smooth trend line; empty (hidden) below two points. Drawn through the
+   *  halo as well as the visible dots, and clipped to the plot. */
+  readonly linePath = computed(() => monotonePath(this.chart().line));
 }

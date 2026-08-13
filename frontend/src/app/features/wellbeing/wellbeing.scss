@@ -3,12 +3,44 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
-// Trend-window selector, right-aligned above the charts. width:fit-content +
-// margin-left:auto shrinks the group to its buttons and pushes it to the edge.
+// Zoom + "back to now", right-aligned above the charts.
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin: 1rem 0 0.25rem;
+}
 .windows {
   display: flex;
   width: fit-content;
-  margin: 1rem 0 0.25rem auto;
+}
+
+// The charts scroll left/right through history without the SVGs ever growing:
+// this is a transparent scroller laid over them whose rail is --pan-factor chart-
+// widths long, and whose scrollLeft the host reads back as a time. The charts
+// then redraw in place, so the DOM stays the size of one window however far back
+// the history goes.
+//
+// Native scrolling rather than pointer handlers, deliberately: momentum, the
+// desktop scrollbar, shift+wheel and arrow keys all come for free — and a
+// vertical drag still scrolls the page, which a touch-action override would break.
+.pan-area {
+  position: relative;
+}
+.pan {
+  position: absolute;
+  inset: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  // Or reaching the oldest entry hands the swipe to the browser's back gesture.
+  overscroll-behavior-x: contain;
+  // Nothing under here is tappable today. If a dot ever becomes so, this overlay
+  // is what has to give way — it swallows the tap.
+}
+.rail {
+  height: 1px;
+  width: calc(100% * var(--pan-factor, 1));
 }
 
 .empty-window {

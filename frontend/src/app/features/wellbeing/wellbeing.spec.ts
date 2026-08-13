@@ -146,6 +146,107 @@ describe('Wellbeing history', () => {
     expect(c.hasEnergyChart()).toBe(false);
   });
 
+  // Panning. The charts keep a fixed viewBox and redraw the window in place, so
+  // these assert the *window* moves — never that the drawing grows.
+  describe('panning back through history', () => {
+    /** The scroll overlay, at `frac` of the way along its rail. Only the three
+     *  measurements onPan reads; no DOM needed to exercise the mapping. */
+    const scroller = (frac: number, factor: number): HTMLElement =>
+      ({
+        clientWidth: 300,
+        scrollWidth: 300 * factor,
+        scrollLeft: frac * 300 * (factor - 1),
+      }) as HTMLElement;
+
+    /** A month of daily check-ins, newest first, as the store supplies them. */
+    const month = (): WellbeingDoc[] =>
+      Array.from({ length: 30 }, (_, i) =>
+        entry({
+          ulid: `d${i}`,
+          recordedAt: hoursAgo(i * 24 + 2),
+          scoreTenths: 10 + ((i * 10) % 41),
+        }),
+      );
+
+    it('starts pinned to now, showing one window of a pannable month', () => {
+      const c = setup(month()).fixture.componentInstance;
+      expect(c.atNow()).toBe(true);
+      expect(c.chart().dots.length).toBe(7); // one week of daily entries
+      expect(c.panFactor()).toBeGreaterThan(4); // ~30 days of history, 7 to a screen
+    });
+
+    it('moves the window back without drawing more of the history', () => {
+      const c = setup(month()).fixture.componentInstance;
+      const pinned = c.chart().dots.length;
+      c.onPan(scroller(0, c.panFactor())); // hard left
+      expect(c.atNow()).toBe(false);
+      expect(c.endMs()).toBeLessThan(Date.now() - 20 * 86_400_000);
+      // Still a window's worth of dots — the whole point of the exercise.
+      expect(c.chart().dots.length).toBeLessThanOrEqual(pinned + 1);
+    });
+
+    it('stops at the oldest entry and re-pins at the right edge', () => {
+      const items = month();
+      const c = setup(items).fixture.componentInstance;
+      c.onPan(scroller(0, c.panFactor()));
+      // Panned fully left, the window opens on the first check-in, not before it.
+      const oldest = new Date(items[items.length - 1].recordedAt).getTime();
+      expect(c.endMs() - 7 * 86_400_000).toBeGreaterThanOrEqual(oldest - 1000);
+      c.onPan(scroller(1, c.panFactor()));
+      expect(c.atNow()).toBe(true);
+    });
+
+    it('does not scroll at all when the history already fits one window', () => {
+      const c = setup([entry({ recordedAt: hoursAgo(2) })]).fixture.componentInstance;
+      expect(c.pannableMs()).toBe(0);
+      expect(c.panFactor()).toBe(1);
+    });
+
+    it('carries the trend line past both edges of the window', () => {
+      const c = setup(month()).fixture.componentInstance;
+      c.onPan(scroller(0.5, c.panFactor()));
+      const { dots, line } = c.chart();
+      expect(line.length).toBe(dots.length + 4); // two readings either side
+      // The halo is genuinely outside the window, which is what carries the curve
+      // off-screen instead of ending it at the last visible dot.
+      expect(line[0].cx).toBeLessThan(dots[0].cx);
+      expect(line[line.length - 1].cx).toBeGreaterThan(dots[dots.length - 1].cx);
+    });
+
+    it('keeps the chart on screen over an empty stretch, so panning is reversible', () => {
+      // Two check-ins two months apart: pan into the gap between them.
+      const c = setup([
+        entry({ ulid: 'new', recordedAt: hoursAgo(2) }),
+        entry({ ulid: 'old', recordedAt: hoursAgo(60 * 24) }),
+      ]).fixture.componentInstance;
+      c.onPan(scroller(0.5, c.panFactor()));
+      expect(c.chart().dots.length).toBe(0);
+      // If the chart went away with its dots it would take the scroller with it,
+      // and there would be no way back to now.
+      expect(c.hasChart()).toBe(true);
+      expect(c.emptyWindow()).toBe(true);
+      // The line still crosses the gap: "nothing here", not "no data exists".
+      expect(c.chart().line.length).toBe(2);
+    });
+
+    it('names the range once panned, since "last 7 days" is then untrue', () => {
+      const c = setup(month()).fixture.componentInstance;
+      expect(c.windowLabel()).toBe('last 7 days');
+      c.onPan(scroller(0.3, c.panFactor()));
+      expect(c.windowLabel()).not.toContain('last');
+      expect(c.windowLabel()).toContain('–');
+    });
+
+    it('goes back to now on demand', () => {
+      const c = setup(month()).fixture.componentInstance;
+      c.onPan(scroller(0.2, c.panFactor()));
+      expect(c.atNow()).toBe(false);
+      c.toNow();
+      expect(c.atNow()).toBe(true);
+      expect(c.windowLabel()).toBe('last 7 days');
+    });
+  });
+
   it('opens the edit sheet for an entry', () => {
     const { fixture, sheet } = setup([entry({ ulid: 'a' })]);
     fixture.componentInstance.edit(entry({ ulid: 'a' }));
