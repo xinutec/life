@@ -170,9 +170,11 @@ class Model:
 
 
 def run(base: str, token: str, model: Model) -> None:
-    # When we started waiting on a load, so the wait is logged once rather than
-    # once per poll — a 25-minute load would otherwise write 150 identical lines.
-    waiting_since: float | None = None
+    # Whether the wait has already been announced, so a load is logged once
+    # rather than once per poll — a 25-minute load would otherwise write 150
+    # identical lines. A FLAG, not a timestamp: this loop cannot measure a load
+    # (see below), and holding a start time here is what invited it to try.
+    announced_wait = False
     while True:
         try:
             job = next_job(base, token)
@@ -201,14 +203,22 @@ def run(base: str, token: str, model: Model) -> None:
         # handed straight back to us.
         busy = model.loading()
         if busy is not None:
-            if waiting_since is None:
-                waiting_since = time.monotonic()
+            if not announced_wait:
+                announced_wait = True
                 LOG.info("waiting: llm-host is loading %s", busy)  # once per load, not per poll
             time.sleep(RETRY_SECS)
             continue
-        if waiting_since is not None:
-            LOG.info("llm-host finished loading after %.0fs", time.monotonic() - waiting_since)
-            waiting_since = None
+        if announced_wait:
+            # Deliberately no duration. Any clock started above can only stop
+            # when the NEXT job arrives, because this check sits after
+            # `if job is None: continue` — with nobody asking, the worker cannot
+            # see the load end. It used to report the gap between jobs as the
+            # load time, once claiming 8h15m for a load that had finished
+            # overnight, and fleet-health graded the model on that number.
+            # llm-host times its own load from inside it and logs
+            # "loaded <model> in Ns"; that is the measurement, and this is not.
+            LOG.info("llm-host finished loading")
+            announced_wait = False
 
         if job.get("warm"):
             # A preload, not a job: run the model on the day's system prompt to
