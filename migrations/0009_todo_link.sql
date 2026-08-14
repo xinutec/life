@@ -1,8 +1,7 @@
 -- Typed, directional connections between a to-do and a target — another to-do or
 -- an app entity. Offline-first like the `todos` table (own sync columns). The
 -- endpoints are *soft refs* (ULID / id-string / room name), never hard FKs, so a
--- link and its endpoints sync on independent streams without ordering hazards
--- (offline-first proposal §6 / C2). See overview §4 "To-do".
+-- link and its endpoints sync on independent streams without ordering hazards.
 --
 --   from_ulid  ──kind──▶  (target_kind, target_ref)
 --   kind        ∈ depends_on | subtask | related

@@ -1,7 +1,7 @@
 -- life schema, migration 0003: recipes.
 -- A recipe is a name + method + an ordered list of ingredients. Ingredients
 -- are matched to inventory by name (case-insensitive) to derive "cook now" and
--- "shopping list = recipe − stock"; see docs/design/overview.md §4.
+-- "shopping list = recipe − stock".
 
 CREATE TABLE IF NOT EXISTS recipes (
     id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,

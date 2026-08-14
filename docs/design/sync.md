@@ -112,7 +112,13 @@ and RxDB encryption is a paid plugin — a stated decision, not an omission.
 
 ---
 
-Migrations 0006 and 0009 cite this file by its old name,
-`docs/proposals/offline-first.md`. Their comments are frozen: `sqlx::migrate!()`
-checksums applied migrations, so editing one — even a comment — makes the app
-refuse to boot against a database that already ran it.
+**Migrations don't cite this file, on purpose.** `sqlx::migrate!()` checksums
+every applied migration, so a migration's comments are effectively frozen — and
+a frozen file that names a path in a living doc tree is a dangling reference
+waiting to happen. Migration headers state their reasoning inline instead.
+
+When a migration comment genuinely has to change, `scripts/rechecksum-migrations.sh`
+is the supported route: it re-blesses a migration only when the SQL is untouched,
+and emits nothing at all if any file fails that test. Apply its statements to
+every database that already ran the migration, in the same breath as deploying
+the matching image — a database and a binary that disagree will not boot.

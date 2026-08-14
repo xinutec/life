@@ -1,7 +1,6 @@
 -- life schema, migration 0002: the generic location/item model.
 -- Containment is general asset tracking: item -> layer -> cupboard -> room ->
--- house. Items are generic (category, not food-only) from day one; see
--- docs/design/overview.md §4.
+-- house. Items are generic (category, not food-only) from day one.
 
 -- A node in the spatial tree. `kind` is house/room/cupboard/fridge/layer.
 -- `parent_id` forms the tree; `position` holds optional 3D placement (JSON)

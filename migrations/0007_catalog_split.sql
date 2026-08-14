@@ -5,7 +5,7 @@
 -- hand-defined), keyed by a surrogate id with an OPTIONAL unique barcode. An
 -- `item` (a thing you actually own) links to a product via `product_id`, or
 -- stands alone with its own `name` (one-offs with no barcode). This is the
--- catalog-vs-inventory split — see docs/design/catalog-and-holdings.md.
+-- catalog-vs-inventory split.
 --
 -- Single-user app, so `products` is simply Pippijn's catalog (no per-user
 -- sharing concerns). Additive + backfilled; the redundant items.barcode/name

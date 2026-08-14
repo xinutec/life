@@ -1,6 +1,6 @@
 -- Life schema, migration 0006: offline-first sync foundation (shopping slice).
--- See docs/proposals/offline-first.md. Adds a global, commit-ordered revision
--- counter and the per-row sync columns to shopping_items: a client-mintable
+-- Adds a global, commit-ordered revision counter and the per-row sync columns
+-- to shopping_items: a client-mintable
 -- stable identity (ulid), the server revision (rev), and a soft-delete tombstone
 -- (deleted_at) so deletes propagate to offline clients.
 
