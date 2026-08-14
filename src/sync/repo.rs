@@ -4,7 +4,7 @@
 //! FOR UPDATE row lock, rev guard, **set-only tombstone**, commit-ordered
 //! revs, validate-before-write — cannot drift between collections. A new
 //! collection implements the spec and gets the tested protocol for free.
-//! See `docs/proposals/offline-first.md`.
+//! See `docs/design/sync.md`.
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};

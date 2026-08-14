@@ -1,8 +1,13 @@
 # life
 
 Personal home OS web app. Rust (axum) backend + Angular frontend, own MariaDB.
-Nextcloud is used only for **identity** (login) and **calendar** (CalDAV) — see
-[`docs/design/overview.md`](docs/design/overview.md).
+Nextcloud is used only for **identity** (login) and **calendar** (CalDAV).
+
+Design docs — [`overview.md`](docs/design/overview.md) (architecture and
+boundaries), [`sync.md`](docs/design/sync.md) (local-first sync and its traps),
+[`catalog-and-holdings.md`](docs/design/catalog-and-holdings.md) (products vs
+items, shops, reconciliation), [`ui-grammar.md`](docs/design/ui-grammar.md).
+[`docs/TODO.md`](docs/TODO.md) tracks what's built and what's next.
 
 ## Deploy
 
@@ -15,17 +20,16 @@ and the running deployment.
 
 There is **no image automation** (no Flux/Argo image controller): the Deployment
 pins `xinutec/life:latest`, a fixed string, so pushing a new `:latest` changes
-nothing on the cluster by itself. Once CI is green, roll it out by hand on isis —
-the restart is what pulls the fresh image (`:latest` ⇒ `imagePullPolicy: Always`):
+nothing on the cluster by itself. Once CI is green, roll it out from a monorepo
+checkout — this is the single implementation, and it applies manifests and
+restarts only what is behind:
 
 ```sh
-ssh root@isis.xinutec.org \
-  "kubectl -n life rollout restart deploy/life-app && \
-   kubectl -n life rollout status deploy/life-app --timeout=180s"
+~/Code/pippijn/code/kubes/deploy.sh life
 ```
 
-Manifest changes (yaml edits) additionally need a `kubectl apply` of
-`code/kubes/life/k8s/` from a monorepo checkout on the host.
+It deploys the **host's** checkout, so it refuses unless the monorepo is on main,
+committed and pushed. Then confirm the served bundle carries the new sha.
 
 ## Android app
 
@@ -43,18 +47,21 @@ cargo run            # boots, migrates, serves on $BIND_ADDR
 
 ### Git hooks — one gate, at commit
 
-A commit must be healthy: `scripts/verify.sh` is the single gate (backend fmt +
-clippy + generated-types drift; frontend lint + build + unit tests + ui-check;
-shared dev-lint rules). It runs as a **pre-commit** hook — there is no separate
-pre-push step. Slow by design; we optimise for healthy commits, not speed.
+A commit must be healthy: `gate.dhall` (compiled to `gate.json`) is the single
+gate — backend fmt, clippy, the full test suite against a throwaway MariaDB,
+generated-types drift; frontend lint, build, unit tests, ui-check; shared
+dev-lint rules. It runs as a **pre-commit** hook — there is no separate pre-push
+step. Slow by design; we optimise for healthy commits, not speed.
 
 ```sh
 scripts/setup-hooks.sh   # activate, once per clone (sets core.hooksPath)
 git commit --no-verify   # bypass for a genuine WIP commit
 ```
 
-`cargo test` runs offline. The DB integration test (`tests/db.rs`) runs only
-when `LIFE_TEST_DATABASE_URL` is set, e.g.:
+**A bare `cargo test` is not the test suite.** Most test files `return` early
+unless `LIFE_TEST_DATABASE_URL` is set, so they report green with none of the SQL
+exercised — and the queries are runtime strings, so *running* them is the only
+check on them. The gate supplies a throwaway server; by hand:
 
 ```sh
 LIFE_TEST_DATABASE_URL=mysql://life:life@127.0.0.1:3307/life cargo test
@@ -66,7 +73,7 @@ Angular 22 (Material 3) in `frontend/`. One origin: dev proxies to the backend,
 prod is served by the backend.
 
 ```sh
-cd frontend && npm install
+cd frontend && pnpm install
 pnpm start           # ng serve on :4200, proxies /api,/login,... to :8080
 pnpm run build       # → frontend/dist/life-web/browser
 ```

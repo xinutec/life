@@ -4,7 +4,7 @@
 //! carrying the server `rev` (version) plus RxDB's `_deleted` tombstone flag. The
 //! checkpoint is simply the highest `rev` the client has pulled. The page/entry
 //! envelopes are generic over the document type so each collection reuses them.
-//! See `docs/proposals/offline-first.md`.
+//! See `docs/design/sync.md`.
 
 use crate::products::ids::ProductId;
 use chrono::{DateTime, NaiveDate, Utc};

@@ -32,6 +32,7 @@ locations ──<  items        items.location_id → locations.id  (nullable, S
 locations self-tree         locations.parent_id → locations.id (CASCADE)
 products  ──<  items        items.product_id   → products.id   (nullable, SET NULL)
 products  ──<  shopping_items   (buy entries; same nullable-product + name pattern)
+products  ──<  product_listings (one per source: that source's whole record)
 items     ──<  item_history     (append-only audit)
 products  (UNIQUE barcode where present)
 ```
@@ -67,31 +68,41 @@ Indices that matter: `products.barcode` UNIQUE (lookup + dedup); `items
   `ProductId` and `ListingId` are both row numbers and deliberately *not* the
   same type: a price observation hangs off a listing, everything else off a
   product, and as `u64`s the swap type-checked.
-  - **The exception is on purpose.** `shopping_items.barcode` stays a `String`.
+  - **The exception is deliberate.** `shopping_items.barcode` stays a `String`.
     It is what a phone scanned, arriving over offline sync, and a push refused
     for shape would strand an edit made with no signal. Catalog identity travels
     through `product_id`; that column is a hint, and it is typed like one.
 - **Freeform has a floor.** Don't force one-offs into the catalog — that's why
   `product_id` is nullable. Promote to a product only with a barcode or when
   you'll rebuy/track it.
-- **Sync (when items join it).** The offline-first layer references rows by ULID
-  with nullable hard FKs resolved server-side (see `proposals/offline-first.md`),
-  so cross-table links travel as ULIDs; the BIGINT FKs are for local integrity.
+- **Sync (when items join it).** `shopping_items` syncs; `items`/`locations`/
+  `recipes` are online-only REST by choice — see [`sync.md`](sync.md), including
+  the quantity-delta hazard that has to be solved before inventory joins.
 
-## Sync scope (deliberate, not an oversight)
+## Reconciliation — the canonical row is curated, not overwritten
 
-Offline-first sync (RxDB + soft-delete + `rev`/`ulid`) currently covers **only
-`shopping_items`** — the one surface you use while walking around a shop with no
-signal. `items`/`locations`/`recipes` are **online-only** (plain REST, hard
-deletes) **by choice**: inventory is edited at home, on wifi, so the cost of the
-per-table sync machinery isn't yet worth it. When that changes, the pattern
-(ULID + `rev` + tombstones + the conflict handler) is established and applies
-unchanged. So the inconsistency between the two paths is a known trade-off, not
-an accident.
+Each source keeps its **whole record on its own listing**, verbatim, including a
+`raw_json` backstop for fields we don't model yet. The canonical `products` row
+holds one **blessed** value per field with provenance, and `'user'` provenance
+outranks every source — a hand correction ("Oalty" → "Oatly") survives a refresh.
+
+A **divergence** is computed live by comparing a listing's value against the
+blessed one, so there is no pending-changes table to go stale. You approve
+field-by-field; the decision is recorded (`product_field_decisions`) so a
+declined diff stays quiet until that source's value changes.
+
+Two shapes fall out of this:
+
+- **Scalars** (name, brand, pack size) string-compare directly. The image
+  doesn't: the canonical picture is *bytes* and a listing offers a *URL*, so it
+  is reconciled by provenance rather than by comparison (migration 0036).
+- **Facts** (nutrition, allergens, ingredients, dietary flags) are stored
+  per-source and merged on read. For whole-value facts — the nutrition panel,
+  the ingredients text — "merge" means **pick one source's account verbatim**;
+  you don't average two panels or splice two ingredient lists.
 
 ## Deferred (not yet built)
 
-`purchases`/`price_observations` (+ optional `shops`), recipe_ingredient →
-product links (replace name-matching), items into the RxDB sync (ulid/rev),
-extra item fields (opened_at/acquired_at/notes), and dropping the now-redundant
+Items into the RxDB sync (see [`sync.md`](sync.md)), extra item fields
+(opened_at / acquired_at / notes), and dropping the now-redundant
 `items.barcode`/`items.name` once all reads go through the product.

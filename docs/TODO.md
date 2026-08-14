@@ -504,8 +504,8 @@ early rather than leaning on the margin.
 
 ## Next up
 
-- [x] **Wellbeing · to-do timing · UI quality** — plan in
-      `docs/proposals/wellbeing-timing-ux.md` (2026-07-03). SHIPPED as six
+- [x] **Wellbeing · to-do timing · UI quality** — planned 2026-07-03; the
+      durable parts live in `docs/design/`. SHIPPED as six
       increments, all deployed: **A** shared `<app-list-state>` + `Feedback`
       service across the 7 list screens; **B** `not_before`/`due` on to-dos
       (waiting + urgency states, sort, chips, presets); **C** wellbeing
@@ -814,8 +814,8 @@ early rather than leaning on the margin.
       in the data model; a linked line now matches the jar in the cupboard
       whatever the label calls it. Still name-only where no link exists —
       "cumin" vs "ground cumin" only agree once one of them names a product.
-- [x] **Frontend: shared list-state component** — SHIPPED as increment A of
-      `docs/proposals/wellbeing-timing-ux.md` (`<app-list-state>` used on all
+- [x] **Frontend: shared list-state component** — SHIPPED as increment A of the
+      2026-07-03 UI-quality plan (`<app-list-state>` used on all
       list screens). Remaining stragglers that bypass it (House error-as-empty,
       Today's hydration false-empty) are tracked as B2/D5 in the 2026-07-08
       review findings below.
@@ -938,11 +938,11 @@ deletion/trash (B), field-level sync merge + conflict log (C).
 ## 2026-07-08 review findings (priority-ordered)
 
 From the three-part whole-codebase quality review (backend, frontend, UI
-design) at commit `2815d45`. Full detail — failure scenarios, file refs, fix +
-test per finding, batching — in `proposals/quality-review-2026-07-08.md`.
-Verdict: A− across all three; the below-bar items are places where the right
-pattern exists in the codebase and one spot didn't get it. Go given
-2026-07-09; batches land in K → L → M → N order.
+design) at commit `2815d45`. Verdict: A− across all three; every below-bar item
+was a place where the right pattern already existed in the codebase and one spot
+hadn't got it. All findings below are shipped — the list is kept as the record of
+what was fixed and why, and the rules it settled now live in
+`design/ui-grammar.md` and `design/sync.md`.
 
 Below the bar (B), planned as batches K/L/M/N per the proposal:
 

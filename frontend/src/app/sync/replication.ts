@@ -41,7 +41,7 @@ export function guardAuth(
 }
 
 /** Start the standard HTTP pull/push replication every synced collection uses
- *  (see docs/proposals/offline-first.md). One implementation instead of three
+ *  (see docs/design/sync.md). One implementation instead of three
  *  copies — the shape is identical per collection: GET `path?since&limit` for
  *  pulls, POST `path` with the RxDB rows for pushes, rev-checkpointing, the
  *  auth guard, and quiet retry on transient errors. */

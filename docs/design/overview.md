@@ -1,223 +1,150 @@
 # life — architecture & scope
 
-Personal "life" web app: a single-user home operating system. Owns an
-**inventory + spatial model** of the house (what is where) and **recipes**,
-and **delegates scheduling/reminders to Nextcloud Calendar** rather than
-reinventing them.
+Personal single-user home OS. Owns an **inventory + spatial model** of the house,
+a **product catalog** fed from shops and Open Food Facts, **recipes**,
+**shopping**, **typed to-dos** and **wellbeing tracking** — and **delegates
+scheduling to Nextcloud Calendar** rather than reinventing it.
 
-Single user (Pippijn). No SLA, no multi-tenant concerns. Hosted on the
-xinutec fleet alongside `home` / `health` / `recall`.
+The whole app lives at one origin, `life.xinutec.org` — one Angular app, one Rust
+backend, one MariaDB. "Domain" here and in the code (the *inventory domain*)
+means a bounded context, not a DNS name; there are no per-feature subdomains.
 
-The **entire application lives at one origin, `life.xinutec.org`** — one
-Angular app + one Rust backend. Every feature (inventory, recipes, the 3D
-house) is served from that single domain; there are no per-feature subdomains.
-"Domain" elsewhere in this doc and the code (e.g. the *inventory domain*) means
-a feature area / bounded context, not a DNS name.
+Read alongside:
+
+- [`sync.md`](sync.md) — the local-first sync protocol and its traps. Read it
+  before touching `src/sync/` or `frontend/src/app/sync/`.
+- [`catalog-and-holdings.md`](catalog-and-holdings.md) — products vs items,
+  shop listings, per-source facts and reconciliation.
+- [`ui-grammar.md`](ui-grammar.md) — the interaction rules every screen follows.
+- [`../TODO.md`](../TODO.md) — what's built, what's next, and the open decisions.
 
 ---
 
 ## 1. Shape
 
-| Layer    | Choice                                  | Rationale                                         |
-|----------|-----------------------------------------|---------------------------------------------------|
-| Backend  | **Rust + axum**                         | New; small, explicit auth/session surface.        |
-| Frontend | **Angular (TypeScript)**                | Matches `home` / `health` / `recall`.             |
-| DB       | **MariaDB via `sqlx`** (own database)   | Same engine as the fleet → uniform ops + backup.  |
-| 3D       | three.js in the Angular app             | Render house → highlight searched item.           |
-| Host     | isis k3s, own namespace `life`          | Same as `home`/`health`.                          |
-| Backup   | restic (Mac mini daily 05:00)           | DB dump folded into the existing restic set.      |
+Rust + axum, Angular (Material 3), MariaDB via `sqlx`, three.js for the house;
+isis k3s, namespace `life`; the DB dump rides in the Mac mini's existing restic
+set. Each choice is "same as `home` / `health` / `recall`" — one set of fleet ops
+beats a locally optimal stack.
 
-Nextcloud is **not** the database. It is used at two boundaries only:
-**identity** (login) and **calendar** (scheduling), both via public APIs —
-never schema surgery on NC's own tables.
+Nextcloud is **not** the database. It is touched at two boundaries only:
+identity and calendar.
 
-> **Firm boundary:** the *only* thing managed through NC is the **calendar**.
-> Everything else — inventory, locations, recipes, history — lives in life's
-> own MariaDB. NC never stores app state.
+> **Firm boundary:** the *only* thing life manages through NC is the **calendar**.
+> Inventory, locations, recipes, history and wellbeing live in life's own
+> MariaDB. "No NC DB writes" means *no schema surgery* — public APIs are fine, so
+> writing a `VEVENT` over CalDAV is allowed; touching NC's app tables is not.
 
----
+## 2. Nextcloud integration — why there are two flows
 
-## 2. Nextcloud integration
+life runs two deliberately separate NC flows, for the reasons `health` learned
+the hard way (`kubes/health/src/nextcloud/*`).
 
-Learned from the `health` app (`kubes/health/src/nextcloud/*`,
-`src/middleware/session.ts`, `src/routes/nextcloud-oauth.ts`). health runs
-two deliberately-separate NC flows; life needs **both**, for different reasons
-than health did.
+**2a. Identity — OAuth2 authorization-code, identity-only.** Exchange the code,
+call `/ocs/v2.php/cloud/user` once for `{id, displayname}`, then **discard the
+tokens** and mint life's own session (§3). Because no NC **refresh** token is
+ever held, life never hits the single-use-refresh-token rotation race that forced
+health to split its flows.
 
-### 2a. Identity — OAuth2 authorization-code, identity-only
+**2b. Calendar — app password (NC Login Flow v2) → CalDAV.** Identity-OAuth2
+cannot reach the DAV endpoints, so calendar read/write needs a second flow
+yielding a long-lived app password (no expiry, HTTP Basic), stored in life's own
+`nc_credentials`. CalDAV is then plain authenticated HTTP against
+`/remote.php/dav/calendars/<user>/…`.
 
-Establishes *who the user is* and nothing else.
+## 3. Sessions — life's own, DB-backed
 
-1. `/login` → redirect to NC `index.php/apps/oauth2/authorize`.
-2. `/auth/callback` → exchange `code` for an access token.
-3. Call `/ocs/v2.php/cloud/user?format=json` **once** for `{id, displayname}`.
-4. **Discard the tokens.** Create the app's own session (see §3).
+NC is touched only at login; every later request authenticates against life's own
+opaque session (random id → `sessions` row; cookie is `id.HMAC`, verified
+timing-safe). Two decisions worth keeping in mind:
 
-Because the tokens are used once and thrown away, life never holds an NC
-**refresh** token, so it never hits the single-use-refresh-token rotation race
-that forced health to split its flows in the first place.
+- **The pending login travels in a signed cookie of ours, not keyed by `state`.**
+  When the browser holds no NC session, NC's `oauth2/authorize` bounces to its
+  own Login Flow and drops every query parameter, so `state` comes back
+  **empty** — a server that looks the pending login up by `state` cannot complete
+  a login from a cookie-less browser at all. Every app in this family shares the
+  flow and the fix; the full reasoning, including the accepted residual risk, is
+  in `src/pending_login.rs`.
+- **`return_to` only accepts same-site internal paths**, rejecting `//host` and
+  `/\host` — browsers fold `\` to `/`, so `/\evil.com` redirects off-site. This
+  is the open-redirect guard, not cosmetic.
 
-Requires an OAuth2 client registered in NC admin → `NC_CLIENT_ID`,
-`NC_CLIENT_SECRET`, `NC_REDIRECT_URI` (secrets).
+## 4. Data model
 
-### 2b. Calendar — app password (NC Login Flow v2) → CalDAV
-
-Pure identity-OAuth2 cannot reach the DAV endpoints, so for calendar
-read/write life also runs **Login Flow v2** to obtain a long-lived **app
-password** (no expiry, no refresh; HTTP Basic Auth), exactly as health does
-for PhoneTrack. Stored in life's own `nc_credentials` table.
-
-CalDAV is plain authenticated HTTP against
-`/remote.php/dav/calendars/<user>/...`:
-- **Read** the bins subscription + existing calendars (`PROPFIND` / `REPORT`).
-- **Write** shop-trip events (`PUT` a `VEVENT`).
-
-> **Decision recorded:** "no NC DB writes" is read as *no schema surgery — use
-> the public APIs*. Writing a `VEVENT` via **CalDAV** is the supported, clean
-> path and is allowed under that rule. We do **not** touch NC's internal app
-> tables.
-
-Rust: `reqwest` for HTTP; the `icalendar` crate to serialize/parse `VEVENT`s.
-
----
-
-## 3. Sessions (life's own, DB-backed)
-
-Copied from health's model — NC is touched only at login; every subsequent
-request authenticates against life's own opaque session:
-
-- Random 32-byte id → row in own `sessions` table
-  (`user_id`, `display_name`, `expires_at`, 7-day TTL).
-- Cookie = `id.HMAC_SHA256(id)`, **timing-safe** verify; `httpOnly`,
-  `secure`, `SameSite=Lax`.
-- Lazy expiry on read + periodic sweep.
-- `require_auth` middleware; single-user (owner-only).
-- OAuth `state`: short-TTL, `return_to` **allowlist-validated** (no open
-  redirect). health keeps this in-memory per-pod — life should put it in a
-  small DB table from the start so a future 2nd replica is safe.
-
-Rust crates: `axum-extra` cookie jar, `hmac` + `sha2`, `rand`,
-`constant_time_eq`.
-
----
-
-## 4. Data model — generic inventory + spatial graph
-
-The core insight: cupboard containment is **general asset tracking**. Build
-**one generic engine**, then ship food/recipes as the first skin. Everything
-else (meds, tools, documents) later becomes a new category + a few fields,
-not a new app.
+The core insight: cupboard containment is **general asset tracking**. One generic
+engine, with food/recipes as the first skin — meds, tools and documents later
+become a category and a few fields, not a new app.
 
 ### Containment (location graph)
+
 ```
 item → layer → cupboard → room → house
 ```
-- `location` is a node with a `kind` (house / room / cupboard / layer / fridge…)
-  and a parent, forming a tree. Registering a new cupboard = inserting a node.
-- `cupboard` carries 3D placement (room + position) so the model can be
-  rendered and a node highlighted.
-- `layer` is an ordered child of a cupboard.
 
-### Item — generic from day one
-- `category` (food / med / tool / document / …) — **not** hard-coded to food.
-- `quantity`, `unit`, **`expiry`** (first-class, not food-only).
-- `location_id` → current node.
-- **History/audit** of enter/leave from the start (cheap now, impossible to
-  backfill).
+`location` is a node with a `kind` and a parent, so registering a cupboard is one
+insert. A `layer` is a cupboard's ordered child.
 
-### Food / recipes skin
-- `recipe` → `recipe_ingredient` (item-ref + amount).
-- Derived views: "cook now with what's in stock"; "shopping list = recipe −
-  inventory".
+**3D geometry lives in `scenes/house.json`, not on the location rows.** Boxes are
+centre-based — `{cx, cz, w, d, h, y0}` — in **metres**, floor plane **X–Z**,
+**Y up**. Whether that geometry should move onto `location` rows (versus staying
+separate and mapping by id/name) is an open decision in
+[`../TODO.md`](../TODO.md); until it's settled, a room in a `todo_link` is
+referenced by *name*, because that's the only identity the scene has.
 
-### 3D house
-- Hand-authored room/cupboard **geometry described parametrically** so that
-  "register a cupboard" needs no 3D-modelling step — the Angular/three.js
-  layer renders from the data. (A planned "find an item → highlight its
-  cupboard/layer in 3D" lookup is parked — the standalone search page was
-  removed 2026-07-02; rebuild it with the highlight, not as its own tab.)
-- **`position` JSON schema** (metres, floor plane is X–Z, origin at a house
-  corner, Y up):
-  - room: `{ "x", "z", "w", "d" }` — a footprint rectangle; walls implied.
-  - cupboard/fridge: `{ "x", "z", "w", "d", "h" }` — a box.
-  - house/layer: no `position`; the house is the container, a layer's vertical
-    slot comes from its `sort_order` within the cupboard.
-  All fields optional/forward-compatible — the renderer skips nodes without a
-  usable box.
+### Item
 
-### To-do — typed tasks + a connection graph
+Generic from day one: `category` is not hard-coded to food, and `expiry` is
+first-class rather than a food-only afterthought. **History is recorded from the
+start** because it cannot be backfilled.
 
-A **strongly-managed** to-do list: not a flat checklist but *typed* tasks that
-can be **connected** to each other and to the rest of life's data.
+### To-do — typed tasks over a connection graph
 
-- **`todo`** — `title`, `type`, `status` (`open` / `done`), optional `notes`.
-  - `type` is a **curated enum** that starts minimal — `purchase`, `call` — and
-    grows a variant at a time as real kinds appear, not up front.
-  - Offline-first exactly like shopping: its own RxDB collection synced through
-    `/api/sync/todo`, soft-deleted (tombstones), client-minted `ulid` identity.
-- **`todo_link`** — a **typed, directional** edge from one to-do to a target:
-  ```
-  todo ──kind──▶ target        kind ∈ depends-on | subtask | related
-  ```
-  - `target` is **polymorphic**: another `todo`, or an app entity —
-    `item` / `recipe` / `shopping` / `place` (DB ids) or a house `room` (the room
-    *name*, since rooms live in `scenes/house.json`, not the DB).
-  - Stored as `(from_ulid, kind, target_kind, target_ref)`, its own synced
-    collection (`/api/sync/todo-link`) so links travel offline too.
-  - Directionality carries meaning: `depends-on` / blocks (ordering), `subtask`
-    (parent → child hierarchy), `related` (plain association).
-- **Why a graph, not flags:** "fix the bay-window latch" → `related` to the
-  *bay/living room*; "buy a smoke alarm" → `depends-on` the *smoke-alarm item*.
-  Modelling each connection as an edge row (rather than baking relationships into
-  the to-do) keeps every kind of link uniform and queryable from either end —
-  the same "one generic engine" instinct as the inventory model above.
-- **Build status:** the `todo` entity ships first (typed list, offline-first);
-  the `todo_link` connections layer on top in the following increment.
+Not a flat checklist. `todo` carries a **curated `type` enum** that grows one
+variant at a time as real kinds appear (`purchase`, `call`, …) rather than being
+guessed up front.
 
----
+`todo_link` is a **typed, directional** edge — `depends-on | subtask | related` —
+to another to-do or to an app entity (`item` / `recipe` / `shopping` / `place` by
+id, or a house `room` by *name*, since rooms live in `scenes/house.json`, not the
+DB). Modelling connections as edge rows rather than baking relationships into the
+to-do keeps every kind of link uniform and queryable from either end.
+
+Timing extends actionability instead of sitting beside it as a date column:
+
+- **`not_before`** → the to-do is **waiting** — the temporal analogue of
+  *blocked*, and also how snoozing works ("not this week").
+- **`due`** → **urgency**, an axis orthogonal to actionability. A to-do can be
+  blocked *and* due tomorrow, which is the state most worth surfacing.
+- Precedence `done → blocked → waiting → ready/open`: when an item is both
+  dep-blocked and deferred, the external gate is the informative one.
+
+Both are **dates, not datetimes**. Hour-level scheduling stays in NC Calendar
+(§5); these fields are list-ordering and attention metadata, not a scheduler.
+
+Deliberately not built: lead-time estimates (they decay into noise), soft-vs-hard
+deadlines (a taxonomy nobody maintains), recurrence (NC does it).
+
+### Wellbeing
+
+An **entry**, not a daily value: `(recorded_at, score, optional energy, emotions,
+note)`. Several entries a day is the point — "down in the morning, good in the
+afternoon" is two entries. No streaks, no gamification, no prompts; capture is
+always user-initiated, and the design constraint is that logging a mood costs one
+tap or it stops happening. Backdating exists so "this morning I felt down" can be
+logged at 15:00.
+
+Readings are stored in **tenths** (`score_tenths`, `energy_tenths`; 10..50, where
+35 is a 3.5) — fixed-point integers so they average and compare exactly. The
+columns were *renamed* when rescaled so stale code fails to find them rather than
+plotting a 4 as a 0.4; see `migrations/0023_wellbeing_tenths.sql`. Energy is
+stored higher-is-better and displayed as its complement, "fatigue" — the
+inversion is display-only.
 
 ## 5. Scheduling — delegated to NC Calendar
 
-Shop trips and reminders live in **NC Calendar**, not a life table:
-- life **writes** "go to <shop>" `VEVENT`s with a `LOCATION` (free-text always
-  works; geocoded `GEO`/location-picker depends on the NC version — verify
-  before relying on coordinates).
-- life **reads** the **bins** subscription
-  (`recyclingservices.brent.gov.uk/waste/2081268/calendar.ics`) as an input —
-  e.g. *don't schedule a shop the morning the bins go out*.
-
-This shows up in every calendar client for free and removes a whole
-scheduling subsystem from life's own DB.
-
----
-
-## 6. Backup (restic)
-
-life's data is in MariaDB → fold a DB dump into the existing Mac-mini restic
-set (`xinutec-infra/mac-mini/hm-agents.nix`, daily 05:00). Restic backs up the
-dump file, not the live DB. Wire a pre-backup `mysqldump` of the `life`
-database; verify it lands in a restic snapshot.
-
----
-
-## 7. Initial feature scope (v1)
-
-1. NC login (identity) + session.
-2. Generic item/location engine + register-a-cupboard (with layers).
-3. Food inventory on top of it (quantity, expiry, "use soon").
-4. Recipes + shopping-list / cook-now views.
-5. 3D house: render + highlight searched item's location.
-6. CalDAV: write a shop-trip event; read the bins feed.
-
-Deferred (the engine makes these cheap later): whole-house inventory (tools,
-docs, meds), barcode/phone capture, warranties/manuals.
-
----
-
-## 8. Open decisions
-
-- three.js parametric geometry vs an authored glTF model of the house.
-- Whether barcode capture (phone) is in v1 — it's the make-or-break for
-  inventory staying accurate, but adds a mobile surface.
-</content>
-</invoke>
+Shop trips and reminders live in NC Calendar, not a life table. life **writes**
+"go to <shop>" `VEVENT`s (free-text `LOCATION` always works; geocoded `GEO`
+depends on the NC version — verify before relying on it) and **reads** the Brent
+bins subscription as an *input*, e.g. don't schedule a shop the morning the bins
+go out. This shows up in every calendar client for free and keeps a whole
+scheduling subsystem out of life's DB.
