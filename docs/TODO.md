@@ -993,4 +993,3 @@ mode), matching the tap-to-edit grammar everywhere else.
 - three.js parametric geometry vs an authored glTF model of the house.
 - How scene cupboards relate to the DB location tree (store `position` on the
   `location` rows, vs keep scene geometry separate and map by id/name).
-- Whether barcode capture is worth the mobile-camera surface.
