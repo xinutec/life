@@ -7,7 +7,7 @@ import { nextCollections, shortKind } from './bins';
  * ⚠ **The zone is pinned, not inherited.** Every date case below is arithmetic
  * between a bare `YYYY-MM-DD` and a reader's clock, and the two disagree only in
  * the hours where the local calendar day and the UTC one are different days. A
- * test that reads the runner's zone passes on a laptop in London and asserts
+ * test that reads the runner's zone passes on a machine in London and asserts
  * nothing on a machine in UTC — which is how a real off-by-a-day survived here.
  *
  * `stubEnv` rather than assigning `process.env.TZ`: `process` is untyped in this
