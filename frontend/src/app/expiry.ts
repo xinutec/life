@@ -13,7 +13,11 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export function expiryInfo(expiry: string, now: Date = new Date()): ExpiryInfo {
   const date = new Date(`${expiry}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) return { label: expiry, cls: 'ok' };
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  // ⚠ The READER'S day, not Greenwich's — see `daysUntil` in `bins.ts`, which
+  // had this same line and the same fault. Between midnight and 01:00 BST the
+  // UTC date is still yesterday, so food expiring today read as `in 1d`: the
+  // wrong way round to be wrong about something you are deciding whether to eat.
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
   const days = Math.round((date.getTime() - today) / DAY_MS);
   if (days < 0) return { label: `expired ${-days}d ago`, cls: 'expired' };
   if (days === 0) return { label: 'expires today', cls: 'soon' };

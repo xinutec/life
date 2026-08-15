@@ -1,7 +1,23 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { BinDay } from './models';
 import { nextCollections, shortKind } from './bins';
+
+/**
+ * ⚠ **The zone is pinned, not inherited.** Every date case below is arithmetic
+ * between a bare `YYYY-MM-DD` and a reader's clock, and the two disagree only in
+ * the hours where the local calendar day and the UTC one are different days. A
+ * test that reads the runner's zone passes on a laptop in London and asserts
+ * nothing on a machine in UTC — which is how a real off-by-a-day survived here.
+ *
+ * `stubEnv` rather than assigning `process.env.TZ`: `process` is untyped in this
+ * project, and the two linters want opposite spellings of the index access —
+ * TS4111 demands brackets, `dot-notation` demands dots. Setting it after the
+ * module's `Date`s are built is safe, because those are absolute instants; only
+ * the local-field reads inside the functions under test depend on the zone.
+ */
+beforeAll(() => vi.stubEnv('TZ', 'Europe/London'));
+afterAll(() => vi.unstubAllEnvs());
 
 /** 10 Aug 2026, mid-morning UTC. */
 const NOW = new Date('2026-08-10T09:00:00Z');
@@ -86,15 +102,55 @@ describe('nextCollections', () => {
     expect(rows[0].imminent).toBe(false);
   });
 
-  it('reads the day in UTC, as the server states it', () => {
-    // The feed states a bare day with no timezone. Reading it as LOCAL midnight
-    // would flip a collection to "tomorrow" for anyone west of Greenwich.
-    const justBeforeMidnightUtc = new Date('2026-08-10T23:30:00Z');
-    const rows = nextCollections([day('2026-08-11', 'Rubbish collection')], justBeforeMidnightUtc);
-    expect(rows[0].when).toBe('tomorrow');
+  it('names the day the council stated, whatever the hour it is read at', () => {
+    // The feed states a bare day with no timezone, and it must appear as that
+    // day — never the one before, however late the reader is up.
+    //
+    // ⚠ **This used to assert `tomorrow` for a collection on the very day the
+    // reader was already in**, from a `now` of 23:30Z — which is 00:30 the next
+    // morning in London. The comment was about how the DATE is parsed, but the
+    // assertion pinned the reference day, and pinned it wrong: the bins were
+    // going out that morning. It also only meant that in a zone east of UTC, so
+    // on a machine in UTC it quietly tested nothing. The parsing it was actually
+    // guarding is checked here, and the reference day below.
+    const lateAtNight = new Date('2026-08-10T23:30:00Z');
+    const rows = nextCollections([day('2026-09-24', 'Rubbish collection')], lateAtNight);
+    expect(rows[0].when).toBe('Thu 24 Sept');
   });
 
   it('no feed is no rows, not a broken card', () => {
     expect(nextCollections([], NOW)).toEqual([]);
+  });
+});
+
+/** 00:30 on 15 Aug, London — still 14 Aug by the clock in Greenwich. */
+const AFTER_MIDNIGHT = new Date('2026-08-14T23:30:00Z');
+
+/**
+ * The hour when the local day and the UTC day are different days.
+ *
+ * ⚠ **Every other case in this file is set mid-morning UTC, where the two agree
+ * — which is why none of them could see this.** `daysUntil` took its idea of
+ * "today" from the UTC fields, so between midnight and 01:00 BST the app was a
+ * whole day behind: a collection happening THAT MORNING read as "tomorrow",
+ * which is how a bin gets missed, and the next morning's read as "in 2 days".
+ */
+describe('nextCollections across midnight, local time', () => {
+  it('calls this morning’s collection today, not tomorrow', () => {
+    const [row] = nextCollections([day('2026-08-15', 'Food waste collection')], AFTER_MIDNIGHT);
+    expect(row.when).toBe('today');
+    expect(row.imminent).toBe(true);
+  });
+
+  it('calls the next morning’s collection tomorrow, not in 2 days', () => {
+    const [row] = nextCollections([day('2026-08-16', 'Rubbish collection')], AFTER_MIDNIGHT);
+    expect(row.when).toBe('tomorrow');
+    expect(row.imminent).toBe(true);
+  });
+
+  it('still counts the far ones from the same day', () => {
+    const [row] = nextCollections([day('2026-08-18', 'Recycling collection')], AFTER_MIDNIGHT);
+    expect(row.when).toBe('in 3 days');
+    expect(row.imminent).toBe(false);
   });
 });

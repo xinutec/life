@@ -46,13 +46,23 @@ export function nextCollections(days: BinDay[], now: Date = new Date()): BinColl
 
 /** Whole days from `now` to a `YYYY-MM-DD`, or `null` if it is not a date.
  *
- *  Compared in UTC on both sides, like `expiryInfo`: the server states a bare
- *  day with no timezone, and reading it as local midnight would make a
- *  collection flip to "tomorrow" for anyone west of Greenwich. */
+ *  ⚠ **Two civil dates, compared as civil dates.** The council states a bare day
+ *  with no timezone, so it is read at UTC midnight and never shifts — that part
+ *  was always right. What "today" means is the other half, and it is the
+ *  READER'S day, not Greenwich's: taking it from `now.getUTCDate()` put the app
+ *  a whole day behind between midnight and 01:00 BST, where the local date has
+ *  turned over and the UTC one has not. A collection happening that morning read
+ *  as "tomorrow". A bin you are told about the morning after is a bin you missed.
+ *
+ *  Local fields encoded through `Date.UTC` so both sides are the same kind of
+ *  thing: a calendar day, with no hours in it to be wrong about. That also keeps
+ *  the case the old comment was guarding — someone west of Greenwich in the
+ *  evening, whose UTC date has already advanced past their own. Both ends of the
+ *  world are the same mistake, and neither happens once the comparison is civil. */
 function daysUntil(date: string, now: Date): number | null {
   const at = new Date(`${date}T00:00:00Z`);
   if (Number.isNaN(at.getTime())) return null;
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
   return Math.round((at.getTime() - today) / DAY_MS);
 }
 
