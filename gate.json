@@ -200,6 +200,19 @@
     {
       "argv": [
         "nix",
+        "build",
+        "--no-warn-dirty",
+        "--no-link",
+        ".#emotion-worker"
+      ],
+      "cwd": ".",
+      "env": {},
+      "name": "the emotion worker builds (what home-manager deploys)",
+      "timeout_s": 1800
+    },
+    {
+      "argv": [
+        "nix",
         "run",
         "git+file:../dev-lint?ref=HEAD",
         "--",

@@ -178,6 +178,30 @@ in  { name = "life"
             ]
         , timeout_s = 1800
         }
+      , {-  A green gate has to mean the thing home-manager deploys still builds.
+            `deploy/hm-agents.nix` runs `${worker}/bin/life-emotion-worker` from a
+            STORE PATH built by `nix/emotion-worker.nix`, and none of the rows
+            above touch it: `frontend build` is `ng build`, the Rust rows are
+            `cargo`, and neither goes near the flake output the agent installs.
+
+            Named after recall's row, which has said this since before it was
+            needed anywhere. gamepads and thoth each grew one on 2026-08-15 after
+            a pnpm audit refresh moved a lockfile and left the `pnpmDeps` hash
+            behind, wedging every home-manager activation on the Mac.
+
+            ⚠ **The cost of this hole is not local.** `~/.config/home-manager/
+            switch.sh` re-locks every local input to its committed HEAD in one
+            step, so a repository that will not build stops the activation for
+            all of them — the failure lands on whatever is being updated, not on
+            whoever broke it. life cannot fail the pnpm way (it has no pnpmDeps),
+            which is exactly why the row goes in now rather than after it does.
+        -}
+        G.Check::{
+        , name = "the emotion worker builds (what home-manager deploys)"
+        , argv =
+            [ "nix", "build", "--no-warn-dirty", "--no-link", ".#emotion-worker" ]
+        , timeout_s = 1800
+        }
       , G.devLint "../"
       , G.checkTable "../dev-lint"
       ]
