@@ -95,25 +95,23 @@ class MainActivity : WebShellActivity() {
      * The three native capabilities the web app drives, exposed to the life app's
      * own pages and to nothing else in the WebView.
      *
-     * These were `addJavascriptInterface`, which Android documents as "available
-     * to every frame within the WebView, including iframes. It lacks origin-based
-     * access control." Two of them re-checked `web.url` per call, which is the
-     * *main frame* and so still says "life" when the caller is a sub-frame; the
-     * reminders bridge checked nothing at all. Nothing untrusted is embedded here
-     * today — but what sat behind that is the clipboard, arbitrary notifications,
-     * and a shop bridge that takes a URL **and JavaScript to run against it**. One
-     * embedded widget is all it would take, and by then the hole is old.
+     * ⚠ These were `addJavascriptInterface`, which Android documents as "available to
+     * every frame within the WebView, including iframes. It lacks origin-based access
+     * control." Two re-checked `web.url` per call — the *main frame*, so it still says
+     * "life" when the caller is a sub-frame — and the reminders bridge checked nothing.
+     * Nothing untrusted is embedded today, but behind that sat the clipboard, arbitrary
+     * notifications, and a shop bridge taking a URL **and JavaScript to run against
+     * it**. One embedded widget would be enough, and by then the hole is old.
      *
-     * `addWebMessageListener` is origin-scoped: the WebView guarantees each object
-     * is injected only into frames matching [ALLOWED_ORIGINS]. Each listener also
-     * checks `sourceOrigin` and `isMainFrame`, which is what Android's guidance
-     * recommends rather than trusting the rules alone — so the per-call `web.url`
-     * gates are gone, replaced by one that is actually about the caller.
+     * `addWebMessageListener` is origin-scoped: each object is injected only into frames
+     * matching [ALLOWED_ORIGINS]. Each listener also checks `sourceOrigin` and
+     * `isMainFrame`, per Android's guidance, rather than trusting the rules alone — so
+     * the per-call `web.url` gates are replaced by one that is about the caller.
      *
-     * Without [WebViewFeature.WEB_MESSAGE_LISTENER] the bridges are absent and the
-     * web app feature-detects its way to the browser behaviour, which every one of
-     * these already does. Falling back to `addJavascriptInterface` would re-open
-     * the hole on the devices least able to afford it.
+     * ⚠ Without [WebViewFeature.WEB_MESSAGE_LISTENER] the bridges are absent and the web
+     * app feature-detects its way to browser behaviour, which all of these already do.
+     * Falling back to `addJavascriptInterface` would re-open the hole on exactly the
+     * devices least able to afford it.
      */
     override fun onWebViewCreated(web: WebView) {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return

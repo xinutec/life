@@ -1,33 +1,29 @@
-/** A three-tier emotional vocabulary — 7 core emotions, each with a ring of
- *  secondary feelings, each with fine-grained tertiary leaves. Held as static
- *  data (no backend): a check-in records a set of emotions, and their path back
- *  up to the core is derived here for display and colour. Every node carries a
- *  brief plain-English gloss of what it means, so the picker can explain each
- *  feeling.
+/** A three-tier emotional vocabulary — 7 core emotions, each with a ring of secondary
+ *  feelings, each with fine-grained tertiary leaves. Static data, no backend: a check-in
+ *  records a set of emotions and their path back up to the core is derived here for
+ *  display and colour. Every node carries a plain-English gloss, so the picker can
+ *  explain each feeling.
  *
- *  It started as the Geoffrey Roberts "Feelings Wheel" (a strict two leaves per
- *  group) and is being extended where that wheel leaves a real feeling with no
- *  word at all — so groups may now hold more than two leaves.
+ *  It began as the Geoffrey Roberts "Feelings Wheel" (strictly two leaves per group) and
+ *  is extended where that wheel leaves a real feeling with no word at all, so groups may
+ *  hold more than two.
  *
- *  Both rings are selectable: a secondary group is a legitimate answer on its
- *  own, not merely a heading over the "real" words. "Frustrated" is often the
- *  whole truth, and making you commit to Infuriated or Annoyed would record the
- *  feeling as more precise than it was.
+ *  Both rings are selectable: a secondary group is a legitimate answer on its own, not a
+ *  heading over the "real" words. "Frustrated" is often the whole truth, and forcing a
+ *  commitment to Infuriated or Annoyed would record the feeling as more precise than it
+ *  was.
  *
- *  Identity is the *qualified* token `Core/Name` (see [[emotionToken]]), not the
- *  bare word — because a few leaves ("Embarrassed", "Inferior", "Overwhelmed")
- *  sit under two different cores, and a bare word can't tell them apart (same
- *  name in different groups is NOT the same emotion, and their glosses differ
- *  accordingly). Within one core a name is unique across both rings, so a token
- *  always names exactly one node. The `/` delimiter is safe: no name contains a
- *  slash.
+ *  ⚠ Identity is the *qualified* token `Core/Name` (see [[emotionToken]]), not the bare
+ *  word: a few leaves ("Embarrassed", "Inferior", "Overwhelmed") sit under two cores,
+ *  and the same name in different groups is NOT the same emotion — their glosses differ.
+ *  Within one core a name is unique across both rings, so a token names exactly one
+ *  node, and `/` is safe because no name contains one.
  *
- *  Every stored emotion is a token. Bare leaf names were the pre-qualification
- *  format and were resolved by a first-occurrence fallback until migration 0039
- *  rewrote the last 15 of them; that fallback is gone, and with it the hazard
- *  that adding a word ahead of an existing one silently re-pointed old history
- *  to a core it never meant. Adding to the wheel is now free of consequence for
- *  what is already recorded. */
+ *  ⚠ Every stored emotion is a token. Bare leaf names were the pre-qualification format,
+ *  resolved by a first-occurrence fallback until migration 0039 rewrote the last 15.
+ *  That fallback is gone, and with it the hazard that adding a word ahead of an existing
+ *  one silently re-pointed old history to a core it never meant — so adding to the wheel
+ *  no longer affects what is already recorded. */
 
 /** One outer-ring (tertiary) leaf: the word plus a brief gloss. */
 export interface EmotionLeafDef {
