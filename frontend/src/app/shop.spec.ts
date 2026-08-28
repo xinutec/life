@@ -124,6 +124,13 @@ describe('Waitrose provider', () => {
     expect(() => WAITROSE.product('not-a-number')).toThrow(/invalid/);
   });
 
+  it('a missing token names the login, not just the symptom', () => {
+    // Signed out, Waitrose mints no Authorization header at all, so the bare
+    // "no token" reads as a broken extractor and sends the reader to the JS.
+    const { js } = WAITROSE.product('062593');
+    expect(js).toContain('signed out of waitrose.com');
+  });
+
   it('the extractor reads the pack size off the weights block', () => {
     // Waitrose puts it on `weights.sizeDescription` ("42g", "100g") rather than
     // beside the name, so a reader looking near `name` finds nothing and the

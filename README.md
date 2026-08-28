@@ -47,7 +47,14 @@ node --experimental-strip-types scripts/shop-desktop.mjs waitrose product 785492
 ```
 
 A `product` op needs a hand-made login to the shop in that Chrome profile: signed
-out, Waitrose mints no Bearer at all and the extractor answers `"no token"`.
+out, Waitrose mints no Bearer at all, and the extractor says so. The session is
+short-lived — expect to sign in again between sittings.
+
+⚠ **Check the login on `waitrose.com/`, not on a search page.** The search page
+the extractor runs on is identical signed in and signed out: both show "Sign in",
+neither shows "Sign out". Probing it answers "signed out" for a signed-IN
+session, which is why the extractor names the likely cause rather than claiming
+to know it.
 
 ## Develop
 
