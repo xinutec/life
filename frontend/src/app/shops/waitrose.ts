@@ -1,4 +1,4 @@
-import { ShopProvider } from '../shop';
+import type { ShopProvider } from '../shop';
 
 // Extractor JS runs in the hidden WebView on waitrose.com. Contract with the
 // native layer: read `window.__authToken` (captured Bearer), report via

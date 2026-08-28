@@ -36,6 +36,19 @@ committed and pushed. Then confirm the served bundle carries the new sha.
 A native-feeling phone wrapper — a full-screen WebView onto this site, no browser
 chrome. Build & install steps: [`android/README.md`](android/README.md).
 
+It also carries the *hidden* WebView the shop providers run in, which is why shop
+work has historically needed the phone. It no longer does for the part that
+changes: `scripts/shop-desktop.mjs` runs the same provider ops against a debug
+Chrome on this machine.
+
+```sh
+node --experimental-strip-types scripts/shop-desktop.mjs waitrose search "black peppercorns"
+node --experimental-strip-types scripts/shop-desktop.mjs waitrose product 785492
+```
+
+A `product` op needs a hand-made login to the shop in that Chrome profile: signed
+out, Waitrose mints no Bearer at all and the extractor answers `"no token"`.
+
 ## Develop
 
 ```sh

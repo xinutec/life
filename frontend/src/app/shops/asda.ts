@@ -1,4 +1,4 @@
-import { FactsProvider } from '../shop';
+import type { FactsProvider } from '../shop';
 
 // Asda facts provider — the WebView half of the Asda integration.
 //
