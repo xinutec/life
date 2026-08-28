@@ -124,6 +124,7 @@ describe('ProductPicker', () => {
         name: 'Waitrose Cheddar',
         brand: 'Waitrose',
         barcodes: [],
+        quantity_label: '200g',
         image_url: 'https://cdn/img.jpg',
         display_price: { amount: 2.65, currencyCode: 'GBP' },
         display_price_label: '£2.65',
@@ -295,6 +296,10 @@ describe('ProductPicker', () => {
       expect.objectContaining({
         source: 'waitrose',
         external_id: '062593',
+        // The pack the shop sells. Dropping it here is invisible — the import
+        // succeeds and the product simply arrives unmeasured, so stock linked
+        // from a Waitrose pick starts out not knowing how much it holds.
+        quantity_label: '200g',
         // The shop's own quote, recorded here as it is everywhere else — a price
         // this path dropped would make "cheapest shop" depend on which screen
         // you linked the product from. Spelled out rather than matched loosely:

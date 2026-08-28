@@ -833,8 +833,13 @@ early rather than leaning on the margin.
       grew a `quantity_label` so a product created from a shop hit is measured
       at creation — it was dropping one Asda had sent, and only the attach-a-
       listing path on the product page ever promoted it, so the picker's shop
-      tiers handed back a product with nothing to fill from. Waitrose still
-      supplies none: its search scrape does not extract the `size` key.
+      tiers handed back a product with nothing to fill from. Waitrose supplies
+      one too since 2026-08-28: the pack is on the SUMMARY payload's `weights`
+      block (`sizeDescription`, "42g" / "100g") rather than beside the name,
+      which is why a reader looking near `name` had found nothing. Both import
+      paths carry it — the picker's `pickShop` and the product page's refresh,
+      which had the same gap. Verified against the live site through
+      `scripts/shop-desktop.mjs` on three lineNumbers, not only in a mock.
       It **refuses rather than guesses** — `oz` (mass or fluid?), `gr`, `ltr` and anything with extra
       words in it read as `None` and the raw label goes on being displayed. All
       45 distinct labels in the live catalogue parse.

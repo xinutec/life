@@ -455,6 +455,7 @@ export class ProductPage {
             external_id: product.external_id,
             name: product.name ?? row.label,
             brand: product.brand,
+            quantity_label: product.quantity_label,
             barcode: this.detail()?.product.barcode ?? null,
             image_url: product.image_url,
             price: shopPrice(product),

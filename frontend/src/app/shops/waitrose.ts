@@ -63,9 +63,14 @@ function productJs(lineNumber: string): string {
     if (!p) { AndroidShop.result(JSON.stringify({ ok: false, error: "not found" })); return; }
     var im = p.images || {};
     var pr = p.pricing || {};
+    // Waitrose states the pack on 'weights', not beside the name: sizeDescription
+    // is "42g" / "100g". Asda's search already hands back a quantity_label, so
+    // without this a Waitrose pick was the only one that arrived unmeasured.
+    var w = p.weights || {};
     AndroidShop.result(JSON.stringify({ ok: true, product: {
       source: "waitrose", external_id: p.lineNumber, name: p.name || null, brand: p.brand || null,
-      barcodes: p.barCodes || [], image_url: im.large || im.medium || im.extraLarge || im.small || null,
+      barcodes: p.barCodes || [], quantity_label: w.sizeDescription || null,
+      image_url: im.large || im.medium || im.extraLarge || im.small || null,
       display_price: (pr.currentSaleUnitRetailPrice && pr.currentSaleUnitRetailPrice.price) || null,
       // Carried ONLY so the number above can be checked against it: the pricing
       // block gives that amount no unit, and Waitrose renders this string itself.

@@ -282,6 +282,7 @@ export class ProductPicker {
             external_id: p.external_id,
             name: p.name ?? candidate.name,
             brand: p.brand,
+            quantity_label: p.quantity_label,
             barcode: p.barcodes[0] ?? null, // Waitrose SUMMARY carries barCodes[]
             image_url: p.image_url,
             // What the shop quoted, recorded like every other shop's price —

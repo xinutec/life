@@ -124,6 +124,15 @@ describe('Waitrose provider', () => {
     expect(() => WAITROSE.product('not-a-number')).toThrow(/invalid/);
   });
 
+  it('the extractor reads the pack size off the weights block', () => {
+    // Waitrose puts it on `weights.sizeDescription` ("42g", "100g") rather than
+    // beside the name, so a reader looking near `name` finds nothing and the
+    // product arrives unmeasured — which is what this used to do.
+    const { js } = WAITROSE.product('062593');
+    expect(js).toContain('w.sizeDescription');
+    expect(js).toContain('quantity_label');
+  });
+
   it('the extractor carries the formatted price, not just the number', () => {
     // Without it there is nothing to check the amount's unit against, and
     // shopPrice would (rightly) refuse to record anything at all.
@@ -160,6 +169,7 @@ describe('shopPrice', () => {
       name: 'Cheddar',
       brand: null,
       barcodes: [],
+      quantity_label: null,
       image_url: null,
       display_price: { amount: 2.5, currencyCode: 'GBP' },
       display_price_label: '£2.50',

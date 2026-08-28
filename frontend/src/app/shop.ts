@@ -9,6 +9,11 @@ export interface ShopProduct {
   name: string | null;
   brand: string | null;
   barcodes: string[];
+  /** The pack the shop sells, as the shop writes it ("100g"). Read into an
+   *  amount server-side (products::packsize), which is what lets stock linked
+   *  from a shop pick start out knowing how much it holds. `null` when the
+   *  shop's payload carries no size. */
+  quantity_label: string | null;
   image_url: string | null;
   display_price: { amount: number; currencyCode: string } | null;
   /** The shop's OWN formatted price for the same quote ("£2.50", "85p"), kept
