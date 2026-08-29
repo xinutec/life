@@ -82,7 +82,11 @@ const out = execFileSync(CDP, [
   '--ua', MOBILE_UA,
   '--mobile',
   '--result-js', 'window.__shopOut',
-  '--match', 'waitrose.com',
+  // Its own tab, not whichever one is in front: the default is the
+  // most-recently-active tab, so this used to navigate away from whatever a
+  // person was reading. Same Chrome profile either way, so a hand-made shop
+  // login still applies — that is what makes the product op work at all.
+  '--new-tab',
 ], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
 
 // The extractor reports a JSON *string*, and `cdp.py run` emits a string result
