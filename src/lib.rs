@@ -10,6 +10,7 @@ pub mod inventory;
 pub mod nextcloud;
 pub mod pending_login;
 pub mod products;
+pub mod purchases;
 pub mod recipes;
 pub mod routes;
 pub mod session;

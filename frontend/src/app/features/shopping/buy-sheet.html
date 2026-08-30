@@ -1,0 +1,38 @@
+<div class="sheet-form">
+  <app-sheet-header title="Bought — where from?" (closed)="close()" />
+
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>Shop</mat-label>
+    <input
+      matInput
+      [ngModel]="shop()"
+      (ngModelChange)="shop.set($event)"
+      placeholder="e.g. Waitrose"
+    />
+  </mat-form-field>
+
+  @for (row of rows; track row.id) {
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>{{ row.name }}</mat-label>
+      <span matTextPrefix>£&nbsp;</span>
+      <input
+        matInput
+        inputmode="decimal"
+        [ngModel]="priceText(row.id)"
+        (ngModelChange)="setPrice(row.id, $event)"
+        placeholder="optional"
+      />
+    </mat-form-field>
+  }
+
+  @if (unreadable().length > 0) {
+    <p class="hint">
+      Not a price: {{ unreadableNames() }} — use pounds and pence, like 3.30.
+    </p>
+  }
+
+  <div class="actions">
+    <button mat-button (click)="skip()">Add without prices</button>
+    <button mat-flat-button (click)="record()" [disabled]="!canRecord()">Record</button>
+  </div>
+</div>

@@ -17,6 +17,7 @@ import { CoverageQuery, Source } from "../../models";
 import { sourceLabel } from "../../shared/sources";
 import { ProductThumb } from "../../product-thumb";
 import { ShoppingDoc, ShoppingStore } from "../../sync/shopping-store";
+import { BuyPrices, BuyRow, BuySheet } from "./buy-sheet";
 import { ShoppingItemSheet } from "./shopping-item-sheet";
 import { TripSheet } from "./trip-sheet";
 
@@ -215,13 +216,30 @@ export class Shopping {
   buyDone(): void {
     const done = this.items().filter((i) => i.done && i.id != null);
     if (done.length === 0) return;
-    const buys = done.map((it) =>
-      this.api.buyShopping(it.id!).pipe(
+    const rows: BuyRow[] = done.map((it) => ({ id: it.id!, name: it.name }));
+    this.sheet
+      .open(BuySheet, { data: rows })
+      .afterDismissed()
+      .subscribe((res: BuyPrices | 'skip' | undefined) => {
+        // Dismissed without choosing: buy nothing. Closing a sheet you opened by
+        // mistake must not empty the list.
+        if (res === undefined) return;
+        this.completeBuy(done, res === 'skip' ? null : res);
+      });
+  }
+
+  /** The buy itself, once it is known whether prices were recorded. */
+  private completeBuy(done: ShoppingDoc[], priced: BuyPrices | null): void {
+    const buys = done.map((it) => {
+      const minor = priced?.prices.get(it.id!);
+      const purchase =
+        priced && minor !== undefined ? { shop: priced.shop, amount_minor: minor } : undefined;
+      return this.api.buyShopping(it.id!, purchase).pipe(
         tap(() => void this.store.remove(it.ulid)), // remove as each one lands
         map(() => true),
         catchError(() => of(false)),
-      ),
-    );
+      );
+    });
     forkJoin(buys).subscribe((flags) => {
       const ok = flags.filter(Boolean).length;
       const failed = flags.length - ok;

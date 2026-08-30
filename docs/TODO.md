@@ -666,7 +666,29 @@ early rather than leaning on the margin.
       OFF"; a `@zxing/browser` fallback for non-Chromium browsers (the native
       BarcodeDetector scanner only works on Chromium); contribute missing
       products back to OFF (uses Pippijn's OFF account — creds user-held).
-- [ ] **Purchases: shop + price observations** (design decided) — price is NOT
+- [x] **Purchases: what was paid, and where** (2026-08-30) — the MVP of the
+      design below: capture shop + amount at buy-time. `purchases` (migration
+      0043) is a SEPARATE table from `price_observations`, not the same record,
+      and the reasons are load-bearing: 0026 is `ON DELETE CASCADE` on its
+      listing (right for a scrape series, catastrophic for money spent), has no
+      `user_id`, and needs a listing to exist — you can buy in a shop this app
+      has never heard of. Shelf price answers "what does Asda charge"; a
+      purchase answers "what did I pay".
+      **Identified three times on purpose**: `product_id` (useful, and fragile —
+      an item can be linked to the wrong product with every barcode agreeing,
+      #1281), `barcode` (re-attaches the history after a relink), and the `name`
+      it was bought under (the last thing that still means something when both
+      keys turn out to be lies). FK is `ON DELETE SET NULL`, never CASCADE.
+      Money is integer minor units end to end; `shared/money.ts` parses a typed
+      price WITHOUT a float, because `3.30 * 100` is `330.00000000000006` and
+      rounding hides that for most inputs while failing for some. Unreadable
+      input is refused, not guessed — a wrong number in a spending history is
+      indistinguishable from a real one.
+      Capture never gates the buy: the sheet's "Add without prices" is a
+      first-class button, and a rejected price is logged while the buy stands.
+      Still to do from the design below: per-unit ranking, cheapest-shop,
+      estimated Buy-list totals, trip scheduling.
+- [ ] **Purchases: the derived views** (design decided) — price is NOT
       a product attribute; it varies by shop and time, so model it as an
       **observation = the same record as "where bought"**:
       - A `price_observations` row: `barcode`/product, `shop`, `amount`,

@@ -149,8 +149,14 @@ export class LifeApi {
   deleteShopping(id: number): Observable<unknown> {
     return this.http.delete(`/api/shopping/${id}`);
   }
-  buyShopping(id: number): Observable<Item> {
-    return this.http.post<Item>(`/api/shopping/${id}/buy`, {});
+  /** Mark a row bought. `purchase` is optional and its absence is normal — the
+   *  buy must work with a full trolley and one hand, so the price is a note that
+   *  can be skipped, never a gate. */
+  buyShopping(
+    id: number,
+    purchase?: { shop: string; amount_minor: number },
+  ): Observable<Item> {
+    return this.http.post<Item>(`/api/shopping/${id}/buy`, purchase ? { purchase } : {});
   }
 
   /** Look up (and cache) a product by barcode via Open Food Facts. */

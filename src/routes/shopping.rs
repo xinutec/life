@@ -3,12 +3,16 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use serde::Deserialize;
+use ts_rs::TS;
 
 use crate::error::AppError;
 use crate::inventory::repo as inventory_repo;
 use crate::inventory::types::{Item, NewItem};
 use crate::products::coverage;
 use crate::products::repo as product_repo;
+use crate::purchases::repo as purchases_repo;
+use crate::purchases::types::NewPurchase;
 use crate::session::AuthUser;
 use crate::shopping::repo;
 use crate::shopping::types::{NewShoppingItem, ShoppingItem, UpdateShoppingItem};
@@ -53,6 +57,20 @@ pub async fn delete(
     }
 }
 
+/// What may ride along with a buy: the price, if it was noted.
+///
+/// Optional because it must be, not because it is a nicety. Marking something
+/// bought is the gesture that empties the list, and it has to keep working with
+/// a full trolley and one hand — a capture step that blocks it would be skipped,
+/// and then the list stops being used at all. Recording nothing is a valid,
+/// common answer.
+#[derive(Debug, Default, Deserialize, TS)]
+#[ts(export)]
+pub struct BuyRequest {
+    #[serde(default)]
+    pub purchase: Option<NewPurchase>,
+}
+
 /// POST /api/shopping/{id}/buy → turn a bought item into an inventory item
 /// (unplaced) and remove it from the list. Returns the item. The row's own
 /// `category` and `product_id` carry onto the item — the row knows what it is;
@@ -67,6 +85,7 @@ pub async fn buy(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
     Path(id): Path<u64>,
+    body: Option<Json<BuyRequest>>,
 ) -> Result<Json<Item>, AppError> {
     let s = repo::get(&app.pool, &user.user_id, id)
         .await?
@@ -93,6 +112,26 @@ pub async fn buy(
         },
     )
     .await?;
+
+    // After the item exists, and never in a way that can fail the buy. The
+    // purchase is a note about money; the item is the thing you are holding.
+    // Losing the note is a small loss, and refusing the buy over it would be a
+    // large one — so a bad price is reported and the buy still stands.
+    if let Some(Json(BuyRequest {
+        purchase: Some(ref p),
+    })) = body
+    {
+        let bought = purchases_repo::BoughtItem {
+            product_id: item.product_id,
+            barcode: item.barcode.as_deref(),
+            name: &item.name,
+            quantity: item.quantity,
+            unit: item.unit.as_deref(),
+        };
+        if let Err(e) = purchases_repo::record(&app.pool, &user.user_id, &bought, p).await {
+            tracing::warn!(error = %e, item = item.id, "purchase not recorded; the buy stands");
+        }
+    }
     Ok(Json(item))
 }
 

@@ -51,7 +51,15 @@ function setup(
     ),
   };
   const feedback = { notify: vi.fn(), error: vi.fn(), undo: vi.fn() };
-  const sheet = { open: vi.fn() };
+  // buyDone now asks where the shopping happened before it buys anything, so a
+  // bare `open` mock would leave every buy test waiting on a sheet that never
+  // answers. `dismissed` is what the sheet handed back: 'skip' is the
+  // buy-without-prices path these tests were written against.
+  let dismissed: unknown = 'skip';
+  const setDismissed = (v: unknown) => {
+    dismissed = v;
+  };
+  const sheet = { open: vi.fn(() => ({ afterDismissed: () => of(dismissed) })) };
   const router = { navigate: vi.fn(() => Promise.resolve(true)) };
   TestBed.configureTestingModule({
     providers: [
@@ -63,7 +71,7 @@ function setup(
       { provide: Router, useValue: router },
     ],
   });
-  return { c: TestBed.inject(Shopping), store, api, feedback, sheet, router };
+  return { c: TestBed.inject(Shopping), store, api, feedback, sheet, router, setDismissed };
 }
 
 describe('Shopping row tap → detail', () => {
@@ -126,6 +134,28 @@ describe('Shopping buyDone', () => {
     expect(store.remove).toHaveBeenCalledExactlyOnceWith('A'.repeat(26));
     expect(feedback.error).toHaveBeenCalledWith('1 added to inventory; 1 failed and stayed on the list.');
     expect(feedback.notify).not.toHaveBeenCalled();
+  });
+
+  it('records a price against the row it was typed for, and nothing for the rest', () => {
+    // The prices map is keyed by row id: a price typed for one thing must not
+    // ride along with another, and an empty box is not a price of zero.
+    const { c, api, setDismissed } = setup([
+      doc({ ulid: 'A'.repeat(26), id: 1, done: true }),
+      doc({ ulid: 'B'.repeat(26), id: 2, done: true, name: 'Beans' }),
+    ]);
+    setDismissed({ shop: 'Waitrose', prices: new Map([[2, 330]]) });
+    c.buyDone();
+    expect(api.buyShopping).toHaveBeenCalledWith(1, undefined);
+    expect(api.buyShopping).toHaveBeenCalledWith(2, { shop: 'Waitrose', amount_minor: 330 });
+  });
+
+  it('buys nothing when the sheet is dismissed without choosing', () => {
+    // Closing a sheet opened by mistake must not empty the list — the buy is
+    // irreversible from the list's point of view.
+    const { c, api, setDismissed } = setup([doc({ ulid: 'A'.repeat(26), id: 1, done: true })]);
+    setDismissed(undefined);
+    c.buyDone();
+    expect(api.buyShopping).not.toHaveBeenCalled();
   });
 
   it('skips never-synced rows (no server id) and does nothing when none qualify', () => {
