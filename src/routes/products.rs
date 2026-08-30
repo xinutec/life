@@ -14,6 +14,7 @@ use crate::products::source::Source;
 use crate::products::types::{Choice, FieldChoice, ReconcileField};
 use crate::products::types::{Product, ProductDetail, ProductListing, ProductReconciliation};
 use crate::products::{asda, brandbank, off, repo, shop_cache};
+use crate::purchases::repo as purchases_repo;
 use crate::session::AuthUser;
 use crate::state::AppState;
 
@@ -318,17 +319,30 @@ pub async fn import(
 /// empty until a shop quote / OFF lookup has provided them.
 pub async fn product_detail(
     State(app): State<AppState>,
-    AuthUser(_user): AuthUser,
+    AuthUser(user): AuthUser,
     Path(id): Path<ProductId>,
 ) -> Result<Json<ProductDetail>, AppError> {
-    Ok(Json(build_detail(&app.pool, id).await?))
+    Ok(Json(build_detail(&app.pool, &user.user_id, id).await?))
 }
 
 /// Assemble the product-page aggregate for a product id (404 if it doesn't
 /// exist). Shared by the detail GET and the reconcile POST, which answers with
 /// the re-read detail.
-async fn build_detail(pool: &sqlx::MySqlPool, id: ProductId) -> Result<ProductDetail, AppError> {
+async fn build_detail(
+    pool: &sqlx::MySqlPool,
+    user_id: &str,
+    id: ProductId,
+) -> Result<ProductDetail, AppError> {
     let product = repo::get_by_id(pool, id).await?.ok_or(AppError::NotFound)?;
+    // By id AND barcode: a purchase made before this catalogue row existed, or
+    // one whose link was corrected (#1281), is still this person's purchase.
+    let purchases = purchases_repo::history(
+        pool,
+        user_id,
+        Some(id),
+        product.barcode.as_ref().map(Barcode::as_str),
+    )
+    .await?;
     let (listings, prices, facts_by_source, fact_prefs, decisions, documents) = tokio::try_join!(
         repo::listings_for(pool, id),
         repo::latest_prices(pool, id),
@@ -369,6 +383,7 @@ async fn build_detail(pool: &sqlx::MySqlPool, id: ProductId) -> Result<ProductDe
         facts_by_source,
         reconciliation,
         documents,
+        purchases,
     })
 }
 
@@ -382,7 +397,7 @@ async fn build_detail(pool: &sqlx::MySqlPool, id: ProductId) -> Result<ProductDe
 /// re-read product detail (with the divergence list now updated).
 pub async fn reconcile(
     State(app): State<AppState>,
-    AuthUser(_user): AuthUser,
+    AuthUser(user): AuthUser,
     Path(id): Path<ProductId>,
     Json(body): Json<Vec<FieldChoice>>,
 ) -> Result<Json<ProductDetail>, AppError> {
@@ -404,7 +419,7 @@ pub async fn reconcile(
         .await
         .map_err(|e| AppError::BadRequest(e.to_string()))?;
     tracing::info!(product = %id, decisions = total, "product reconciled");
-    Ok(Json(build_detail(&app.pool, id).await?))
+    Ok(Json(build_detail(&app.pool, &user.user_id, id).await?))
 }
 
 /// Apply a picture reconcile choice. `keep` just settles the divergence; a source
@@ -744,7 +759,7 @@ pub struct SubmitFacts {
 /// on. Returns the refreshed detail.
 pub async fn submit_facts(
     State(app): State<AppState>,
-    AuthUser(_user): AuthUser,
+    AuthUser(user): AuthUser,
     Path(id): Path<ProductId>,
     Json(body): Json<SubmitFacts>,
 ) -> Result<Json<ProductDetail>, AppError> {
@@ -779,7 +794,7 @@ pub async fn submit_facts(
         dietary = facts.dietary.len(),
         "asda page fetched + stored"
     );
-    build_detail(&app.pool, id).await.map(Json)
+    build_detail(&app.pool, &user.user_id, id).await.map(Json)
 }
 
 /// GET /api/products/id/{id}/image → cached image bytes for a catalog row by id.

@@ -21,6 +21,7 @@ import { ago } from '../../shared/ago';
 import { assertNever, classifyApiError, onlineHint } from '../../shared/api-error';
 import { Feedback } from '../../shared/feedback';
 import { ListState } from '../../shared/list-state';
+import { fromMinorUnits } from '../../shared/money';
 import { sourceLabel } from '../../shared/sources';
 import { ShopProduct, ShopProvider, Shops, shopPrice } from '../../shop';
 import { ASDA_FACTS } from '../../shops/asda';
@@ -733,6 +734,27 @@ export class ProductPage {
    *  A price names the exact listing it came from, so the link goes to the item
    *  actually quoted — a shop with two listings for one product is already
    *  collapsed to its cheapest by the backend. */
+  /**
+   * What this person has paid, newest first — deliberately NOT merged into
+   * `buyRows`.
+   *
+   * A shelf price is what a shop charges today; a purchase is what one person
+   * paid on one day. Putting them in one list would make each read as the other:
+   * a two-year-old receipt would look like a current quote, and today's quote
+   * would look like proof you can get it at that price. They answer different
+   * questions, so they get different lists.
+   */
+  readonly paidRows = computed(() =>
+    (this.detail()?.purchases ?? []).map((p) => ({
+      id: p.id,
+      shop: p.shop,
+      price: `${p.currency === 'GBP' ? '£' : p.currency + ' '}${fromMinorUnits(p.amount_minor)}`,
+      // The pack it was for. Without it £3.30 cannot be compared with £3.30.
+      pack: p.quantity != null ? `${p.quantity}${p.unit ? ' ' + p.unit : ''}` : '',
+      when: new Date(p.bought_at).toLocaleDateString(),
+    })),
+  );
+
   readonly buyRows = computed<BuyRow[]>(() => {
     const d = this.detail();
     if (!d) return [];

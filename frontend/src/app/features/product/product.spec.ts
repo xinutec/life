@@ -64,6 +64,7 @@ const DETAIL: ProductDetail = {
   facts_by_source: [],
   reconciliation: { fields: [] },
   documents: [],
+  purchases: [],
 };
 
 const hit = (over: Partial<AsdaHit>): AsdaHit => ({
@@ -793,5 +794,42 @@ describe('ProductPage', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.asda-facts')?.textContent).toContain('Refresh');
     expect(el.querySelector('.asda-facts-age')?.textContent).toContain('stored today');
+  });
+
+  it('shows what was paid, with the pack it was paid for', () => {
+    // Without the pack, £3.30 cannot be compared with £3.30 — that is the whole
+    // reason the quantity is captured at buy-time.
+    const withPaid = {
+      ...DETAIL,
+      purchases: [
+        {
+          id: 1,
+          product_id: 42,
+          barcode: '5000328042732',
+          name: 'Oats',
+          shop: 'Waitrose',
+          amount_minor: 330,
+          currency: 'GBP',
+          quantity: 594,
+          unit: 'g',
+          bought_at: '2026-08-30T10:00:00Z',
+        },
+      ],
+    } satisfies ProductDetail;
+    const { fixture, page } = setup(withPaid);
+    expect(page.paidRows()).toHaveLength(1);
+    expect(page.paidRows()[0].price).toBe('£3.30');
+    expect(page.paidRows()[0].pack).toBe('594 g');
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.textContent).toContain('What you paid');
+  });
+
+  it('says nothing about what was paid when nothing was recorded', () => {
+    // The common case for a long while: the section must not appear as an empty
+    // heading, which reads as "no purchases exist" rather than "none recorded".
+    const { fixture, page } = setup(DETAIL);
+    expect(page.paidRows()).toHaveLength(0);
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.textContent).not.toContain('What you paid');
   });
 });

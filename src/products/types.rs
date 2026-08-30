@@ -1,6 +1,7 @@
 //! Product wire types: the canonical product, its per-source listings, and the
 //! aggregate the product page fetches.
 
+use crate::purchases::types::Purchase;
 use std::fmt;
 use std::str::FromStr;
 
@@ -321,4 +322,12 @@ pub struct ProductDetail {
     /// Raw source payloads we've fetched and kept (see SourceDocument) — so the
     /// UI knows what's already stored and needn't re-fetch it.
     pub documents: Vec<SourceDocument>,
+    /// What THIS person has paid for it, newest first — a different claim from
+    /// `prices`, which is what shops charge. Shown together they answer "is this
+    /// the going rate"; shown interchangeably they would be a lie, so they are
+    /// two fields and not one list.
+    ///
+    /// Matched by product id OR barcode, so a purchase made before the catalogue
+    /// link existed, or one whose link was corrected, still appears.
+    pub purchases: Vec<Purchase>,
 }

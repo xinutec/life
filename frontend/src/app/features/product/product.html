@@ -172,6 +172,23 @@
     </section>
   }
 
+  @if (paidRows().length) {
+    <h3>What you paid</h3>
+    <div class="buy">
+      @for (r of paidRows(); track r.id) {
+        <div class="buy-row">
+          <span class="shop">{{ r.shop }}</span>
+          <span class="price-block">
+            <span class="price">{{ r.price }}</span>
+            <span class="fine">
+              {{ r.pack }}@if (r.pack && r.when) {&nbsp;·&nbsp;}{{ r.when }}
+            </span>
+          </span>
+        </div>
+      }
+    </div>
+  }
+
   @if (buyRows().length || shopLookups().length) {
     <h3>Where to buy</h3>
     <div class="buy">
