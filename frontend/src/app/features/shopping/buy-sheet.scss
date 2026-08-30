@@ -1,0 +1,22 @@
+// The price list is the only part that grows: one field per ticked row, and a
+// big shop is fifteen of them. Left to itself the sheet grew past the screen and
+// pushed "Record" out of sight — with just TWO rows, measured — so the primary
+// action was invisible on open and the sheet read as having no way to finish.
+//
+// The layout oracles could not see this: nothing was clipped, overlapping or
+// wider than the viewport, all of which stayed true while the button sat below
+// the fold. It took looking at the render.
+//
+// So the list scrolls and everything else holds still. `40vh` leaves room for
+// the shop field above and the actions below at phone height, which is the size
+// this is used at.
+.prices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  overflow-y: auto;
+  max-height: 32vh;
+  // Room for the floating label of the first field, which is drawn outside the
+  // input's own box and would otherwise be shaved off by the scroll container.
+  padding-top: 0.4rem;
+}

@@ -515,6 +515,65 @@ test('plan-a-trip sheet — shop, time and list lay out cleanly @ phone width', 
   await expectNoHorizontalOverflow(page, testInfo, 'app-trip-sheet');
 });
 
+test('bought sheet — a price per row lays out cleanly @ phone width', async ({
+  page,
+}, testInfo) => {
+  // The row at risk is the price field: its label is the item's NAME, which is
+  // arbitrary length and user-supplied, and it sits beside a currency prefix on
+  // a 412px screen. "Greek yoghurt (the big tubs)" is the mock's longest, and
+  // the sheet grows a field per ticked row, so the list is the other risk.
+  await mockApi(page);
+  await page.goto('/shopping');
+  // By role and name, which also pins the fix that made this possible: these
+  // checkboxes bound `[attr.aria-label]`, which lands on the mat-checkbox HOST
+  // and never reaches the inner input — so every tick control on Buy, Today and
+  // To-do was reaching a screen reader as an unnamed "checkbox".
+  await page.getByRole('checkbox', { name: 'Bought Greek yoghurt (the big tubs)' }).check();
+  await page.getByRole('button', { name: /add to inventory/ }).click();
+
+  const sheet = page.locator('app-buy-sheet');
+  await sheet.waitFor();
+  await sheet.getByLabel('Shop').fill('Waitrose');
+  await sheet.getByLabel('Greek yoghurt (the big tubs)').fill('3.30');
+  await expect(sheet.getByRole('button', { name: 'Record' })).toBeEnabled();
+
+  // The button that finishes the job must be ON the screen when the sheet opens.
+  // The clipping/overlap/overflow oracles are all silent about this — they were
+  // green while "Record" sat below the fold, because a sheet taller than the
+  // viewport is not a clipped element, it is a scrolled one. Measured instead.
+  const button = sheet.getByRole('button', { name: 'Record' });
+  await expect(button).toBeInViewport({ ratio: 1 });
+  await expectNoClippedText(page, testInfo, 'app-buy-sheet');
+  await expectNoTextOverlaps(page, testInfo, 'app-buy-sheet');
+  await expectNoHorizontalOverflow(page, testInfo, 'app-buy-sheet');
+});
+
+test('bought sheet — the not-a-price message lays out cleanly @ phone width', async ({
+  page,
+}, testInfo) => {
+  // The state that adds a line of text under a full-height sheet, and the one a
+  // person only sees when they have already made a mistake.
+  await mockApi(page);
+  await page.goto('/shopping');
+  // By role and name, which also pins the fix that made this possible: these
+  // checkboxes bound `[attr.aria-label]`, which lands on the mat-checkbox HOST
+  // and never reaches the inner input — so every tick control on Buy, Today and
+  // To-do was reaching a screen reader as an unnamed "checkbox".
+  await page.getByRole('checkbox', { name: 'Bought Greek yoghurt (the big tubs)' }).check();
+  await page.getByRole('button', { name: /add to inventory/ }).click();
+
+  const sheet = page.locator('app-buy-sheet');
+  await sheet.waitFor();
+  await sheet.getByLabel('Shop').fill('Waitrose');
+  await sheet.getByLabel('Greek yoghurt (the big tubs)').fill('free');
+  await expect(sheet.getByText('Not a price', { exact: false })).toBeVisible();
+  await expect(sheet.getByRole('button', { name: 'Record' })).toBeDisabled();
+
+  await expectNoClippedText(page, testInfo, 'app-buy-sheet');
+  await expectNoTextOverlaps(page, testInfo, 'app-buy-sheet');
+  await expectNoHorizontalOverflow(page, testInfo, 'app-buy-sheet');
+});
+
 test('plan-a-trip sheet — the unlinked-calendar way out lays out cleanly @ phone width', async ({
   page,
 }, testInfo) => {

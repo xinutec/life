@@ -41,6 +41,7 @@ const LAST_SHOP_KEY = 'life.lastShop';
 @Component({
   selector: 'app-buy-sheet',
   templateUrl: './buy-sheet.html',
+  styleUrl: './buy-sheet.scss',
   imports: [FormsModule, MatButtonModule, MatFormFieldModule, MatInputModule, SheetHeader],
 })
 export class BuySheet {

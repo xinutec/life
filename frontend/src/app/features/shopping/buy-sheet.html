@@ -11,19 +11,21 @@
     />
   </mat-form-field>
 
-  @for (row of rows; track row.id) {
-    <mat-form-field appearance="outline" subscriptSizing="dynamic">
-      <mat-label>{{ row.name }}</mat-label>
-      <span matTextPrefix>£&nbsp;</span>
-      <input
-        matInput
-        inputmode="decimal"
-        [ngModel]="priceText(row.id)"
-        (ngModelChange)="setPrice(row.id, $event)"
-        placeholder="optional"
-      />
-    </mat-form-field>
-  }
+  <div class="prices">
+    @for (row of rows; track row.id) {
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>{{ row.name }}</mat-label>
+        <span matTextPrefix>£&nbsp;</span>
+        <input
+          matInput
+          inputmode="decimal"
+          [ngModel]="priceText(row.id)"
+          (ngModelChange)="setPrice(row.id, $event)"
+          placeholder="optional"
+        />
+      </mat-form-field>
+    }
+  </div>
 
   @if (unreadable().length > 0) {
     <p class="hint">

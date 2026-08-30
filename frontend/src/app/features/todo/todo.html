@@ -48,7 +48,7 @@
         [checked]="it.status === 'done'"
         [disabled]="st === 'blocked'"
         (change)="toggle(it)"
-        [attr.aria-label]="'Done ' + it.title"
+        [aria-label]="'Done ' + it.title"
       ></mat-checkbox>
       <span
         matListItemTitle
