@@ -466,12 +466,30 @@ early rather than leaning on the margin.
       `app.ts` shell) captures from two central seams — Router events (nav) and a
       single global capture-phase click listener that reads the nearest control's
       accessible name (`labelFor`) — batches, and POSTs to `POST /api/telemetry`
-      (`src/routes/telemetry.rs`), which only logs them (NO storage; these are
-      logs, not data). Best-effort: dropped-not-retried, `sendBeacon` on
-      backgrounding, auth-gated (an open log-write would be an injection vector).
+      (`src/routes/telemetry.rs`), which logs them AND stores them
+      (`client_events`, migration 0041 — see below). Best-effort: dropped-not-retried,
+      `sendBeacon` on backgrounding, auth-gated (an open log-write would be an
+      injection vector).
       Labels are verbatim — `labelFor` strips `mat-icon`/`[aria-hidden]` text so a
       Material icon's ligature doesn't prefix every button. Read a session with
       `kubectl -n life logs deploy/life-app | grep client-event`.
+- [x] **Client trace persisted** (2026-08-30) — the trace above was log-only, so
+      the whole readable history was one pod's buffer: 28 hours and 12 events when
+      measured, erased on restart. `client_events` (migration 0041) keeps it, and
+      the log line stays — reading ONE session is still easier interleaved with the
+      request trace; the table is what makes a MONTH readable.
+      Two clocks on purpose: `client_at_ms` verbatim as the browser sent it (a
+      batch lands at once, so only the client's clock orders events *within* it)
+      and `received_at` from this server (trustworthy, and what a per-day rollup
+      should group by). Storing the client clock raw rather than converting it
+      keeps skew *detectable* — converting would assert it was right.
+      A write failure is logged at ERROR and still answers 204: the client neither
+      reads the response nor retries, so failing loudly there would cost a visible
+      error and still not save the events.
+      ⚠ Fixed here too: `one_line` guarded `label` only, while `kind` and `path`
+      are equally client-chosen and went into the log raw — so the log-forgery that
+      sanitiser exists to prevent was reachable through either. All three now go
+      through one `Sanitised` struct, so a new field that skips it fails to compile.
 - [x] **Wellbeing check-in reminders** (2026-07-20) — device-local Android
       notifications that nudge you to check in. A **generic native bridge**
       (`window.ReminderBridge`: `available`/`schedule`/`cancel`, mirroring

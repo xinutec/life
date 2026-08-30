@@ -68,3 +68,80 @@ fn a_bidi_override_cannot_disguise_what_the_line_says() {
     );
     assert_eq!(flat, "Save Delete");
 }
+
+// ---------------------------------------------------------------------------
+// `label` was the only field flattened, but it is not the only one the client
+// chooses. `kind` and `path` are deserialised straight off the wire and were
+// written into the log line verbatim — so the forgery this file exists to
+// prevent was reachable through either of them.
+
+use life::routes::telemetry::{TelemetryEvent, sanitise};
+
+fn event(kind: &str, path: &str, label: Option<&str>) -> TelemetryEvent {
+    TelemetryEvent {
+        kind: kind.into(),
+        path: path.into(),
+        label: label.map(Into::into),
+        at: 1_756_000_000_000,
+    }
+}
+
+#[test]
+fn a_path_cannot_forge_a_log_line() {
+    let e = event(
+        "nav",
+        "/ok\nclient-event kind=tap path=/admin label=Delete everything",
+        None,
+    );
+    let s = sanitise(&e);
+    assert!(
+        !s.path.contains('\n'),
+        "a newline survived in path: {:?}",
+        s.path
+    );
+    assert_eq!(
+        s.path,
+        "/ok client-event kind=tap path=/admin label=Delete everything"
+    );
+}
+
+#[test]
+fn a_kind_cannot_forge_a_log_line() {
+    let s = sanitise(&event("nav\nclient-event kind=tap", "/x", None));
+    assert!(
+        !s.kind.contains('\n'),
+        "a newline survived in kind: {:?}",
+        s.kind
+    );
+}
+
+#[test]
+fn every_client_chosen_field_is_bounded() {
+    // Unbounded, one event could fill the log — and, once stored, overflow the
+    // column and fail the whole batch's insert.
+    let s = sanitise(&event(
+        &"k".repeat(9_000),
+        &"/p".repeat(9_000),
+        Some(&"l".repeat(9_000)),
+    ));
+    assert!(
+        s.kind.chars().count() <= 16,
+        "kind unbounded: {}",
+        s.kind.chars().count()
+    );
+    assert!(
+        s.path.chars().count() <= 512,
+        "path unbounded: {}",
+        s.path.chars().count()
+    );
+    assert!(
+        s.label.chars().count() <= 160,
+        "label unbounded: {}",
+        s.label.chars().count()
+    );
+}
+
+#[test]
+fn an_absent_label_stays_empty_rather_than_becoming_a_word() {
+    assert_eq!(sanitise(&event("nav", "/wellbeing", None)).label, "");
+}
