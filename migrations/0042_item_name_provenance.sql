@@ -1,0 +1,44 @@
+-- Life schema, migration 0042: record WHOSE name an item carries.
+--
+-- The read path resolved a display name as `COALESCE(p.name, i.name, '')` — the
+-- catalogue's name whenever it has one, the item's own only as a fallback. That
+-- is right most of the time and wrong in a way that cannot be argued with when
+-- the catalogue's name is worse than what a person typed: a shop or Open Food
+-- Facts record whose "name" is a marketing sentence replaces a one-word name
+-- with a line of shouting, and there was no way to say no. The reverse rule is
+-- just as wrong — a hand-typed shorthand should not outrank a proper product
+-- name with its brand and pack size.
+--
+-- Neither wins by default, because the question is not which SOURCE is better.
+-- It is which name someone MEANT, and that is provenance, not precedence. So
+-- items get the same `*_source` treatment `products` already uses for its own
+-- fields:
+--
+--   'product'  the name came from the catalogue (or was left to it). Follows
+--              the linked product forever — a correction reaches the cupboard
+--              with no refresh step, which is the property worth keeping.
+--   'user'     somebody typed this name deliberately. It wins over the
+--              catalogue, and a later product correction leaves it alone.
+--
+-- `items.name` keeps its old job as the fallback copy for an item with no
+-- product link, and is now also where a 'user' name lives. Nothing is dropped:
+-- either value survives a change of mind in the other direction.
+--
+-- BACKFILL IS DELIBERATELY UNIFORM: every existing row becomes 'product'.
+--
+-- The tempting rule — "name differs from the product's, so a person must have
+-- typed it" — is wrong, and provably so on this data. An item's name can differ
+-- because the PRODUCT changed after the item was added, which is exactly what
+-- happened when a peppercorn product was corrected from a shop listing: the
+-- item's stored name is simply older, not authored. Marking those 'user' would
+-- freeze a stale copy and undo the correction. 'product' is also the recoverable
+-- direction — a name that should have been kept is still sitting in
+-- `items.name`, one UPDATE away — whereas a wrongly-frozen name looks correct
+-- and is never revisited.
+--
+-- Rows that genuinely hold an authored name are set by hand against the live
+-- database, not here: which ones they are is a question only the person who
+-- typed them can answer, and their names are personal data that does not belong
+-- in a public repository.
+
+ALTER TABLE items ADD COLUMN IF NOT EXISTS name_source VARCHAR(16) NOT NULL DEFAULT 'product';

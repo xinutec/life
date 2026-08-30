@@ -97,10 +97,43 @@ export class ItemSheet {
     this.form.update((f) => ({ ...f, ...p }));
   }
 
+  /**
+   * Whether the person typed this name themselves.
+   *
+   * The server cannot tell. It sees a name and a linked product and nothing
+   * about how the name got there, so it has to be told: an item whose name is
+   * the person's outranks the catalogue and stops following it, and one that is
+   * not keeps taking corrections forever. Only this form knows which happened,
+   * because only this form sees the keystroke.
+   *
+   * Starts false even when editing: the box is prefilled with the name the item
+   * already DISPLAYS, so opening the sheet and saving must change nothing.
+   */
+  private readonly nameIsMine = signal(false);
+
+  /** The name box changed because somebody typed in it. */
+  renameByHand(name: string): void {
+    this.nameIsMine.set(true);
+    this.patch({ name });
+  }
+
+  /** A name that arrived FROM the catalogue — a scan or a product pick. Hands
+   *  the name back to the product, so later corrections reach this item. */
+  private nameFromCatalog(name: string): void {
+    this.nameIsMine.set(false);
+    this.patch({ name });
+  }
+
   save(): void {
     if (!this.form().name.trim() || this.saving()) return;
     this.saving.set(true);
-    const body = { ...this.form() };
+    // Absent unless it is a statement: `null` here would be a claim that the
+    // name is the catalogue's, and a plain save must not make that claim on
+    // somebody's behalf (the server preserves what the item already had).
+    const body = {
+      ...this.form(),
+      ...(this.nameIsMine() ? { name_source: 'user' as const } : {}),
+    };
     const id = this.data.item?.id;
     const req = id != null ? this.api.updateItem(id, body) : this.api.createItem(body);
     const trimmed = this.form().barcode?.trim();
@@ -134,7 +167,7 @@ export class ItemSheet {
         this.patch({ barcode: code });
         this.api.lookupProduct(code).subscribe({
           next: (p) => {
-            if (!this.form().name.trim() && p.name) this.patch({ name: p.name });
+            if (!this.form().name.trim() && p.name) this.nameFromCatalog(p.name);
             this.feedback.notify(p.name ? `Found: ${p.name}` : 'Product found');
           },
           error: (e: unknown) => {
@@ -159,7 +192,8 @@ export class ItemSheet {
       .afterClosed()
       .subscribe((pick) => {
         if (!pick) return;
-        this.patch({ name: pick.name, barcode: pick.barcode, product_id: pick.product_id });
+        this.patch({ barcode: pick.barcode, product_id: pick.product_id });
+        this.nameFromCatalog(pick.name);
         if (pick.unit != null && !this.form().unit?.trim()) this.patch({ unit: pick.unit });
         // The pack size is how much this row holds — a 950g tub starts at 950g,
         // which is what makes "how much is left" answerable at all. Only when

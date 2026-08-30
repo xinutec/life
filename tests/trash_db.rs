@@ -56,6 +56,7 @@ async fn item_delete_lists_in_trash_and_restores() {
             location_id: None,
             barcode: None,
             product_id: None,
+            name_source: None,
         },
     )
     .await
@@ -148,6 +149,7 @@ async fn location_delete_takes_subtree_and_restores_it() {
             location_id: Some(shelf.id),
             barcode: None,
             product_id: None,
+            name_source: None,
         },
     )
     .await

@@ -37,7 +37,14 @@ pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<TrashEntry>> {
     let queries: [(TrashKind, &str); 6] = [
         (
             TrashKind::Item,
-            "SELECT CAST(i.id AS CHAR) AS ref_, COALESCE(p.name, i.name, '') AS name, \
+            // Resolved the same way the cupboard resolves it (inventory::repo's
+            // `item_select!`): an authored name outranks the catalogue. The two
+            // must agree — you find something in the trash by the name you last
+            // saw it under, so a row that renames itself on the way in is a row
+            // you cannot search for.
+            "SELECT CAST(i.id AS CHAR) AS ref_, \
+             CASE WHEN i.name_source = 'user' THEN COALESCE(i.name, p.name, '') \
+                  ELSE COALESCE(p.name, i.name, '') END AS name, \
              i.deleted_at AS deleted_at FROM items i \
              LEFT JOIN products p ON p.id = i.product_id \
              WHERE i.user_id = ? AND i.deleted_at IS NOT NULL",

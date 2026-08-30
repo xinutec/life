@@ -48,6 +48,36 @@ impl FromStr for LocationKind {
     }
 }
 
+/// Whose name an item carries.
+///
+/// The server cannot work this out, and trying to is how it goes wrong. It sees
+/// a name and a linked product; it cannot see whether a person TOUCHED the name
+/// field. Inferring "differs from the product, so it was authored" mislabels
+/// every hurried word typed at a cupboard door as an intention, and inferring it
+/// only on update assumes every client prefills the displayed name — which the
+/// web form happens to do and a sync client, a script or the Android app need
+/// not. So the client that owns the form says so explicitly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum ItemNameSource {
+    /// Somebody typed this name deliberately. It outranks the catalogue, and a
+    /// later product correction leaves it alone.
+    User,
+    /// The name came from the catalogue, or was left to it. Follows the linked
+    /// product forever, so a correction reaches the cupboard with no refresh.
+    Product,
+}
+
+impl fmt::Display for ItemNameSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            ItemNameSource::User => "user",
+            ItemNameSource::Product => "product",
+        })
+    }
+}
+
 /// Item category. Generic from day one — food is just the first skin.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -275,6 +305,15 @@ pub struct NewItem {
     /// is the only way to link a barcodeless shop product (Waitrose etc.).
     #[serde(default)]
     pub product_id: Option<ProductId>,
+    /// Whose name `name` is, when the client knows. Absent means "no statement":
+    /// a new item defaults to [`ItemNameSource::Product`], and an update leaves
+    /// whatever the item already had.
+    ///
+    /// Absent is the common case and it is not a shrug — it is what every caller
+    /// that is not the item form sends, and it deliberately cannot disturb a
+    /// choice the person already made.
+    #[serde(default)]
+    pub name_source: Option<ItemNameSource>,
 }
 
 fn default_category() -> ItemCategory {

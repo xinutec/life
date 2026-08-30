@@ -9,7 +9,8 @@ use sqlx::MySqlPool;
 
 use super::consume::{self, Taken};
 use super::types::{
-    Item, ItemCategory, ItemEvent, ItemHistoryEntry, Location, LocationKind, NewItem, NewLocation,
+    Item, ItemCategory, ItemEvent, ItemHistoryEntry, ItemNameSource, Location, LocationKind,
+    NewItem, NewLocation,
 };
 use crate::products::ids::{Barcode, ProductId};
 
@@ -80,14 +81,49 @@ impl ItemRow {
 /// (name/brand/barcode/image) resolved against the linked catalog product. A
 /// macro (not a const) so it stays a compile-time literal — sqlx rejects
 /// runtime-built query strings.
+///
+/// The name is resolved by PROVENANCE, not by precedence. This used to be a
+/// plain `COALESCE(p.name, i.name, '')`, so the catalogue won whenever it had
+/// anything at all — including an Open Food Facts record whose "name" is a
+/// marketing sentence, which replaced a one-word name with a line of shouting
+/// and could not be overruled. Preferring the item's name instead is wrong in
+/// the same way, just less loudly: a hand-typed shorthand would outrank a proper
+/// name with its brand and pack size. So `items.name_source` says which name was
+/// MEANT, and only a 'user' one outranks the catalogue (migration 0042).
 macro_rules! item_select {
     () => {
         "SELECT i.id AS id, i.product_id AS product_id, \
-         COALESCE(p.name, i.name, '') AS name, p.brand AS brand, i.category AS category, \
+         CASE WHEN i.name_source = 'user' THEN COALESCE(i.name, p.name, '') \
+              ELSE COALESCE(p.name, i.name, '') END AS name, \
+         p.brand AS brand, i.category AS category, \
          i.quantity AS quantity, i.unit AS unit, i.expiry AS expiry, i.location_id AS location_id, \
          COALESCE(i.barcode, p.barcode) AS barcode, (p.image IS NOT NULL) AS has_image \
          FROM items i LEFT JOIN products p ON p.id = i.product_id"
     };
+}
+
+/// The `name_source` an UPDATE should write.
+///
+/// `None` from the client is not "product" — it is "no statement", and it must
+/// leave an existing choice alone. Every caller that is not the item form sends
+/// nothing here (sync, scripts, the Android app), and any of them re-saving an
+/// item would otherwise silently strip a name its owner had chosen to keep.
+async fn name_source_for_update(
+    pool: &MySqlPool,
+    user_id: &str,
+    id: u64,
+    stated: Option<ItemNameSource>,
+) -> Result<String> {
+    if let Some(s) = stated {
+        return Ok(s.to_string());
+    }
+    let existing: Option<(String,)> =
+        sqlx::query_as("SELECT name_source FROM items WHERE id = ? AND user_id = ?")
+            .bind(id)
+            .bind(user_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(existing.map_or_else(|| ItemNameSource::Product.to_string(), |(v,)| v))
 }
 
 /// The catalog link for a new/updated item: an explicit `product_id` wins (it's
@@ -188,14 +224,23 @@ pub async fn create_item(pool: &MySqlPool, user_id: &str, new: NewItem) -> Resul
     // Prefer an explicit catalog link (the only way to reach a barcodeless shop
     // product); otherwise link by barcode when it's already known (scanned/looked up).
     let product_id = resolve_product_id(pool, &new).await?;
+    // A name typed while ADDING is a scribble — you type "cheese" and then scan,
+    // and the form fills the product's name in only if the box is still empty. So
+    // the catalogue wins unless the client explicitly says the name is the
+    // person's, which `tests/catalog_db.rs` has always required.
+    let name_source = new
+        .name_source
+        .unwrap_or(ItemNameSource::Product)
+        .to_string();
     let res = sqlx::query(
         "INSERT INTO items \
-         (user_id, product_id, name, category, quantity, unit, expiry, location_id, barcode) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         (user_id, product_id, name, name_source, category, quantity, unit, expiry, location_id, barcode) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(user_id)
     .bind(product_id)
     .bind(&new.name)
+    .bind(&name_source)
     .bind(new.category.to_string())
     .bind(new.quantity)
     .bind(&new.unit)
@@ -261,12 +306,14 @@ pub async fn update_item(
         return Ok(None);
     };
     let product_id = resolve_product_id(pool, &new).await?;
+    let name_source = name_source_for_update(pool, user_id, id, new.name_source).await?;
     sqlx::query(
-        "UPDATE items SET product_id = ?, name = ?, category = ?, quantity = ?, unit = ?, \
+        "UPDATE items SET product_id = ?, name = ?, name_source = ?, category = ?, quantity = ?, unit = ?, \
          expiry = ?, location_id = ?, barcode = ? WHERE id = ? AND user_id = ?",
     )
     .bind(product_id)
     .bind(&new.name)
+    .bind(name_source)
     .bind(new.category.to_string())
     .bind(new.quantity)
     .bind(&new.unit)

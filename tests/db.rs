@@ -77,6 +77,7 @@ async fn inventory_crud_against_real_db() {
             location_id: Some(shelf.id),
             barcode: None,
             product_id: None,
+            name_source: None,
         },
     )
     .await
@@ -121,6 +122,7 @@ async fn inventory_crud_against_real_db() {
             location_id: Some(kitchen.id),
             barcode: None,
             product_id: None,
+            name_source: None,
         },
     )
     .await

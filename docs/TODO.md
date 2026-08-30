@@ -643,9 +643,25 @@ early rather than leaning on the margin.
 
 ## Backlog
 
-- [ ] **Product extras** — name+image copied onto items at add-time (currently
-      items carry the barcode and the thumbnail is fetched live from the cache —
-      fine, but not self-contained if the cache is wiped); camera photo +
+- [x] **Item names resolve by provenance** (2026-08-30) — the name half of
+      "product extras", and it turned out to be the opposite of how this bullet
+      and its task both described it. Names were NOT frozen copies: the read was
+      `COALESCE(p.name, i.name, '')`, so the catalogue won whenever it had
+      anything, and a correction already reached items. What could not be done
+      was overruling it — an Open Food Facts record whose "name" is a marketing
+      sentence replaced a typed one-word name with a line of shouting.
+      `items.name_source` (migration 0042) says which name was MEANT: 'user'
+      outranks the catalogue, 'product' follows it forever. The gesture is the
+      signal — a name that differs from the linked product's was typed on
+      purpose, because the client prefills the product's own name — so retyping
+      the catalogue name takes the override back off and no new UI is needed.
+      Backfill is uniform 'product': "differs, so a person typed it" is provably
+      wrong on this data, because a name can differ merely by being OLDER than a
+      product correction. 'product' is also the recoverable direction — the old
+      name still sits in `items.name`.
+- [ ] **Product extras** (remainder) — the image half: items carry the barcode
+      and the thumbnail is fetched live from the cache, which is fine but not
+      self-contained if the cache is wiped. Plus camera photo +
       paste-URL→`og:image` as alternative image sources; manual "refresh from
       OFF"; a `@zxing/browser` fallback for non-Chromium browsers (the native
       BarcodeDetector scanner only works on Chromium); contribute missing

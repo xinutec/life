@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
-import { of } from 'rxjs';
+import { Observable, of } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Feedback } from '../../shared/feedback';
@@ -21,7 +21,12 @@ function setup(
     open: vi.fn(() => ({ afterClosed: () => of(opts.pick ?? null) })),
   };
   const api = {
-    createItem: vi.fn(() => of({ id: 7 })),
+    // Declared with its argument type, so a test can read the body that was sent
+    // without reaching through an `any`. Absence of a key is what two of these
+    // tests check, and `expect.anything()` cannot express that without one.
+    createItem: vi.fn<(body: Record<string, unknown>) => Observable<{ id: number }>>(() =>
+      of({ id: 7 }),
+    ),
     updateItem: vi.fn(() => of({ id: 7 })),
     lookupProduct: vi.fn(() => of({})),
   };
@@ -136,5 +141,49 @@ describe('ItemSheet product linking', () => {
     cmp.patch({ name: 'Cheddar', product_id: 99 });
     cmp.save();
     expect(api.createItem).toHaveBeenCalledWith(expect.objectContaining({ product_id: 99 }));
+  });
+
+  // Only this form sees the keystroke, so only this form can say whose name it
+  // is. The server sees a name and a linked product and cannot tell them apart —
+  // guessing there froze scribbles as intentions and stripped real overrides.
+  it('claims the name only when it was typed by hand', () => {
+    const { cmp, api } = setup();
+    cmp.renameByHand('Oregano');
+    cmp.save();
+    expect(api.createItem).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Oregano', name_source: 'user' }),
+    );
+  });
+
+  it('says nothing about the name when it came from a product pick', async () => {
+    // The pick supplies the catalogue's own name, so the item must keep
+    // following the product — a correction should still reach it later.
+    const { cmp, api } = setup({
+      pick: {
+        name: 'Waitrose Cheddar',
+        barcode: null,
+        product_id: 7,
+        quantity: null,
+        unit: null,
+        category: null,
+      },
+    });
+    cmp.renameByHand('chedar');
+    cmp.findProduct();
+    await flush();
+    cmp.save();
+    expect(api.createItem).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Waitrose Cheddar' }),
+    );
+    expect('name_source' in api.createItem.mock.calls[0][0]).toBe(false);
+  });
+
+  it('says nothing on a plain save, so an existing choice is left alone', () => {
+    // Opening an item and saving it unchanged must not make a claim either way:
+    // `name_source` absent tells the server to preserve what the item had.
+    const { cmp, api } = setup();
+    cmp.patch({ name: 'Cheddar' });
+    cmp.save();
+    expect('name_source' in api.createItem.mock.calls[0][0]).toBe(false);
   });
 });

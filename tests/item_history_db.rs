@@ -69,6 +69,7 @@ async fn an_items_history_reads_back_newest_first_and_says_where() {
             location_id: Some(cupboard.id),
             barcode: None,
             product_id: None,
+            name_source: None,
         },
     )
     .await
@@ -139,6 +140,7 @@ async fn a_history_is_only_ever_its_owners() {
             location_id: None,
             barcode: None,
             product_id: None,
+            name_source: None,
         },
     )
     .await
@@ -197,6 +199,7 @@ async fn a_stored_event_outside_the_enum_fails_the_read_loudly() {
             location_id: None,
             barcode: None,
             product_id: None,
+            name_source: None,
         },
     )
     .await

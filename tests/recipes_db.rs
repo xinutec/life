@@ -53,6 +53,7 @@ async fn recipe_create_and_shopping_list_against_real_db() {
             location_id: None,
             barcode: None,
             product_id: None,
+            name_source: None,
         },
     )
     .await
@@ -213,6 +214,7 @@ async fn a_linked_ingredient_matches_stock_by_product_not_by_name() {
             location_id: None,
             barcode: Some(barcode.to_string()),
             product_id: Some(product.id),
+            name_source: None,
         },
     )
     .await

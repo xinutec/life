@@ -22,6 +22,7 @@ fn new_item(name: &str, barcode: Option<&str>) -> NewItem {
         location_id: None,
         barcode: barcode.map(Into::into),
         product_id: None,
+        name_source: None,
     }
 }
 

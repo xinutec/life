@@ -86,6 +86,10 @@ pub async fn buy(
             location_id: None,
             barcode: s.barcode,
             product_id: s.product_id,
+            // A buy-list row's name is a note to self ("cheese"), not a naming
+            // of the thing that comes home. The catalogue outranks it, which is
+            // what `None` asks for.
+            name_source: None,
         },
     )
     .await?;

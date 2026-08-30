@@ -28,6 +28,7 @@ fn stock(name: &str, quantity: Option<f64>, unit: Option<&str>) -> NewItem {
         location_id: None,
         barcode: None,
         product_id: None,
+        name_source: None,
     }
 }
 
