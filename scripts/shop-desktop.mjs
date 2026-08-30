@@ -17,6 +17,9 @@
 //   node --experimental-strip-types scripts/shop-desktop.mjs waitrose search "black peppercorns"
 //   node --experimental-strip-types scripts/shop-desktop.mjs waitrose product 785492
 //
+// Waitrose only: Asda's search is answered server-side, so it has no provider
+// here to drive.
+//
 // Requires the ChromeDebug profile running (xinutec-infra/mac-mini/chrome-debug.sh
 // start) and, for anything past a search, a hand-made login to the shop in it:
 // signed out, Waitrose mints no Bearer at all and every product op returns
@@ -57,14 +60,25 @@ const MOBILE_UA =
 
 const [shop, op, arg] = process.argv.slice(2);
 if (!shop || !op) {
-  console.error('usage: shop-desktop.mjs <waitrose|asda> <search|product|facts> [arg]');
+  console.error('usage: shop-desktop.mjs waitrose <search|product> [arg]');
   process.exit(2);
 }
 
+// Waitrose is the only ShopProvider. Asda's search is answered SERVER-side
+// (`GET /api/products/shop/asda?q=`), so there is no {url, js} pair here to
+// drive — asda.ts exports facts-parsing only. Saying "unknown shop: asda" sent
+// me looking for a typo instead of at the architecture.
 const { WAITROSE } = await import('../frontend/src/app/shops/waitrose.ts');
-const { ASDA } = await import('../frontend/src/app/shops/asda.ts');
-const provider = { waitrose: WAITROSE, asda: ASDA }[shop];
-if (!provider) throw new Error(`unknown shop: ${shop}`);
+const provider = { waitrose: WAITROSE }[shop];
+if (!provider) {
+  const known = 'waitrose';
+  throw new Error(
+    shop === 'asda'
+      ? "asda has no ShopProvider: its search runs server-side, so query the "
+        + "backend instead — GET /api/products/shop/asda?q=..."
+      : `unknown shop: ${shop} (this driver knows: ${known})`,
+  );
+}
 const fn = provider[op];
 if (typeof fn !== 'function') throw new Error(`${shop} has no ${op} op`);
 
