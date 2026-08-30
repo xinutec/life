@@ -193,7 +193,8 @@ const PRODUCT_DETAIL = {
   purchases: [
     { id: 1, product_id: 42, barcode: '5000328042732', name: 'Oat So Simple',
       shop: 'Waitrose', amount_minor: 425, currency: 'GBP', quantity: 594,
-      unit: 'g', bought_at: '2026-08-20T09:00:00Z' },
+      unit: 'g', unit_amount_minor: 715, unit_measure: 'KG',
+      bought_at: '2026-08-20T09:00:00Z' },
   ]
 };
 

@@ -9,4 +9,22 @@ export type Purchase = { id: number, product_id: ProductId | null, barcode: stri
  * What it was called when it was bought — the one field no later
  * correction to the catalogue can invalidate.
  */
-name: string, shop: string, amount_minor: number, currency: string, quantity: number | null, unit: string | null, bought_at: string, };
+name: string, shop: string, amount_minor: number, currency: string, quantity: number | null, unit: string | null, 
+/**
+ * DERIVED, never stored: what this works out to per kg / per litre / per
+ * item, in minor units. Computed on read from `amount_minor` and the pack,
+ * so it cannot drift from them the way a second stored column would.
+ *
+ * `None` when the pack is unknown or its unit is one `packsize::parse`
+ * refuses — an unreadable unit means the rate is unknown, and inventing a
+ * dimension for it would be worse than saying nothing.
+ *
+ * Rounded to the nearest minor unit. It is a RATE for comparing packs, not
+ * an amount anybody paid; the exact figure is `amount_minor`.
+ */
+unit_amount_minor: number | null, 
+/**
+ * "KG" / "L" / "each" — the scale `unit_amount_minor` is quoted per,
+ * matching how the shop rows above it read ("£8.00/KG").
+ */
+unit_measure: string | null, bought_at: string, };

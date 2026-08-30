@@ -65,6 +65,46 @@ pub async fn record(
     Ok(res.last_insert_id())
 }
 
+/// What a purchase works out to per kg / litre / item.
+///
+/// Reuses `packsize::parse` rather than reading "g" and "kg" again here: the
+/// unit table is deliberately non-exhaustive and refuses what it does not know,
+/// and a second copy of it would answer differently the first time one of them
+/// learned a spelling.
+///
+/// Quoted per kg and per litre, not per gram, because that is the scale the
+/// shop prices beside it already use ("£8.00/KG"), and a rate nobody can
+/// compare is not worth showing.
+fn per_unit(amount_minor: i64, quantity: Option<f64>, unit: Option<&str>) -> Option<(i64, String)> {
+    let (q, u) = (quantity?, unit?);
+    let pack = crate::products::packsize::parse(&format!("{q}{u}"))?;
+    // parse() guarantees a finite value greater than zero, so this cannot divide
+    // by zero — but the rate is still only meaningful for a positive amount.
+    let (scale, measure) = match pack.unit {
+        crate::products::packsize::PackUnit::Gram => (1000.0, "KG"),
+        crate::products::packsize::PackUnit::Millilitre => (1000.0, "L"),
+        crate::products::packsize::PackUnit::Count => (1.0, "each"),
+    };
+    // Same guard-then-cast shape as `products::asda`'s price parsing, and the
+    // same reasoning: bound the value to a range that says something about the
+    // DOMAIN, then let the cast be safe by construction rather than by hope.
+    //
+    // £1,000,000 in pence, for a rate as well as an amount. Not a technical
+    // limit — i64 holds far more — but the point past which a per-kg price is
+    // evidence the pack was misread rather than a very expensive spice.
+    const MAX_PENCE: f64 = 100_000_000.0;
+    let amount = i32::try_from(amount_minor).ok()?;
+    let rate = (f64::from(amount) * scale / pack.value).round();
+    if !rate.is_finite() || !(0.0..=MAX_PENCE).contains(&rate) {
+        return None;
+    }
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "guarded above: finite and within 0..=MAX_PENCE, which i64 holds exactly"
+    )]
+    Some((rate as i64, measure.to_string()))
+}
+
 /// Everything this person has paid for a thing, newest first.
 ///
 /// Matched on product id OR barcode, not on product id alone. An item can be
@@ -94,5 +134,15 @@ pub async fn history(
     .bind(barcode)
     .fetch_all(pool)
     .await?;
-    Ok(rows)
+    Ok(rows
+        .into_iter()
+        .map(|mut p| {
+            if let Some((amount, measure)) = per_unit(p.amount_minor, p.quantity, p.unit.as_deref())
+            {
+                p.unit_amount_minor = Some(amount);
+                p.unit_measure = Some(measure);
+            }
+            p
+        })
+        .collect())
 }

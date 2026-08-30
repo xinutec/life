@@ -190,6 +190,88 @@ async fn a_nonsense_price_is_refused_rather_than_stored() {
 }
 
 #[tokio::test]
+async fn the_rate_is_quoted_per_kg_and_refused_when_the_pack_cannot_be_read() {
+    // The pack is captured so £3.30 can be compared with £3.30, which needs a
+    // RATE. Quoted per kg / per litre because that is the scale the shop prices
+    // beside it already use ("£8.00/KG") — a rate nobody can compare against the
+    // row below it is not worth showing.
+    let pool = db::connect(&common::test_db_url()).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+    let user = "test-user-purchases-rate";
+    sqlx::query("DELETE FROM purchases WHERE user_id = ?")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .expect("clean");
+
+    /// One pack, and the rate it should work out to. Named rather than a
+    /// 4-tuple of options, which nobody can read at the call site.
+    struct Case {
+        quantity: Option<f64>,
+        unit: Option<&'static str>,
+        amount_minor: i64,
+        /// `None` = no rate should be quoted at all.
+        want: Option<(i64, &'static str)>,
+    }
+    let case = |quantity, unit, amount_minor, want| Case {
+        quantity,
+        unit,
+        amount_minor,
+        want,
+    };
+    let cases = [
+        // 425p for 594g -> £7.15/kg.
+        case(Some(594.0), Some("g"), 425, Some((715, "KG"))),
+        // The unit is normalised, not assumed: 2kg is the same dimension.
+        case(Some(2.0), Some("kg"), 400, Some((200, "KG"))),
+        case(Some(750.0), Some("ml"), 900, Some((1200, "L"))),
+        // A unit `packsize::parse` refuses. An unreadable unit means the rate is
+        // unknown; inventing a dimension would be worse than saying nothing.
+        case(Some(3.0), Some("sachets"), 300, None),
+        // No pack at all — the common case for a hand-typed buy-list row.
+        case(None, None, 300, None),
+    ];
+
+    for (
+        i,
+        Case {
+            quantity,
+            unit,
+            amount_minor,
+            want,
+        },
+    ) in cases.into_iter().enumerate()
+    {
+        let barcode = format!("T-RATE-{i}");
+        let item = BoughtItem {
+            product_id: None,
+            barcode: Some(&barcode),
+            name: "Thing",
+            quantity,
+            unit,
+        };
+        repo::record(&pool, user, &item, &paid("Waitrose", amount_minor))
+            .await
+            .expect("record");
+        let got = repo::history(&pool, user, None, Some(&barcode))
+            .await
+            .expect("history");
+        let p = &got[0];
+        assert_eq!(
+            (p.unit_amount_minor, p.unit_measure.as_deref()),
+            (want.map(|w| w.0), want.map(|w| w.1)),
+            "case {i}: {quantity:?} {unit:?} at {amount_minor}"
+        );
+    }
+
+    sqlx::query("DELETE FROM purchases WHERE user_id = ?")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .expect("clean up");
+}
+
+#[tokio::test]
 async fn a_purchase_is_only_its_owners() {
     let pool = db::connect(&common::test_db_url()).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");

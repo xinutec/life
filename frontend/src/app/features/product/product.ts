@@ -800,8 +800,17 @@ export class ProductPage {
       id: p.id,
       shop: p.shop,
       price: `${p.currency === 'GBP' ? '£' : p.currency + ' '}${fromMinorUnits(p.amount_minor)}`,
-      // The pack it was for. Without it £3.30 cannot be compared with £3.30.
-      pack: p.quantity != null ? `${p.quantity}${p.unit ? ' ' + p.unit : ''}` : '',
+      // The RATE first, because that is the comparable number and the whole
+      // reason the pack is captured; the pack itself only says what the rate is
+      // of. Absent when the unit could not be read — see purchases::repo.
+      pack: [
+        p.unit_amount_minor != null && p.unit_measure
+          ? `£${fromMinorUnits(p.unit_amount_minor)}/${p.unit_measure}`
+          : '',
+        p.quantity != null ? `${p.quantity}${p.unit ? ' ' + p.unit : ''}` : '',
+      ]
+        .filter((x) => x)
+        .join(' · '),
       // The same phrasing as the shop prices right below — `ago` exists so the
       // two money lists do not spell the same question two ways ("2 days ago"
       // against "8/20/2026" is a difference a reader has to stop and dismiss).

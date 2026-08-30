@@ -814,6 +814,8 @@ describe('ProductPage', () => {
           currency: 'GBP',
           quantity: 594,
           unit: 'g',
+          unit_amount_minor: 715,
+          unit_measure: 'KG',
           bought_at: '2026-08-30T10:00:00Z',
         },
       ],
@@ -821,7 +823,9 @@ describe('ProductPage', () => {
     const { fixture, page } = setup(withPaid);
     expect(page.paidRows()).toHaveLength(1);
     expect(page.paidRows()[0].price).toBe('£3.30');
-    expect(page.paidRows()[0].pack).toBe('594 g');
+    // The rate leads: it is the comparable number, and the pack only says what
+    // the rate is of.
+    expect(page.paidRows()[0].pack).toBe('£7.15/KG · 594 g');
     const el = fixture.nativeElement as HTMLElement;
     expect(el.textContent).toContain('What you paid');
   });
