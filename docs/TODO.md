@@ -659,13 +659,27 @@ early rather than leaning on the margin.
       wrong on this data, because a name can differ merely by being OLDER than a
       product correction. 'product' is also the recoverable direction — the old
       name still sits in `items.name`.
-- [ ] **Product extras** (remainder) — the image half: items carry the barcode
-      and the thumbnail is fetched live from the cache, which is fine but not
-      self-contained if the cache is wiped. Plus camera photo +
-      paste-URL→`og:image` as alternative image sources; manual "refresh from
-      OFF"; a `@zxing/browser` fallback for non-Chromium browsers (the native
-      BarcodeDetector scanner only works on Chromium); contribute missing
-      products back to OFF (uses Pippijn's OFF account — creds user-held).
+- [x] **A picture can be added** (2026-08-30) — the image half, and like the
+      name half its filed premise was the wrong one. "Not self-contained if the
+      cache is wiped" is hypothetical: `products.image` is a LONGBLOB in the
+      database, not an ephemeral cache. The measured gap was that **17 of 84
+      items showed no picture and there was no way to give them one**.
+      The whole upload path already existed and NOTHING CALLED IT — the PUT
+      endpoint, `uploadProductImage`, and `ProductImages.replace` with its
+      cache-buster. All 17 have a barcode, which is what the endpoint takes, so
+      one control on the product page covers every one.
+      Offered whenever there is a barcode, not only when the image is missing (a
+      bad stock photo is as worth replacing as an absent one); hidden for a
+      barcodeless shop product rather than offered and failing; no `capture` on
+      the input, which would force the camera and remove the photo library.
+      Re-reads after upload or `has_image` stays false and saving reads as
+      failing; clears the input first or the same photo cannot be retried.
+- [ ] **Product extras** (remainder) — camera-only capture is not needed (the
+      system picker offers it), but still open: paste-URL→`og:image` as an image
+      source; manual "refresh from OFF"; a `@zxing/browser` fallback for
+      non-Chromium browsers (the native BarcodeDetector scanner only works on
+      Chromium); contribute missing products back to OFF (uses Pippijn's OFF
+      account — creds user-held, so this one needs him, not just code).
 - [x] **Purchases: what was paid, and where** (2026-08-30) — the MVP of the
       design below: capture shop + amount at buy-time. `purchases` (migration
       0043) is a SEPARATE table from `price_observations`, not the same record,
