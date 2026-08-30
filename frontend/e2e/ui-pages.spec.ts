@@ -190,6 +190,11 @@ const PRODUCT_DETAIL = {
   facts_by_source: [],
   reconciliation: { fields: [] },
   documents: [],
+  purchases: [
+    { id: 1, product_id: 42, barcode: '5000328042732', name: 'Oat So Simple',
+      shop: 'Waitrose', amount_minor: 425, currency: 'GBP', quantity: 594,
+      unit: 'g', bought_at: '2026-08-20T09:00:00Z' },
+  ]
 };
 
 /** A product Open Food Facts knows under a cryptic crowd name, that no shop
@@ -710,6 +715,10 @@ test('product page — prices, panel, chips: lays out cleanly @ phone width', as
   await page.getByText('of which saturates').waitFor();
   await page.getByText('may contain milk').waitFor();
   await page.getByText('Open Food Facts').waitFor();
+  // The two newest things on this page, both unmeasured until now: what was
+  // paid (a second money list, above the shop prices) and the picture control.
+  await page.getByText('What you paid').waitFor();
+  await page.getByRole('button', { name: /picture/ }).waitFor();
   // Scoped to the page's own text: this screen is the first that genuinely
   // outgrows a phone viewport, and mid-scroll its content passes BEHIND the
   // fixed bottom nav (opaque by design). A whole-page assertion would read that

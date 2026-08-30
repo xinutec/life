@@ -19,6 +19,7 @@ import {
 } from '../../models';
 import { ago } from '../../shared/ago';
 import { assertNever, classifyApiError, onlineHint } from '../../shared/api-error';
+import { ProductImages } from '../../product-image';
 import { Feedback } from '../../shared/feedback';
 import { ListState } from '../../shared/list-state';
 import { fromMinorUnits } from '../../shared/money';
@@ -183,6 +184,7 @@ export class ProductPage {
   private api = inject(LifeApi);
   private location = inject(Location);
   private feedback = inject(Feedback);
+  private images = inject(ProductImages);
   private shops = inject(Shops);
 
   readonly detail = signal<ProductDetail | null>(null);
@@ -722,6 +724,55 @@ export class ProductPage {
     return d?.product.has_image ? this.api.productImageByIdUrl(d.product.id) : null;
   });
 
+  /** A picture is being uploaded — the button is disabled and says so, because
+   *  a photo takes long enough on a phone that a silent wait reads as broken. */
+  readonly savingImage = signal(false);
+
+  /**
+   * Give this product a picture from a file the person picks.
+   *
+   * The whole path underneath already existed and nothing called it — the PUT
+   * endpoint, the API client, and `ProductImages.replace` with its cache-buster
+   * were all written and unreachable. So 17 of 84 items showed no picture and
+   * there was no way to give them one, which is the actual gap here; a wiped
+   * cache was always hypothetical.
+   *
+   * Keyed on the barcode because that is what the endpoint takes, and every one
+   * of those 17 items has one. A shop product with no EAN cannot be reached this
+   * way, so the control is hidden rather than offered and failing.
+   *
+   * `capture` is deliberately NOT set on the input: it would force the camera and
+   * take away the photo library, and a picture of the thing is often already on
+   * the phone. The system picker offers the camera anyway.
+   */
+  pickImage(ev: Event): void {
+    // A guard, not a cast: `ev.target` is EventTarget and narrowing it by
+    // assertion is a claim the compiler cannot check (the lint says so).
+    const input = ev.target;
+    if (!(input instanceof HTMLInputElement)) return;
+    const file = input.files?.[0];
+    // Clear first: picking the SAME file twice fires no change event otherwise,
+    // so a failed upload could not be retried with the same photo.
+    input.value = '';
+    if (!file) return;
+    const barcode = this.detail()?.product.barcode;
+    if (!barcode) return;
+    this.savingImage.set(true);
+    this.images.replace(barcode, file).subscribe({
+      next: () => {
+        this.savingImage.set(false);
+        // Re-read so `has_image` flips on for a product that had none — without
+        // it the <img> stays hidden and the upload reads as having failed.
+        this.reload();
+        this.feedback.notify('Picture saved.');
+      },
+      error: (e: unknown) => {
+        this.savingImage.set(false);
+        this.feedback.error(`Could not save the picture${onlineHint(e)}`);
+      },
+    });
+  }
+
   /** "Brand · 500g" — whichever parts exist. */
   readonly subtitle = computed(() => {
     const p = this.detail()?.product;
@@ -751,7 +802,10 @@ export class ProductPage {
       price: `${p.currency === 'GBP' ? '£' : p.currency + ' '}${fromMinorUnits(p.amount_minor)}`,
       // The pack it was for. Without it £3.30 cannot be compared with £3.30.
       pack: p.quantity != null ? `${p.quantity}${p.unit ? ' ' + p.unit : ''}` : '',
-      when: new Date(p.bought_at).toLocaleDateString(),
+      // The same phrasing as the shop prices right below — `ago` exists so the
+      // two money lists do not spell the same question two ways ("2 days ago"
+      // against "8/20/2026" is a difference a reader has to stop and dismiss).
+      when: ago(new Date(p.bought_at).getTime()),
     })),
   );
 

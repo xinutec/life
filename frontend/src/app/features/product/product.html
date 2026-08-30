@@ -96,6 +96,21 @@
     </div>
   }
 
+  <!-- Below the name, not above it: the page leads with WHAT it is. Offered
+       whenever there is a barcode to hang a picture on, not only when one is
+       missing — a bad stock photo is as worth replacing as an absent one. Hidden
+       for a barcodeless shop product, whose image the PUT cannot address, rather
+       than shown and failing. -->
+  @if (d.product.barcode) {
+    <div class="pic-pick">
+      <input #picFile type="file" accept="image/*" hidden (change)="pickImage($event)" />
+      <button mat-button [disabled]="savingImage()" (click)="picFile.click()">
+        <mat-icon>photo_camera</mat-icon>
+        {{ savingImage() ? 'Saving…' : imageUrl() ? 'Replace picture' : 'Add a picture' }}
+      </button>
+    </div>
+  }
+
   @if (dietary().length) {
     <div class="chips" aria-label="Dietary">
       @for (c of dietary(); track c.label) {

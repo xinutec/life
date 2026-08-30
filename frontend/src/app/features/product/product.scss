@@ -50,6 +50,13 @@
 }
 
 // Brand · pack size on one line with its edit button, matching the name row.
+// A mat-button carries its own horizontal padding, so left to itself this sits
+// indented against the name and subtitle above it and reads as belonging to
+// something else. Pulled back by that padding so the page has one left edge.
+.pic-pick button {
+  margin-left: -0.5rem;
+}
+
 .subtitle-row {
   display: flex;
   align-items: center;

@@ -106,6 +106,8 @@ describe('ProductPage', () => {
       // Answers with the same detail but no divergences left (the settled state).
       reconcile: vi.fn(() => of({ ...detail, reconciliation: { fields: [] } })),
       submitFacts: vi.fn(() => of({ ...detail, reconciliation: { fields: [] } })),
+      uploadProductImage: vi.fn(() => of(undefined)),
+      productImageUrl: (barcode: string) => `/api/products/${barcode}/image`,
     };
     TestBed.configureTestingModule({
       imports: [ProductPage],
@@ -822,6 +824,41 @@ describe('ProductPage', () => {
     expect(page.paidRows()[0].pack).toBe('594 g');
     const el = fixture.nativeElement as HTMLElement;
     expect(el.textContent).toContain('What you paid');
+  });
+
+  it('sends the picked picture and re-reads, so a first picture becomes visible', () => {
+    // The re-read is the part worth pinning: `has_image` is false for a product
+    // that had none, so without refetching the <img> stays hidden and a
+    // successful upload reads as a failure.
+    const { api, page } = setup();
+    const file = new File(['x'], 'p.jpg', { type: 'image/jpeg' });
+    const input = document.createElement('input');
+    Object.defineProperty(input, 'files', { value: [file] });
+    page.pickImage({ target: input } as unknown as Event);
+    expect(api.uploadProductImage).toHaveBeenCalledWith('5000328042732', file);
+    expect(api.getProductDetail).toHaveBeenCalledTimes(2);
+    expect(page.savingImage()).toBe(false);
+  });
+
+  it('clears the file input, so the same photo can be picked again after a failure', () => {
+    // Picking the SAME file twice fires no change event unless the value is
+    // cleared — so a retry with the same photo would silently do nothing, which
+    // looks exactly like the upload being ignored.
+    const { page } = setup();
+    const file = new File(['x'], 'p.jpg', { type: 'image/jpeg' });
+    const input = document.createElement('input');
+    Object.defineProperty(input, 'files', { value: [file] });
+    input.value = '';
+    page.pickImage({ target: input } as unknown as Event);
+    expect(input.value).toBe('');
+  });
+
+  it('does nothing when the picker is dismissed without a file', () => {
+    const { api, page } = setup();
+    const input = document.createElement('input');
+    Object.defineProperty(input, 'files', { value: [] });
+    page.pickImage({ target: input } as unknown as Event);
+    expect(api.uploadProductImage).not.toHaveBeenCalled();
   });
 
   it('says nothing about what was paid when nothing was recorded', () => {
