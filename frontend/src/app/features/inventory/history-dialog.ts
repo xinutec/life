@@ -6,11 +6,12 @@ import { MatListModule } from '@angular/material/list';
 
 import { ago } from '../../shared/ago';
 import { amount } from '../../shared/amount';
+import { fromMinorUnits } from '../../shared/money';
 import { assertNever, classifyApiError } from '../../shared/api-error';
 import { Dialog } from '../../shared/dialog';
 import { ListState } from '../../shared/list-state';
 import { LifeApi } from '../../life-api';
-import { Item, ItemEvent, ItemHistoryEntry } from '../../models';
+import { Item, ItemEvent, ItemHistoryEntry, Purchase } from '../../models';
 
 export interface HistoryDialogData {
   item: Item;
@@ -63,10 +64,34 @@ export class HistoryDialog {
 
   readonly item = this.data.item;
   readonly entries = signal<ItemHistoryEntry[] | null>(null);
+  readonly purchases = signal<Purchase[]>([]);
   readonly error = signal<string | null>(null);
 
   readonly loaded = computed(() => this.entries() !== null);
   readonly lines = computed(() => (this.entries() ?? []).map((e) => this.line(e)));
+
+  /** What this row cost, newest first.
+   *
+   *  Shown HERE and not only on the product page, because for a hand-typed
+   *  buy-list row the product page cannot show it: there is no barcode and no
+   *  catalogue product to hang it on, and the item is the only key that always
+   *  exists. Without this the price was recorded and then unreachable. */
+  readonly paid = computed(() =>
+    this.purchases().map((p) => ({
+      id: p.id,
+      // The rate leads when there is one — it is the comparable number.
+      what: [
+        `${p.currency === 'GBP' ? '£' : p.currency + ' '}${fromMinorUnits(p.amount_minor)}`,
+        p.unit_amount_minor != null && p.unit_measure
+          ? `£${fromMinorUnits(p.unit_amount_minor)}/${p.unit_measure}`
+          : '',
+      ]
+        .filter((x) => x)
+        .join(' · '),
+      where: p.shop,
+      when: ago(new Date(p.bought_at).getTime()),
+    })),
+  );
 
   constructor() {
     this.load();
@@ -76,7 +101,10 @@ export class HistoryDialog {
     this.entries.set(null);
     this.error.set(null);
     this.api.itemHistory(this.item.id).subscribe({
-      next: (entries) => this.entries.set(entries),
+      next: (h) => {
+        this.entries.set(h.entries);
+        this.purchases.set(h.purchases);
+      },
       error: (e: unknown) => this.error.set(message(e)),
     });
   }

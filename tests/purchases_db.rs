@@ -26,6 +26,18 @@ async fn product(pool: &sqlx::MySqlPool, barcode: &str, name: &str) -> ProductId
     ProductId::from(id)
 }
 
+/// A bare cupboard row to hang a purchase on. Real, because `purchases.item_id`
+/// is a foreign key — a made-up id would be rejected, which is the point of it.
+async fn item_row(pool: &sqlx::MySqlPool, user: &str, name: &str) -> u64 {
+    sqlx::query("INSERT INTO items (user_id, name, category) VALUES (?, ?, 'food')")
+        .bind(user)
+        .bind(name)
+        .execute(pool)
+        .await
+        .expect("insert item")
+        .last_insert_id()
+}
+
 fn paid(shop: &str, amount_minor: i64) -> NewPurchase {
     NewPurchase {
         shop: shop.into(),
@@ -51,6 +63,7 @@ async fn a_purchase_survives_being_relinked_to_a_different_product() {
 
     let wrong = product(&pool, "T-BUY-1", "Organic Honey").await;
     let item = BoughtItem {
+        id: item_row(&pool, user, "Blue dragon Oyster Sauce").await,
         product_id: Some(wrong),
         barcode: Some("T-BUY-1"),
         name: "Blue dragon Oyster Sauce",
@@ -94,6 +107,11 @@ async fn a_purchase_survives_being_relinked_to_a_different_product() {
         .execute(&pool)
         .await
         .expect("clean up");
+    sqlx::query("DELETE FROM items WHERE user_id = ?")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .expect("clean up items");
 }
 
 #[tokio::test]
@@ -112,6 +130,7 @@ async fn deleting_a_product_keeps_the_purchase() {
 
     let pid = product(&pool, "T-BUY-2", "Doomed Product").await;
     let item = BoughtItem {
+        id: item_row(&pool, user, "Doomed Product").await,
         product_id: Some(pid),
         barcode: Some("T-BUY-2"),
         name: "Doomed Product",
@@ -142,6 +161,11 @@ async fn deleting_a_product_keeps_the_purchase() {
         .execute(&pool)
         .await
         .expect("clean up");
+    sqlx::query("DELETE FROM items WHERE user_id = ?")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .expect("clean up items");
 }
 
 #[tokio::test]
@@ -152,6 +176,7 @@ async fn a_nonsense_price_is_refused_rather_than_stored() {
     db::migrate(&pool).await.expect("migrate");
     let user = "test-user-purchases-bad";
     let item = BoughtItem {
+        id: item_row(&pool, user, "Something").await,
         product_id: None,
         barcode: None,
         name: "Something",
@@ -244,6 +269,7 @@ async fn the_rate_is_quoted_per_kg_and_refused_when_the_pack_cannot_be_read() {
     {
         let barcode = format!("T-RATE-{i}");
         let item = BoughtItem {
+            id: item_row(&pool, user, "Thing").await,
             product_id: None,
             barcode: Some(&barcode),
             name: "Thing",
@@ -269,6 +295,84 @@ async fn the_rate_is_quoted_per_kg_and_refused_when_the_pack_cannot_be_read() {
         .execute(&pool)
         .await
         .expect("clean up");
+    sqlx::query("DELETE FROM items WHERE user_id = ?")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .expect("clean up items");
+}
+
+#[tokio::test]
+async fn a_hand_typed_row_is_reachable_by_its_item_and_by_nothing_else() {
+    // The gap this column exists to close, found by running the buy flow against
+    // production: a hand-typed buy-list row has no barcode and no catalogue
+    // product, so `history` — which matches on those two — can never find it.
+    // Every buy knows its item, so that is the key that always works.
+    let pool = db::connect(&common::test_db_url()).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+    let user = "test-user-purchases-item";
+    sqlx::query("DELETE FROM purchases WHERE user_id = ?")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .expect("clean");
+
+    let id = item_row(&pool, user, "Milk").await;
+    let item = BoughtItem {
+        id,
+        product_id: None,
+        barcode: None,
+        name: "Milk",
+        quantity: Some(2.0),
+        unit: Some("l"),
+    };
+    repo::record(&pool, user, &item, &paid("Waitrose", 250))
+        .await
+        .expect("record");
+
+    assert!(
+        repo::history(&pool, user, None, None)
+            .await
+            .expect("history")
+            .is_empty(),
+        "with no product and no barcode there is nothing for history to match on"
+    );
+
+    let by_item = repo::for_item(&pool, user, id).await.expect("for_item");
+    assert_eq!(by_item.len(), 1, "the item must find its own purchase");
+    assert_eq!(by_item[0].amount_minor, 250);
+    assert_eq!(by_item[0].item_id, Some(id));
+    // 250p for 2 l -> £1.25/L. The rate must be filled the same way both
+    // readers do it, or the two screens disagree about the same purchase.
+    assert_eq!(
+        (
+            by_item[0].unit_amount_minor,
+            by_item[0].unit_measure.as_deref()
+        ),
+        (Some(125), Some("L"))
+    );
+
+    // The spending record outlives the thing it bought.
+    sqlx::query("DELETE FROM items WHERE id = ?")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .expect("delete item");
+    let (left,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM purchases WHERE user_id = ?")
+        .bind(user)
+        .fetch_one(&pool)
+        .await
+        .expect("count");
+    assert_eq!(
+        left, 1,
+        "deleting the item must not delete what was paid for it"
+    );
+
+    sqlx::query("DELETE FROM purchases WHERE user_id = ?")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .expect("clean up");
 }
 
 #[tokio::test]
@@ -286,6 +390,7 @@ async fn a_purchase_is_only_its_owners() {
     }
 
     let item = BoughtItem {
+        id: item_row(&pool, mine, "Tea").await,
         product_id: None,
         barcode: Some("T-BUY-3"),
         name: "Tea",

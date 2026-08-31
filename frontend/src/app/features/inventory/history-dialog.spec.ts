@@ -5,7 +5,7 @@ import { of, throwError } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 
 import { LifeApi } from '../../life-api';
-import { Item, ItemHistoryEntry } from '../../models';
+import { Item, ItemHistoryEntry, Purchase } from '../../models';
 import { HistoryDialog, HistoryDialogData } from './history-dialog';
 
 const DAY = 86_400_000;
@@ -24,9 +24,13 @@ const item: Item = {
   has_image: false,
 };
 
-function setup(opts: { entries?: ItemHistoryEntry[]; error?: unknown } = {}) {
+function setup(
+  opts: { entries?: ItemHistoryEntry[]; purchases?: Purchase[]; error?: unknown } = {},
+) {
   const itemHistory = vi.fn(() =>
-    opts.error !== undefined ? throwError(() => opts.error) : of(opts.entries ?? []),
+    opts.error !== undefined
+      ? throwError(() => opts.error)
+      : of({ entries: opts.entries ?? [], purchases: opts.purchases ?? [] }),
   );
   TestBed.configureTestingModule({
     imports: [HistoryDialog],
@@ -39,6 +43,27 @@ function setup(opts: { entries?: ItemHistoryEntry[]; error?: unknown } = {}) {
   const fixture = TestBed.createComponent(HistoryDialog);
   fixture.detectChanges();
   return { fixture, cmp: fixture.componentInstance, itemHistory };
+}
+
+/** A purchase as the server sends it. Named so the two tests below read as
+ *  being about what is SHOWN, not about assembling a fixture. */
+function purchase(over: Partial<Purchase> = {}): Purchase {
+  return {
+    id: 1,
+    item_id: 7,
+    product_id: null,
+    barcode: null,
+    name: 'Milk',
+    shop: 'Waitrose',
+    amount_minor: 250,
+    currency: 'GBP',
+    quantity: 2,
+    unit: 'l',
+    unit_amount_minor: 125,
+    unit_measure: 'L',
+    bought_at: new Date().toISOString(),
+    ...over,
+  };
 }
 
 function text(fixture: { nativeElement: unknown }): string {
@@ -104,5 +129,25 @@ describe('HistoryDialog', () => {
     cmp.load();
     expect(itemHistory).toHaveBeenCalledTimes(2);
     expect(itemHistory).toHaveBeenCalledWith(7);
+  });
+});
+
+describe('HistoryDialog purchases', () => {
+  it('shows what was paid, with the rate, for a row that has no product at all', () => {
+    // The whole reason this lives here: a hand-typed buy-list row has no barcode
+    // and no catalogue product, so the product page cannot show its price. The
+    // item is the only key that always exists.
+    const { fixture } = setup({ purchases: [purchase()] });
+    const t = text(fixture);
+    expect(t).toContain('£2.50');
+    expect(t).toContain('£1.25/L');
+    expect(t).toContain('Waitrose');
+  });
+
+  it('does not read as empty when the only thing recorded is a price', () => {
+    // The empty state says "it was added before the app kept a history", which
+    // directly above a price would be a contradiction.
+    const { fixture } = setup({ entries: [], purchases: [purchase()] });
+    expect(text(fixture)).not.toContain('Nothing recorded');
   });
 });

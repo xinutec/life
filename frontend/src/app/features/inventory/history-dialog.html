@@ -4,10 +4,26 @@
     [error]="!!error()"
     [errorText]="error() ?? ''"
     (retry)="load()"
-    [empty]="loaded() && lines().length === 0"
+    [empty]="loaded() && lines().length === 0 && paid().length === 0"
     emptyIcon="history"
     emptyText="Nothing recorded for this one — it was added before the app kept a history."
   />
+
+  <!-- Above the timeline, and its own list: a purchase is a fact about the
+       item rather than one of the things that happened to it. For a hand-typed
+       buy-list row this is the ONLY place it can appear — no barcode and no
+       catalogue product means the product page has nothing to hang it on. -->
+  @if (paid().length) {
+    <mat-list>
+      @for (p of paid(); track p.id) {
+        <mat-list-item [lines]="2">
+          <mat-icon matListItemIcon aria-hidden="true">receipt_long</mat-icon>
+          <span matListItemTitle>{{ p.what }}</span>
+          <span matListItemLine class="when">{{ p.where }} · {{ p.when }}</span>
+        </mat-list-item>
+      }
+    </mat-list>
+  }
 
   @if (lines().length) {
     <mat-list>

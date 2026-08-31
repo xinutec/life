@@ -8,7 +8,8 @@ use serde::Deserialize;
 use crate::error::AppError;
 use crate::inventory::consume::Taken;
 use crate::inventory::repo;
-use crate::inventory::types::{Item, ItemHistoryEntry, Location, NewItem, NewLocation, UseItem};
+use crate::inventory::types::{Item, ItemHistory, Location, NewItem, NewLocation, UseItem};
+use crate::purchases::repo as purchases_repo;
 use crate::session::AuthUser;
 use crate::state::AppState;
 
@@ -99,10 +100,12 @@ pub async fn item_history(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
     Path(id): Path<u64>,
-) -> Result<Json<Vec<ItemHistoryEntry>>, AppError> {
-    Ok(Json(
-        repo::item_history(&app.pool, &user.user_id, id).await?,
-    ))
+) -> Result<Json<ItemHistory>, AppError> {
+    let (entries, purchases) = tokio::try_join!(
+        repo::item_history(&app.pool, &user.user_id, id),
+        purchases_repo::for_item(&app.pool, &user.user_id, id),
+    )?;
+    Ok(Json(ItemHistory { entries, purchases }))
 }
 
 pub async fn move_item(

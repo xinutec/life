@@ -10,6 +10,9 @@ use crate::products::ids::ProductId;
 /// separately from [`NewPurchase`] because none of it is typed by the person —
 /// it is copied from the row, so the capture step asks only for shop and price.
 pub struct BoughtItem<'a> {
+    /// The item the buy created. Always known at the call site, and the only
+    /// identifier that is — see `Purchase::item_id`.
+    pub id: u64,
     pub product_id: Option<ProductId>,
     pub barcode: Option<&'a str>,
     pub name: &'a str,
@@ -48,10 +51,11 @@ pub async fn record(
     }
     let res = sqlx::query(
         "INSERT INTO purchases \
-         (user_id, product_id, barcode, name, shop, amount_minor, currency, quantity, unit) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         (user_id, item_id, product_id, barcode, name, shop, amount_minor, currency, quantity, unit) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(user_id)
+    .bind(item.id)
     .bind(item.product_id)
     .bind(item.barcode)
     .bind(item.name)
@@ -63,6 +67,26 @@ pub async fn record(
     .execute(pool)
     .await?;
     Ok(res.last_insert_id())
+}
+
+/// What this person paid for ONE cupboard item, newest first.
+///
+/// Separate from [`history`] because it answers a different question and needs a
+/// key that always exists. `history` is "what have I paid for this THING, ever"
+/// and is keyed on the catalogue; this is "what did this particular row cost",
+/// and it is the only way to reach a purchase from a hand-typed buy-list row,
+/// which has no barcode and no product (migration 0044).
+pub async fn for_item(pool: &MySqlPool, user_id: &str, item_id: u64) -> Result<Vec<Purchase>> {
+    let rows = sqlx::query_as::<_, Purchase>(
+        "SELECT id, item_id, product_id, barcode, name, shop, amount_minor, currency, \
+         quantity, unit, bought_at FROM purchases \
+         WHERE user_id = ? AND item_id = ? ORDER BY bought_at DESC, id DESC",
+    )
+    .bind(user_id)
+    .bind(item_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(with_rate).collect())
 }
 
 /// What a purchase works out to per kg / litre / item.
@@ -121,7 +145,7 @@ pub async fn history(
         return Ok(Vec::new());
     }
     let rows = sqlx::query_as::<_, Purchase>(
-        "SELECT id, product_id, barcode, name, shop, amount_minor, currency, \
+        "SELECT id, item_id, product_id, barcode, name, shop, amount_minor, currency, \
          quantity, unit, bought_at FROM purchases \
          WHERE user_id = ? \
            AND ((? IS NOT NULL AND product_id = ?) OR (? IS NOT NULL AND barcode = ?)) \
@@ -134,15 +158,15 @@ pub async fn history(
     .bind(barcode)
     .fetch_all(pool)
     .await?;
-    Ok(rows
-        .into_iter()
-        .map(|mut p| {
-            if let Some((amount, measure)) = per_unit(p.amount_minor, p.quantity, p.unit.as_deref())
-            {
-                p.unit_amount_minor = Some(amount);
-                p.unit_measure = Some(measure);
-            }
-            p
-        })
-        .collect())
+    Ok(rows.into_iter().map(with_rate).collect())
+}
+
+/// Fill in the derived rate. Shared by both readers so they cannot disagree
+/// about what a purchase looks like.
+fn with_rate(mut p: Purchase) -> Purchase {
+    if let Some((amount, measure)) = per_unit(p.amount_minor, p.quantity, p.unit.as_deref()) {
+        p.unit_amount_minor = Some(amount);
+        p.unit_measure = Some(measure);
+    }
+    p
 }

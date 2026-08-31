@@ -806,6 +806,7 @@ describe('ProductPage', () => {
       purchases: [
         {
           id: 1,
+          item_id: null,
           product_id: 42,
           barcode: '5000328042732',
           name: 'Oats',

@@ -122,6 +122,7 @@ pub async fn buy(
     })) = body
     {
         let bought = purchases_repo::BoughtItem {
+            id: item.id,
             product_id: item.product_id,
             barcode: item.barcode.as_deref(),
             name: &item.name,

@@ -11,7 +11,7 @@ import {
   FieldChoice,
   HouseScene,
   Item,
-  ItemHistoryEntry,
+  ItemHistory,
   Loc,
   Me,
   PlannedTrip,
@@ -101,8 +101,11 @@ export class LifeApi {
   }
   /** What has happened to one stock row, newest first. Empty for a row added
    *  before the audit existed — "no history" is an answer, not a failure. */
-  itemHistory(id: number): Observable<ItemHistoryEntry[]> {
-    return this.http.get<ItemHistoryEntry[]>(`/api/items/${id}/history`);
+  /** Everything the history dialog shows: the events, and what was paid. The
+   *  purchases ride alongside rather than among them — a purchase is a fact
+   *  about the item, not one of the things that happened to it. */
+  itemHistory(id: number): Observable<ItemHistory> {
+    return this.http.get<ItemHistory>(`/api/items/${id}/history`);
   }
   moveItem(id: number, locationId: number | null): Observable<Item> {
     return this.http.post<Item>(`/api/items/${id}/move`, { location_id: locationId });

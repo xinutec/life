@@ -4,7 +4,14 @@ import type { ProductId } from "./ProductId";
 /**
  * A recorded purchase, as it reads back.
  */
-export type Purchase = { id: number, product_id: ProductId | null, barcode: string | null, 
+export type Purchase = { id: number, product_id: ProductId | null, 
+/**
+ * The cupboard item this bought. The one key that ALWAYS exists, because a
+ * purchase is only recorded by buying something and buying is what creates
+ * the item — a hand-typed buy-list row has no barcode and no product, and
+ * was unreachable without this (migration 0044).
+ */
+item_id: number | null, barcode: string | null, 
 /**
  * What it was called when it was bought — the one field no later
  * correction to the catalogue can invalidate.

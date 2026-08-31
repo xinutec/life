@@ -176,6 +176,24 @@ pub enum ItemEvent {
     Used,
 }
 
+/// Everything the history dialog shows for one stock row.
+///
+/// The purchases ride ALONGSIDE the events rather than among them. A purchase is
+/// a fact about the item, not one of the things that happened to it, and
+/// `ItemEvent` is read back out of the database under a rule that an unknown
+/// value fails loudly — synthesising a `bought` event that nothing ever stores
+/// would put a value in that union which the table can never contain.
+///
+/// This is also the ONLY way to reach a purchase made against a hand-typed
+/// buy-list row: it has no barcode and no catalogue product, so the product page
+/// cannot show it (migration 0044).
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct ItemHistory {
+    pub entries: Vec<ItemHistoryEntry>,
+    pub purchases: Vec<crate::purchases::types::Purchase>,
+}
+
 /// One thing that happened to a stock row — a line of its history.
 ///
 /// The table has been written on every add, move, remove and use since the

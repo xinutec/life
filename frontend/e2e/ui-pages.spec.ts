@@ -107,6 +107,16 @@ const ITEMS = [
 
 // An item's audit, as the server orders it: newest first, and mixing the two
 // readings of `quantity` — a delta on the `used` row, a level on the others.
+/** What the row cost. Present so the dialog's newest section is measured too —
+ *  a second list above a timeline that was already the height of the screen. */
+const ITEM_PURCHASES = [
+  {
+    id: 1, item_id: 3, product_id: null, barcode: null, name: 'Greek yoghurt',
+    shop: 'Waitrose', amount_minor: 250, currency: 'GBP', quantity: 2, unit: 'l',
+    unit_amount_minor: 125, unit_measure: 'L', bought_at: '2026-08-29T09:00:00Z',
+  },
+];
+
 const ITEM_HISTORY = [
   { id: 12, event: 'used', quantity: 200, location: 'Fridge', at: Date.now() - 3_600_000 },
   { id: 8, event: 'moved', quantity: null, location: 'Fridge', at: Date.now() - 2 * 86_400_000 },
@@ -191,7 +201,7 @@ const PRODUCT_DETAIL = {
   reconciliation: { fields: [] },
   documents: [],
   purchases: [
-    { id: 1, product_id: 42, barcode: '5000328042732', name: 'Oat So Simple',
+    { id: 1, item_id: null, product_id: 42, barcode: '5000328042732', name: 'Oat So Simple',
       shop: 'Waitrose', amount_minor: 425, currency: 'GBP', quantity: 594,
       unit: 'g', unit_amount_minor: 715, unit_measure: 'KG',
       bought_at: '2026-08-20T09:00:00Z' },
@@ -248,7 +258,11 @@ async function mockApi(page: Page): Promise<void> {
     r.fulfill({ json: { suggestions: [], stale: false, pending: false, thinkingSecs: null } }),
   );
   await page.route('**/api/items*', (r) => r.fulfill({ json: ITEMS }));
-  await page.route('**/api/items/*/history', (r) => r.fulfill({ json: ITEM_HISTORY }));
+  await page.route('**/api/items/*/history', (r) =>
+    // Events AND what was paid — the dialog reads both now, and a purchase from
+    // a hand-typed row is only reachable here.
+    r.fulfill({ json: { entries: ITEM_HISTORY, purchases: ITEM_PURCHASES } }),
+  );
   await page.route('**/api/bins', (r) => r.fulfill({ json: BINS }));
   // Not linked: the state that actually renders a card with a button in it.
   await page.route('**/api/nextcloud/connect/status', (r) =>

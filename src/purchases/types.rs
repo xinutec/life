@@ -35,6 +35,12 @@ pub struct Purchase {
     #[ts(type = "number")]
     pub id: u64,
     pub product_id: Option<ProductId>,
+    /// The cupboard item this bought. The one key that ALWAYS exists, because a
+    /// purchase is only recorded by buying something and buying is what creates
+    /// the item — a hand-typed buy-list row has no barcode and no product, and
+    /// was unreachable without this (migration 0044).
+    #[ts(type = "number | null")]
+    pub item_id: Option<u64>,
     pub barcode: Option<String>,
     /// What it was called when it was bought — the one field no later
     /// correction to the catalogue can invalidate.
