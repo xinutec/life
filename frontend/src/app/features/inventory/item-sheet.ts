@@ -17,7 +17,7 @@ import { Feedback } from '../../shared/feedback';
 import { ProductPick, ProductPickData, ProductPicker } from '../../shared/product-picker';
 import { SheetHeader } from '../../shared/sheet-header';
 import { LifeApi } from '../../life-api';
-import { ITEM_CATEGORIES, Item, ItemCategory } from '../../models';
+import { ITEM_CATEGORIES, ITEM_CATEGORY_LABEL, Item, ItemCategory } from '../../models';
 import { ScannerDialog } from '../scanner/scanner-dialog';
 import { HistoryDialog, HistoryDialogData } from './history-dialog';
 
@@ -66,6 +66,10 @@ export class ItemSheet {
   private router = inject(Router);
 
   readonly categories = ITEM_CATEGORIES;
+  /** Its display name — the picker shows what a category is called, not its key. */
+  label(c: ItemCategory): string {
+    return ITEM_CATEGORY_LABEL[c];
+  }
   readonly locations = this.data.locations;
   readonly editing = this.data.item != null;
   readonly saving = signal(false);

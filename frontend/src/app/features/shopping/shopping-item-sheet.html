@@ -43,7 +43,7 @@
     <mat-label>Category</mat-label>
     <mat-select [ngModel]="category()" (ngModelChange)="category.set($event)">
       @for (c of categories; track c) {
-        <mat-option [value]="c">{{ c }}</mat-option>
+        <mat-option [value]="c">{{ label(c) }}</mat-option>
       }
     </mat-select>
   </mat-form-field>

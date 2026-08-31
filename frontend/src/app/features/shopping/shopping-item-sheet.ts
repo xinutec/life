@@ -14,7 +14,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 
 import { isNotFound } from '../../shared/api-error';
-import { ITEM_CATEGORIES, ItemCategory } from '../../models';
+import { ITEM_CATEGORIES, ITEM_CATEGORY_LABEL, ItemCategory } from '../../models';
 import { Feedback } from '../../shared/feedback';
 import { ProductPick, ProductPickData, ProductPicker } from '../../shared/product-picker';
 import { SheetHeader } from '../../shared/sheet-header';
@@ -54,6 +54,10 @@ export class ShoppingItemSheet {
   readonly editing = this.ulid != null;
 
   readonly categories = ITEM_CATEGORIES;
+  /** Its display name — the picker shows what a category is called, not its key. */
+  label(c: ItemCategory): string {
+    return ITEM_CATEGORY_LABEL[c];
+  }
 
   readonly name = signal('');
   readonly quantity = signal<number | null>(null);

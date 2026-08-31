@@ -69,13 +69,43 @@ import { keysOf } from './shared/narrow';
 /** Every ItemCategory, in the order category pickers show them. The `Record`
  *  keys make the compiler prove the list is exhaustive and duplicate-free — a
  *  new enum value won't build until it's placed here. */
+// Ordered as a person would scan it, not alphabetically: the everyday ones
+// first, `other` last because it is the fallback and a fallback offered early
+// gets picked early — which is how `other` came to hold an avocado.
 export const ITEM_CATEGORIES = keysOf({
   food: true,
-  medication: true,
+  cookware: true,
+  tableware: true,
+  cleaning: true,
+  clothing: true,
+  appliance: true,
   tool: true,
+  medication: true,
   document: true,
   other: true,
 } satisfies Record<ItemCategoryT, true>);
+
+/** What each category is CALLED, as opposed to what it is keyed by.
+ *
+ *  The pickers rendered the slug itself, which was survivable while the list was
+ *  five short words and is not now: "tableware" beside "cookware" in lower case
+ *  is two near-identical strings a person has to read letter by letter.
+ *
+ *  Typed as a total Record, so adding a variant is a compile error here — a
+ *  category that reaches the UI unnamed would render as its slug and look like
+ *  a bug in the data. */
+export const ITEM_CATEGORY_LABEL: Record<ItemCategoryT, string> = {
+  food: 'Food',
+  cookware: 'Cookware (pans, trays)',
+  tableware: 'Tableware (glasses, plates)',
+  cleaning: 'Cleaning',
+  clothing: 'Clothing',
+  appliance: 'Appliance',
+  tool: 'Tool',
+  medication: 'Medication',
+  document: 'Document',
+  other: 'Other',
+};
 
 // Scene-file types are frontend-owned: /api/house streams scenes/house.json
 // through as raw JSON (no Rust struct), so these aren't generated.

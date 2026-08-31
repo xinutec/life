@@ -78,13 +78,40 @@ impl fmt::Display for ItemNameSource {
     }
 }
 
-/// Item category. Generic from day one — food is just the first skin.
+/// What kind of thing an item is.
+///
+/// "Generic from day one — food is just the first skin" was the intent, but the
+/// list was food's skin and nothing else's: a house is full of pans, glasses and
+/// clothes, and every one of them landed in `Other`. Measured 2026-08-31, and the
+/// tell is that `Other` had come to hold BOTH — four genuinely non-food things
+/// AND two foods (an avocado, a protein drink) that somebody filed there because
+/// nothing fitted. A bucket that means "not food" and "nobody said" at the same
+/// time cannot group, filter or answer anything.
+///
+/// Split by WHERE A THING LIVES AND WHAT YOU ASK OF IT, not by material:
+/// `Cookware` and `Tableware` are different cupboards and different questions
+/// ("which pan", "how many glasses"), while a steel pan and a steel fork have
+/// nothing to say to each other.
+///
+/// ⚠ Still a closed set, so adding a kind needs a deploy. That is a known limit
+/// rather than a decision that this is enough — the column is VARCHAR and the
+/// client's sync schema already stores a free string, so nothing below this
+/// layer constrains it. See the follow-up task on user-defined categories.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum ItemCategory {
     Food,
     Medication,
+    /// Pans, baking trays, the things you cook WITH.
+    Cookware,
+    /// Glasses, plates, cutlery — what you eat and drink FROM.
+    Tableware,
+    Clothing,
+    /// Anything with a plug and a warranty; the category #131 hangs off.
+    Appliance,
+    /// Detergent, sponges, refills — bought repeatedly, never eaten.
+    Cleaning,
     Tool,
     Document,
     Other,
@@ -95,6 +122,11 @@ impl fmt::Display for ItemCategory {
         let s = match self {
             ItemCategory::Food => "food",
             ItemCategory::Medication => "medication",
+            ItemCategory::Cookware => "cookware",
+            ItemCategory::Tableware => "tableware",
+            ItemCategory::Clothing => "clothing",
+            ItemCategory::Appliance => "appliance",
+            ItemCategory::Cleaning => "cleaning",
             ItemCategory::Tool => "tool",
             ItemCategory::Document => "document",
             ItemCategory::Other => "other",
@@ -109,6 +141,11 @@ impl FromStr for ItemCategory {
         match s {
             "food" => Ok(ItemCategory::Food),
             "medication" => Ok(ItemCategory::Medication),
+            "cookware" => Ok(ItemCategory::Cookware),
+            "tableware" => Ok(ItemCategory::Tableware),
+            "clothing" => Ok(ItemCategory::Clothing),
+            "appliance" => Ok(ItemCategory::Appliance),
+            "cleaning" => Ok(ItemCategory::Cleaning),
             "tool" => Ok(ItemCategory::Tool),
             "document" => Ok(ItemCategory::Document),
             "other" => Ok(ItemCategory::Other),
