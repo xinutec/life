@@ -659,6 +659,28 @@ early rather than leaning on the margin.
       wrong on this data, because a name can differ merely by being OLDER than a
       product correction. 'product' is also the recoverable direction — the old
       name still sits in `items.name`.
+- [x] **The house has its own categories** (2026-08-31) — "generic from day one,
+      food is just the first skin" was the intent, but the list WAS food's skin:
+      pans, glasses and clothes all landed in `other`. The tell was that `other`
+      held both those AND two foods somebody filed there because nothing fitted —
+      a bucket meaning "not food" and "nobody said" at once cannot group or
+      filter. Added cookware, tableware, clothing, appliance, cleaning, split by
+      what you ASK of a thing rather than what it is made of. `other` is offered
+      LAST (a fallback offered early gets picked early) and is now empty.
+      ⚠ Still a closed enum, so a new kind needs a deploy. The column is VARCHAR
+      and the client's sync schema already stores a free string, so nothing below
+      that layer constrains it — user-defined categories are a separate task, and
+      deliberately not started until somebody wants a kind that does not exist.
+- [x] **A check-in can say more than a score** (2026-08-31) — the app's
+      most-used screen, and the previous 60 commits touched none of it: telemetry
+      puts `/wellbeing` top while the work all went to inventory. Logging a bare
+      score is the RARE case — 196 of 207 entries have `updated_at > created_at`,
+      and a trace caught the edit tap landing in the SAME batch as the log. The
+      strip now offers a way into the entry it just logged, on Wellbeing and on
+      Today.
+      ⚠ NOT a sheet that opens itself: tapping an adjacent face inside the amend
+      window is how a half-step is recorded, and a sheet over the strip would
+      take that gesture away to save one tap. The offer lapses with that window.
 - [x] **A picture can be added** (2026-08-30) — the image half, and like the
       name half its filed premise was the wrong one. "Not self-contained if the
       cache is wiped" is hypothetical: `products.image` is a LONGBLOB in the

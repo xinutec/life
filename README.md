@@ -50,6 +50,53 @@ A `product` op needs a hand-made login to the shop in that Chrome profile: signe
 out, Waitrose mints no Bearer at all, and the extractor says so. The session is
 short-lived — expect to sign in again between sittings.
 
+### Working against the running app
+
+`scripts/life-api.mjs` makes one authenticated request against a live Life,
+borrowing the browser's session instead of handling anybody's credentials.
+`seed-demo.sh` cannot do this: it talks to a local server through `dev-login`,
+which production does not have.
+
+```sh
+./scripts/life-api.mjs GET  /api/items
+./scripts/life-api.mjs POST /api/locations '{"kind":"room","name":"Bedroom"}'
+```
+
+It is deliberately thin — one request per call, composed with `jq` — so
+multi-step work needs no bespoke script, and nothing personal lands in this
+repository.
+
+`scripts/shop-listings-sweep.mjs` finds the shop listing for cupboard products
+that have none, so "where can I buy this" and "cheapest shop" have prices to
+compare. **Name to discover, barcode to confirm**: Asda's search does not match
+EANs, so discovery goes by name, and only an exact barcode match is accepted —
+bulk-linking on a fuzzy name would file the wrong product at scale. Yield is
+about a third; the misses are honest (an own-brand barcode is not the
+manufacturer EAN, and no shop stocks everything).
+
+```sh
+./scripts/shop-listings-sweep.mjs                    # dry run
+./scripts/shop-listings-sweep.mjs --commit --limit 20
+```
+
+Paced and capped per run — this is somebody else's storefront. It remembers what
+it has asked in `~/.cache/life/shop-sweep.json`, outside this repo because that
+is a record of one person's cupboard; without it, successive runs repeat the
+same misses forever.
+
+`scripts/house-plan.mjs` renders `scenes/house.json` with every furniture box
+numbered, which is how somebody says *which* box is the tall cupboard — the
+scene carries geometry and no labels.
+
+```sh
+./scripts/house-plan.mjs --room kitchen        > plan.svg   # top-down, split by height
+./scripts/house-plan.mjs --room kitchen --iso  > iso.svg    # isometric
+```
+
+Numbering is by index in `scenes/house.json`, so the number read off the picture
+identifies the box in the file. Use `--iso` when boxes stack: seen from above, a
+wall unit lands on the base unit under it and their numbers collide.
+
 ⚠ **Check the login on `waitrose.com/`, not on a search page.** The search page
 the extractor runs on is identical signed in and signed out: both show "Sign in",
 neither shows "Sign out". Probing it answers "signed out" for a signed-IN
