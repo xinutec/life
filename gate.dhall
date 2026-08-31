@@ -105,18 +105,21 @@ in  { name = "life"
         , name = "frontend deps match the lockfile"
         , cwd = "frontend"
         , argv = G.inDevShell [ "pnpm", "install", "--frozen-lockfile" ]
+        , env = G.nonInteractive
         , timeout_s = 900
         }
       , G.Check::{
         , name = "frontend lint"
         , cwd = "frontend"
         , argv = G.inDevShell [ "pnpm", "run", "lint" ]
+        , env = G.nonInteractive
         , timeout_s = 900
         }
       , G.Check::{
         , name = "frontend typecheck (e2e)"
         , cwd = "frontend"
         , argv = G.inDevShell [ "pnpm", "run", "typecheck:e2e" ]
+        , env = G.nonInteractive
         , timeout_s = 900
         }
       , G.Check::{
@@ -127,13 +130,14 @@ in  { name = "life"
               "../../"
               [ "dist/life-web/browser" ]
               [ "pnpm", "exec", "ng", "build" ]
+        , env = G.nonInteractive
         , timeout_s = 1800
         }
       , G.Check::{
         , name = "frontend unit tests"
         , cwd = "frontend"
         , argv = G.inDevShell [ "pnpm", "test" ]
-        , env = G.oneAngularWorker
+        , env = G.nonInteractive # G.oneAngularWorker
         , timeout_s = 1800
         }
       , {-  The L2 phone-width layout harness: serves the dist the build row
@@ -143,6 +147,7 @@ in  { name = "life"
         , name = "frontend ui-check (phone-width layout harness)"
         , cwd = "frontend"
         , argv = G.inDevShell [ "pnpm", "run", "ui-check" ]
+        , env = G.nonInteractive
         , timeout_s = 1800
         }
       , {-  The Android app is not a bookmark: it holds the clipboard bridge, the
