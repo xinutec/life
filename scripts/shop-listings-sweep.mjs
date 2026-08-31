@@ -14,9 +14,16 @@
 // when its barcode equals the product's, and everything else is reported and
 // skipped rather than guessed at.
 //
-// Sampled hit rate under that rule: 4 of 6. Two thirds of the catalogue should
-// find itself; the rest stays unlinked, which is the correct outcome for a
-// product this cannot identify.
+// Hit rate under that rule, measured 2026-08-31: 4 of 6 on the first sample,
+// then 5 of 15 on the first real batch — call it a THIRD, not the two thirds the
+// small sample suggested. Six products was not enough to quote a rate from.
+//
+// The misses are mostly honest: a shop's own barcode for an own-brand line is
+// not the manufacturer EAN that Open Food Facts holds, and some things (a
+// Spanish olive oil, Dutch chocolate sprinkles) Asda simply does not stock. A
+// product that stays unlinked is the correct outcome for one this cannot
+// identify — the alternative is a wrong link that looks exactly like a right
+// one.
 //
 //   ./scripts/shop-listings-sweep.mjs            # dry run: says what it WOULD link
 //   ./scripts/shop-listings-sweep.mjs --commit   # actually records them
@@ -26,6 +33,8 @@
 // burst of 72 searches is a scraper. The default spreads a full sweep over
 // several runs; --limit exists so it can be run little and often.
 import { execFileSync } from 'node:child_process';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 const API = new URL('./life-api.mjs', import.meta.url).pathname;
 const argv = process.argv.slice(2);
@@ -37,6 +46,29 @@ const commit = argv.includes('--commit');
 const limit = Number(flag('--limit', '25'));
 const delayMs = Number(flag('--delay', '20')) * 1000;
 const source = flag('--source', 'asda');
+// Products already asked about, so a second run does not spend somebody else's
+// bandwidth re-asking. Found the hard way: the first two batches shared TEN of
+// fifteen products, because a miss left no trace and the sweep restarted from
+// the same place every time.
+//
+// Outside the repo: it is a record of what is in one person's cupboard, and this
+// repository is public.
+const statePath = flag('--state', `${process.env.HOME}/.cache/life/shop-sweep.json`);
+// A miss is not permanent — a shop starts stocking things, and a barcode gets
+// corrected. Re-ask eventually rather than never.
+const retryAfterDays = Number(flag('--retry-after', '30'));
+
+const loadState = () => {
+  try {
+    return JSON.parse(readFileSync(statePath, 'utf8'));
+  } catch {
+    return {};
+  }
+};
+const saveState = (state) => {
+  mkdirSync(dirname(statePath), { recursive: true });
+  writeFileSync(statePath, JSON.stringify(state, null, 2));
+};
 
 if (source !== 'asda') {
   // Waitrose has no server-side search: its provider runs in a browser
@@ -78,10 +110,22 @@ const covered = new Set(
     .map((r) => r.key),
 );
 
+const state = loadState();
+const askedRecently = (id) => {
+  const at = state[`${source}:${id}`];
+  return at != null && Date.now() - at < retryAfterDays * 86_400_000;
+};
+
 // De-duplicated: two cupboard rows of the same thing are one product to price.
 const seen = new Set();
 const todo = items
-  .filter((i) => !covered.has(String(i.product_id)) && !seen.has(i.product_id) && seen.add(i.product_id))
+  .filter(
+    (i) =>
+      !covered.has(String(i.product_id)) &&
+      !askedRecently(i.product_id) &&
+      !seen.has(i.product_id) &&
+      seen.add(i.product_id),
+  )
   .map((i) => ({ id: i.product_id, barcode: i.barcode, name: i.name }))
   .slice(0, limit);
 
@@ -103,7 +147,11 @@ for (const [i, p] of todo.entries()) {
     // A search that fails is not a product that does not exist. Say so, and
     // leave it for another run rather than recording an absence.
     console.log(`  ?  ${p.id}  search failed  | ${p.name}`);
-    continue;
+    continue; // NOT recorded: the shop did not answer, so nothing was learned
+  }
+  if (commit) {
+    state[`${source}:${p.id}`] = Date.now();
+    saveState(state);
   }
   const exact = hits.filter((h) => h.barcode === p.barcode);
   if (exact.length === 0) {
@@ -130,4 +178,5 @@ for (const [i, p] of todo.entries()) {
 }
 
 console.log(`\nlinked ${linked}, no barcode match ${missed}, ambiguous ${ambiguous}`);
+if (commit) console.log(`asked-about set: ${Object.keys(state).length} (${statePath})`);
 if (!commit && linked > 0) console.log('re-run with --commit to record them');
