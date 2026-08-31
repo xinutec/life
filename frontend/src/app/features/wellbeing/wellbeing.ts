@@ -166,21 +166,37 @@ export class Wellbeing {
     // survives a zoom change, so the charts still look right, while scrollLeft
     // silently still refers to the old rail. Left alone, the next touch reads that
     // stale position against the new width and teleports the window.
+    // A resize has happened and the scroller has not been put right yet. Set
+    // where the width changes, cleared by the re-seat below; `onPan` ignores
+    // scrolls while it holds, because a scroll arriving in that gap is
+    // describing the OLD rail and nobody chose the position it reports.
+    effect(() => {
+      this.panFactor();
+      untracked(() => this.reseating.set(true));
+    });
     afterRenderEffect(() => {
       const el = this.panEl()?.nativeElement;
-      if (!el) return;
+      // Read BEFORE the element check, or an effect that runs once without a
+      // rail never tracks the width and stops re-seating for good.
       this.panFactor();
       const pinned = this.atNow();
       untracked(() => {
-        const max = el.scrollWidth - el.clientWidth;
-        const want =
-          pinned || max <= 0
-            ? max
-            : ((this.endMs() - this.earliestEnd()) / this.pannableMs()) * max;
-        // Only when genuinely out of step. Writing back a position we just derived
-        // FROM scrollLeft fires another scroll event, and the two chase each
-        // other's rounding.
-        if (Math.abs(el.scrollLeft - want) > 1) el.scrollLeft = want;
+        if (el) {
+          const max = el.scrollWidth - el.clientWidth;
+          const want =
+            pinned || max <= 0
+              ? max
+              : ((this.endMs() - this.earliestEnd()) / this.pannableMs()) * max;
+          // Only when genuinely out of step. Writing back a position we just
+          // derived FROM scrollLeft fires another scroll event, and the two
+          // chase each other's rounding.
+          if (Math.abs(el.scrollLeft - want) > 1) el.scrollLeft = want;
+        }
+        // ⚠ On EVERY path, including the one with no rail. An earlier attempt
+        // cleared this only after seating, behind an early return — the flag
+        // stuck set, every pan was ignored, and the failure rate went from
+        // 2-in-10 to 7-in-10. Measured both ways (#1293).
+        this.reseating.set(false);
       });
     });
   }
@@ -227,7 +243,14 @@ export class Wellbeing {
    *  Within a pixel of the end re-pins to now, so a flick to the right edge
    *  starts following new check-ins again rather than freezing the window a few
    *  seconds short of them. */
+  /** True between a rail resize and the re-seat that answers it. */
+  private readonly reseating = signal(false);
+
   onPan(el: HTMLElement): void {
+    // Mid-resize the scroller still refers to the old rail; reading this
+    // position against the new width drags the window a day sideways. The
+    // re-seat decides where it sits, not this.
+    if (this.reseating()) return;
     // Every measurement taken before the write, and one write: a signal write
     // schedules change detection rather than performing it, so a scrollLeft read
     // after one measures the DOM as it was before.
