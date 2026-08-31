@@ -20,6 +20,7 @@ import { ShoppingDoc, ShoppingStore } from '../../sync/shopping-store';
 import { TodoDoc, TodoStore } from '../../sync/todo-store';
 import { prioRank } from '../todo/todo-meta';
 import { TodoDetail } from '../todo/todo-detail';
+import { WellbeingEntry } from '../wellbeing/wellbeing-entry';
 import { TodoGraph, Urgency } from '../todo/todo-graph';
 
 /** One to-do surfaced on Today, with a short reason chip. */
@@ -120,6 +121,17 @@ export class Today {
   /** Tap the title: the full to-do editor, same as in the list. */
   open(todo: TodoDoc): void {
     this.sheet.open(TodoDetail, { data: { ulid: todo.ulid } });
+  }
+
+  /** Say more about the check-in just logged here.
+   *
+   *  Today carries the same strip as Wellbeing, so it had the same problem: the
+   *  score commits on the first tap and everything else meant finding the entry
+   *  again on another screen. It was left out when this shipped on the reasoning
+   *  that Today has no edit sheet — which was simply wrong, it opens one for
+   *  to-dos two lines above. */
+  addDetail(ulid: string): void {
+    this.sheet.open(WellbeingEntry, { data: { ulid } });
   }
 
   private chip(todo: TodoDoc, urgency: Urgency): { label: string; cls: string } | null {

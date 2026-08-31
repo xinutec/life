@@ -4,6 +4,7 @@ import { of } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Feedback } from '../../shared/feedback';
+import { WellbeingEntry } from '../wellbeing/wellbeing-entry';
 import { LifeApi } from '../../life-api';
 import { BinDay } from '../../models';
 import { ShoppingStore } from '../../sync/shopping-store';
@@ -41,6 +42,7 @@ describe('Today', () => {
     };
     const shopping = { items$: of(opts.shopping ?? []) };
     const todoStore = { items$: of(todos), setStatus: vi.fn().mockResolvedValue(undefined) };
+    const sheet = { open: vi.fn() };
     const graph = {
       todoItems: () => todos,
       statusOf: vi.fn((t: { ulid: string }) => opts.state?.[t.ulid] ?? 'open'),
@@ -54,11 +56,11 @@ describe('Today', () => {
         { provide: ShoppingStore, useValue: shopping },
         { provide: TodoStore, useValue: todoStore },
         { provide: TodoGraph, useValue: graph },
-        { provide: MatBottomSheet, useValue: { open: vi.fn() } },
+        { provide: MatBottomSheet, useValue: sheet },
         { provide: Feedback, useValue: { undo: vi.fn() } },
       ],
     });
-    return { c: TestBed.inject(Today), todoStore };
+    return { c: TestBed.inject(Today), todoStore, sheet };
   }
 
   it('surfaces overdue and ready to-dos, hiding blocked/waiting/done/plain-open', () => {
@@ -109,5 +111,17 @@ describe('Today', () => {
     const undoFn = (feedback.undo.mock.calls[0] as [string, () => void])[1];
     undoFn();
     expect(todoStore.setStatus).toHaveBeenCalledWith('a', 'open');
+  });
+
+  it('opens the just-logged check-in, rather than sending you to another screen', () => {
+    // Today carries the same strip, so it had the same defect. It was left out
+    // of the first fix on the reasoning that Today has no edit sheet — wrong, it
+    // opens one for to-dos. Checking in from the landing screen must not be the
+    // worse flow.
+    const { c, sheet } = setup({});
+    c.addDetail('01ABCDEF0000000000000000AB');
+    expect(sheet.open).toHaveBeenCalledWith(WellbeingEntry, {
+      data: { ulid: '01ABCDEF0000000000000000AB' },
+    });
   });
 });
