@@ -19,6 +19,10 @@ import { readFileSync } from 'node:fs';
 
 const argv = process.argv.slice(2);
 const only = argv.includes('--room') ? argv[argv.indexOf('--room') + 1] : null;
+// Seen from above, a wall unit and the base unit under it occupy the same
+// square and their numbers land on top of each other. Height is the thing that
+// tells them apart, so --iso keeps it.
+const iso = argv.includes('--iso');
 
 const scene = JSON.parse(readFileSync(new URL('../scenes/house.json', import.meta.url), 'utf8'));
 
@@ -119,5 +123,88 @@ panels.forEach((panel, i) => {
   for (const box of panel.of) parts.push(...draw(box, dy));
 });
 parts.push('</svg>');
-console.log(parts.join('\n'));
+
+if (iso) {
+  // A 2:1 isometric: x goes right-and-down, z goes left-and-down, y straight up.
+  // Not a perspective camera — parallel projection keeps a box the same size
+  // wherever it sits, so two cupboards of equal width read as equal, which is
+  // what makes them identifiable.
+  const S = 78; // px per metre
+  const px = (x, y, z) => [(x - z) * 0.866 * S, ((x + z) * 0.5 - y) * S];
+
+  const corners = [];
+  for (const box of boxes) {
+    const { cx, cz, w, d, h } = box;
+    const y0 = box.y0 ?? 0;
+    for (const X0 of [cx - w / 2, cx + w / 2])
+      for (const Z0 of [cz - d / 2, cz + d / 2])
+        for (const Y0 of [y0, y0 + h]) corners.push(px(X0, Y0, Z0));
+  }
+  const xs = corners.map((c) => c[0]);
+  const ys = corners.map((c) => c[1]);
+  const m = 40;
+  const minX = Math.min(...xs) - m;
+  const minY = Math.min(...ys) - m;
+  const wSvg = Math.max(...xs) - minX + m;
+  const hSvg = Math.max(...ys) - minY + m;
+  const P = (x, y, z) => {
+    const [a, b2] = px(x, y, z);
+    return `${(a - minX).toFixed(1)},${(b2 - minY).toFixed(1)}`;
+  };
+
+  // Painter's algorithm: draw what is furthest away first. Depth here is
+  // x + z (how far back along both floor axes) with height as a tie-break, so a
+  // wall unit is drawn after the counter it hangs over rather than behind it.
+  const order = [...boxes].sort(
+    (p1, p2) => p1.cx + p1.cz - (p2.cx + p2.cz) || (p1.y0 ?? 0) - (p2.y0 ?? 0),
+  );
+
+  const out = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${wSvg.toFixed(0)}" height="${hSvg.toFixed(0)}" viewBox="0 0 ${wSvg.toFixed(0)} ${hSvg.toFixed(0)}">`,
+    `<rect width="100%" height="100%" fill="#fbfbf7"/>`,
+  ];
+  const labels = [];
+  for (const box of order) {
+    const { cx, cz, w, d, h } = box;
+    const y0 = box.y0 ?? 0;
+    const x0 = cx - w / 2;
+    const x1 = cx + w / 2;
+    const z0 = cz - d / 2;
+    const z1 = cz + d / 2;
+    const y1 = y0 + h;
+    const fill = box.color ?? '#cfd8c8';
+    // Three visible faces, shaded so the form reads: top lightest, then the two
+    // sides. A single flat colour makes a row of boxes one indistinct slab.
+    out.push(
+      `<polygon points="${P(x0, y1, z0)} ${P(x1, y1, z0)} ${P(x1, y1, z1)} ${P(x0, y1, z1)}" fill="${fill}" stroke="#4a4a44" stroke-width="1"/>`,
+      `<polygon points="${P(x0, y0, z1)} ${P(x1, y0, z1)} ${P(x1, y1, z1)} ${P(x0, y1, z1)}" fill="${fill}" fill-opacity="0.78" stroke="#4a4a44" stroke-width="1"/>`,
+      `<polygon points="${P(x1, y0, z0)} ${P(x1, y0, z1)} ${P(x1, y1, z1)} ${P(x1, y1, z0)}" fill="${fill}" fill-opacity="0.58" stroke="#4a4a44" stroke-width="1"/>`,
+    );
+    const [lx, ly] = P(cx, y1, cz).split(',');
+    labels.push({ n: box.n, x: Number(lx), y: Number(ly) + 5 });
+  }
+  // ⚠ EVERY label after ALL the geometry. Drawn with its box, a number is
+  // painted over by whatever is drawn in front of it — 25 and 20 came out as
+  // ghosts under the units in front, which is precisely the boxes a person most
+  // needs to name.
+  //
+  // Nudged apart where two land within a few pixels: coincident labels are as
+  // unreadable as hidden ones, and this is a picture whose whole job is to let
+  // somebody say a number.
+  labels.sort((a, b2) => a.y - b2.y || a.x - b2.x);
+  for (const [i, l] of labels.entries()) {
+    for (const other of labels.slice(0, i)) {
+      if (Math.abs(other.x - l.x) < 16 && Math.abs(other.y - l.y) < 14) l.y = other.y + 15;
+    }
+  }
+  for (const l of labels) {
+    out.push(
+      `<text x="${l.x.toFixed(1)}" y="${l.y.toFixed(1)}" text-anchor="middle" font-family="system-ui" font-size="15" font-weight="700" fill="#111" stroke="#fbfbf7" stroke-width="3.5" paint-order="stroke">${l.n}</text>`,
+    );
+  }
+  out.push('</svg>');
+  console.log(out.join('\n'));
+} else {
+  console.log(parts.join('\n'));
+}
 console.error(`${boxes.length} boxes drawn (numbered by index in scenes/house.json)`);
