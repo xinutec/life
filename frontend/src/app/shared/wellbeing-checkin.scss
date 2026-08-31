@@ -55,3 +55,14 @@
     color: var(--wb-score-5);
   }
 }
+
+// Sits under the strip, aligned with its left edge. A mat-button carries its own
+// horizontal padding, so left to itself it reads as indented from the faces
+// above and looks like it belongs to something else.
+//
+// Deliberately quiet: an offer, not an instruction. The check-in is finished and
+// saved by the time this appears, and anything louder would suggest it is not.
+.add-detail {
+  margin-left: -0.5rem;
+  margin-top: 0.35rem;
+}

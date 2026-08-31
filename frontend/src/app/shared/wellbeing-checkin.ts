@@ -1,4 +1,4 @@
-import { Component, inject, output } from '@angular/core';
+import { Component, DestroyRef, inject, input, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 
@@ -152,6 +152,26 @@ export class WellbeingCheckin {
   /** Emitted after a check-in is logged (so a host can e.g. scroll to it). */
   readonly logged = output<void>();
 
+  /** Offer a route into the just-logged entry's detail. Off by default: only a
+   *  screen that can OPEN that entry should show it, and Today cannot — it has
+   *  no edit sheet, and a button that leads nowhere is worse than none. */
+  readonly showDetail = input(false);
+  /** The ulid of the entry a person wants to say more about. */
+  readonly detail = output<string>();
+
+  /** The entry just logged, while the amend window is still open.
+   *
+   *  A signal rather than reading `pending`, which the template cannot see. It
+   *  exists because logging a bare score is the RARE case: 196 of 207 entries
+   *  were edited after creation, and a trace on 2026-08-31 caught the edit tap
+   *  landing in the same batch as the log — the flow committed a number, then
+   *  made the person reopen it to say what they actually meant.
+   *
+   *  ⚠ Deliberately NOT an auto-opened sheet. Tapping an adjacent face inside
+   *  this same window is how a half-step (a 3.5) is recorded, and a sheet
+   *  opening over the strip would take that gesture away to save one tap. */
+  readonly justLogged = signal<string | null>(null);
+
   readonly scores = WELLBEING_SCORES;
 
   /** The check-in this tap might still be amending: tap Good then Okay and you
@@ -159,6 +179,23 @@ export class WellbeingCheckin {
    *  apart isn't a half-step, it's a correction (or a different feeling), and both
    *  of those are better served by leaving the first entry alone. */
   private pending: { key: string; score: number; at: number } | null = null;
+  /** Clears [`justLogged`] when the amend window lapses. Without it the offer
+   *  outlives the moment it belongs to: an hour later the strip would still be
+   *  inviting you to say more about a check-in you finished long ago. Restarted
+   *  on every log, so a second check-in gets its own full window. */
+  private lapse: ReturnType<typeof setTimeout> | null = null;
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => {
+      if (this.lapse !== null) clearTimeout(this.lapse);
+    });
+  }
+
+  /** Start (or restart) the window after which the offer goes away. */
+  private armLapse(): void {
+    if (this.lapse !== null) clearTimeout(this.lapse);
+    this.lapse = setTimeout(() => this.justLogged.set(null), AMEND_WINDOW_MS);
+  }
 
   async log(score: number): Promise<void> {
     const recent = this.pending;
@@ -171,9 +208,14 @@ export class WellbeingCheckin {
       const tenths = midpoint(recent.score, score);
       await this.store.patch(recent.key, { scoreTenths: tenths });
       this.pending = null;
+      this.justLogged.set(recent.key);
+      this.armLapse();
       this.logged.emit();
       const key = recent.key;
-      this.feedback.undo(`Logged ${scoreMeta(tenths).label}`, () => void this.store.remove(key));
+      this.feedback.undo(`Logged ${scoreMeta(tenths).label}`, () => {
+        this.justLogged.set(null); // it points at an entry that no longer exists
+        void this.store.remove(key);
+      });
       return;
     }
     // Log at "now" immediately (offline-ok); a mis-tap is one Undo away. A
@@ -184,9 +226,12 @@ export class WellbeingCheckin {
       note: null,
     });
     this.pending = { key, score, at: Date.now() };
+    this.justLogged.set(key);
+    this.armLapse();
     this.logged.emit();
     this.feedback.undo(`Logged ${scoreMeta(toTenths(score)).label}`, () => {
       this.pending = null;
+      this.justLogged.set(null); // it points at an entry that no longer exists
       void this.store.remove(key);
     });
   }

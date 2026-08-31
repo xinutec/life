@@ -100,3 +100,96 @@ describe('WellbeingCheckin', () => {
     }
   });
 });
+
+describe('WellbeingCheckin — saying more than a score', () => {
+  function setup() {
+    const store = {
+      add: vi.fn<
+        (input: { recordedAt: string; scoreTenths: number; note: string | null }) => Promise<string>
+      >(() => Promise.resolve('u1')),
+      patch: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn(),
+    };
+    const feedback = { undo: vi.fn<(msg: string, onUndo: () => void) => void>() };
+    TestBed.configureTestingModule({
+      imports: [WellbeingCheckin],
+      providers: [
+        { provide: WellbeingStore, useValue: store },
+        { provide: Feedback, useValue: feedback },
+      ],
+    });
+    return { fixture: TestBed.createComponent(WellbeingCheckin), store, feedback };
+  }
+
+  it('offers a way into the entry it just logged', async () => {
+    // Logging a bare score is the RARE case: 196 of 207 entries were edited
+    // after creation, and a trace caught the edit tap landing in the same batch
+    // as the log. Without this the only route back in is to find the entry in
+    // the timeline and press Edit.
+    const { fixture } = setup();
+    const cmp = fixture.componentInstance;
+    expect(cmp.justLogged()).toBeNull();
+    await cmp.log(4);
+    expect(cmp.justLogged()).toBe('u1');
+  });
+
+  it('takes the offer away when the check-in is undone', async () => {
+    // It points at an entry that no longer exists; leaving it would open a sheet
+    // onto a removed row.
+    const { fixture, feedback } = setup();
+    const cmp = fixture.componentInstance;
+    await cmp.log(4);
+    feedback.undo.mock.calls[0][1](); // the Undo tap
+    expect(cmp.justLogged()).toBeNull();
+  });
+
+  it('still records a half-step, which is what an auto-opened sheet would have cost', async () => {
+    // The reason this is a button under the strip and not a sheet that opens
+    // itself: tapping an adjacent face inside the amend window is how a 3.5 is
+    // recorded, and a sheet over the strip would take that gesture away.
+    const { fixture, store } = setup();
+    const cmp = fixture.componentInstance;
+    await cmp.log(4);
+    await cmp.log(3);
+    expect(store.patch).toHaveBeenCalledWith('u1', { scoreTenths: 35 });
+    expect(cmp.justLogged()).toBe('u1');
+  });
+
+  it('hides the offer unless the screen can act on it', () => {
+    // Today shows the same strip and has no edit sheet; a button that leads
+    // nowhere is worse than no button.
+    const { fixture } = setup();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.add-detail')).toBeNull();
+  });
+});
+
+describe('WellbeingCheckin — the offer does not outlive its moment', () => {
+  it('withdraws the offer once the amend window lapses', async () => {
+    // Found by looking at the render: nothing cleared it, so an hour later the
+    // strip would still be inviting you to say more about a finished check-in.
+    vi.useFakeTimers();
+    try {
+      const store = {
+        add: vi.fn(() => Promise.resolve('u1')),
+        patch: vi.fn().mockResolvedValue(undefined),
+        remove: vi.fn(),
+      };
+      TestBed.configureTestingModule({
+        imports: [WellbeingCheckin],
+        providers: [
+          { provide: WellbeingStore, useValue: store },
+          { provide: Feedback, useValue: { undo: vi.fn() } },
+        ],
+      });
+      const c = TestBed.createComponent(WellbeingCheckin).componentInstance;
+      await c.log(4);
+      expect(c.justLogged()).toBe('u1');
+      vi.advanceTimersByTime(90_000);
+      expect(c.justLogged()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

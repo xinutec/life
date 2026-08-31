@@ -12,3 +12,18 @@
     </button>
   }
 </div>
+
+<!-- Only after a log, and only where the parent can open the entry. Says what
+     it adds rather than "Edit": the entry is already saved, and this is
+     continuing the thought, not correcting a mistake. -->
+@if (showDetail() && justLogged(); as key) {
+  <button
+    type="button"
+    class="add-detail"
+    mat-button
+    (click)="detail.emit(key)"
+  >
+    <mat-icon>add</mat-icon>
+    Add energy, emotions or a note
+  </button>
+}

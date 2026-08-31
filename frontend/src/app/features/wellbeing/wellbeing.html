@@ -1,7 +1,7 @@
 <h2>Wellbeing</h2>
 
 <p class="prompt">How do you feel right now?</p>
-<app-wellbeing-checkin />
+<app-wellbeing-checkin [showDetail]="true" (detail)="editByKey($event)" />
 
 @if (hasAny()) {
   <div class="controls">

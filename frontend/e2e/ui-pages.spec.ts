@@ -344,6 +344,28 @@ test('wellbeing — chart + timeline: lays out cleanly @ phone width', async ({ 
   await expectNoHorizontalOverflow(page, testInfo, null, CHART_SCROLLERS);
 });
 
+test('wellbeing — after logging, saying more is one tap and the strip still works', async ({
+  page,
+}, testInfo) => {
+  // The check-in is the app's most-used interaction, and logging a bare score is
+  // the rare case: 196 of 207 entries were edited after creation. This measures
+  // the state that appears straight after a tap, which nothing covered before.
+  await mockApi(page);
+  await page.goto('/wellbeing');
+  await page.getByRole('button', { name: 'Log feeling: good' }).click();
+
+  const more = page.getByRole('button', { name: /Add energy, emotions or a note/ });
+  await more.waitFor();
+  await expect(more).toBeInViewport({ ratio: 1 });
+
+  await expectNoClippedText(page, testInfo, 'app-wellbeing-checkin');
+  await expectNoTextOverlaps(page, testInfo, 'app-wellbeing-checkin');
+  // Same exemption the chart test uses: the trend rail is wider than the
+  // viewport BY DESIGN (it scrolls), so a whole-page overflow oracle reads it
+  // as a fault. Exempted by element, not switched off.
+  await expectNoHorizontalOverflow(page, testInfo, null, CHART_SCROLLERS);
+});
+
 test('wellbeing — the two charts agree on where the days are', async ({ page }) => {
   await mockApi(page);
   await page.goto('/wellbeing');

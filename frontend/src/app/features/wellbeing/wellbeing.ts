@@ -412,6 +412,15 @@ export class Wellbeing {
     return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   }
 
+  /** Open the entry just logged from the strip.
+   *
+   *  Keyed by ulid, which is what the store hands back on add — the row may not
+   *  have reached the server yet, and waiting for a server id before a person
+   *  can say how they feel would put the network in the middle of a check-in. */
+  editByKey(ulid: string): void {
+    this.sheet.open(WellbeingEntry, { data: { ulid } });
+  }
+
   edit(entry: WellbeingDoc): void {
     this.sheet.open(WellbeingEntry, { data: { ulid: entry.ulid } });
   }
