@@ -137,15 +137,26 @@ h3 {
 // Expiry urgency text (inventory, food, Today) — colour says how urgent.
 .expiry {
   font-variant-numeric: tabular-nums;
+}
 
-  &.expired {
-    color: var(--mat-sys-error);
-    font-weight: 700;
-  }
-  &.soon {
-    color: var(--mat-sys-tertiary);
-    font-weight: 500;
-  }
+// ⚠ The class is repeated to win a specificity fight, and it is not decoration.
+// Where the expiry IS a list row's trailing meta — Today's "Expiring soon" card,
+// the one screen where "expired" has to shout — Material colours the slot with
+// `.mdc-list-item.mdc-list-item--with-trailing-meta .mdc-list-item__end`, three
+// classes, and weights it with a two-class rule that a plain `.expiry.expired`
+// ties and then loses on source order. It lost both: measured on that card,
+// "expired 1d ago", "expired since June 2026" and "in 1d" all rendered
+// rgb(67,72,63) at weight 500 — identical grey, no urgency at all — against
+// rgb(186,26,26)/700 for the same markup on the All-items list, where nothing
+// competes. Four classes clears the colour rule outright, so neither screen
+// depends on which stylesheet happens to load last.
+.expiry.expiry.expiry.expired {
+  color: var(--mat-sys-error);
+  font-weight: 700;
+}
+.expiry.expiry.expiry.soon {
+  color: var(--mat-sys-tertiary);
+  font-weight: 500;
 }
 
 // Emotion chips — the feelings-wheel grammar, shared by the picker dialog, the

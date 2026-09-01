@@ -740,6 +740,50 @@ test('item history dialog — the timeline lays out cleanly @ phone width', asyn
   await expectNoHorizontalOverflow(page, testInfo, '.mat-mdc-dialog-container');
 });
 
+/**
+ * The expiry label's URGENCY COLOUR, measured rather than inspected.
+ *
+ * `.expiry.expired` was in the DOM on both screens and correct on one of them.
+ * Where the label is a list row's trailing meta — Today's "Expiring soon" card,
+ * the one screen where an expired thing has to shout — Material's
+ * `.mdc-list-item.mdc-list-item--with-trailing-meta .mdc-list-item__end` is a
+ * class more specific and simply won: "expired 1d ago" rendered the same grey at
+ * the same weight as "in 1d". Nothing in the source said so, and the class list
+ * agreed with the intent all the way down.
+ *
+ * So this asserts the COMPUTED colour, on both screens, against the theme's own
+ * error token rather than a hex — a re-themed app should move both together.
+ */
+test('an expired item reads as expired — on Today and on All items', async ({ page }) => {
+  await mockApi(page);
+  for (const path of ['/today', '/items']) {
+    await page.goto(path);
+    await page.locator('.expiry.expired').first().waitFor();
+    const seen = await page.locator('.expiry').evaluateAll((els) => {
+      // Resolve the token the same way the browser resolves the rule, so the
+      // comparison is colour-to-colour and not hex-to-rgb().
+      const probe = document.createElement('span');
+      probe.style.color = 'var(--mat-sys-error)';
+      document.body.appendChild(probe);
+      const error = getComputedStyle(probe).color;
+      probe.remove();
+      return els.map((e) => {
+        const s = getComputedStyle(e);
+        return { text: e.textContent?.trim() ?? '', color: s.color, weight: s.fontWeight, error };
+      });
+    });
+    const expired = seen.filter((r) => r.text.startsWith('expired'));
+    expect(expired.length, `${path} has an expired row to measure`).toBeGreaterThan(0);
+    for (const r of expired) {
+      expect(r.color, `${path}: "${r.text}"`).toBe(r.error);
+      expect(r.weight, `${path}: "${r.text}"`).toBe('700');
+    }
+    for (const r of seen.filter((x) => !x.text.startsWith('expired'))) {
+      expect(r.color, `${path}: "${r.text}" must not read as expired`).not.toBe(r.error);
+    }
+  }
+});
+
 // The item sheet's expiry row is a field and a toggle-group side by side, which
 // is the composition the header of this file names as the classic overflow
 // culprit. Measured in BOTH states, because they are different widths: the date
