@@ -943,6 +943,26 @@ early rather than leaning on the margin.
 - [ ] **Whole-house inventory** — surface non-food categories in the UI (tools,
       documents, meds); the engine is already generic.
 - [ ] **Meds / supplements** — expiry + refill-soon (fits the generic engine).
+      Half done (2026-09-01): the EXPIRY half, which turned out to be a question
+      about honesty rather than about medicine. A box is printed **06/2028** and
+      `items.expiry` is a DATE, so a day has to be invented to store one at all.
+      The stored day is the month's LAST — a box marked 06/2028 is good THROUGH
+      June, and the 1st would expire it twenty-nine days early — and migration
+      0045 adds `expiry_precision` so no reader mistakes that invented 30th for
+      a printed one. Month precision renders "June 2028" and, inside the month,
+      "expires this month"; there is no day countdown, because the data cannot
+      support one. The form asks a medication for a month and everything else
+      for a date, only while the field is still empty. Storing a month-end
+      rather than a parallel `YYYY-MM` column is what left every existing query
+      correct untouched: the index still orders, the sort still sorts, and a
+      "before X" scan still catches exactly the right boxes.
+      A save that says NOTHING about precision preserves what the item had —
+      the same rule as `name_source`, and for the same reason: sync, a script
+      and the Android app all re-save items without having seen the box.
+      **Refill-soon is deliberately not started.** It is a different question
+      ("when do I run out"), and it needs how much is left and how fast it goes
+      — neither of which anything records yet. Conflating it with the printed
+      date would answer the wrong question confidently.
 - [ ] **Warranties / receipts / manuals** — attach a file + purchase/expiry date.
 - [x] **Item history view** (2026-08-10) — the `item_history` audit had three
       writers and no reader since migration 0002 ("cheap now, impossible to

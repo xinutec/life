@@ -19,6 +19,7 @@ const item: Item = {
   quantity: 750,
   unit: 'g',
   expiry: null,
+  expiry_precision: 'day',
   location_id: null,
   barcode: null,
   has_image: false,

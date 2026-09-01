@@ -3,7 +3,7 @@
 //! where the honest answer is to take nothing at all.
 
 use life::inventory::consume::{Taken, take};
-use life::inventory::types::{Item, ItemCategory};
+use life::inventory::types::{ExpiryPrecision, Item, ItemCategory};
 
 fn stock(quantity: Option<f64>, unit: Option<&str>) -> Item {
     Item {
@@ -15,6 +15,7 @@ fn stock(quantity: Option<f64>, unit: Option<&str>) -> Item {
         quantity,
         unit: unit.map(Into::into),
         expiry: None,
+        expiry_precision: ExpiryPrecision::Day,
         location_id: None,
         barcode: None,
         has_image: false,

@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 // The fleet-shared harness, published as @xinutec/ui-harness (source repo
 // ~/Code/ui-harness). Ships compiled JS, so it loads straight from node_modules.
+import type { Item } from '../src/app/models';
 import {
   expectNoTextOverlaps,
   expectNoHorizontalOverflow,
@@ -98,11 +99,26 @@ const WELLBEING = [
     emotions: [], note: null, rev: 7, _deleted: false },
 ];
 
-const ITEMS = [
+// ⚠ TYPED, and it has to stay that way. This started as a bare array literal
+// and silently lost `expiry_precision` when the field was added: the sheet then
+// rendered a toggle with NEITHER side selected, which reads as a broken control
+// rather than as a stale mock. A mock that is missing what the server always
+// sends does not fail — it lies, and the lie looks like a bug in the code under
+// test. `Item[]` turns the next such addition into a compile error, which is
+// what the gate's e2e typecheck row is for.
+const ITEMS: Item[] = [
   { id: 1, product_id: null, name: 'Milk (semi-skimmed)', brand: 'Waitrose Essential', category: 'food',
-    quantity: 1, unit: 'bottle', expiry: iso(-1), location_id: 2, barcode: null, has_image: false },
+    quantity: 1, unit: 'bottle', expiry: iso(-1), expiry_precision: 'day', location_id: 2,
+    barcode: null, has_image: false },
   { id: 2, product_id: null, name: 'Chicken thighs', brand: null, category: 'food',
-    quantity: 500, unit: 'g', expiry: iso(1), location_id: 2, barcode: null, has_image: false },
+    quantity: 500, unit: 'g', expiry: iso(1), expiry_precision: 'day', location_id: 2,
+    barcode: null, has_image: false },
+  // A medicine box, printed MM/YYYY. Its list line reads "expired since June
+  // 2026" rather than a date — the longest string this meta slot ever holds, and
+  // therefore the one worth measuring against a phone-width row.
+  { id: 3, product_id: null, name: 'Levetiracetam', brand: null, category: 'medication',
+    quantity: 1, unit: 'box', expiry: '2026-06-30', expiry_precision: 'month', location_id: 2,
+    barcode: null, has_image: false },
 ];
 
 // An item's audit, as the server orders it: newest first, and mixing the two
@@ -722,6 +738,33 @@ test('item history dialog — the timeline lays out cleanly @ phone width', asyn
   await expectNoClippedText(page, testInfo, '.mat-mdc-dialog-container');
   await expectNoTextOverlaps(page, testInfo, '.mat-mdc-dialog-container');
   await expectNoHorizontalOverflow(page, testInfo, '.mat-mdc-dialog-container');
+});
+
+// The item sheet's expiry row is a field and a toggle-group side by side, which
+// is the composition the header of this file names as the classic overflow
+// culprit. Measured in BOTH states, because they are different widths: the date
+// input carries a native picker icon the month one does not.
+test('item sheet — the expiry row and its precision toggle fit @ phone width', async ({
+  page,
+}, testInfo) => {
+  await mockApi(page);
+  await page.goto('/inventory');
+  await page.getByText('Milk (semi-skimmed)').click();
+
+  const sheet = page.locator('app-item-sheet');
+  await sheet.waitFor();
+  await sheet.locator('input[type="date"]').waitFor();
+  await expectNoClippedText(page, testInfo, 'app-item-sheet');
+  await expectNoTextOverlaps(page, testInfo, 'app-item-sheet');
+  await expectNoHorizontalOverflow(page, testInfo, 'app-item-sheet');
+
+  // A medicine box is printed MM/YYYY, so the month input is a first-class
+  // state of this form rather than a corner of it.
+  await sheet.getByRole('radio', { name: 'Month' }).click();
+  await sheet.locator('input[type="month"]').waitFor();
+  await expectNoClippedText(page, testInfo, 'app-item-sheet');
+  await expectNoTextOverlaps(page, testInfo, 'app-item-sheet');
+  await expectNoHorizontalOverflow(page, testInfo, 'app-item-sheet');
 });
 
 test('all items — filter + brand + expiry rows: lays out cleanly @ phone width', async ({ page }, testInfo) => {

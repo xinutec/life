@@ -9,8 +9,8 @@ use sqlx::MySqlPool;
 
 use super::consume::{self, Taken};
 use super::types::{
-    Item, ItemCategory, ItemEvent, ItemHistoryEntry, ItemNameSource, Location, LocationKind,
-    NewItem, NewLocation,
+    ExpiryPrecision, Item, ItemCategory, ItemEvent, ItemHistoryEntry, ItemNameSource, Location,
+    LocationKind, NewItem, NewLocation,
 };
 use crate::products::ids::{Barcode, ProductId};
 
@@ -52,6 +52,7 @@ struct ItemRow {
     quantity: Option<f64>,
     unit: Option<String>,
     expiry: Option<NaiveDate>,
+    expiry_precision: String,
     location_id: Option<u64>,
     barcode: Option<String>,
     // A boolean SQL expression decodes as an integer.
@@ -61,6 +62,8 @@ struct ItemRow {
 impl ItemRow {
     fn into_item(self) -> Result<Item> {
         let category = ItemCategory::from_str(&self.category).map_err(|e| anyhow!(e))?;
+        let expiry_precision =
+            ExpiryPrecision::from_str(&self.expiry_precision).map_err(|e| anyhow!(e))?;
         Ok(Item {
             id: self.id,
             product_id: self.product_id,
@@ -70,6 +73,7 @@ impl ItemRow {
             quantity: self.quantity,
             unit: self.unit,
             expiry: self.expiry,
+            expiry_precision,
             location_id: self.location_id,
             barcode: self.barcode,
             has_image: self.has_image != 0,
@@ -96,7 +100,8 @@ macro_rules! item_select {
          CASE WHEN i.name_source = 'user' THEN COALESCE(i.name, p.name, '') \
               ELSE COALESCE(p.name, i.name, '') END AS name, \
          p.brand AS brand, i.category AS category, \
-         i.quantity AS quantity, i.unit AS unit, i.expiry AS expiry, i.location_id AS location_id, \
+         i.quantity AS quantity, i.unit AS unit, i.expiry AS expiry, \
+         i.expiry_precision AS expiry_precision, i.location_id AS location_id, \
          COALESCE(i.barcode, p.barcode) AS barcode, (p.image IS NOT NULL) AS has_image \
          FROM items i LEFT JOIN products p ON p.id = i.product_id"
     };
@@ -124,6 +129,31 @@ async fn name_source_for_update(
             .fetch_optional(pool)
             .await?;
     Ok(existing.map_or_else(|| ItemNameSource::Product.to_string(), |(v,)| v))
+}
+
+/// The `expiry_precision` an UPDATE should write.
+///
+/// `None` is "no statement", not "day", and the difference is the whole point of
+/// the column: an update that quietly wrote `day` would re-print the invented
+/// 30th of a month-precision box as a real one, which is exactly the fault
+/// migration 0045 exists to stop. Only the item form knows whether a person
+/// picked a month or a day, so only it says.
+async fn expiry_precision_for_update(
+    pool: &MySqlPool,
+    user_id: &str,
+    id: u64,
+    stated: Option<ExpiryPrecision>,
+) -> Result<String> {
+    if let Some(p) = stated {
+        return Ok(p.to_string());
+    }
+    let existing: Option<(String,)> =
+        sqlx::query_as("SELECT expiry_precision FROM items WHERE id = ? AND user_id = ?")
+            .bind(id)
+            .bind(user_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(existing.map_or_else(|| ExpiryPrecision::Day.to_string(), |(v,)| v))
 }
 
 /// The catalog link for a new/updated item: an explicit `product_id` wins (it's
@@ -234,8 +264,9 @@ pub async fn create_item(pool: &MySqlPool, user_id: &str, new: NewItem) -> Resul
         .to_string();
     let res = sqlx::query(
         "INSERT INTO items \
-         (user_id, product_id, name, name_source, category, quantity, unit, expiry, location_id, barcode) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         (user_id, product_id, name, name_source, category, quantity, unit, expiry, \
+          expiry_precision, location_id, barcode) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(user_id)
     .bind(product_id)
@@ -245,6 +276,11 @@ pub async fn create_item(pool: &MySqlPool, user_id: &str, new: NewItem) -> Resul
     .bind(new.quantity)
     .bind(&new.unit)
     .bind(new.expiry)
+    .bind(
+        new.expiry_precision
+            .unwrap_or(ExpiryPrecision::Day)
+            .to_string(),
+    )
     .bind(new.location_id)
     .bind(&new.barcode)
     .execute(pool)
@@ -307,9 +343,12 @@ pub async fn update_item(
     };
     let product_id = resolve_product_id(pool, &new).await?;
     let name_source = name_source_for_update(pool, user_id, id, new.name_source).await?;
+    let expiry_precision =
+        expiry_precision_for_update(pool, user_id, id, new.expiry_precision).await?;
     sqlx::query(
         "UPDATE items SET product_id = ?, name = ?, name_source = ?, category = ?, quantity = ?, unit = ?, \
-         expiry = ?, location_id = ?, barcode = ? WHERE id = ? AND user_id = ?",
+         expiry = ?, expiry_precision = ?, location_id = ?, barcode = ? \
+         WHERE id = ? AND user_id = ?",
     )
     .bind(product_id)
     .bind(&new.name)
@@ -318,6 +357,7 @@ pub async fn update_item(
     .bind(new.quantity)
     .bind(&new.unit)
     .bind(new.expiry)
+    .bind(expiry_precision)
     .bind(new.location_id)
     .bind(&new.barcode)
     .bind(id)
@@ -382,6 +422,7 @@ pub async fn use_item(
         quantity,
         unit,
         expiry: None,
+        expiry_precision: ExpiryPrecision::Day,
         location_id,
         barcode: None,
         has_image: false,

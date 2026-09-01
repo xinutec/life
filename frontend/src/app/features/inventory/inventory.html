@@ -35,8 +35,8 @@
         <span matListItemLine>
           {{ qty(it) }}
           @if (it.location_id) { · {{ shortLoc(it.location_id) }} }
-          @if (it.expiry; as expiry) {
-            · <span class="expiry" [class]="expiryOf(expiry).cls">{{ expiryOf(expiry).label }}</span>
+          @if (it.expiry) {
+            · <span class="expiry" [class]="expiryOf(it).cls">{{ expiryOf(it).label }}</span>
           }
         </span>
         <button

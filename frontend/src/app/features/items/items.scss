@@ -22,6 +22,33 @@
   font-weight: 400;
 }
 
+// The second line of a row: facts, then the expiry. The expiry keeps its width
+// and the FACTS give way, because a truncated place name still tells you which
+// cupboard and a truncated expiry tells you nothing. A month-precision one is
+// the long case — "expired since June 2026" against "in 1d" — and it spilled 81
+// px past the right edge before this, ellipsised out of sight rather than shown.
+.meta-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+
+  .facts {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .expiry {
+    flex: 0 0 auto;
+
+    &::before {
+      content: '· ';
+    }
+  }
+}
+
 // Colours from the global .expiry grammar; the date is quieter until urgent.
 .expiry {
   opacity: 0.8;

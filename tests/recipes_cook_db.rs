@@ -25,6 +25,7 @@ fn stock(name: &str, quantity: Option<f64>, unit: Option<&str>) -> NewItem {
         quantity,
         unit: unit.map(Into::into),
         expiry: None,
+        expiry_precision: None,
         location_id: None,
         barcode: None,
         product_id: None,

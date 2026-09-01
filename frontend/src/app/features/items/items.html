@@ -52,10 +52,13 @@
         >
           {{ it.name }}@if (it.brand) {<span class="brand"> · {{ it.brand }}</span>}
         </span>
-        <span matListItemLine>
-          {{ meta(it) }}
-          @if (it.expiry; as expiry) {
-            · <span class="expiry" [class]="expiryOf(expiry).cls">{{ expiryOf(expiry).label }}</span>
+        <!-- Two parts, not one sentence: the line ellipsises, and whatever sits
+             last is what disappears. That used to be the expiry — the one fact
+             on the row you might act on — as soon as it grew past "in 1d". -->
+        <span matListItemLine class="meta-line">
+          <span class="facts">{{ meta(it) }}</span>
+          @if (it.expiry) {
+            <span class="expiry" [class]="expiryOf(it).cls">{{ expiryOf(it).label }}</span>
           }
         </span>
         <button matListItemMeta mat-icon-button (click)="deleteItem(it.id)" aria-label="Delete">

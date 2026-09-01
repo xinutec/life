@@ -20,6 +20,7 @@ const item = (over: Partial<Item>): Item => ({
   quantity: null,
   unit: null,
   expiry: null,
+  expiry_precision: 'day',
   location_id: null,
   barcode: null,
   has_image: false,

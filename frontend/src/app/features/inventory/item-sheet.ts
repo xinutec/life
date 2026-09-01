@@ -10,6 +10,7 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatSelectModule } from '@angular/material/select';
 
 import { isNotFound, onlineHint } from '../../shared/api-error';
@@ -17,7 +18,14 @@ import { Feedback } from '../../shared/feedback';
 import { ProductPick, ProductPickData, ProductPicker } from '../../shared/product-picker';
 import { SheetHeader } from '../../shared/sheet-header';
 import { LifeApi } from '../../life-api';
-import { ITEM_CATEGORIES, ITEM_CATEGORY_LABEL, Item, ItemCategory } from '../../models';
+import { monthEnd, toMonth } from '../../expiry';
+import {
+  ExpiryPrecision,
+  ITEM_CATEGORIES,
+  ITEM_CATEGORY_LABEL,
+  Item,
+  ItemCategory,
+} from '../../models';
 import { ScannerDialog } from '../scanner/scanner-dialog';
 import { HistoryDialog, HistoryDialogData } from './history-dialog';
 
@@ -34,6 +42,8 @@ interface ItemForm {
   quantity: number | null;
   unit: string | null;
   expiry: string | null;
+  /** Which input the expiry is typed into, and what gets saved with it. */
+  expiry_precision: ExpiryPrecision;
   location_id: number | null;
   barcode: string | null;
   /** Set when linked to a catalog product (incl. a barcodeless shop product). */
@@ -53,6 +63,7 @@ interface ItemForm {
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
+    MatButtonToggleModule,
     MatSelectModule,
     SheetHeader,
   ],
@@ -82,6 +93,7 @@ export class ItemSheet {
           quantity: this.data.item.quantity,
           unit: this.data.item.unit,
           expiry: this.data.item.expiry,
+          expiry_precision: this.data.item.expiry_precision,
           location_id: this.data.item.location_id,
           barcode: this.data.item.barcode,
           product_id: this.data.item.product_id,
@@ -92,6 +104,7 @@ export class ItemSheet {
           quantity: null,
           unit: null,
           expiry: null,
+          expiry_precision: 'day',
           location_id: null,
           barcode: null,
           product_id: null,
@@ -99,6 +112,43 @@ export class ItemSheet {
   );
   patch(p: Partial<ItemForm>): void {
     this.form.update((f) => ({ ...f, ...p }));
+  }
+
+  /**
+   * A category picked while the expiry box is still empty also picks how that
+   * box asks the question.
+   *
+   * Medicine is printed MM/YYYY and nothing else, so a date picker makes
+   * somebody choose a day that is not on the packet; everything else in a
+   * cupboard carries a full date. Only while the field is UNTOUCHED — a date
+   * already typed is an answer, and re-categorising must not quietly widen it.
+   */
+  chooseCategory(category: ItemCategory): void {
+    if (this.form().expiry != null) {
+      this.patch({ category });
+      return;
+    }
+    this.patch({ category, expiry_precision: category === 'medication' ? 'month' : 'day' });
+  }
+
+  /** `YYYY-MM` for the month input — the stored date is that month's last day. */
+  readonly expiryMonth = computed(() => toMonth(this.form().expiry));
+
+  /** A month picked in the month input, stored as the month's LAST day: a box
+   *  marked 06/2028 is good THROUGH June, and the 1st would expire it early. */
+  setExpiryMonth(month: string | null): void {
+    this.patch({ expiry: month ? monthEnd(month) : null });
+  }
+
+  /** Switch how the expiry is asked for. Re-reads the date through the new
+   *  precision rather than dropping it: month → day keeps the month-end as a
+   *  starting point to correct, and day → month keeps the month it fell in. */
+  setPrecision(expiry_precision: ExpiryPrecision): void {
+    const expiry = this.form().expiry;
+    this.patch({
+      expiry_precision,
+      expiry: expiry_precision === 'month' && expiry ? monthEnd(toMonth(expiry) ?? '') : expiry,
+    });
   }
 
   /**

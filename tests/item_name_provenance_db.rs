@@ -38,6 +38,7 @@ fn item(name: &str, product_id: Option<ProductId>) -> NewItem {
         quantity: None,
         unit: None,
         expiry: None,
+        expiry_precision: None,
         location_id: None,
         barcode: None,
         name_source: None,

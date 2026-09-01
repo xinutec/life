@@ -17,7 +17,7 @@
   <div class="pair">
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>Category</mat-label>
-      <mat-select [ngModel]="form().category" (ngModelChange)="patch({ category: $event })">
+      <mat-select [ngModel]="form().category" (ngModelChange)="chooseCategory($event)">
         @for (c of categories; track c) {
           <mat-option [value]="c">{{ label(c) }}</mat-option>
         }
@@ -56,15 +56,37 @@
     </mat-form-field>
   </div>
 
-  <mat-form-field appearance="outline" subscriptSizing="dynamic">
-    <mat-label>Expiry</mat-label>
-    <input
-      matInput
-      type="date"
-      [ngModel]="form().expiry"
-      (ngModelChange)="patch({ expiry: $event })"
-    />
-  </mat-form-field>
+  <div class="expiry-row">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Expiry</mat-label>
+      <!-- Two inputs, not one with a changing type: a bound `type` would leave
+           the browser re-parsing the same value as it switched, and the stored
+           date differs between the two (a month keeps its LAST day). -->
+      @if (form().expiry_precision === 'month') {
+        <input
+          matInput
+          type="month"
+          [ngModel]="expiryMonth()"
+          (ngModelChange)="setExpiryMonth($event)"
+        />
+      } @else {
+        <input
+          matInput
+          type="date"
+          [ngModel]="form().expiry"
+          (ngModelChange)="patch({ expiry: $event })"
+        />
+      }
+    </mat-form-field>
+    <mat-button-toggle-group
+      [ngModel]="form().expiry_precision"
+      (ngModelChange)="setPrecision($event)"
+      aria-label="How precise the expiry is"
+    >
+      <mat-button-toggle value="day">Day</mat-button-toggle>
+      <mat-button-toggle value="month">Month</mat-button-toggle>
+    </mat-button-toggle-group>
+  </div>
 
   <mat-form-field appearance="outline" subscriptSizing="dynamic">
     <mat-label>Barcode</mat-label>

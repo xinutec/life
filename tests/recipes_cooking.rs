@@ -4,7 +4,7 @@
 //! what it insists on telling you about.
 
 use chrono::NaiveDate;
-use life::inventory::types::{Item, ItemCategory};
+use life::inventory::types::{ExpiryPrecision, Item, ItemCategory};
 use life::recipes::cooking::{CookedLine, LineOutcome, Take, Untouched, plan, settled};
 use life::recipes::types::{Recipe, RecipeIngredient};
 
@@ -18,6 +18,7 @@ fn item(id: u64, name: &str, quantity: Option<f64>, unit: Option<&str>) -> Item 
         quantity,
         unit: unit.map(Into::into),
         expiry: None,
+        expiry_precision: ExpiryPrecision::Day,
         location_id: None,
         barcode: None,
         has_image: false,

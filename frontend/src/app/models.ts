@@ -13,6 +13,7 @@ export type { Loc } from './generated/Loc';
 export type { ItemCategory } from './generated/ItemCategory';
 export type { Item } from './generated/Item';
 export type { ItemEvent } from './generated/ItemEvent';
+export type { ExpiryPrecision } from './generated/ExpiryPrecision';
 export type { ItemHistory } from './generated/ItemHistory';
 export type { ItemHistoryEntry } from './generated/ItemHistoryEntry';
 export type { Purchase } from './generated/Purchase';

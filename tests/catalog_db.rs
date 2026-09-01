@@ -19,6 +19,7 @@ fn new_item(name: &str, barcode: Option<&str>) -> NewItem {
         quantity: Some(1.0),
         unit: None,
         expiry: None,
+        expiry_precision: None,
         location_id: None,
         barcode: barcode.map(Into::into),
         product_id: None,

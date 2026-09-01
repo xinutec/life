@@ -18,6 +18,7 @@ function item(over: Partial<Item> = {}): Item {
     quantity: 950,
     unit: 'g',
     expiry: null,
+    expiry_precision: 'day',
     location_id: null,
     barcode: null,
     has_image: false,

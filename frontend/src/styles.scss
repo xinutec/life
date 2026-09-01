@@ -250,6 +250,21 @@ h3 {
     }
   }
 
+  // The expiry field beside how precise it is. Not `.pair`: that splits the row
+  // evenly, and the toggle only needs its own width. Which question is being
+  // asked — a date, or the MM/YYYY a medicine box actually carries — has to
+  // stay visible while the answer is being typed.
+  .expiry-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+
+    > mat-form-field {
+      flex: 1;
+      min-width: 0;
+    }
+  }
+
   .actions {
     display: flex;
     justify-content: flex-end;

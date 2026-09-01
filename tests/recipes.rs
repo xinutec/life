@@ -1,6 +1,6 @@
 //! Pure recipe↔inventory matching: shopping list and cook-now.
 
-use life::inventory::types::{Item, ItemCategory};
+use life::inventory::types::{ExpiryPrecision, Item, ItemCategory};
 use life::products::ids::ProductId;
 use life::recipes::matching::{can_cook, shopping_list};
 use life::recipes::types::RecipeIngredient;
@@ -31,6 +31,7 @@ fn item(name: &str, qty: Option<f64>, unit: Option<&str>) -> Item {
         quantity: qty,
         unit: unit.map(Into::into),
         expiry: None,
+        expiry_precision: ExpiryPrecision::Day,
         location_id: None,
         barcode: None,
         has_image: false,

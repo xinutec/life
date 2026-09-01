@@ -102,6 +102,8 @@ pub async fn buy(
             quantity: s.quantity,
             unit: s.unit,
             expiry: None,
+            // No expiry, so nothing to be precise about.
+            expiry_precision: None,
             location_id: None,
             barcode: s.barcode,
             product_id: s.product_id,

@@ -138,7 +138,7 @@ export class Items {
   }
 
   /** Urgency-aware expiry display (expired / soon / date). */
-  expiryOf(expiry: string): ExpiryInfo {
-    return expiryInfo(expiry);
+  expiryOf(item: Item): ExpiryInfo {
+    return expiryInfo(item.expiry ?? '', item.expiry_precision);
   }
 }

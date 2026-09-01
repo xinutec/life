@@ -187,3 +187,61 @@ describe('ItemSheet product linking', () => {
     expect('name_source' in api.createItem.mock.calls[0][0]).toBe(false);
   });
 });
+
+/**
+ * A medicine box carries MM/YYYY and nothing else. The DATE column needs a day,
+ * so the form's job is to never make somebody choose one that is not printed —
+ * and to say which of the two it asked for, because the server cannot tell.
+ */
+describe('ItemSheet expiry precision', () => {
+  it('asks a medication for a month, and everything else for a date', () => {
+    const { cmp } = setup();
+    expect(cmp.form().expiry_precision).toBe('day');
+    cmp.chooseCategory('medication');
+    expect(cmp.form().expiry_precision).toBe('month');
+    cmp.chooseCategory('food');
+    expect(cmp.form().expiry_precision).toBe('day');
+  });
+
+  it('leaves a date that has already been typed alone', () => {
+    // Re-categorising is not a statement about the date. Widening a full date to
+    // a month would throw away a day somebody read off a jar.
+    const { cmp } = setup();
+    cmp.patch({ expiry: '2026-09-14' });
+    cmp.chooseCategory('medication');
+    expect(cmp.form().expiry_precision).toBe('day');
+    expect(cmp.form().expiry).toBe('2026-09-14');
+  });
+
+  it('stores a picked month as its LAST day', () => {
+    // 06/2028 is good THROUGH June. The 1st would expire it twenty-nine days
+    // early, which for a prescription is the expensive direction to be wrong.
+    const { cmp } = setup();
+    cmp.setPrecision('month');
+    cmp.setExpiryMonth('2028-06');
+    expect(cmp.form().expiry).toBe('2028-06-30');
+    expect(cmp.expiryMonth()).toBe('2028-06');
+  });
+
+  it('keeps the date across a change of precision, rather than dropping it', () => {
+    const { cmp } = setup();
+    cmp.patch({ expiry: '2028-06-14' });
+    cmp.setPrecision('month');
+    expect(cmp.form().expiry).toBe('2028-06-30');
+    cmp.setPrecision('day');
+    expect(cmp.form().expiry).toBe('2028-06-30');
+  });
+
+  it('sends the precision, because the server cannot infer it', () => {
+    // The stored 30th is identical whether it was printed or invented. Only this
+    // form saw which question was answered.
+    const { cmp, api } = setup();
+    cmp.patch({ name: 'Tablets' });
+    cmp.setPrecision('month');
+    cmp.setExpiryMonth('2028-06');
+    cmp.save();
+    expect(api.createItem).toHaveBeenCalledWith(
+      expect.objectContaining({ expiry: '2028-06-30', expiry_precision: 'month' }),
+    );
+  });
+});

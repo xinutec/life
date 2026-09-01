@@ -11,7 +11,7 @@ import { MatListModule } from '@angular/material/list';
 import { map } from 'rxjs';
 
 import { nextCollections } from '../../bins';
-import { ExpiryInfo, expiryInfo } from '../../expiry';
+import { expiryInfo } from '../../expiry';
 import { Feedback } from '../../shared/feedback';
 import { BinsStore, ItemsStore } from '../../stores/catalog';
 import { ListState } from '../../shared/list-state';
@@ -103,7 +103,17 @@ export class Today {
   /** Food that's expired or expiring within 3 days, soonest first. */
   readonly expiring = computed(() => {
     return this.items()
-      .flatMap((item) => (item.expiry ? [{ item, expiry: item.expiry, info: expiryInfo(item.expiry) }] : []))
+      .flatMap((item) =>
+        item.expiry
+          ? [
+              {
+                item,
+                expiry: item.expiry,
+                info: expiryInfo(item.expiry, item.expiry_precision),
+              },
+            ]
+          : [],
+      )
       .filter((x) => x.info.cls !== 'ok')
       .sort((a, b) => a.expiry.localeCompare(b.expiry))
       .slice(0, 5);
@@ -142,9 +152,5 @@ export class Today {
       return { label: d === 1 ? 'due tomorrow' : `due in ${d}d`, cls: 'due-soon' };
     }
     return { label: 'ready', cls: 'ready' };
-  }
-
-  expiryOf(expiry: string): ExpiryInfo {
-    return expiryInfo(expiry);
   }
 }

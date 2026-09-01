@@ -78,6 +78,47 @@ impl fmt::Display for ItemNameSource {
     }
 }
 
+/// How much of an `expiry` date was actually printed on the thing.
+///
+/// A medicine box is printed MM/YYYY, and `items.expiry` is a DATE, so a day
+/// has to be invented to store one at all. The convention is the month's LAST
+/// day — a box marked 06/2028 is good THROUGH June, and the 1st would expire it
+/// twenty-nine days early — but the convention alone is not enough, because a
+/// reader cannot tell an invented 30th from a printed one. Rendering "30 Jun
+/// 2028" states a day that appears nowhere on the box; counting down "in 2d"
+/// through the end of the month claims something changes overnight that does
+/// not. So the precision travels with the date (migration 0045).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum ExpiryPrecision {
+    /// The date is exactly what was printed.
+    Day,
+    /// Only the month was printed; `expiry` holds that month's last day.
+    Month,
+}
+
+impl fmt::Display for ExpiryPrecision {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            ExpiryPrecision::Day => "day",
+            ExpiryPrecision::Month => "month",
+        })
+    }
+}
+
+impl FromStr for ExpiryPrecision {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "day" => Ok(ExpiryPrecision::Day),
+            "month" => Ok(ExpiryPrecision::Month),
+            other => Err(format!("unknown expiry precision {other:?}")),
+        }
+    }
+}
+
 /// What kind of thing an item is.
 ///
 /// "Generic from day one — food is just the first skin" was the intent, but the
@@ -185,6 +226,9 @@ pub struct Item {
     pub quantity: Option<f64>,
     pub unit: Option<String>,
     pub expiry: Option<NaiveDate>,
+    /// How much of `expiry` was printed rather than invented to fill the DATE.
+    /// Meaningless when `expiry` is `None`.
+    pub expiry_precision: ExpiryPrecision,
     #[ts(type = "number | null")]
     pub location_id: Option<u64>,
     pub barcode: Option<String>,
@@ -353,6 +397,16 @@ pub struct NewItem {
     pub quantity: Option<f64>,
     pub unit: Option<String>,
     pub expiry: Option<NaiveDate>,
+    /// How much of `expiry` is real, when the client knows. Absent means "no
+    /// statement": a new item defaults to [`ExpiryPrecision::Day`], and an
+    /// update leaves whatever the item already had.
+    ///
+    /// The same rule as `name_source`, for the same reason. A caller that is not
+    /// the item form — sync, a script, the Android app — sends nothing here, and
+    /// defaulting it to `Day` on update would silently re-print an invented 30th
+    /// as a real one on the single row where that matters most.
+    #[serde(default)]
+    pub expiry_precision: Option<ExpiryPrecision>,
     pub location_id: Option<u64>,
     #[serde(default)]
     pub barcode: Option<String>,

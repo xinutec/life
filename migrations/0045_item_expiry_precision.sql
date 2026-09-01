@@ -1,0 +1,42 @@
+-- Life schema, migration 0045: say how much of an expiry date is real.
+
+-- `items.expiry` is a DATE, so it always has a day, and a medicine box does not.
+-- Boxes are printed MM/YYYY. The first medication added to the app was given as
+-- **06/2028** and had to be stored as **2028-06-30** — the end of the month,
+-- because a box marked 06/2028 is good THROUGH June and storing the 1st would
+-- expire it twenty-nine days early.
+--
+-- That is the right date to store. The problem is that nothing recorded it as a
+-- CONVENTION, so every reader downstream treated an invented day as a printed
+-- one: the item list rendered "30 Jun 2028", a day that appears nowhere on the
+-- box and that nobody can check against it, and the urgency rule would count
+-- "in 2d" through the last days of June as though something changed overnight.
+--
+-- So the row carries its own precision:
+--
+--   'day'    the date is exactly what was printed. Food, mostly.
+--   'month'  only the month was printed; `expiry` holds that month's LAST day.
+--            Render the month, and never a day-level countdown inside it.
+--
+-- Storing the month-end rather than a separate YYYY-MM column is what keeps
+-- every existing query correct without being touched: `idx_items_expiry` still
+-- orders, "soonest first" still sorts, and a range scan for "expires before X"
+-- still includes exactly the boxes that do. A parallel nullable month column
+-- would have split the same fact across two places and left every comparison
+-- having to remember both.
+--
+-- BACKFILL IS UNIFORM: every existing row becomes 'day'.
+--
+-- The tempting rule — "expiry falls on the last day of a month, so somebody
+-- meant a month" — is wrong on this data in both directions. Food genuinely
+-- expires on the 30th, and there is no way to tell that row from a box; and the
+-- one row that IS month-precision looks identical to it. 'day' is also the
+-- recoverable direction: it over-states precision in a visible way, on a screen
+-- its owner reads, whereas a wrongly-widened food date silently hides the day
+-- you were meant to eat it by.
+--
+-- The single month-precision row is set by hand against the live database. Which
+-- item it is, is a question only its owner can answer, and what it holds is
+-- medical data that does not belong in a public repository.
+
+ALTER TABLE items ADD COLUMN IF NOT EXISTS expiry_precision VARCHAR(8) NOT NULL DEFAULT 'day';
