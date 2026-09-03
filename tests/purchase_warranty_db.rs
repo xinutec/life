@@ -245,3 +245,87 @@ async fn an_old_purchase_does_not_disturb_the_day_it_names() {
         );
     }
 }
+
+/// Unmaking a purchase, and the two ways a delete can reach too far.
+///
+/// This is what makes the WRITE path testable at all: without an inverse,
+/// exercising the success path against production leaves a fabricated number in
+/// the money history forever, so the route shipped verified by its refusals
+/// only. See the task on purchase correction.
+#[tokio::test]
+async fn a_purchase_is_deletable_but_only_its_owners_and_only_on_its_own_item() {
+    let user = "test-user-purchase-delete";
+    let other = "test-user-purchase-delete-other";
+    let pool = setup(user).await;
+    sqlx::query("DELETE FROM purchases WHERE user_id = ?")
+        .bind(other)
+        .execute(&pool)
+        .await
+        .expect("clean other");
+
+    let kettle = inv_repo::create_item(&pool, user, appliance("Kettle"))
+        .await
+        .expect("create kettle");
+    let oven = inv_repo::create_item(&pool, user, appliance("Oven"))
+        .await
+        .expect("create oven");
+    let bought = |item: &life::inventory::types::Item| BoughtItem {
+        id: item.id,
+        product_id: None,
+        barcode: None,
+        name: "thing",
+        quantity: None,
+        unit: None,
+    };
+    let on_kettle =
+        purchases_repo::record(&pool, user, &bought(&kettle), &purchase("Argos", 1_999))
+            .await
+            .expect("record on kettle");
+
+    // Someone else's delete must not reach it, even with the right ids.
+    assert!(
+        !purchases_repo::remove(&pool, other, kettle.id, on_kettle)
+            .await
+            .expect("remove as other"),
+        "a purchase is only its owner's to delete"
+    );
+    // Nor may the right owner delete it through the WRONG item. The id alone
+    // would be enough for ownership; reaching it through an item it does not
+    // belong to is a client bug, and deleting anyway would take a row off a
+    // list nobody was looking at.
+    assert!(
+        !purchases_repo::remove(&pool, user, oven.id, on_kettle)
+            .await
+            .expect("remove via wrong item"),
+        "a purchase must not be reachable through another item"
+    );
+    assert_eq!(
+        purchases_repo::for_item(&pool, user, kettle.id)
+            .await
+            .expect("read")
+            .len(),
+        1,
+        "neither refused delete may have removed anything"
+    );
+
+    // The real one works, once.
+    assert!(
+        purchases_repo::remove(&pool, user, kettle.id, on_kettle)
+            .await
+            .expect("remove")
+    );
+    assert!(
+        purchases_repo::for_item(&pool, user, kettle.id)
+            .await
+            .expect("read")
+            .is_empty()
+    );
+    // And is idempotent in the honest direction: a second delete reports that it
+    // removed nothing, which is what lets the route answer 404 rather than
+    // pretending it did something.
+    assert!(
+        !purchases_repo::remove(&pool, user, kettle.id, on_kettle)
+            .await
+            .expect("remove again")
+    );
+}

@@ -155,6 +155,28 @@ pub async fn record_purchase(
         .ok_or_else(|| AppError::Other(anyhow::anyhow!("purchase {new_id} vanished after insert")))
 }
 
+/// DELETE /api/items/{id}/purchases/{purchase_id} → unmake a purchase.
+///
+/// A purchase is money, and the point of the table is that its numbers are
+/// true — so a mistyped price or the wrong item has to be removable, not just
+/// regrettable. Until this existed the only route was POST, and a typo in the
+/// spending history was permanent.
+///
+/// It also makes the WRITE path testable. Without an inverse, exercising the
+/// success path against production means leaving a fabricated number in the
+/// record forever, so `record_purchase` shipped verified by its refusals alone.
+pub async fn delete_purchase(
+    State(app): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path((id, purchase_id)): Path<(u64, u64)>,
+) -> Result<StatusCode, AppError> {
+    if purchases_repo::remove(&app.pool, &user.user_id, id, purchase_id).await? {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(AppError::NotFound)
+    }
+}
+
 pub async fn move_item(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,

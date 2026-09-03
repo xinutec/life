@@ -118,6 +118,12 @@ export class LifeApi {
   recordPurchase(id: number, purchase: NewPurchase): Observable<Purchase> {
     return this.http.post<Purchase>(`/api/items/${id}/purchases`, purchase);
   }
+  /** Unmake a purchase. Money, so a typo has to be removable rather than merely
+   *  regrettable — and without an inverse the write path cannot be exercised
+   *  against production without leaving a fabricated number in the record. */
+  deletePurchase(itemId: number, purchaseId: number): Observable<unknown> {
+    return this.http.delete(`/api/items/${itemId}/purchases/${purchaseId}`);
+  }
   moveItem(id: number, locationId: number | null): Observable<Item> {
     return this.http.post<Item>(`/api/items/${id}/move`, { location_id: locationId });
   }

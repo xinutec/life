@@ -8,8 +8,9 @@ import { ago } from '../../shared/ago';
 import { warrantyInfo } from '../../warranty';
 import { amount } from '../../shared/amount';
 import { fromMinorUnits } from '../../shared/money';
-import { assertNever, classifyApiError } from '../../shared/api-error';
+import { assertNever, classifyApiError, onlineHint } from '../../shared/api-error';
 import { Dialog } from '../../shared/dialog';
+import { Feedback } from '../../shared/feedback';
 import { ListState } from '../../shared/list-state';
 import { LifeApi } from '../../life-api';
 import { Item, ItemEvent, ItemHistoryEntry, Purchase } from '../../models';
@@ -50,8 +51,13 @@ const SHAPE: Record<ItemEvent, { icon: string; verb: string }> = {
  *  dismiss the edit form under it and take any unsaved typing with it. The
  *  product picker opens from the same place for the same reason.
  *
- *  Read-only, and it stays that way. The audit is append-only; an item's own
- *  numbers are edited in the sheet that opened this. */
+ *  The AUDIT is read-only and stays that way: `item_history` is append-only,
+ *  and an item's own numbers are edited in the sheet that opened this.
+ *
+ *  A purchase is not part of that audit. It rides in the same dialog because it
+ *  is a fact about the item, but it is a separate list from a separate table,
+ *  and it is money — a mistyped price has to be removable rather than merely
+ *  regrettable. So purchases, and only purchases, can be deleted here. */
 @Component({
   selector: 'app-history-dialog',
   templateUrl: './history-dialog.html',
@@ -62,6 +68,7 @@ export class HistoryDialog {
   private ref = inject(MatDialogRef<HistoryDialog, void>);
   private data = inject<HistoryDialogData>(MAT_DIALOG_DATA);
   private api = inject(LifeApi);
+  private feedback = inject(Feedback);
 
   readonly item = this.data.item;
   readonly entries = signal<ItemHistoryEntry[] | null>(null);
@@ -137,6 +144,16 @@ export class HistoryDialog {
       detail,
       when: ago(e.at),
     };
+  }
+
+  /** Remove a purchase that did not happen. Reloads rather than splicing the
+   *  local list: the dialog already has a load path, and a list edited in two
+   *  places drifts from the server the first time one of them is wrong. */
+  removePurchase(id: number): void {
+    this.api.deletePurchase(this.item.id, id).subscribe({
+      next: () => this.load(),
+      error: (e: unknown) => this.feedback.error(`Could not remove it${onlineHint(e)}`),
+    });
   }
 
   close(): void {

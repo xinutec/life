@@ -1,9 +1,10 @@
 import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { HttpErrorResponse } from '@angular/common/http';
-import { of, throwError } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 
+import { Feedback } from '../../shared/feedback';
 import { LifeApi } from '../../life-api';
 import { Item, ItemHistoryEntry, Purchase } from '../../models';
 import { HistoryDialog, HistoryDialogData } from './history-dialog';
@@ -26,24 +27,32 @@ const item: Item = {
 };
 
 function setup(
-  opts: { entries?: ItemHistoryEntry[]; purchases?: Purchase[]; error?: unknown } = {},
+  opts: {
+    entries?: ItemHistoryEntry[];
+    purchases?: Purchase[];
+    error?: unknown;
+    deletePurchase?: () => Observable<unknown>;
+  } = {},
 ) {
   const itemHistory = vi.fn(() =>
     opts.error !== undefined
       ? throwError(() => opts.error)
       : of({ entries: opts.entries ?? [], purchases: opts.purchases ?? [] }),
   );
+  const deletePurchase = vi.fn(opts.deletePurchase ?? (() => of(undefined)));
+  const feedback = { notify: vi.fn(), error: vi.fn() };
   TestBed.configureTestingModule({
     imports: [HistoryDialog],
     providers: [
       { provide: MatDialogRef, useValue: { close: vi.fn() } },
       { provide: MAT_DIALOG_DATA, useValue: { item } satisfies HistoryDialogData },
-      { provide: LifeApi, useValue: { itemHistory } },
+      { provide: LifeApi, useValue: { itemHistory, deletePurchase } },
+      { provide: Feedback, useValue: feedback },
     ],
   });
   const fixture = TestBed.createComponent(HistoryDialog);
   fixture.detectChanges();
-  return { fixture, cmp: fixture.componentInstance, itemHistory };
+  return { fixture, cmp: fixture.componentInstance, itemHistory, deletePurchase, feedback };
 }
 
 /** A purchase as the server sends it. Named so the two tests below read as
@@ -152,5 +161,33 @@ describe('HistoryDialog purchases', () => {
     // directly above a price would be a contradiction.
     const { fixture } = setup({ entries: [], purchases: [purchase()] });
     expect(text(fixture)).not.toContain('Nothing recorded');
+  });
+});
+
+describe('HistoryDialog purchase removal', () => {
+  it('removes a purchase and re-reads, rather than trusting its own list', () => {
+    // Splicing locally would leave the dialog showing a state the server never
+    // confirmed — and this list is money, where "looks right" is not the bar.
+    const { cmp, itemHistory, deletePurchase } = setup({
+      entries: [],
+      purchases: [purchase({ id: 42 })],
+    });
+    const readsBefore = itemHistory.mock.calls.length;
+    cmp.removePurchase(42);
+    expect(deletePurchase).toHaveBeenCalledWith(7, 42);
+    expect(itemHistory.mock.calls.length).toBe(readsBefore + 1);
+  });
+
+  it('says so and keeps the row when the removal fails', () => {
+    // A row that vanishes on a failed delete is the worst outcome: it reads as
+    // done, and the purchase is still there next time the dialog opens.
+    const { cmp, feedback } = setup({
+      entries: [],
+      purchases: [purchase({ id: 42 })],
+      deletePurchase: () => throwError(() => new Error('nope')),
+    });
+    cmp.removePurchase(42);
+    expect(feedback.error).toHaveBeenCalled();
+    expect(cmp.purchases()).toHaveLength(1);
   });
 });

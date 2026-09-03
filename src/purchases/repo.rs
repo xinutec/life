@@ -129,6 +129,32 @@ pub async fn for_item(pool: &MySqlPool, user_id: &str, item_id: u64) -> Result<V
     Ok(rows.into_iter().map(with_derived).collect())
 }
 
+/// Delete one purchase. Returns whether a row belonging to this user, on this
+/// item, was removed.
+///
+/// HARD, where items and locations soft-delete. That convention exists for two
+/// reasons and a purchase has neither: the synced tables keep `deleted_at` so a
+/// tombstone can reach an offline client, and items keep one so the trash can
+/// put them back. Purchases are not synced and there is no trash surface for
+/// them, so a soft-deleted purchase would be an invisible row with no way back —
+/// strictly worse than either choice. What is being deleted is a purchase that
+/// did not happen; a real one you removed by mistake is retyped in the same
+/// dialog that removed it.
+///
+/// Scoped on `item_id` as well as `user_id`. The id alone would be enough for
+/// ownership, but the route reaches this through an item, and a purchase id that
+/// belongs to a DIFFERENT item of yours is a client bug that should 404 rather
+/// than silently delete something off another row.
+pub async fn remove(pool: &MySqlPool, user_id: &str, item_id: u64, id: u64) -> Result<bool> {
+    let res = sqlx::query("DELETE FROM purchases WHERE id = ? AND user_id = ? AND item_id = ?")
+        .bind(id)
+        .bind(user_id)
+        .bind(item_id)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected() > 0)
+}
+
 /// What a purchase works out to per kg / litre / item.
 ///
 /// Reuses `packsize::parse` rather than reading "g" and "kg" again here: the

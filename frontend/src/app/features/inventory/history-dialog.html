@@ -23,6 +23,16 @@
           @if (p.cover; as cover) {
             <span matListItemLine class="expiry" [class]="cover.cls">{{ cover.label }}</span>
           }
+          <!-- Only purchases carry this. The timeline beside them is an
+               append-only audit and has no delete, which is the point of it. -->
+          <button
+            matListItemMeta
+            mat-icon-button
+            (click)="removePurchase(p.id)"
+            [attr.aria-label]="'Remove the ' + p.what + ' purchase from ' + p.where"
+          >
+            <mat-icon>delete_outline</mat-icon>
+          </button>
         </mat-list-item>
       }
     </mat-list>
