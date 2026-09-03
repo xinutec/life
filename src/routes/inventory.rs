@@ -2,10 +2,15 @@
 
 use axum::Json;
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
 use serde::Deserialize;
 
+use axum::body::Bytes;
+use axum::http::{HeaderMap, StatusCode, header};
+use axum::response::{IntoResponse, Response};
+
 use crate::error::AppError;
+use crate::files::repo as files_repo;
+use crate::files::types::{ItemFile, MAX_FILE_BYTES, sniff_mime};
 use crate::inventory::consume::Taken;
 use crate::inventory::repo;
 use crate::inventory::types::{Item, ItemHistory, Location, NewItem, NewLocation, UseItem};
@@ -171,6 +176,132 @@ pub async fn delete_purchase(
     Path((id, purchase_id)): Path<(u64, u64)>,
 ) -> Result<StatusCode, AppError> {
     if purchases_repo::remove(&app.pool, &user.user_id, id, purchase_id).await? {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(AppError::NotFound)
+    }
+}
+
+/// GET /api/items/{id}/files → what is attached to this item, newest first.
+/// Metadata only; the bytes come from the download route.
+pub async fn list_files(
+    State(app): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<u64>,
+) -> Result<Json<Vec<ItemFile>>, AppError> {
+    Ok(Json(
+        files_repo::for_item(&app.pool, &user.user_id, id).await?,
+    ))
+}
+
+/// POST /api/items/{id}/files → attach raw bytes. `X-File-Name` names it and
+/// `X-Purchase-Id` optionally ties it to the purchase it is evidence of.
+///
+/// Raw body, not multipart: the client already holds a `File`/`Blob` and sends
+/// it straight through, which is what the product-image route does and there is
+/// nothing to parse. Bounded by a per-route `DefaultBodyLimit` and re-checked
+/// here, because a limit enforced in only one of those places is a limit that
+/// depends on the router still being wired the way you remember.
+///
+/// ⚠ The STORED mime is sniffed from the bytes, never the declared
+/// `Content-Type`. These files are served back on our own origin, so bytes
+/// riding in under an innocent-looking header would be stored XSS — the same
+/// reason the image allowlist refuses SVG.
+pub async fn add_file(
+    State(app): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<u64>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<Json<ItemFile>, AppError> {
+    if repo::get_item(&app.pool, &user.user_id, id)
+        .await?
+        .is_none()
+    {
+        return Err(AppError::NotFound);
+    }
+    if body.is_empty() {
+        return Err(AppError::BadRequest("empty file".into()));
+    }
+    if body.len() > MAX_FILE_BYTES {
+        return Err(AppError::BadRequest("file exceeds 10 MiB".into()));
+    }
+    let Some(mime) = sniff_mime(&body) else {
+        return Err(AppError::BadRequest(
+            "only images and PDFs can be attached, and the bytes are neither".into(),
+        ));
+    };
+    let name = header_str(&headers, "x-file-name").unwrap_or("attachment");
+    // A purchase id that is not a number is a client bug, not a reason to file
+    // the receipt against nothing — say so rather than silently unlinking it.
+    let purchase_id =
+        match header_str(&headers, "x-purchase-id") {
+            None => None,
+            Some(raw) => Some(raw.parse::<u64>().map_err(|_| {
+                AppError::BadRequest(format!("X-Purchase-Id is not a number: {raw}"))
+            })?),
+        };
+    let new_id =
+        files_repo::add(&app.pool, &user.user_id, id, purchase_id, name, mime, &body).await?;
+    // Read the metadata back rather than assembling it here, so the created_at
+    // the client sees is the one the database wrote.
+    files_repo::for_item(&app.pool, &user.user_id, id)
+        .await?
+        .into_iter()
+        .find(|f| f.id == new_id)
+        .map(Json)
+        .ok_or_else(|| AppError::Other(anyhow::anyhow!("file {new_id} vanished after insert")))
+}
+
+fn header_str<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
+    headers
+        .get(name)
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+}
+
+/// GET /api/items/{id}/files/{file_id} → the bytes.
+///
+/// `Content-Disposition: attachment` on everything, including images. These are
+/// arbitrary user uploads served from the app's own origin; making the browser
+/// download rather than render them is what stops a crafted file being
+/// interpreted in our security context.
+pub async fn get_file(
+    State(app): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path((id, file_id)): Path<(u64, u64)>,
+) -> Result<Response, AppError> {
+    let (name, mime, bytes) = files_repo::read(&app.pool, &user.user_id, id, file_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    // The filename is user text and goes into a header: strip anything that
+    // could end the quoted string or inject a second header line.
+    let safe: String = name
+        .chars()
+        .filter(|c| !matches!(c, '"' | '\\' | '\r' | '\n'))
+        .take(120)
+        .collect();
+    Ok((
+        [
+            (header::CONTENT_TYPE, mime),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{safe}\""),
+            ),
+        ],
+        bytes,
+    )
+        .into_response())
+}
+
+/// DELETE /api/items/{id}/files/{file_id} → detach and destroy.
+pub async fn delete_file(
+    State(app): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path((id, file_id)): Path<(u64, u64)>,
+) -> Result<StatusCode, AppError> {
+    if files_repo::remove(&app.pool, &user.user_id, id, file_id).await? {
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(AppError::NotFound)

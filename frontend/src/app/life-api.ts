@@ -18,6 +18,7 @@ import {
   PlannedTrip,
   PriceInput,
   Product,
+  ItemFile,
   ProductDetail,
   Purchase,
   Recipe,
@@ -124,6 +125,37 @@ export class LifeApi {
   deletePurchase(itemId: number, purchaseId: number): Observable<unknown> {
     return this.http.delete(`/api/items/${itemId}/purchases/${purchaseId}`);
   }
+  /** What is attached to an item — metadata only. The bytes come from
+   *  `fileUrl`, so listing five receipts costs no blobs. */
+  itemFiles(id: number): Observable<ItemFile[]> {
+    return this.http.get<ItemFile[]>(`/api/items/${id}/files`);
+  }
+
+  /** Attach raw bytes. The name and the optional purchase link ride in headers
+   *  because the body IS the file — the same shape as the product image, and
+   *  no multipart for either side to parse.
+   *
+   *  The name is stripped to ASCII: a header cannot carry arbitrary UTF-8, and
+   *  a phone will happily produce a filename with an emoji in it. */
+  addItemFile(id: number, file: File, purchaseId?: number): Observable<ItemFile> {
+    const headers: Record<string, string> = {
+      'Content-Type': file.type || 'application/octet-stream',
+      'X-File-Name': file.name.replace(/[^\x20-\x7e]/g, '_').slice(0, 120) || 'attachment',
+    };
+    if (purchaseId != null) headers['X-Purchase-Id'] = String(purchaseId);
+    return this.http.post<ItemFile>(`/api/items/${id}/files`, file, { headers });
+  }
+
+  deleteItemFile(id: number, fileId: number): Observable<unknown> {
+    return this.http.delete(`/api/items/${id}/files/${fileId}`);
+  }
+
+  /** Where the bytes are. A plain link, so the browser's own download handles
+   *  it — the server sends `Content-Disposition: attachment`. */
+  fileUrl(id: number, fileId: number): string {
+    return `/api/items/${id}/files/${fileId}`;
+  }
+
   moveItem(id: number, locationId: number | null): Observable<Item> {
     return this.http.post<Item>(`/api/items/${id}/move`, { location_id: locationId });
   }

@@ -6,6 +6,7 @@ pub mod config;
 pub mod conflicts;
 pub mod db;
 pub mod error;
+pub mod files;
 pub mod inventory;
 pub mod nextcloud;
 pub mod pending_login;

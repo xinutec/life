@@ -17,6 +17,7 @@ export type { ExpiryPrecision } from './generated/ExpiryPrecision';
 export type { ItemHistory } from './generated/ItemHistory';
 export type { ItemHistoryEntry } from './generated/ItemHistoryEntry';
 export type { Purchase } from './generated/Purchase';
+export type { ItemFile } from './generated/ItemFile';
 export type { NewPurchase } from './generated/NewPurchase';
 export type { Source } from './generated/Source';
 export type { Product } from './generated/Product';

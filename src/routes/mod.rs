@@ -21,6 +21,7 @@ use axum::http::{HeaderValue, Response, header};
 use axum::routing::{delete, get, patch, post};
 
 use crate::error::AppError;
+use crate::files::types as files_types;
 use crate::products::off;
 use tower::ServiceBuilder;
 use tower_http::services::fs::ServeFileSystemResponseBody;
@@ -90,6 +91,18 @@ pub fn router(state: AppState) -> Router {
             patch(inventory::update_item).delete(inventory::delete_item),
         )
         .route("/items/{id}/history", get(inventory::item_history))
+        .route(
+            "/items/{id}/files",
+            get(inventory::list_files).post(inventory::add_file).layer(
+                // Re-stated in the handler too. A limit that lives only here is
+                // one that silently disappears if the route is ever re-wired.
+                DefaultBodyLimit::max(files_types::MAX_FILE_BYTES + 64 * 1024),
+            ),
+        )
+        .route(
+            "/items/{id}/files/{file_id}",
+            get(inventory::get_file).delete(inventory::delete_file),
+        )
         .route("/items/{id}/purchases", post(inventory::record_purchase))
         .route(
             "/items/{id}/purchases/{purchase_id}",

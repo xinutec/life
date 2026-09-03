@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 // The fleet-shared harness, published as @xinutec/ui-harness (source repo
 // ~/Code/ui-harness). Ships compiled JS, so it loads straight from node_modules.
-import type { Item } from '../src/app/models';
+import type { Item, ItemFile } from '../src/app/models';
 import {
   expectNoTextOverlaps,
   expectNoHorizontalOverflow,
@@ -106,6 +106,16 @@ const WELLBEING = [
 // sends does not fail — it lies, and the lie looks like a bug in the code under
 // test. `Item[]` turns the next such addition into a compile error, which is
 // what the gate's e2e typecheck row is for.
+// A long filename is the overflow case here — phones name a scan
+// "IMG_20240315_143022_receipt_dishwasher.pdf" without being asked.
+const FILES: ItemFile[] = [
+  { id: 1, item_id: 3, purchase_id: 9, name: 'receipt.png', mime: 'image/png',
+    size_bytes: 307_200, created_at: '2026-09-01T10:00:00Z' },
+  { id: 2, item_id: 3, purchase_id: null,
+    name: 'IMG_20240315_143022_receipt_dishwasher_manual.pdf', mime: 'application/pdf',
+    size_bytes: 2_097_152, created_at: '2026-08-20T10:00:00Z' },
+];
+
 const ITEMS: Item[] = [
   { id: 1, product_id: null, name: 'Milk (semi-skimmed)', brand: 'Waitrose Essential', category: 'food',
     quantity: 1, unit: 'bottle', expiry: iso(-1), expiry_precision: 'day', location_id: 2,
@@ -782,6 +792,28 @@ test('an expired item reads as expired — on Today and on All items', async ({ 
       expect(r.color, `${path}: "${r.text}" must not read as expired`).not.toBe(r.error);
     }
   }
+});
+
+// Receipts and manuals: a dialog OVER the item sheet with a list whose rows
+// carry a filename, a size line and a trailing delete — and an empty state,
+// which is what it will actually show until somebody attaches something.
+test('files dialog — the empty state and the attach button fit @ phone width', async ({
+  page,
+}, testInfo) => {
+  await mockApi(page);
+  await page.route('**/api/items/*/files', (r) => r.fulfill({ json: FILES }));
+  await page.goto('/inventory');
+  await page.getByText('Levetiracetam').click();
+  await page.getByRole('button', { name: 'Files' }).click();
+
+  const dialog = page.locator('app-files-dialog');
+  await dialog.waitFor();
+  await dialog.getByText('receipt.png').waitFor();
+  await dialog.getByRole('button', { name: 'Attach a file' }).waitFor();
+
+  await expectNoClippedText(page, testInfo, 'app-files-dialog');
+  await expectNoTextOverlaps(page, testInfo, 'app-files-dialog');
+  await expectNoHorizontalOverflow(page, testInfo, 'app-files-dialog');
 });
 
 // Recording a purchase for something already owned — the path that did not

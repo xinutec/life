@@ -1,0 +1,52 @@
+mat-list {
+  padding: 0;
+  width: 100%;
+}
+
+// The head gives way and the tail never does — so `…_manual.pdf` stays readable
+// at any width, which a single ellipsis on the whole string cannot do.
+// ⚠ The class is doubled to win a specificity fight, and it is not decoration.
+// Material sets `display: block` on a list item's primary-text slot, which ties
+// a single class and wins on source order — measured: the anchor computed to
+// `block`, so the head never shrank and BOTH ends overflowed a 192 px row. The
+// same fight the `.expiry` colour lost on the Today card.
+.fname.fname {
+  display: flex;
+  // The ellipsis truncates at a character boundary, so the head box is a little
+  // wider than its visible text — with the browser's default underline that gap
+  // reads as TWO links rather than one filename. Colour carries the affordance;
+  // the row is a link target anyway.
+  text-decoration: none;
+  color: var(--mat-sys-primary);
+  min-width: 0;
+
+  .head {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tail {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+}
+
+// Size and age are context, not the file: quieter than its name above them.
+// Same treatment as the history dialog's timestamps, because it is the same
+// kind of line.
+.when {
+  opacity: 0.7;
+}
+
+.add-row {
+  display: flex;
+  justify-content: flex-start;
+  padding-top: 0.5rem;
+}
+
+// Present but never seen: the button above triggers it, because a native file
+// input cannot be styled to look like anything else in the app.
+.hidden-picker {
+  display: none;
+}

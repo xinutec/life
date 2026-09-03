@@ -28,6 +28,7 @@ import {
 } from '../../models';
 import { ScannerDialog } from '../scanner/scanner-dialog';
 import { HistoryDialog, HistoryDialogData } from './history-dialog';
+import { FilesDialog, FilesDialogData } from './files-dialog';
 import { PurchaseDialog, PurchaseDialogData } from './purchase-dialog';
 
 export interface ItemSheetData {
@@ -310,6 +311,16 @@ export class ItemSheet {
     this.dialog.open<PurchaseDialog, PurchaseDialogData, unknown>(PurchaseDialog, {
       data: { item },
       ariaLabel: `Record what ${item.name} cost`,
+    });
+  }
+
+  /** Receipts and manuals for this item — a dialog, same reason as the others. */
+  viewFiles(): void {
+    const item = this.data.item;
+    if (!item) return;
+    this.dialog.open<FilesDialog, FilesDialogData, void>(FilesDialog, {
+      data: { item },
+      ariaLabel: `Files for ${item.name}`,
     });
   }
 

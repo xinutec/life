@@ -1,0 +1,59 @@
+<app-dialog [title]="'Files for ' + item.name">
+  <app-list-state
+    [loading]="!loaded()"
+    [error]="!!error()"
+    [errorText]="error() ?? ''"
+    (retry)="load()"
+    [empty]="loaded() && rows().length === 0"
+    emptyIcon="attach_file"
+    emptyText="Nothing attached yet — a receipt or a manual goes here."
+  />
+
+  @if (rows().length) {
+    <mat-list>
+      @for (f of rows(); track f.id) {
+        <mat-list-item [lines]="2">
+          <mat-icon matListItemIcon aria-hidden="true">{{ f.icon }}</mat-icon>
+          <!-- A plain link: the server sends Content-Disposition: attachment,
+               so the browser's own download handles it and nothing renders an
+               arbitrary upload inside our origin. -->
+          <a
+            matListItemTitle
+            class="fname"
+            [href]="f.href"
+            [attr.download]="f.full"
+            [title]="f.full"
+            ><span class="head">{{ f.head }}</span><span class="tail">{{ f.tail }}</span></a
+          >
+          <span matListItemLine class="when">{{ f.detail }}</span>
+          <button
+            matListItemMeta
+            mat-icon-button
+            (click)="remove(f.id)"
+            [attr.aria-label]="'Remove ' + f.full"
+          >
+            <mat-icon>delete_outline</mat-icon>
+          </button>
+        </mat-list-item>
+      }
+    </mat-list>
+  }
+
+  <div class="add-row">
+    <!-- No `capture`: it would force the camera and remove the photo library,
+         which is where a scanned manual already lives. -->
+    <input
+      #picker
+      type="file"
+      class="hidden-picker"
+      accept="image/*,application/pdf"
+      (change)="pick($event)"
+    />
+    <button mat-stroked-button (click)="picker.click()" [disabled]="uploading()">
+      <mat-icon>attach_file</mat-icon>
+      {{ uploading() ? 'Attaching…' : 'Attach a file' }}
+    </button>
+  </div>
+
+  <button dialogActions mat-button (click)="close()">Close</button>
+</app-dialog>
