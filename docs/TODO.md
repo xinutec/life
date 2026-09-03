@@ -988,12 +988,30 @@ early rather than leaning on the margin.
       Refused rather than coerced, matching the existing price validation: a
       purchase in the future, and a warranty over 600 months (the order-of-
       magnitude slip a months box invites — "2" meaning two years).
-      ⚠ **Still to do: the FILE half** — a receipt or a PDF manual attached to an
-      ITEM. `PUT /api/products/{barcode}/image` is the pattern to copy, but it is
-      per-PRODUCT and keyed on a barcode; an appliance has neither. Genuinely new:
-      per-item attachment, more than one file per thing, and a non-image mime.
-      Deliberately left out here — a warranty question is answerable from dates
-      alone, and the file is evidence you fetch when you claim.
+      **The FILE half landed 2026-09-03** (migration 0047, `item_files`): list,
+      upload, download and delete, hung off the ITEM because the product image
+      store is per-PRODUCT and keyed on a barcode an appliance does not have.
+      A receipt keeps its `purchase_id` for the same reason `warranty_months`
+      lives on the purchase — buy the same model twice and you have two receipts.
+      `ON DELETE SET NULL`, so removing a mistyped purchase does not take the
+      scan with it. No `kind` column: a vocabulary invented before any real file
+      exists is how `items.category` shipped as five values and needed ten.
+      The stored mime is SNIFFED, never the declared one, and SVG is refused by
+      construction — these are served from our own origin, so an SVG upload would
+      be stored XSS; everything leaves as `Content-Disposition: attachment` for
+      the same reason. HEIC is accepted because that is what an iPhone makes.
+      DELETE was built in the same commit as the upload, which is what let the
+      whole path be exercised against production and cleaned up after: upload
+      200, bytes identical on the way back, wrong-item 404, delete 204, table
+      empty.
+      ⚠ The filename display took three tries and only measurement settled it. A
+      34-character budget was still clipped (the row is 192 px; 34 characters
+      render at 307), and the head/tail split replacing it did nothing until the
+      specificity was raised — Material sets `display: block` on a list item's
+      primary-text slot and wins on source order, the same fight the `.expiry`
+      colour lost on the Today card. It matters because a phone names a scan
+      `IMG_20240315_143022_receipt_dishwasher_manual.pdf` by itself, so a plain
+      ellipsis eats the only part that says which file it is.
 - [x] **Item history view** (2026-08-10) — the `item_history` audit had three
       writers and no reader since migration 0002 ("cheap now, impossible to
       backfill"). `GET /api/items/{id}/history` reads it back newest-first, with
