@@ -964,6 +964,36 @@ early rather than leaning on the margin.
       — neither of which anything records yet. Conflating it with the printed
       date would answer the wrong question confidently.
 - [ ] **Warranties / receipts / manuals** — attach a file + purchase/expiry date.
+      Half done (2026-09-03): the DATES half. What the filing missed is that
+      `purchases` already had `bought_at` and `item_id` (migrations 0043/0044) —
+      so the purchase date was not missing, it was **unreachable**: the buy-list
+      flow was the only writer, and anything not bought through the app could
+      never carry a price or a date. Measured that day: one appliance in the
+      inventory, zero purchases against it.
+      `POST /api/items/{id}/purchases` is that missing writer, and migration 0046
+      adds `purchases.warranty_months`.
+      **The warranty is on the PURCHASE, not the item.** "This has a two-year
+      warranty" is not actionable — two years from when. The item was the
+      tempting place because that is where the question gets asked, and it is
+      wrong twice over: a replacement is a new purchase with its own cover and
+      would have to overwrite the old one, and an item never bought through the
+      app would hold a length that starts nowhere. `warranty_until` is derived on
+      read, like `unit_amount_minor`, so it cannot drift from either half.
+      A hand-entered date is stored at **midday UTC**, not midnight: the day is
+      the only part anybody knows, and midnight is the one invented time a zone
+      offset can walk across — a receipt dated the 15th reading back as the 14th
+      looks like corruption. The day arithmetic then has to compare day-to-day,
+      which it did not at first: the half-day leaked in and "2 July to 1 August"
+      came out as 31 days, caught by `warranty.spec.ts`.
+      Refused rather than coerced, matching the existing price validation: a
+      purchase in the future, and a warranty over 600 months (the order-of-
+      magnitude slip a months box invites — "2" meaning two years).
+      ⚠ **Still to do: the FILE half** — a receipt or a PDF manual attached to an
+      ITEM. `PUT /api/products/{barcode}/image` is the pattern to copy, but it is
+      per-PRODUCT and keyed on a barcode; an appliance has neither. Genuinely new:
+      per-item attachment, more than one file per thing, and a non-image mime.
+      Deliberately left out here — a warranty question is answerable from dates
+      alone, and the file is evidence you fetch when you claim.
 - [x] **Item history view** (2026-08-10) — the `item_history` audit had three
       writers and no reader since migration 0002 ("cheap now, impossible to
       backfill"). `GET /api/items/{id}/history` reads it back newest-first, with

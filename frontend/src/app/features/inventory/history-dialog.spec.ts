@@ -63,6 +63,8 @@ function purchase(over: Partial<Purchase> = {}): Purchase {
     unit_amount_minor: 125,
     unit_measure: 'L',
     bought_at: new Date().toISOString(),
+    warranty_months: null,
+    warranty_until: null,
     ...over,
   };
 }

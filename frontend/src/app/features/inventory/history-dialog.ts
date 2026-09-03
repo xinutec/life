@@ -5,6 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
 
 import { ago } from '../../shared/ago';
+import { warrantyInfo } from '../../warranty';
 import { amount } from '../../shared/amount';
 import { fromMinorUnits } from '../../shared/money';
 import { assertNever, classifyApiError } from '../../shared/api-error';
@@ -90,6 +91,9 @@ export class HistoryDialog {
         .join(' · '),
       where: p.shop,
       when: ago(new Date(p.bought_at).getTime()),
+      // `null` for almost everything, and that is the point: a jar of oregano
+      // has no warranty and nothing here should imply one either way.
+      cover: warrantyInfo(p.warranty_until),
     })),
   );
 

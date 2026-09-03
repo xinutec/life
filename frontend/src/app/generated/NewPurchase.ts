@@ -19,4 +19,20 @@ amount_minor: number,
  * ISO 4217. Defaulted rather than required, because the overwhelmingly
  * common case should cost no keystrokes.
  */
-currency: string, };
+currency: string, 
+/**
+ * When it was bought, for something being recorded AFTER the fact — an
+ * appliance you have owned for two years, entered so its warranty has a
+ * start. Absent means now, which is what the buy-list flow means every
+ * time: you are standing in the shop.
+ *
+ * A DATE, not a datetime, and the server does the conversion. Nobody knows
+ * what time of day they bought a dishwasher, and a client that picks
+ * midnight in its own zone hands the server a day that can be off by one.
+ */
+bought_on: string | null, 
+/**
+ * How many months of cover the receipt says, if any. Absent means no
+ * warranty was recorded — NOT that there is none. See migration 0046.
+ */
+warranty_months: number | null, };

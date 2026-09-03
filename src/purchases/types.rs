@@ -1,6 +1,6 @@
 //! The shapes a purchase takes on the wire and in the database.
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -22,6 +22,20 @@ pub struct NewPurchase {
     /// common case should cost no keystrokes.
     #[serde(default = "default_currency")]
     pub currency: String,
+    /// When it was bought, for something being recorded AFTER the fact — an
+    /// appliance you have owned for two years, entered so its warranty has a
+    /// start. Absent means now, which is what the buy-list flow means every
+    /// time: you are standing in the shop.
+    ///
+    /// A DATE, not a datetime, and the server does the conversion. Nobody knows
+    /// what time of day they bought a dishwasher, and a client that picks
+    /// midnight in its own zone hands the server a day that can be off by one.
+    #[serde(default)]
+    pub bought_on: Option<NaiveDate>,
+    /// How many months of cover the receipt says, if any. Absent means no
+    /// warranty was recorded — NOT that there is none. See migration 0046.
+    #[serde(default)]
+    pub warranty_months: Option<i32>,
 }
 
 fn default_currency() -> String {
@@ -70,4 +84,13 @@ pub struct Purchase {
     pub unit_measure: Option<String>,
     #[ts(type = "string")]
     pub bought_at: DateTime<Utc>,
+    /// Months of cover from `bought_at`, as recorded. `None` is "not recorded",
+    /// which most purchases are and should render as nothing at all.
+    pub warranty_months: Option<i32>,
+    /// DERIVED, never stored: `bought_at` plus `warranty_months`. Computed on
+    /// read so it cannot drift from the purchase it is measured from — a stored
+    /// end date can outlive a correction to either half.
+    #[sqlx(default)]
+    #[ts(type = "string | null")]
+    pub warranty_until: Option<DateTime<Utc>>,
 }

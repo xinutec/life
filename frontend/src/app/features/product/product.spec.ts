@@ -818,6 +818,8 @@ describe('ProductPage', () => {
           unit_amount_minor: 715,
           unit_measure: 'KG',
           bought_at: '2026-08-30T10:00:00Z',
+          warranty_months: null,
+          warranty_until: null,
         },
       ],
     } satisfies ProductDetail;

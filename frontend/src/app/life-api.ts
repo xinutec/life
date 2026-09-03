@@ -14,10 +14,12 @@ import {
   ItemHistory,
   Loc,
   Me,
+  NewPurchase,
   PlannedTrip,
   PriceInput,
   Product,
   ProductDetail,
+  Purchase,
   Recipe,
   RecipeIngredient,
   Remembered,
@@ -106,6 +108,15 @@ export class LifeApi {
    *  about the item, not one of the things that happened to it. */
   itemHistory(id: number): Observable<ItemHistory> {
     return this.http.get<ItemHistory>(`/api/items/${id}/history`);
+  }
+  /** Record what an item cost, after the fact.
+   *
+   *  The buy-list flow already wrote purchases and was the ONLY thing that did,
+   *  so anything not bought through the app — the dishwasher, the pans,
+   *  everything owned before it existed — could never carry a price or a date.
+   *  A warranty needs a start, and this is where it comes from. */
+  recordPurchase(id: number, purchase: NewPurchase): Observable<Purchase> {
+    return this.http.post<Purchase>(`/api/items/${id}/purchases`, purchase);
   }
   moveItem(id: number, locationId: number | null): Observable<Item> {
     return this.http.post<Item>(`/api/items/${id}/move`, { location_id: locationId });

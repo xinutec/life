@@ -1,0 +1,25 @@
+// One column of outline fields, like the bottom sheets — this is the same kind
+// of form, and it should not read as a different one because it happens to be a
+// dialog (it is a dialog only because Material holds one bottom sheet at a time).
+.purchase-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding-top: 0.25rem;
+
+  .pair {
+    display: flex;
+    gap: 0.6rem;
+
+    > * {
+      flex: 1;
+      min-width: 0;
+    }
+  }
+
+  // A hint that is telling you something is wrong should not read like the one
+  // that was telling you what to type.
+  .bad {
+    color: var(--mat-sys-error);
+  }
+}

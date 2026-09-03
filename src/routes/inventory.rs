@@ -10,6 +10,7 @@ use crate::inventory::consume::Taken;
 use crate::inventory::repo;
 use crate::inventory::types::{Item, ItemHistory, Location, NewItem, NewLocation, UseItem};
 use crate::purchases::repo as purchases_repo;
+use crate::purchases::types::{NewPurchase, Purchase};
 use crate::session::AuthUser;
 use crate::state::AppState;
 
@@ -106,6 +107,52 @@ pub async fn item_history(
         purchases_repo::for_item(&app.pool, &user.user_id, id),
     )?;
     Ok(Json(ItemHistory { entries, purchases }))
+}
+
+/// POST /api/items/{id}/purchases → record what this item cost, after the fact.
+///
+/// The buy-list flow already writes purchases, and it was the ONLY thing that
+/// did — so anything you did not buy through the app could never have a price or
+/// a date. That is most of a house: the dishwasher, the pans, everything owned
+/// before the app existed. Measured 2026-09-03: one appliance in the inventory,
+/// zero purchases against it.
+///
+/// ⚠ A bad price is a 400 here, where the buy flow logs it and carries on. That
+/// asymmetry is deliberate and not an inconsistency: there, the purchase is a
+/// note attached to something you are holding, and refusing the buy over a
+/// mistyped price would lose the larger thing. Here the purchase IS the request,
+/// so silently declining it would report success for a row that does not exist.
+pub async fn record_purchase(
+    State(app): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<u64>,
+    Json(body): Json<NewPurchase>,
+) -> Result<Json<Purchase>, AppError> {
+    // Scoped through the item read, so somebody else's id is a 404 rather than a
+    // purchase filed against a row they own.
+    let item = repo::get_item(&app.pool, &user.user_id, id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let bought = purchases_repo::BoughtItem {
+        id: item.id,
+        product_id: item.product_id,
+        barcode: item.barcode.as_deref(),
+        name: &item.name,
+        quantity: item.quantity,
+        unit: item.unit.as_deref(),
+    };
+    let new_id = purchases_repo::record(&app.pool, &user.user_id, &bought, &body)
+        .await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
+    // Read back rather than echo the request: `warranty_until` and the per-unit
+    // rate are derived on read, and a hand-built reply would be the second place
+    // that computes them.
+    purchases_repo::for_item(&app.pool, &user.user_id, id)
+        .await?
+        .into_iter()
+        .find(|p| p.id == new_id)
+        .map(Json)
+        .ok_or_else(|| AppError::Other(anyhow::anyhow!("purchase {new_id} vanished after insert")))
 }
 
 pub async fn move_item(

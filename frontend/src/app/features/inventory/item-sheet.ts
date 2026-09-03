@@ -28,6 +28,7 @@ import {
 } from '../../models';
 import { ScannerDialog } from '../scanner/scanner-dialog';
 import { HistoryDialog, HistoryDialogData } from './history-dialog';
+import { PurchaseDialog, PurchaseDialogData } from './purchase-dialog';
 
 export interface ItemSheetData {
   /** Present = edit; absent = add. */
@@ -298,6 +299,17 @@ export class ItemSheet {
     this.dialog.open<HistoryDialog, HistoryDialogData, void>(HistoryDialog, {
       data: { item },
       ariaLabel: `History of ${item.name}`,
+    });
+  }
+
+  /** Record what this item cost — a dialog, for the same reason `viewHistory`
+   *  is one: a second bottom sheet would dismiss this form under it. */
+  recordPurchase(): void {
+    const item = this.data.item;
+    if (!item) return;
+    this.dialog.open<PurchaseDialog, PurchaseDialogData, unknown>(PurchaseDialog, {
+      data: { item },
+      ariaLabel: `Record what ${item.name} cost`,
     });
   }
 

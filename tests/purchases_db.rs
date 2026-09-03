@@ -43,6 +43,8 @@ fn paid(shop: &str, amount_minor: i64) -> NewPurchase {
         shop: shop.into(),
         amount_minor,
         currency: "GBP".into(),
+        bought_on: None,
+        warranty_months: None,
     }
 }
 
@@ -200,6 +202,8 @@ async fn a_nonsense_price_is_refused_rather_than_stored() {
         shop: "Waitrose".into(),
         amount_minor: 100,
         currency: "pounds".into(),
+        bought_on: None,
+        warranty_months: None,
     };
     assert!(
         repo::record(&pool, user, &item, &bad_currency)

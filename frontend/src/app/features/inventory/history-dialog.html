@@ -16,10 +16,13 @@
   @if (paid().length) {
     <mat-list>
       @for (p of paid(); track p.id) {
-        <mat-list-item [lines]="2">
+        <mat-list-item [lines]="p.cover ? 3 : 2">
           <mat-icon matListItemIcon aria-hidden="true">receipt_long</mat-icon>
           <span matListItemTitle>{{ p.what }}</span>
           <span matListItemLine class="when">{{ p.where }} · {{ p.when }}</span>
+          @if (p.cover; as cover) {
+            <span matListItemLine class="expiry" [class]="cover.cls">{{ cover.label }}</span>
+          }
         </mat-list-item>
       }
     </mat-list>

@@ -90,6 +90,7 @@ pub fn router(state: AppState) -> Router {
             patch(inventory::update_item).delete(inventory::delete_item),
         )
         .route("/items/{id}/history", get(inventory::item_history))
+        .route("/items/{id}/purchases", post(inventory::record_purchase))
         .route("/items/{id}/move", post(inventory::move_item))
         .route("/items/{id}/use", post(inventory::use_item))
         .route("/recipes", get(recipes::list).post(recipes::create))

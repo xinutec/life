@@ -1,0 +1,55 @@
+<app-dialog [title]="'What did ' + item.name + ' cost?'">
+  <div class="purchase-form">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Shop</mat-label>
+      <input matInput [ngModel]="shop()" (ngModelChange)="shop.set($event)" placeholder="Currys" />
+    </mat-form-field>
+
+    <div class="pair">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Price</mat-label>
+        <span matTextPrefix>£&nbsp;</span>
+        <input
+          matInput
+          inputmode="decimal"
+          [ngModel]="price()"
+          (ngModelChange)="price.set($event)"
+          placeholder="349.99"
+        />
+      </mat-form-field>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Bought on</mat-label>
+        <!-- `max` is today: the server refuses a purchase that has not happened,
+             and a picker that offers next year only to be told no is a worse way
+             to learn that than one that does not offer it. -->
+        <input
+          matInput
+          type="date"
+          [max]="today"
+          [ngModel]="boughtOn()"
+          (ngModelChange)="boughtOn.set($event)"
+        />
+      </mat-form-field>
+    </div>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Warranty</mat-label>
+      <input
+        matInput
+        inputmode="numeric"
+        [ngModel]="warranty()"
+        (ngModelChange)="warranty.set($event)"
+        placeholder="24"
+      />
+      <span matTextSuffix>months</span>
+      <!-- Said in the field rather than only on save: the unit is the trap here.
+           "2" meaning two YEARS is the mistake this box invites. -->
+      <mat-hint [class.bad]="warrantyBad()">
+        {{ warrantyBad() ? 'Whole months — 24, not 2 years' : 'Months, if the receipt says' }}
+      </mat-hint>
+    </mat-form-field>
+  </div>
+
+  <button dialogActions mat-button (click)="close()">Cancel</button>
+  <button dialogActions mat-flat-button (click)="save()" [disabled]="!canSave()">Record</button>
+</app-dialog>

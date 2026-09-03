@@ -34,4 +34,15 @@ unit_amount_minor: number | null,
  * "KG" / "L" / "each" — the scale `unit_amount_minor` is quoted per,
  * matching how the shop rows above it read ("£8.00/KG").
  */
-unit_measure: string | null, bought_at: string, };
+unit_measure: string | null, bought_at: string, 
+/**
+ * Months of cover from `bought_at`, as recorded. `None` is "not recorded",
+ * which most purchases are and should render as nothing at all.
+ */
+warranty_months: number | null, 
+/**
+ * DERIVED, never stored: `bought_at` plus `warranty_months`. Computed on
+ * read so it cannot drift from the purchase it is measured from — a stored
+ * end date can outlive a correction to either half.
+ */
+warranty_until: string | null, };

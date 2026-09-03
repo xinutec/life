@@ -784,6 +784,37 @@ test('an expired item reads as expired — on Today and on All items', async ({ 
   }
 });
 
+// Recording a purchase for something already owned — the path that did not
+// exist until 2026-09-03, so nothing you did not buy through the Buy list could
+// carry a price or a date. A dialog OVER the item sheet (two stacked surfaces),
+// with a price/date field pair and a suffixed unit, which is the composition
+// this file's header names as the classic overflow culprit.
+test('purchase dialog — the price/date pair and the months suffix fit @ phone width', async ({
+  page,
+}, testInfo) => {
+  await mockApi(page);
+  await page.goto('/inventory');
+  await page.getByText('Levetiracetam').click();
+  await page.getByRole('button', { name: 'Record a purchase' }).click();
+
+  const dialog = page.locator('app-purchase-dialog');
+  await dialog.waitFor();
+  await dialog.getByLabel('Shop').fill('Currys');
+  await dialog.getByLabel('Price').fill('349.99');
+  await dialog.locator('input[type="date"]').waitFor();
+
+  await expectNoClippedText(page, testInfo, 'app-purchase-dialog');
+  await expectNoTextOverlaps(page, testInfo, 'app-purchase-dialog');
+  await expectNoHorizontalOverflow(page, testInfo, 'app-purchase-dialog');
+
+  // The wrong-unit hint is longer than the one it replaces, and it appears in a
+  // subscript slot — the exact place a long `mat-hint` has overflowed before.
+  await dialog.getByLabel('Warranty').fill('2.5');
+  await dialog.getByText('Whole months').waitFor();
+  await expectNoClippedText(page, testInfo, 'app-purchase-dialog');
+  await expectNoHorizontalOverflow(page, testInfo, 'app-purchase-dialog');
+});
+
 // The item sheet's expiry row is a field and a toggle-group side by side, which
 // is the composition the header of this file names as the classic overflow
 // culprit. Measured in BOTH states, because they are different widths: the date

@@ -1,6 +1,7 @@
 //! Storage for purchases: append them, and read a thing's price history back.
 
 use anyhow::{Result, bail};
+use chrono::{DateTime, Months, NaiveTime, TimeZone, Utc};
 use sqlx::MySqlPool;
 
 use super::types::{NewPurchase, Purchase};
@@ -49,10 +50,17 @@ pub async fn record(
             p.currency
         );
     }
+    let bought_at = bought_at_from(p.bought_on)?;
+    if let Some(months) = p.warranty_months
+        && !(1..=MAX_WARRANTY_MONTHS).contains(&months)
+    {
+        bail!("a warranty of {months} months is not a length anybody was given");
+    }
     let res = sqlx::query(
         "INSERT INTO purchases \
-         (user_id, item_id, product_id, barcode, name, shop, amount_minor, currency, quantity, unit) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         (user_id, item_id, product_id, barcode, name, shop, amount_minor, currency, quantity, unit, \
+          bought_at, warranty_months) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(user_id)
     .bind(item.id)
@@ -64,9 +72,41 @@ pub async fn record(
     .bind(&currency)
     .bind(item.quantity)
     .bind(item.unit)
+    .bind(bought_at)
+    .bind(p.warranty_months)
     .execute(pool)
     .await?;
     Ok(res.last_insert_id())
+}
+
+/// Fifty years. Not a technical limit — the point past which a "warranty" is
+/// evidence somebody typed years into a months box, which is the mistake this
+/// field invites.
+const MAX_WARRANTY_MONTHS: i32 = 600;
+
+/// When the purchase happened: the stated day, or now.
+///
+/// A stated day is stored at MIDDAY UTC, not midnight. The column is a DATETIME
+/// and the day is the only part anybody knows, so the time is invented either
+/// way — but midnight is the one invented time a zone offset can walk across,
+/// and a receipt dated the 15th reading back as the 14th is the kind of wrong
+/// that looks like data corruption. Midday survives every real offset.
+///
+/// A future purchase is refused rather than stored. It is a typo or a client
+/// bug, and a warranty counted from a date that has not happened would report
+/// cover nobody has.
+fn bought_at_from(on: Option<chrono::NaiveDate>) -> Result<DateTime<Utc>> {
+    let Some(day) = on else {
+        return Ok(Utc::now());
+    };
+    let midday = NaiveTime::from_hms_opt(12, 0, 0).expect("12:00:00 is a time");
+    let Some(at) = Utc.from_local_datetime(&day.and_time(midday)).single() else {
+        bail!("{day} is not a real day");
+    };
+    if at > Utc::now() {
+        bail!("a purchase cannot have happened in the future ({day})");
+    }
+    Ok(at)
 }
 
 /// What this person paid for ONE cupboard item, newest first.
@@ -79,14 +119,14 @@ pub async fn record(
 pub async fn for_item(pool: &MySqlPool, user_id: &str, item_id: u64) -> Result<Vec<Purchase>> {
     let rows = sqlx::query_as::<_, Purchase>(
         "SELECT id, item_id, product_id, barcode, name, shop, amount_minor, currency, \
-         quantity, unit, bought_at FROM purchases \
+         quantity, unit, bought_at, warranty_months FROM purchases \
          WHERE user_id = ? AND item_id = ? ORDER BY bought_at DESC, id DESC",
     )
     .bind(user_id)
     .bind(item_id)
     .fetch_all(pool)
     .await?;
-    Ok(rows.into_iter().map(with_rate).collect())
+    Ok(rows.into_iter().map(with_derived).collect())
 }
 
 /// What a purchase works out to per kg / litre / item.
@@ -146,7 +186,7 @@ pub async fn history(
     }
     let rows = sqlx::query_as::<_, Purchase>(
         "SELECT id, item_id, product_id, barcode, name, shop, amount_minor, currency, \
-         quantity, unit, bought_at FROM purchases \
+         quantity, unit, bought_at, warranty_months FROM purchases \
          WHERE user_id = ? \
            AND ((? IS NOT NULL AND product_id = ?) OR (? IS NOT NULL AND barcode = ?)) \
          ORDER BY bought_at DESC, id DESC",
@@ -158,15 +198,24 @@ pub async fn history(
     .bind(barcode)
     .fetch_all(pool)
     .await?;
-    Ok(rows.into_iter().map(with_rate).collect())
+    Ok(rows.into_iter().map(with_derived).collect())
 }
 
-/// Fill in the derived rate. Shared by both readers so they cannot disagree
-/// about what a purchase looks like.
-fn with_rate(mut p: Purchase) -> Purchase {
+/// Fill in everything DERIVED from the stored columns. Shared by both readers so
+/// they cannot disagree about what a purchase looks like — the fault that made
+/// this a function rather than two copies.
+fn with_derived(mut p: Purchase) -> Purchase {
     if let Some((amount, measure)) = per_unit(p.amount_minor, p.quantity, p.unit.as_deref()) {
         p.unit_amount_minor = Some(amount);
         p.unit_measure = Some(measure);
     }
+    // Calendar months, not 30-day blocks: a two-year warranty on something
+    // bought on 3 March runs to 3 March, which is what the receipt means and
+    // what somebody would check it against. `checked_add_months` also clamps a
+    // 31st into a short month rather than overflowing into the next one.
+    p.warranty_until = p
+        .warranty_months
+        .and_then(|m| u32::try_from(m).ok())
+        .and_then(|m| p.bought_at.checked_add_months(Months::new(m)));
     p
 }
