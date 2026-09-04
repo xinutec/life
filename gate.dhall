@@ -65,6 +65,7 @@ in  { name = "life"
         , env = G.clippyTarget
         , timeout_s = 1800
         }
+      , G.cargoDoc
       , {-  The whole suite against a throwaway MariaDB — see the header. This is
             the row the conversion exists for.
 
