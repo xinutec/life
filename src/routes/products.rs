@@ -518,10 +518,9 @@ fn cached_as_hit(c: shop_cache::CachedListing) -> asda::AsdaHit {
 /// remembered on the way back, so the cache fills as a side effect of use and
 /// lookups tend toward zero queries.
 ///
-/// Identity is always the barcode, never the name: Asda's relevance order is no
-/// evidence about which product this is (a name search for a balsamic ranked a
-/// raspberry glaze above it). So a `None` with `searched` means every hit was
-/// checked and none carried this EAN — a real, if unwelcome, answer.
+/// Identity is always the barcode, never the name (see [`asda::match_barcode`]).
+/// So a `None` with `searched` means every hit was checked and none carried this
+/// EAN — a real, if unwelcome, answer.
 ///
 /// Every registered shop can be asked, because memory is shop-agnostic and the
 /// question "what do we already know" is answerable for all of them. What differs

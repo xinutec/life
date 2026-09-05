@@ -212,7 +212,7 @@ const LABEL_FLAGS: &[(&str, &str)] = &[
 ///   than pick a winner. Over-claiming is the harmful direction: telling someone
 ///   avoiding animal products that a thing is vegan when a source says otherwise
 ///   is a real-world error, where "we're not sure" merely sends them to the
-///   label. This is why `value` is tri-state at all.
+///   label.
 ///
 /// Input may hold repeated flags (one per source, in any order); the result has
 /// one entry per flag, sorted. Pure — the unit under test.
