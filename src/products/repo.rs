@@ -56,21 +56,30 @@ impl From<MetaRow> for Product {
     }
 }
 
-// The metadata columns every getter selects (no image bytes). Kept in sync by
-// hand across the getters below — sqlx 0.8 only accepts `&'static str`
-// SQL (its injection guard), so this can't be a shared runtime `format!`.
-// "SELECT id, barcode, external_id, name, brand, quantity_label, source,
-//  name_source, image_source, (image IS NOT NULL) AS has_image FROM products WHERE …"
+/// The metadata columns every getter selects (no image bytes).
+///
+/// A macro rather than a `const`, because sqlx 0.8 accepts only `&'static str`
+/// SQL — its injection guard — and a macro expands to a literal that `concat!`
+/// can extend with each getter's own WHERE. The same device as
+/// `inventory::repo`'s `item_select!`, for the same reason. This was three
+/// hand-synced copies until 2026-09-05.
+///
+/// ⚠ `get_by_source_external` does NOT use this, and cannot: it joins
+/// `product_listings`, which carries its own `id`, `source`, `external_id`,
+/// `brand` and `quantity_label`, so every column there must be alias-qualified.
+macro_rules! product_select {
+    () => {
+        "SELECT id, barcode, external_id, name, brand, quantity_label, source, \
+         name_source, image_source, (image IS NOT NULL) AS has_image FROM products"
+    };
+}
 
 /// Cached metadata for a barcode (no image bytes), or None if not cached.
 pub async fn get(pool: &MySqlPool, barcode: &Barcode) -> Result<Option<Product>> {
-    let row: Option<MetaRow> = sqlx::query_as(
-        "SELECT id, barcode, external_id, name, brand, quantity_label, source, \
-         name_source, image_source, (image IS NOT NULL) AS has_image FROM products WHERE barcode = ?",
-    )
-    .bind(barcode)
-    .fetch_optional(pool)
-    .await?;
+    let row: Option<MetaRow> = sqlx::query_as(concat!(product_select!(), " WHERE barcode = ?"))
+        .bind(barcode)
+        .fetch_optional(pool)
+        .await?;
     Ok(row.map(Product::from))
 }
 
@@ -83,11 +92,10 @@ pub async fn search(pool: &MySqlPool, query: &str, limit: u64) -> Result<Vec<Pro
         .replace('%', "\\%")
         .replace('_', "\\_");
     let pattern = format!("%{escaped}%");
-    let rows: Vec<MetaRow> = sqlx::query_as(
-        "SELECT id, barcode, external_id, name, brand, quantity_label, source, \
-         name_source, image_source, (image IS NOT NULL) AS has_image FROM products \
-         WHERE name LIKE ? OR brand LIKE ? ORDER BY name LIMIT ?",
-    )
+    let rows: Vec<MetaRow> = sqlx::query_as(concat!(
+        product_select!(),
+        " WHERE name LIKE ? OR brand LIKE ? ORDER BY name LIMIT ?"
+    ))
     .bind(&pattern)
     .bind(&pattern)
     .bind(limit)
@@ -98,19 +106,19 @@ pub async fn search(pool: &MySqlPool, query: &str, limit: u64) -> Result<Vec<Pro
 
 /// Catalog row by surrogate id, or None.
 pub async fn get_by_id(pool: &MySqlPool, id: ProductId) -> Result<Option<Product>> {
-    let row: Option<MetaRow> = sqlx::query_as(
-        "SELECT id, barcode, external_id, name, brand, quantity_label, source, \
-         name_source, image_source, (image IS NOT NULL) AS has_image FROM products WHERE id = ?",
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await?;
+    let row: Option<MetaRow> = sqlx::query_as(concat!(product_select!(), " WHERE id = ?"))
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
     Ok(row.map(Product::from))
 }
 
 /// The canonical product carrying a listing for (source, external_id), or None.
 /// Resolved through `product_listings`, so it finds a product via ANY of its
 /// sources — not only the one it was first created from.
+///
+/// Spells its columns out rather than using `product_select!` — see that macro:
+/// the join makes half of them ambiguous, so each needs its alias.
 pub async fn get_by_source_external(
     pool: &MySqlPool,
     source: Source,
