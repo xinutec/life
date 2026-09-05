@@ -80,10 +80,8 @@ impl<'a> Dav<'a> {
 
     /// The calendar to write a shop trip to.
     pub async fn writable_calendar(&self) -> Result<CalendarRef, DavError> {
-        let home = self.url(&format!(
-            "/remote.php/dav/calendars/{}/",
-            urlencoding(&self.login_name)
-        ))?;
+        let home = calendar_home(self.base, &self.login_name)
+            .map_err(|e| DavError::Other(e.context("building the Nextcloud URL")))?;
         let res = self
             .http
             .request(propfind(), home)
@@ -169,20 +167,28 @@ fn propfind() -> Method {
     Method::from_bytes(b"PROPFIND").expect("PROPFIND is a valid method token")
 }
 
-/// Percent-encode a path segment. Login names are usually plain, but they may
-/// legitimately contain a space or an `@` (an email-style login), and an
-/// unescaped one makes a URL that resolves somewhere else or nowhere.
-fn urlencoding(segment: &str) -> String {
-    let mut out = String::with_capacity(segment.len());
-    for byte in segment.as_bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
-                out.push(*byte as char);
-            }
-            other => out.push_str(&format!("%{other:02X}")),
-        }
-    }
-    out
+/// The calendar home for one account: `<base>/remote.php/dav/calendars/<login>/`.
+///
+/// A free function, and public, for the reason [`writable_from`] is one: it is
+/// the part with a rule in it, so it should be checkable without a Nextcloud.
+///
+/// The login is pushed as a SEGMENT rather than formatted into a string, so
+/// `url` percent-encodes it. That matters: an email-style login carries an `@`,
+/// some carry a space, and a `/` in one has to become `%2F` instead of opening
+/// a new path segment.
+///
+/// ⚠ Any path already on `base` is REPLACED, which is exactly what the
+/// `join("/remote.php/…")` this grew out of did. Whether a Nextcloud installed
+/// under a sub-path should have these appended instead is a real question and a
+/// different change — not one to make while tidying an encoder.
+pub fn calendar_home(base: &str, login: &str) -> Result<url::Url> {
+    let mut url = url::Url::parse(base).context("parsing the Nextcloud base URL")?;
+    url.set_path("");
+    url.path_segments_mut()
+        .map_err(|()| anyhow!("the Nextcloud base URL cannot hold a path: {base}"))?
+        .extend(["remote.php", "dav", "calendars", login])
+        .push("");
+    Ok(url)
 }
 
 /// What one `<response>` in the multistatus said about itself.

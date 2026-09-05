@@ -218,3 +218,53 @@ fn nowhere_to_write_is_none_rather_than_a_guess() {
     let xml = multistatus(&[]);
     assert!(writable_from(&xml).unwrap().is_none());
 }
+
+// ── the calendar home URL ───────────────────────────────────────────────────
+//
+// Built segment by segment so `url` does the percent-encoding. A login is not
+// always the tidy word the happy path assumes: Nextcloud accepts email-style
+// logins, and a login carrying a `/` must land as one escaped segment rather
+// than opening a new one — that last case is the reason this is not a
+// `format!`.
+
+use life::calendar::caldav::calendar_home;
+
+#[test]
+fn a_plain_login_gets_the_ordinary_dav_path() {
+    let url = calendar_home("https://cloud.example.org", "pippijn").unwrap();
+    assert_eq!(
+        url.as_str(),
+        "https://cloud.example.org/remote.php/dav/calendars/pippijn/"
+    );
+}
+
+#[test]
+fn an_email_style_login_is_escaped_rather_than_sent_raw() {
+    let url = calendar_home("https://cloud.example.org", "a b@example.org").unwrap();
+    assert_eq!(
+        url.as_str(),
+        "https://cloud.example.org/remote.php/dav/calendars/a%20b@example.org/"
+    );
+}
+
+#[test]
+fn a_slash_in_a_login_cannot_open_a_new_path_segment() {
+    let url = calendar_home("https://cloud.example.org", "../../evil").unwrap();
+    // One segment, escaped — not a walk up the tree.
+    assert_eq!(
+        url.as_str(),
+        "https://cloud.example.org/remote.php/dav/calendars/..%2F..%2Fevil/"
+    );
+}
+
+#[test]
+fn a_path_on_the_base_is_replaced_not_appended() {
+    // Documents today's behaviour, which the `join("/remote.php/…")` this grew
+    // out of also had. A Nextcloud under a sub-path would want appending — a
+    // real question, and deliberately not answered here.
+    let url = calendar_home("https://cloud.example.org/nextcloud", "pippijn").unwrap();
+    assert_eq!(
+        url.as_str(),
+        "https://cloud.example.org/remote.php/dav/calendars/pippijn/"
+    );
+}

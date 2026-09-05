@@ -152,29 +152,34 @@ fn trimmed(v: &Option<String>) -> Option<String> {
 /// erase the barcode an earlier product fetch taught us, which is exactly the
 /// silent-erasure shape that bit `product_dietary_flags` in increment 6.
 pub async fn remember(pool: &MySqlPool, listings: &[CachedListing]) -> Result<()> {
-    for l in listings {
-        sqlx::query(
-            "INSERT INTO shop_listings
-                 (source, external_id, barcode, name, brand, quantity_label, image_url)
-             VALUES (?, ?, ?, ?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE
-                 barcode        = COALESCE(VALUES(barcode), barcode),
-                 name           = COALESCE(VALUES(name), name),
-                 brand          = COALESCE(VALUES(brand), brand),
-                 quantity_label = COALESCE(VALUES(quantity_label), quantity_label),
-                 image_url      = COALESCE(VALUES(image_url), image_url),
-                 last_seen_at   = CURRENT_TIMESTAMP",
-        )
-        .bind(l.source)
-        .bind(&l.external_id)
-        .bind(&l.barcode)
-        .bind(&l.name)
-        .bind(&l.brand)
-        .bind(&l.quantity_label)
-        .bind(&l.image_url)
-        .execute(pool)
-        .await?;
+    if listings.is_empty() {
+        return Ok(());
     }
+    // One statement, not one per listing: an Asda search hands back ~15 and the
+    // round trips dominate. Same shape as `routes::telemetry::store`.
+    let mut q = sqlx::QueryBuilder::new(
+        "INSERT INTO shop_listings \
+         (source, external_id, barcode, name, brand, quantity_label, image_url) ",
+    );
+    q.push_values(listings, |mut row, l| {
+        row.push_bind(l.source)
+            .push_bind(&l.external_id)
+            .push_bind(&l.barcode)
+            .push_bind(&l.name)
+            .push_bind(&l.brand)
+            .push_bind(&l.quantity_label)
+            .push_bind(&l.image_url);
+    });
+    q.push(
+        " ON DUPLICATE KEY UPDATE \
+         barcode        = COALESCE(VALUES(barcode), barcode), \
+         name           = COALESCE(VALUES(name), name), \
+         brand          = COALESCE(VALUES(brand), brand), \
+         quantity_label = COALESCE(VALUES(quantity_label), quantity_label), \
+         image_url      = COALESCE(VALUES(image_url), image_url), \
+         last_seen_at   = CURRENT_TIMESTAMP",
+    );
+    q.build().execute(pool).await?;
     Ok(())
 }
 

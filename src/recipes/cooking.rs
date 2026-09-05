@@ -192,14 +192,23 @@ pub fn plan(recipe: &Recipe, inventory: &[Item]) -> Vec<CookedLine> {
         .collect()
 }
 
+/// Every take the plan makes, in order — the rows an outcome actually moved.
+///
+/// The two readers below fold this differently (one keeps the last level, one
+/// sums the amounts) but walk it identically, so the walk lives once and the
+/// two folds stay written out, which is the half worth reading.
+fn takes(lines: &[CookedLine]) -> impl Iterator<Item = &Take> {
+    lines.iter().flat_map(|l| match &l.outcome {
+        LineOutcome::Took { from } | LineOutcome::Short { from, .. } => from.as_slice(),
+        LineOutcome::Untouched { .. } => &[],
+    })
+}
+
 /// Every row the plan touches and what it should hold afterwards, one entry per
 /// row — the last word wins, which is the running total `plan` already threaded.
 pub fn settled(lines: &[CookedLine]) -> Vec<(u64, f64)> {
     let mut out: Vec<(u64, f64)> = Vec::new();
-    for take in lines.iter().flat_map(|l| match &l.outcome {
-        LineOutcome::Took { from } | LineOutcome::Short { from, .. } => from.as_slice(),
-        LineOutcome::Untouched { .. } => &[],
-    }) {
+    for take in takes(lines) {
         match out.iter_mut().find(|(id, _)| *id == take.item_id) {
             Some(entry) => entry.1 = take.left,
             None => out.push((take.item_id, take.left)),
@@ -211,10 +220,7 @@ pub fn settled(lines: &[CookedLine]) -> Vec<(u64, f64)> {
 /// How much came off each row in total — what the history rows record.
 pub fn taken_per_row(lines: &[CookedLine]) -> Vec<(u64, f64)> {
     let mut out: Vec<(u64, f64)> = Vec::new();
-    for take in lines.iter().flat_map(|l| match &l.outcome {
-        LineOutcome::Took { from } | LineOutcome::Short { from, .. } => from.as_slice(),
-        LineOutcome::Untouched { .. } => &[],
-    }) {
+    for take in takes(lines) {
         match out.iter_mut().find(|(id, _)| *id == take.item_id) {
             Some(entry) => entry.1 += take.amount,
             None => out.push((take.item_id, take.amount)),
