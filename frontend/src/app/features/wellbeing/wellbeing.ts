@@ -191,9 +191,8 @@ export class Wellbeing {
           // derived FROM scrollLeft fires another scroll event, and the two
           // chase each other's rounding.
           if (Math.abs(el.scrollLeft - want) > 1) el.scrollLeft = want;
-          // Read BACK, don't assume `want`: the rail keeps whole pixels, so what
-          // it now holds is a ROUNDED version of what it was given, and that
-          // rounded number is what the next scroll event will report.
+          // Read BACK, don't assume `want`: the rail rounds what it was given,
+          // and the rounded number is what the scroll event will report.
           this.lastLeft = el.scrollLeft;
         }
         // ⚠ On EVERY path, including the one with no rail. An earlier attempt
@@ -242,18 +241,25 @@ export class Wellbeing {
    *  multiplier, so nothing has to measure the chart to size it. */
   readonly panFactor = computed(() => 1 + this.pannableMs() / this.spanMs());
 
+  /** True between a rail resize and the re-seat that answers it. */
+  private readonly reseating = signal(false);
+
+  /** The position last read from the rail or written to it; NaN matches nothing,
+   *  so the first scroll is never taken for an echo.
+   *
+   *  The rail holds whole pixels and one is ~50 MINUTES at a 14-day window on a
+   *  phone, so re-deriving the window's end from a position we ourselves wrote
+   *  loses up to half a pixel of time — and the caption names both edges as
+   *  days, so near local midnight that read as the window jumping a day
+   *  (#1293). Provenance, not a tolerance: ignoring small changes would swallow
+   *  the smallest real pan and still drift once several were made. */
+  private lastLeft = Number.NaN;
+
   /** Map the scroller's position onto the window's right edge.
    *
    *  Within a pixel of the end re-pins to now, so a flick to the right edge
    *  starts following new check-ins again rather than freezing the window a few
    *  seconds short of them. */
-  /** True between a rail resize and the re-seat that answers it. */
-  private readonly reseating = signal(false);
-
-  /** The scroll position last read from the rail or written to it. NaN so the
-   *  first scroll is never mistaken for an echo — NaN matches nothing. */
-  private lastLeft = Number.NaN;
-
   onPan(el: HTMLElement): void {
     // Mid-resize the scroller still refers to the old rail; reading this
     // position against the new width drags the window a day sideways. The
@@ -263,16 +269,8 @@ export class Wellbeing {
     // schedules change detection rather than performing it, so a scrollLeft read
     // after one measures the DOM as it was before.
     const { scrollLeft, scrollWidth, clientWidth } = el;
-    // A scroll reporting the position we already hold moved nothing, so it must
-    // change nothing. It is not free to re-derive from it: the rail keeps whole
-    // pixels and one is ~50 MINUTES at a 14-day window on a phone, so the round
-    // trip endMs -> scrollLeft -> endMs loses up to half a pixel of time. The
-    // caption names both edges as days, so landing that near local midnight
-    // moved the whole window a day (#1293) — and the browser fires exactly this
-    // event after the re-seat writes.
-    //
-    // Provenance, not a tolerance: "ignore small changes" would also swallow the
-    // smallest real pan, and would still drift once the user made several.
+    // The re-seat's own echo: the position is one we wrote, so nothing moved and
+    // nothing changes. See `lastLeft` for why re-deriving from it is not free.
     if (scrollLeft === this.lastLeft) return;
     this.lastLeft = scrollLeft;
     const max = scrollWidth - clientWidth;

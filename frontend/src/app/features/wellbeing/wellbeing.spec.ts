@@ -237,16 +237,9 @@ describe('Wellbeing history', () => {
       expect(c.windowLabel()).toContain('–');
     });
 
-    /** The rail holds a whole number of pixels, and at a 14-day window on a phone
-     *  ONE PIXEL IS ABOUT 50 MINUTES. So the re-seat writes a fractional position,
-     *  the rail keeps a rounded one, and reading that back names a different
-     *  instant — up to ~25 minutes away. Landed near local midnight, the caption
-     *  (day names, both ends) jumps a whole day. That is #1293, and it is not a
-     *  race: the scroll below moves the rail zero pixels.
-     *
-     *  jsdom has no layout, so the geometry a phone gives the rail is supplied
-     *  here, ROUNDING on write exactly as a browser does. The rounding IS the
-     *  fault under test — without it this test cannot fail. */
+    /** jsdom has no layout, so the rail is given a phone's geometry and a
+     *  scrollLeft that ROUNDS on write, as a browser's does. That rounding is
+     *  the fault under test — take it away and this test cannot fail. #1293. */
     it('ignores a scroll reporting the position the re-seat itself left', async () => {
       const { fixture } = setup(month());
       const c = fixture.componentInstance;
@@ -276,6 +269,13 @@ describe('Wellbeing history', () => {
       c.onPan(el); // the scroll event a re-seat provokes: nothing has moved
       expect(el.scrollLeft).toBe(seated);
       expect(c.endMs()).toBe(settled);
+
+      // ⚠ A guard that ignored EVERY scroll would pass the two lines above, and
+      // that is how the August attempt failed: the flag stuck set and deliberate
+      // pans went dead too. So a real one must still land.
+      el.scrollLeft = seated - 40;
+      c.onPan(el);
+      expect(c.endMs()).toBeLessThan(settled);
     });
 
     it('goes back to now on demand', () => {
