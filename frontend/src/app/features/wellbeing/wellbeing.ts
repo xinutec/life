@@ -191,6 +191,10 @@ export class Wellbeing {
           // derived FROM scrollLeft fires another scroll event, and the two
           // chase each other's rounding.
           if (Math.abs(el.scrollLeft - want) > 1) el.scrollLeft = want;
+          // Read BACK, don't assume `want`: the rail keeps whole pixels, so what
+          // it now holds is a ROUNDED version of what it was given, and that
+          // rounded number is what the next scroll event will report.
+          this.lastLeft = el.scrollLeft;
         }
         // ⚠ On EVERY path, including the one with no rail. An earlier attempt
         // cleared this only after seating, behind an early return — the flag
@@ -246,6 +250,10 @@ export class Wellbeing {
   /** True between a rail resize and the re-seat that answers it. */
   private readonly reseating = signal(false);
 
+  /** The scroll position last read from the rail or written to it. NaN so the
+   *  first scroll is never mistaken for an echo — NaN matches nothing. */
+  private lastLeft = Number.NaN;
+
   onPan(el: HTMLElement): void {
     // Mid-resize the scroller still refers to the old rail; reading this
     // position against the new width drags the window a day sideways. The
@@ -255,6 +263,18 @@ export class Wellbeing {
     // schedules change detection rather than performing it, so a scrollLeft read
     // after one measures the DOM as it was before.
     const { scrollLeft, scrollWidth, clientWidth } = el;
+    // A scroll reporting the position we already hold moved nothing, so it must
+    // change nothing. It is not free to re-derive from it: the rail keeps whole
+    // pixels and one is ~50 MINUTES at a 14-day window on a phone, so the round
+    // trip endMs -> scrollLeft -> endMs loses up to half a pixel of time. The
+    // caption names both edges as days, so landing that near local midnight
+    // moved the whole window a day (#1293) — and the browser fires exactly this
+    // event after the re-seat writes.
+    //
+    // Provenance, not a tolerance: "ignore small changes" would also swallow the
+    // smallest real pan, and would still drift once the user made several.
+    if (scrollLeft === this.lastLeft) return;
+    this.lastLeft = scrollLeft;
     const max = scrollWidth - clientWidth;
     const pinned = max <= 0 || max - scrollLeft <= 1;
     this.pannedEnd.set(

@@ -237,6 +237,47 @@ describe('Wellbeing history', () => {
       expect(c.windowLabel()).toContain('–');
     });
 
+    /** The rail holds a whole number of pixels, and at a 14-day window on a phone
+     *  ONE PIXEL IS ABOUT 50 MINUTES. So the re-seat writes a fractional position,
+     *  the rail keeps a rounded one, and reading that back names a different
+     *  instant — up to ~25 minutes away. Landed near local midnight, the caption
+     *  (day names, both ends) jumps a whole day. That is #1293, and it is not a
+     *  race: the scroll below moves the rail zero pixels.
+     *
+     *  jsdom has no layout, so the geometry a phone gives the rail is supplied
+     *  here, ROUNDING on write exactly as a browser does. The rounding IS the
+     *  fault under test — without it this test cannot fail. */
+    it('ignores a scroll reporting the position the re-seat itself left', async () => {
+      const { fixture } = setup(month());
+      const c = fixture.componentInstance;
+      fixture.detectChanges();
+      const host = fixture.nativeElement as HTMLElement;
+      const el = host.querySelector<HTMLElement>('.pan');
+      if (!el) throw new Error('the pan rail did not render');
+      let left = 0;
+      Object.defineProperty(el, 'clientWidth', { get: () => 380 });
+      Object.defineProperty(el, 'scrollWidth', { get: () => Math.round(380 * c.panFactor()) });
+      Object.defineProperty(el, 'scrollLeft', {
+        get: () => left,
+        set: (v: number) => {
+          left = Math.round(v);
+        },
+      });
+
+      // Pan back through the history, then zoom: the case that re-seats the rail.
+      el.scrollLeft = (el.scrollWidth - el.clientWidth) * 0.5;
+      c.onPan(el);
+      c.window.set(14);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const settled = c.endMs();
+      const seated = el.scrollLeft;
+      c.onPan(el); // the scroll event a re-seat provokes: nothing has moved
+      expect(el.scrollLeft).toBe(seated);
+      expect(c.endMs()).toBe(settled);
+    });
+
     it('goes back to now on demand', () => {
       const c = setup(month()).fixture.componentInstance;
       c.onPan(scroller(0.2, c.panFactor()));
