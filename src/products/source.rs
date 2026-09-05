@@ -14,40 +14,36 @@
 //! Adding a shop is: one variant, the arms the compiler then demands, and the
 //! frontend's display label. Nothing else needs finding.
 
-use std::fmt;
-use std::str::FromStr;
-
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::ids::ExternalId;
+use crate::str_enum;
 
-/// A source of product data: a shop, Open Food Facts, or our own hand-entry.
-///
-/// **Variants are alphabetical, and that is load-bearing**: the derived `Ord` is
-/// what `BTreeSet<Source>` sorts by, which is how shop lists reach the screen in
-/// a stable order (see [[super::coverage]]). Alphabetical means no shop is
-/// implicitly ranked above another by where it happens to sit in this list —
-/// where a genuine preference is meant, it is written down explicitly
-/// ([`Source::name_rank`]).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
-#[serde(rename_all = "lowercase")]
-#[ts(export)]
-pub enum Source {
-    Asda,
-    /// Open Food Facts — the crowd-sourced catalogue, not a shop.
-    Off,
-    /// Typed by hand. Our own layer: authoritative over every shop, because it
-    /// is how a product still reads correctly when every source is wrong.
-    User,
-    Waitrose,
+str_enum! {
+    /// A source of product data: a shop, Open Food Facts, or our own hand-entry.
+    ///
+    /// **Variants are alphabetical, and that is load-bearing**: the derived `Ord` is
+    /// what `BTreeSet<Source>` sorts by, which is how shop lists reach the screen in
+    /// a stable order (see [[super::coverage]]). Alphabetical means no shop is
+    /// implicitly ranked above another by where it happens to sit in this list —
+    /// where a genuine preference is meant, it is written down explicitly
+    /// ([`Source::name_rank`]).
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
+    #[serde(rename_all = "lowercase")]
+    #[ts(export)]
+    pub enum Source: "source" {
+        Asda => "asda",
+        /// Open Food Facts — the crowd-sourced catalogue, not a shop.
+        Off => "off",
+        /// Typed by hand. Our own layer: authoritative over every shop, because it
+        /// is how a product still reads correctly when every source is wrong.
+        User => "user",
+        Waitrose => "waitrose",
+    }
 }
 
 impl Source {
-    /// Every source. Iterate this rather than writing a set out again — a new
-    /// variant then reaches every list that derives from it.
-    pub const ALL: [Source; 4] = [Source::Asda, Source::Off, Source::User, Source::Waitrose];
-
     /// Somewhere you can walk into and buy the thing.
     ///
     /// This is the predicate behind both "which shops carry it" and "what may be
@@ -64,7 +60,7 @@ impl Source {
 
     /// Every shop, in display order.
     pub fn shops() -> impl Iterator<Item = Source> {
-        Source::ALL.into_iter().filter(|s| s.is_shop())
+        Source::ALL.iter().copied().filter(|s| s.is_shop())
     }
 
     /// Allowed image-host suffixes for this source's picture, for the SSRF guard
@@ -108,16 +104,6 @@ impl Source {
         }
     }
 
-    /// The value stored in the database and sent on the wire.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Source::Asda => "asda",
-            Source::Off => "off",
-            Source::User => "user",
-            Source::Waitrose => "waitrose",
-        }
-    }
-
     /// Rank in the canonical-name preference order (lower wins), or `None` if
     /// this source never supplies the canonical name.
     ///
@@ -133,13 +119,6 @@ impl Source {
         }
     }
 }
-
-impl fmt::Display for Source {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
 // --- Database mapping ---
 //
 // Written out rather than `#[derive(sqlx::Type)]`: the derive declares the type
@@ -176,18 +155,5 @@ impl<'r> sqlx::Decode<'r, sqlx::MySql> for Source {
         <&str as sqlx::Decode<'r, sqlx::MySql>>::decode(value)?
             .parse()
             .map_err(Into::into)
-    }
-}
-
-impl FromStr for Source {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "asda" => Ok(Source::Asda),
-            "off" => Ok(Source::Off),
-            "user" => Ok(Source::User),
-            "waitrose" => Ok(Source::Waitrose),
-            other => Err(format!("unknown source {other:?}")),
-        }
     }
 }

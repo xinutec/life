@@ -170,6 +170,7 @@ pub async fn connect_init(
         }
     });
 
+    // dev-lint: allow-wire-untyped pre-standard debt (DL-WIRE-UNTYPED-RESPONSE landed 2026-09-03): give this handler a Serialize response struct when the route is next touched
     Ok(Json(json!({ "login_url": login_url })))
 }
 
@@ -195,5 +196,6 @@ pub async fn connect_status(
     AuthUser(user): AuthUser,
 ) -> Result<Json<Value>, AppError> {
     let status = credentials::status(&app.pool, &user.user_id).await?;
+    // dev-lint: allow-wire-untyped pre-standard debt (DL-WIRE-UNTYPED-RESPONSE landed 2026-09-03): give this handler a Serialize response struct when the route is next touched
     Ok(Json(json!({ "status": status })))
 }

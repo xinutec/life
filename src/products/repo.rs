@@ -1253,7 +1253,8 @@ pub async fn fact_source_prefs(pool: &MySqlPool, product_id: ProductId) -> Resul
 /// picked up here without anyone remembering to add it.
 pub fn picked_facts() -> impl Iterator<Item = ReconcileField> {
     ReconcileField::ALL
-        .into_iter()
+        .iter()
+        .copied()
         .filter(|f| f.reconciler() == Reconciler::Fact)
 }
 

@@ -9,54 +9,24 @@
 
 pub mod repo;
 
-use std::fmt;
-use std::str::FromStr;
-
+use crate::str_enum;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-/// Which table a trash entry lives in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export)]
-pub enum TrashKind {
-    Item,
-    Location,
-    Recipe,
-    Shopping,
-    Todo,
-    Wellbeing,
-}
-
-impl fmt::Display for TrashKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            TrashKind::Item => "item",
-            TrashKind::Location => "location",
-            TrashKind::Recipe => "recipe",
-            TrashKind::Shopping => "shopping",
-            TrashKind::Todo => "todo",
-            TrashKind::Wellbeing => "wellbeing",
-        };
-        f.write_str(s)
+str_enum! {
+    /// Which table a trash entry lives in.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[serde(rename_all = "snake_case")]
+    #[ts(export)]
+    pub enum TrashKind: "trash kind" {
+        Item => "item",
+        Location => "location",
+        Recipe => "recipe",
+        Shopping => "shopping",
+        Todo => "todo",
+        Wellbeing => "wellbeing",
     }
 }
-
-impl FromStr for TrashKind {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "item" => Ok(TrashKind::Item),
-            "location" => Ok(TrashKind::Location),
-            "recipe" => Ok(TrashKind::Recipe),
-            "shopping" => Ok(TrashKind::Shopping),
-            "todo" => Ok(TrashKind::Todo),
-            "wellbeing" => Ok(TrashKind::Wellbeing),
-            other => Err(format!("unknown trash kind {other:?}")),
-        }
-    }
-}
-
 /// One deleted thing, as shown on the trash screen. `ref_` identifies the row
 /// within its kind: the numeric id for REST entities (item/location/recipe),
 /// the ULID for synced ones (shopping/todo) — ids can be absent client-side

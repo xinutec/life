@@ -1,200 +1,111 @@
 //! Domain types for the location/item model. `kind` and `category` are stored
 //! as short strings in the DB and parsed into these enums at the repo boundary.
 
-use std::fmt;
-use std::str::FromStr;
-
 use crate::products::ids::ProductId;
+use crate::str_enum;
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-/// A node kind in the spatial tree.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export)]
-pub enum LocationKind {
-    House,
-    Room,
-    Cupboard,
-    Fridge,
-    Layer,
-}
-
-impl fmt::Display for LocationKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            LocationKind::House => "house",
-            LocationKind::Room => "room",
-            LocationKind::Cupboard => "cupboard",
-            LocationKind::Fridge => "fridge",
-            LocationKind::Layer => "layer",
-        };
-        f.write_str(s)
+str_enum! {
+    /// A node kind in the spatial tree.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[serde(rename_all = "snake_case")]
+    #[ts(export)]
+    pub enum LocationKind: "location kind" {
+        House => "house",
+        Room => "room",
+        Cupboard => "cupboard",
+        Fridge => "fridge",
+        Layer => "layer",
     }
 }
 
-impl FromStr for LocationKind {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "house" => Ok(LocationKind::House),
-            "room" => Ok(LocationKind::Room),
-            "cupboard" => Ok(LocationKind::Cupboard),
-            "fridge" => Ok(LocationKind::Fridge),
-            "layer" => Ok(LocationKind::Layer),
-            other => Err(format!("unknown location kind {other:?}")),
-        }
+str_enum! {
+    /// Whose name an item carries.
+    ///
+    /// The server cannot work this out, and trying to is how it goes wrong. It sees
+    /// a name and a linked product; it cannot see whether a person TOUCHED the name
+    /// field. Inferring "differs from the product, so it was authored" mislabels
+    /// every hurried word typed at a cupboard door as an intention, and inferring it
+    /// only on update assumes every client prefills the displayed name — which the
+    /// web form happens to do and a sync client, a script or the Android app need
+    /// not. So the client that owns the form says so explicitly.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[serde(rename_all = "snake_case")]
+    #[ts(export)]
+    pub enum ItemNameSource: "item name source" {
+        /// Somebody typed this name deliberately. It outranks the catalogue, and a
+        /// later product correction leaves it alone.
+        User => "user",
+        /// The name came from the catalogue, or was left to it. Follows the linked
+        /// product forever, so a correction reaches the cupboard with no refresh.
+        Product => "product",
     }
 }
 
-/// Whose name an item carries.
-///
-/// The server cannot work this out, and trying to is how it goes wrong. It sees
-/// a name and a linked product; it cannot see whether a person TOUCHED the name
-/// field. Inferring "differs from the product, so it was authored" mislabels
-/// every hurried word typed at a cupboard door as an intention, and inferring it
-/// only on update assumes every client prefills the displayed name — which the
-/// web form happens to do and a sync client, a script or the Android app need
-/// not. So the client that owns the form says so explicitly.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export)]
-pub enum ItemNameSource {
-    /// Somebody typed this name deliberately. It outranks the catalogue, and a
-    /// later product correction leaves it alone.
-    User,
-    /// The name came from the catalogue, or was left to it. Follows the linked
-    /// product forever, so a correction reaches the cupboard with no refresh.
-    Product,
-}
-
-impl fmt::Display for ItemNameSource {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            ItemNameSource::User => "user",
-            ItemNameSource::Product => "product",
-        })
+str_enum! {
+    /// How much of an `expiry` date was actually printed on the thing.
+    ///
+    /// A medicine box is printed MM/YYYY, and `items.expiry` is a DATE, so a day
+    /// has to be invented to store one at all. The convention is the month's LAST
+    /// day — a box marked 06/2028 is good THROUGH June, and the 1st would expire it
+    /// twenty-nine days early — but the convention alone is not enough, because a
+    /// reader cannot tell an invented 30th from a printed one. Rendering "30 Jun
+    /// 2028" states a day that appears nowhere on the box; counting down "in 2d"
+    /// through the end of the month claims something changes overnight that does
+    /// not. So the precision travels with the date (migration 0045).
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[serde(rename_all = "snake_case")]
+    #[ts(export)]
+    pub enum ExpiryPrecision: "expiry precision" {
+        /// The date is exactly what was printed.
+        Day => "day",
+        /// Only the month was printed; `expiry` holds that month's last day.
+        Month => "month",
     }
 }
 
-/// How much of an `expiry` date was actually printed on the thing.
-///
-/// A medicine box is printed MM/YYYY, and `items.expiry` is a DATE, so a day
-/// has to be invented to store one at all. The convention is the month's LAST
-/// day — a box marked 06/2028 is good THROUGH June, and the 1st would expire it
-/// twenty-nine days early — but the convention alone is not enough, because a
-/// reader cannot tell an invented 30th from a printed one. Rendering "30 Jun
-/// 2028" states a day that appears nowhere on the box; counting down "in 2d"
-/// through the end of the month claims something changes overnight that does
-/// not. So the precision travels with the date (migration 0045).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export)]
-pub enum ExpiryPrecision {
-    /// The date is exactly what was printed.
-    Day,
-    /// Only the month was printed; `expiry` holds that month's last day.
-    Month,
-}
-
-impl fmt::Display for ExpiryPrecision {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            ExpiryPrecision::Day => "day",
-            ExpiryPrecision::Month => "month",
-        })
+str_enum! {
+    /// What kind of thing an item is.
+    ///
+    /// "Generic from day one — food is just the first skin" was the intent, but the
+    /// list was food's skin and nothing else's: a house is full of pans, glasses and
+    /// clothes, and every one of them landed in `Other`. Measured 2026-08-31, and the
+    /// tell is that `Other` had come to hold BOTH — four genuinely non-food things
+    /// AND two foods (an avocado, a protein drink) that somebody filed there because
+    /// nothing fitted. A bucket that means "not food" and "nobody said" at the same
+    /// time cannot group, filter or answer anything.
+    ///
+    /// Split by WHERE A THING LIVES AND WHAT YOU ASK OF IT, not by material:
+    /// `Cookware` and `Tableware` are different cupboards and different questions
+    /// ("which pan", "how many glasses"), while a steel pan and a steel fork have
+    /// nothing to say to each other.
+    ///
+    /// ⚠ Still a closed set, so adding a kind needs a deploy. That is a known limit
+    /// rather than a decision that this is enough — the column is VARCHAR and the
+    /// client's sync schema already stores a free string, so nothing below this
+    /// layer constrains it. See the follow-up task on user-defined categories.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[serde(rename_all = "snake_case")]
+    #[ts(export)]
+    pub enum ItemCategory: "item category" {
+        Food => "food",
+        Medication => "medication",
+        /// Pans, baking trays, the things you cook WITH.
+        Cookware => "cookware",
+        /// Glasses, plates, cutlery — what you eat and drink FROM.
+        Tableware => "tableware",
+        Clothing => "clothing",
+        /// Anything with a plug and a warranty; the category #131 hangs off.
+        Appliance => "appliance",
+        /// Detergent, sponges, refills — bought repeatedly, never eaten.
+        Cleaning => "cleaning",
+        Tool => "tool",
+        Document => "document",
+        Other => "other",
     }
 }
-
-impl FromStr for ExpiryPrecision {
-    type Err = String;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s {
-            "day" => Ok(ExpiryPrecision::Day),
-            "month" => Ok(ExpiryPrecision::Month),
-            other => Err(format!("unknown expiry precision {other:?}")),
-        }
-    }
-}
-
-/// What kind of thing an item is.
-///
-/// "Generic from day one — food is just the first skin" was the intent, but the
-/// list was food's skin and nothing else's: a house is full of pans, glasses and
-/// clothes, and every one of them landed in `Other`. Measured 2026-08-31, and the
-/// tell is that `Other` had come to hold BOTH — four genuinely non-food things
-/// AND two foods (an avocado, a protein drink) that somebody filed there because
-/// nothing fitted. A bucket that means "not food" and "nobody said" at the same
-/// time cannot group, filter or answer anything.
-///
-/// Split by WHERE A THING LIVES AND WHAT YOU ASK OF IT, not by material:
-/// `Cookware` and `Tableware` are different cupboards and different questions
-/// ("which pan", "how many glasses"), while a steel pan and a steel fork have
-/// nothing to say to each other.
-///
-/// ⚠ Still a closed set, so adding a kind needs a deploy. That is a known limit
-/// rather than a decision that this is enough — the column is VARCHAR and the
-/// client's sync schema already stores a free string, so nothing below this
-/// layer constrains it. See the follow-up task on user-defined categories.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export)]
-pub enum ItemCategory {
-    Food,
-    Medication,
-    /// Pans, baking trays, the things you cook WITH.
-    Cookware,
-    /// Glasses, plates, cutlery — what you eat and drink FROM.
-    Tableware,
-    Clothing,
-    /// Anything with a plug and a warranty; the category #131 hangs off.
-    Appliance,
-    /// Detergent, sponges, refills — bought repeatedly, never eaten.
-    Cleaning,
-    Tool,
-    Document,
-    Other,
-}
-
-impl fmt::Display for ItemCategory {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            ItemCategory::Food => "food",
-            ItemCategory::Medication => "medication",
-            ItemCategory::Cookware => "cookware",
-            ItemCategory::Tableware => "tableware",
-            ItemCategory::Clothing => "clothing",
-            ItemCategory::Appliance => "appliance",
-            ItemCategory::Cleaning => "cleaning",
-            ItemCategory::Tool => "tool",
-            ItemCategory::Document => "document",
-            ItemCategory::Other => "other",
-        };
-        f.write_str(s)
-    }
-}
-
-impl FromStr for ItemCategory {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "food" => Ok(ItemCategory::Food),
-            "medication" => Ok(ItemCategory::Medication),
-            "cookware" => Ok(ItemCategory::Cookware),
-            "tableware" => Ok(ItemCategory::Tableware),
-            "clothing" => Ok(ItemCategory::Clothing),
-            "appliance" => Ok(ItemCategory::Appliance),
-            "cleaning" => Ok(ItemCategory::Cleaning),
-            "tool" => Ok(ItemCategory::Tool),
-            "document" => Ok(ItemCategory::Document),
-            "other" => Ok(ItemCategory::Other),
-            other => Err(format!("unknown item category {other:?}")),
-        }
-    }
-}
-
 /// A spatial node as returned by the API. (Exported to TS as `Loc`.)
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export, rename = "Loc")]
@@ -237,24 +148,26 @@ pub struct Item {
     pub has_image: bool,
 }
 
-/// What happened to a stock row, as recorded in `item_history`.
-///
-/// A closed set in the type system rather than four spellings of a `VARCHAR(16)`
-/// scattered through the repo — the same reason `products::Source` is one. The
-/// history table is about to start earning its keep (consumption is what makes
-/// "how much is left" and "what am I running out of" answerable), so the set it
-/// is keyed on should be something the compiler knows.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "lowercase")]
-#[ts(export)]
-pub enum ItemEvent {
-    Added,
-    Moved,
-    Removed,
-    Restored,
-    /// Some of it was used up. The only event that carries a *delta* rather
-    /// than a state: `quantity` is how much went, not how much is left.
-    Used,
+str_enum! {
+    /// What happened to a stock row, as recorded in `item_history`.
+    ///
+    /// A closed set in the type system rather than four spellings of a `VARCHAR(16)`
+    /// scattered through the repo — the same reason `products::Source` is one. The
+    /// history table is about to start earning its keep (consumption is what makes
+    /// "how much is left" and "what am I running out of" answerable), so the set it
+    /// is keyed on should be something the compiler knows.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[serde(rename_all = "lowercase")]
+    #[ts(export)]
+    pub enum ItemEvent: "item event" {
+        Added => "added",
+        Moved => "moved",
+        Removed => "removed",
+        Restored => "restored",
+        /// Some of it was used up. The only event that carries a *delta* rather
+        /// than a state: `quantity` is how much went, not how much is left.
+        Used => "used",
+    }
 }
 
 /// Everything the history dialog shows for one stock row.
@@ -300,38 +213,6 @@ pub struct ItemHistoryEntry {
     /// When, Unix milliseconds (UTC).
     #[ts(type = "number")]
     pub at: i64,
-}
-
-impl ItemEvent {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            ItemEvent::Added => "added",
-            ItemEvent::Moved => "moved",
-            ItemEvent::Removed => "removed",
-            ItemEvent::Restored => "restored",
-            ItemEvent::Used => "used",
-        }
-    }
-}
-
-impl fmt::Display for ItemEvent {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-impl FromStr for ItemEvent {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "added" => Ok(ItemEvent::Added),
-            "moved" => Ok(ItemEvent::Moved),
-            "removed" => Ok(ItemEvent::Removed),
-            "restored" => Ok(ItemEvent::Restored),
-            "used" => Ok(ItemEvent::Used),
-            other => Err(format!("unknown item event {other:?}")),
-        }
-    }
 }
 
 // `event` is a VARCHAR, so this delegates to `str` rather than deriving

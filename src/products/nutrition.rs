@@ -10,14 +10,13 @@
 //! small set, one field each; OFF's long tail keeps its structure in `extra`.
 
 use std::collections::BTreeMap;
-use std::fmt;
-use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use ts_rs::TS;
 
 use super::source::Source;
+use crate::str_enum;
 
 /// The nutrition panel, per `basis`. Every figure is optional — a source declares
 /// whatever it has. `None` throughout + empty `extra` means "no panel".
@@ -43,45 +42,26 @@ pub struct Nutrition {
     pub extra: BTreeMap<String, f64>,
 }
 
-/// How an allergen is present. The `product_allergens.presence` column has been
-/// `ENUM('contains','may_contain')` since 0027 — this is that same closed set in
-/// the type system, so a fourth spelling can't be invented at a call site, and
-/// ts-rs hands the frontend the union instead of a bare `string` it would have to
-/// re-assert.
-///
-/// **Ordered by severity** (`MayContain` < `Contains`), which is what makes
-/// `merge_allergens` a `max` rather than a hand-written comparison: "the more
-/// severe claim wins" becomes a property of the type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export)]
-pub enum Presence {
-    /// A trace: possible cross-contamination, not a declared ingredient.
-    MayContain,
-    /// A declared ingredient.
-    Contains,
-}
-
-impl fmt::Display for Presence {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Presence::MayContain => "may_contain",
-            Presence::Contains => "contains",
-        })
+str_enum! {
+    /// How an allergen is present. The `product_allergens.presence` column has been
+    /// `ENUM('contains','may_contain')` since 0027 — this is that same closed set in
+    /// the type system, so a fourth spelling can't be invented at a call site, and
+    /// ts-rs hands the frontend the union instead of a bare `string` it would have to
+    /// re-assert.
+    ///
+    /// **Ordered by severity** (`MayContain` < `Contains`), which is what makes
+    /// `merge_allergens` a `max` rather than a hand-written comparison: "the more
+    /// severe claim wins" becomes a property of the type.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, TS)]
+    #[serde(rename_all = "snake_case")]
+    #[ts(export)]
+    pub enum Presence: "allergen presence" {
+        /// A trace: possible cross-contamination, not a declared ingredient.
+        MayContain => "may_contain",
+        /// A declared ingredient.
+        Contains => "contains",
     }
 }
-
-impl FromStr for Presence {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "may_contain" => Ok(Presence::MayContain),
-            "contains" => Ok(Presence::Contains),
-            other => Err(format!("unknown allergen presence {other:?}")),
-        }
-    }
-}
-
 /// One allergen and how it's present in a product.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -91,41 +71,20 @@ pub struct Allergen {
     pub presence: Presence,
 }
 
-/// What a source asserts about a dietary flag. Tri-state on purpose: `Maybe` is
-/// how a genuine disagreement (or a soft analysis) is reported, because
-/// over-claiming is the harmful direction — see `merge_dietary`. Matches the
-/// `product_dietary_flags.value` column's `ENUM('yes','no','maybe')` (0027).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export)]
-pub enum Claim {
-    Yes,
-    No,
-    Maybe,
-}
-
-impl fmt::Display for Claim {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Claim::Yes => "yes",
-            Claim::No => "no",
-            Claim::Maybe => "maybe",
-        })
+str_enum! {
+    /// What a source asserts about a dietary flag. Tri-state on purpose: `Maybe` is
+    /// how a genuine disagreement (or a soft analysis) is reported, because
+    /// over-claiming is the harmful direction — see `merge_dietary`. Matches the
+    /// `product_dietary_flags.value` column's `ENUM('yes','no','maybe')` (0027).
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[serde(rename_all = "snake_case")]
+    #[ts(export)]
+    pub enum Claim: "dietary claim" {
+        Yes => "yes",
+        No => "no",
+        Maybe => "maybe",
     }
 }
-
-impl FromStr for Claim {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "yes" => Ok(Claim::Yes),
-            "no" => Ok(Claim::No),
-            "maybe" => Ok(Claim::Maybe),
-            other => Err(format!("unknown dietary claim {other:?}")),
-        }
-    }
-}
-
 /// One dietary flag and its assertion.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]

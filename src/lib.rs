@@ -17,6 +17,7 @@ pub mod routes;
 pub mod session;
 pub mod shopping;
 pub mod state;
+pub mod str_enum;
 pub mod sync;
 pub mod todo;
 pub mod trash;

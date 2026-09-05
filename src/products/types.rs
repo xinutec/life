@@ -3,7 +3,6 @@
 
 use crate::purchases::types::Purchase;
 use std::fmt;
-use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -13,6 +12,7 @@ use super::nutrition::ProductFacts;
 use super::packsize::PackSize;
 use super::prices::ShopPrice;
 use super::source::Source;
+use crate::str_enum;
 
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
@@ -90,25 +90,27 @@ pub struct Candidate {
     pub value: String,
 }
 
-/// A field of a product that sources can disagree about.
-///
-/// Closed, because every one of them has to be handled by name somewhere: the
-/// route splits the picture out (its bytes come through the SSRF gate), the repo
-/// splits facts out (they record a trusted source rather than copying a value),
-/// and each scalar needs a reader for its current and offered values. As a
-/// `String` those four dispatch sites agreed only by convention and a new field
-/// could silently fall through all of them; as an enum, [`Self::reconciler`] is
-/// exhaustive and the compiler names every site that must learn about it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export)]
-pub enum ReconcileField {
-    Name,
-    Brand,
-    QuantityLabel,
-    Picture,
-    Nutrition,
-    Ingredients,
+str_enum! {
+    /// A field of a product that sources can disagree about.
+    ///
+    /// Closed, because every one of them has to be handled by name somewhere: the
+    /// route splits the picture out (its bytes come through the SSRF gate), the repo
+    /// splits facts out (they record a trusted source rather than copying a value),
+    /// and each scalar needs a reader for its current and offered values. As a
+    /// `String` those four dispatch sites agreed only by convention and a new field
+    /// could silently fall through all of them; as an enum, [`Self::reconciler`] is
+    /// exhaustive and the compiler names every site that must learn about it.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+    #[serde(rename_all = "snake_case")]
+    #[ts(export)]
+    pub enum ReconcileField: "reconcile field" {
+        Name => "name",
+        Brand => "brand",
+        QuantityLabel => "quantity_label",
+        Picture => "picture",
+        Nutrition => "nutrition",
+        Ingredients => "ingredients",
+    }
 }
 
 /// Which machinery settles a field — see [`ReconcileField`].
@@ -125,16 +127,6 @@ pub enum Reconciler {
 }
 
 impl ReconcileField {
-    /// Every field. Iterate this rather than writing a subset out again.
-    pub const ALL: [ReconcileField; 6] = [
-        ReconcileField::Name,
-        ReconcileField::Brand,
-        ReconcileField::QuantityLabel,
-        ReconcileField::Picture,
-        ReconcileField::Nutrition,
-        ReconcileField::Ingredients,
-    ];
-
     pub fn reconciler(self) -> Reconciler {
         match self {
             ReconcileField::Name | ReconcileField::Brand | ReconcileField::QuantityLabel => {
@@ -156,41 +148,7 @@ impl ReconcileField {
             ReconcileField::Ingredients => "Ingredients",
         }
     }
-
-    /// The column name in `product_field_decisions` / `product_fact_sources`.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            ReconcileField::Name => "name",
-            ReconcileField::Brand => "brand",
-            ReconcileField::QuantityLabel => "quantity_label",
-            ReconcileField::Picture => "picture",
-            ReconcileField::Nutrition => "nutrition",
-            ReconcileField::Ingredients => "ingredients",
-        }
-    }
 }
-
-impl fmt::Display for ReconcileField {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-impl FromStr for ReconcileField {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "name" => Ok(ReconcileField::Name),
-            "brand" => Ok(ReconcileField::Brand),
-            "quantity_label" => Ok(ReconcileField::QuantityLabel),
-            "picture" => Ok(ReconcileField::Picture),
-            "nutrition" => Ok(ReconcileField::Nutrition),
-            "ingredients" => Ok(ReconcileField::Ingredients),
-            other => Err(format!("unknown reconcile field {other:?}")),
-        }
-    }
-}
-
 /// What to do about one field's divergence: keep what we have, or adopt one
 /// source's account of it.
 ///
