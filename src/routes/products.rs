@@ -387,9 +387,6 @@ async fn build_detail(
     })
 }
 
-/// One field's decision, as the reconcile UI sends it: adopt a source's value
-/// (`choice` = source id), keep the current one (`choice` = "keep"), or set our
-/// own typed value (`choice` = "user", with `value`).
 /// POST /api/products/id/{id}/reconcile → settle field disagreements between the
 /// product's sources and its canonical row. Each decision either adopts a
 /// source's value or keeps the current one; either way the divergence is marked

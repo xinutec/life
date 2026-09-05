@@ -214,8 +214,6 @@ pub async fn update_recipe(
     get_recipe(pool, user_id, id).await
 }
 
-/// Delete a recipe — a tombstone, restorable from the trash; its ingredient
-/// rows stay attached. Returns whether a row was tombstoned.
 /// Cook it: take every ingredient's amount out of the cupboard, and say what
 /// happened to each line.
 ///
@@ -265,6 +263,8 @@ pub async fn cook_recipe(
     Ok(Some(lines))
 }
 
+/// Delete a recipe — a tombstone, restorable from the trash; its ingredient
+/// rows stay attached. Returns whether a row was tombstoned.
 pub async fn delete_recipe(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
     let res = sqlx::query(
         "UPDATE recipes SET deleted_at = NOW() \
