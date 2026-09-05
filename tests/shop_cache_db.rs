@@ -183,3 +183,18 @@ async fn shops_keep_their_own_memories() {
     assert_eq!(a.external_id, "test-s1");
     assert_eq!(w.external_id, "test-s2");
 }
+
+#[tokio::test]
+async fn a_search_that_found_nothing_stores_nothing_and_does_not_error() {
+    let pool = fresh_pool().await;
+
+    // A shop query with no hits reaches here with an empty batch — `search_asda`
+    // and `find_at_shop` both hand `remember_hits` whatever the search returned.
+    //
+    // It matters because the batch became ONE multi-row INSERT: a builder given
+    // no rows emits `INSERT INTO … ()`, which is a syntax error. And the only
+    // caller logs the failure rather than raising it, so without this the break
+    // would show up as nothing at all — a warning in a pod log, on the path that
+    // fills the cache every search.
+    shop_cache::remember(&pool, &[]).await.unwrap();
+}
