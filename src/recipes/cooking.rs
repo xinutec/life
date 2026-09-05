@@ -101,17 +101,18 @@ fn drain_order<'a>(
         .filter(|it| it.unit.as_deref().map(norm) == want && left_of(it, remaining) > 0.0)
         .collect();
     usable.sort_by(|a, b| {
-        let key = |it: &Item| {
-            (
-                it.expiry.is_none(),
-                it.expiry,
-                // f64 has no Ord; these are non-negative and finite here, so the
-                // bit pattern orders them the same way the numbers do.
-                left_of(it, remaining).to_bits(),
-                it.id,
-            )
-        };
-        key(a).cmp(&key(b))
+        // A date is a reason to hurry and its absence is not, so a row carrying
+        // an expiry sorts ahead of one without.
+        (a.expiry.is_none(), a.expiry)
+            .cmp(&(b.expiry.is_none(), b.expiry))
+            // `total_cmp`, not the bit pattern: it is a total order for EVERY
+            // f64. Comparing bits only agrees with the numbers while they are
+            // non-negative, which holds here solely because of the `> 0.0` in
+            // the filter above — a coupling nothing stated, and one an edit to
+            // that filter would quietly break.
+            .then_with(|| left_of(a, remaining).total_cmp(&left_of(b, remaining)))
+            // Then the id, so the order is total and stable between runs.
+            .then_with(|| a.id.cmp(&b.id))
     });
     usable
 }
