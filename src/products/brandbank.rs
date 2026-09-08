@@ -16,7 +16,7 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::nutrition::{Allergen, Claim, DietaryFlag, Nutrition, Presence, ProductFacts};
+use super::nutrition::{Allergen, Claim, DietaryFlag, Nutrition, Presence, ProductFacts, as_f64};
 
 /// The Brandbank fields we consume. Unknown fields (the bulk of the blob —
 /// company address, marketing copy, packaging, …) are ignored by serde.
@@ -127,16 +127,6 @@ fn classify(name: &str) -> Slot {
     }
 }
 
-/// A per100 value as a number, whether it arrived as a JSON number or a numeric
-/// string (Brandbank is mostly numbers, but be tolerant). `None` otherwise.
-fn as_f64(v: &Value) -> Option<f64> {
-    match v {
-        Value::Number(n) => n.as_f64(),
-        Value::String(s) => s.trim().parse().ok(),
-        _ => None,
-    }
-}
-
 /// A tail-nutrient key: the label without its "(unit)" suffix, lowercased with
 /// spaces hyphenated ("Vitamin D (µg)" → "vitamin-d"). Only stored, not shown.
 fn extra_key(name: &str) -> String {
@@ -192,21 +182,7 @@ impl Brandbank {
             }
         }
         // A panel with no numbers and no tail is no panel.
-        let empty = n.extra.is_empty()
-            && [
-                n.energy_kj,
-                n.energy_kcal,
-                n.fat_g,
-                n.saturates_g,
-                n.carbohydrate_g,
-                n.sugars_g,
-                n.fibre_g,
-                n.protein_g,
-                n.salt_g,
-            ]
-            .iter()
-            .all(Option::is_none);
-        (!empty).then_some(n)
+        (!n.is_empty()).then_some(n)
     }
 
     fn ingredients(&self) -> Option<String> {

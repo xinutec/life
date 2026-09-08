@@ -157,6 +157,32 @@ const LABEL_FLAGS: &[(&str, &str)] = &[
     ("palm-oil-free", "palm_oil_free"),
 ];
 
+impl Nutrition {
+    /// A panel with no numbers and no tail is no panel.
+    ///
+    /// Both fact parsers ask this, and each used to ask it with its own copy of
+    /// the list (#1449). It decides whether a source is recorded as HAVING a
+    /// panel at all, and `merge_nutrition` picks ONE source's panel whole — so
+    /// two copies drifting would not shrink an answer, it would swap in a
+    /// different source's.
+    pub fn is_empty(&self) -> bool {
+        self.extra.is_empty()
+            && [
+                self.energy_kj,
+                self.energy_kcal,
+                self.fat_g,
+                self.saturates_g,
+                self.carbohydrate_g,
+                self.sugars_g,
+                self.fibre_g,
+                self.protein_g,
+                self.salt_g,
+            ]
+            .iter()
+            .all(Option::is_none)
+    }
+}
+
 /// Reconcile every source's claims about each dietary flag into one answer.
 ///
 /// Sources overlap: Open Food Facts derives flags from a crowd-entered
@@ -299,7 +325,11 @@ fn trim_num(v: f64) -> String {
 
 /// A numeric OFF value, whether it arrived as a JSON number or a numeric string
 /// (OFF is inconsistent). `None` for anything non-numeric.
-fn as_f64(v: &Value) -> Option<f64> {
+/// A nutriment value, whether the source sent a number or a numeric string.
+///
+/// Shared by both fact parsers: OFF and Asda's blob both mix the two, and each
+/// used to carry its own identical copy (#1449).
+pub(crate) fn as_f64(v: &Value) -> Option<f64> {
     match v {
         Value::Number(n) => n.as_f64(),
         Value::String(s) => s.trim().parse().ok(),
@@ -366,21 +396,7 @@ impl RawFacts {
             extra,
         };
         // A panel with no numbers and no tail is no panel.
-        let empty = n.extra.is_empty()
-            && [
-                n.energy_kj,
-                n.energy_kcal,
-                n.fat_g,
-                n.saturates_g,
-                n.carbohydrate_g,
-                n.sugars_g,
-                n.fibre_g,
-                n.protein_g,
-                n.salt_g,
-            ]
-            .iter()
-            .all(Option::is_none);
-        (!empty).then_some(n)
+        (!n.is_empty()).then_some(n)
     }
 
     fn ingredients(&self) -> Option<String> {
