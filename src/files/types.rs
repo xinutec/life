@@ -1,6 +1,8 @@
 //! What an attachment looks like on the wire, and what may be one.
 
 use chrono::{DateTime, Utc};
+
+use crate::media::{self, Media};
 use serde::Serialize;
 use ts_rs::TS;
 
@@ -46,76 +48,18 @@ pub const MAX_FILE_BYTES: usize = 10 * 1024 * 1024;
 /// PDF is here and is the reason this list exists separately from the image
 /// one — a manual is a PDF, and that is the whole point of per-item files.
 pub fn sniff_mime(bytes: &[u8]) -> Option<&'static str> {
-    match bytes {
-        [0xFF, 0xD8, 0xFF, ..] => Some("image/jpeg"),
-        [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, ..] => Some("image/png"),
-        [b'G', b'I', b'F', b'8', b'7' | b'9', b'a', ..] => Some("image/gif"),
-        // "%PDF-", the only signature a PDF is required to start with.
-        [b'%', b'P', b'D', b'F', b'-', ..] => Some("application/pdf"),
-        // RIFF container: "RIFF" <4-byte size> "WEBP".
-        [
-            b'R',
-            b'I',
-            b'F',
-            b'F',
-            _,
-            _,
-            _,
-            _,
-            b'W',
-            b'E',
-            b'B',
-            b'P',
-            ..,
-        ] => Some("image/webp"),
-        // ISO-BMFF: <4-byte size> "ftyp" then a brand. HEIC is what an iPhone
-        // produces by default, so refusing it would refuse the commonest way a
-        // receipt actually gets photographed.
-        [
-            _,
-            _,
-            _,
-            _,
-            b'f',
-            b't',
-            b'y',
-            b'p',
-            b'h',
-            b'e',
-            b'i',
-            b'c',
-            ..,
-        ]
-        | [
-            _,
-            _,
-            _,
-            _,
-            b'f',
-            b't',
-            b'y',
-            b'p',
-            b'm',
-            b'i',
-            b'f',
-            b'1',
-            ..,
-        ] => Some("image/heic"),
-        [
-            _,
-            _,
-            _,
-            _,
-            b'f',
-            b't',
-            b'y',
-            b'p',
-            b'a',
-            b'v',
-            b'i',
-            b'f',
-            ..,
-        ] => Some("image/avif"),
-        _ => None,
+    // Attachments take everything the sniffer can name: PDF because a receipt
+    // often is one, HEIC because that is what an iPhone photographs one as.
+    // Written out rather than `.map(Media::mime)` so a new variant has to be
+    // decided here instead of joining silently.
+    let media = media::sniff(bytes)?;
+    match media {
+        Media::Jpeg
+        | Media::Png
+        | Media::Gif
+        | Media::Webp
+        | Media::Avif
+        | Media::Heic
+        | Media::Pdf => Some(media.mime()),
     }
 }

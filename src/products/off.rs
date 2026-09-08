@@ -4,6 +4,8 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
 
+use crate::media::{self, Media};
+
 use super::ids::Barcode;
 use super::nutrition::{ProductFacts, RawFacts};
 
@@ -84,45 +86,15 @@ pub fn accept_upload_mime(content_type: &str) -> Option<String> {
 /// so mislabelled bytes can't ride in under an innocent-looking mime. `None` =
 /// not one of ours; reject.
 pub fn sniff_image_mime(bytes: &[u8]) -> Option<&'static str> {
-    match bytes {
-        [0xFF, 0xD8, 0xFF, ..] => return Some("image/jpeg"),
-        [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, ..] => return Some("image/png"),
-        [b'G', b'I', b'F', b'8', b'7' | b'9', b'a', ..] => return Some("image/gif"),
-        // RIFF container: "RIFF" <size> "WEBP".
-        [
-            b'R',
-            b'I',
-            b'F',
-            b'F',
-            _,
-            _,
-            _,
-            _,
-            b'W',
-            b'E',
-            b'B',
-            b'P',
-            ..,
-        ] => {
-            return Some("image/webp");
-        }
-        _ => {}
+    // Deliberately narrower than the attachment allowlist. A product image is
+    // rendered inline in every client: a PDF is not an image at all, and HEIC
+    // is not broadly renderable in browsers. Sharing the sniffer must not merge
+    // the two allowlists, so this match is exhaustive on purpose.
+    let media = media::sniff(bytes)?;
+    match media {
+        Media::Jpeg | Media::Png | Media::Gif | Media::Webp | Media::Avif => Some(media.mime()),
+        Media::Heic | Media::Pdf => None,
     }
-    // ISO-BMFF (AVIF): "<size>ftyp<major-brand><compatible-brands…>". Real-world
-    // encoders often set the major brand to `mif1`/`msf1` and list `avif` only
-    // among the compatible brands, so scan the ftyp box for the `avif`/`avis`
-    // tag rather than matching the major brand alone. HEIC lists heic/heix (not
-    // avif), so this won't misclassify it.
-    if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" {
-        let end = bytes.len().min(64);
-        if bytes[8..end]
-            .windows(4)
-            .any(|w| w == b"avif" || w == b"avis")
-        {
-            return Some("image/avif");
-        }
-    }
-    None
 }
 
 /// Look up a barcode. `Ok(None)` = OFF has no such product.
