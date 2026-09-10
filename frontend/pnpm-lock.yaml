@@ -44,8 +44,8 @@ importers:
         specifier: ^5.2.10
         version: 5.2.10
       '@xinutec/ui-harness':
-        specifier: github:xinutec/ui-harness#5e3cf0a6460068362a2687b2fd8694f75a21e7f8
-        version: https://codeload.github.com/xinutec/ui-harness/tar.gz/5e3cf0a6460068362a2687b2fd8694f75a21e7f8(@playwright/test@1.61.1)
+        specifier: github:xinutec/ui-harness#370cf4e99d1acf0e4fd00bcbe4a39ace2da234a8
+        version: https://codeload.github.com/xinutec/ui-harness/tar.gz/370cf4e99d1acf0e4fd00bcbe4a39ace2da234a8(@playwright/test@1.61.1)
       dexie:
         specifier: ^4.4.4
         version: 4.4.4
@@ -1540,8 +1540,8 @@ packages:
   '@vitest/utils@4.1.9':
     resolution: {integrity: sha512-A51o8ymO5PpqlWNnBP9ZHPXDIpuMtTLlGSjN7la4US+LJzoUMyhwjA5QXlm39JexgwHKW4Xjs8Z2d3dLCXOeuA==}
 
-  '@xinutec/ui-harness@https://codeload.github.com/xinutec/ui-harness/tar.gz/5e3cf0a6460068362a2687b2fd8694f75a21e7f8':
-    resolution: {gitHosted: true, tarball: https://codeload.github.com/xinutec/ui-harness/tar.gz/5e3cf0a6460068362a2687b2fd8694f75a21e7f8}
+  '@xinutec/ui-harness@https://codeload.github.com/xinutec/ui-harness/tar.gz/370cf4e99d1acf0e4fd00bcbe4a39ace2da234a8':
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/xinutec/ui-harness/tar.gz/370cf4e99d1acf0e4fd00bcbe4a39ace2da234a8}
     version: 0.1.0
     peerDependencies:
       '@playwright/test': '>=1.61.0'
@@ -1788,6 +1788,7 @@ packages:
 
   crypto-js@4.2.0:
     resolution: {integrity: sha512-KALDyEYgpY+Rlob/iriUtjV6d5Eq+Y191A5g4UqLAi8CyGP9N1+FdVbkc1SxKc2r4YAYqG8JzO2KGL+AizD70Q==}
+    deprecated: Active development of CryptoJS has been discontinued. This library is no longer maintained.
 
   css-select@6.0.0:
     resolution: {integrity: sha512-rZZVSLle8v0+EY8QAkDWrKhpgt6SA5OtHsgBnsj6ZaLb5dmDVOWUDtQitd9ydxxvEjhewNudS6eTVU7uOyzvXw==}
@@ -4617,7 +4618,7 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
 
-  '@xinutec/ui-harness@https://codeload.github.com/xinutec/ui-harness/tar.gz/5e3cf0a6460068362a2687b2fd8694f75a21e7f8(@playwright/test@1.61.1)':
+  '@xinutec/ui-harness@https://codeload.github.com/xinutec/ui-harness/tar.gz/370cf4e99d1acf0e4fd00bcbe4a39ace2da234a8(@playwright/test@1.61.1)':
     dependencies:
       '@types/node': 24.13.3
     optionalDependencies:

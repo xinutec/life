@@ -23,8 +23,7 @@ function setup(isEnabled: boolean) {
   // Only the navigation is stubbed, so applyUpdate() runs for real — including
   // its failure path, which is where the interesting behaviour lives.
   const reload = vi.spyOn(svc, 'reload').mockImplementation(() => {});
-  const apply = vi.spyOn(svc, 'applyUpdate');
-  return { svc, versionUpdates, unrecoverable, checkForUpdate, activateUpdate, apply, reload };
+  return { svc, versionUpdates, unrecoverable, checkForUpdate, activateUpdate, reload };
 }
 
 const ready = { type: 'VERSION_READY' } as VersionEvent;
@@ -44,27 +43,27 @@ describe('SwUpdates', () => {
   afterEach(() => vi.useRealTimers());
 
   it('checks at startup and reloads when a new version is ready right away', () => {
-    const { svc, versionUpdates, checkForUpdate, apply } = setup(true);
+    const { svc, versionUpdates, checkForUpdate, activateUpdate } = setup(true);
     svc.start();
     expect(checkForUpdate).toHaveBeenCalledOnce();
     versionUpdates.next(ready);
-    expect(apply).toHaveBeenCalledOnce();
+    expect(activateUpdate).toHaveBeenCalledOnce();
   });
 
   it('does nothing when the service worker is disabled (dev build)', () => {
-    const { svc, versionUpdates, checkForUpdate, apply } = setup(false);
+    const { svc, versionUpdates, checkForUpdate, activateUpdate } = setup(false);
     svc.start();
     expect(checkForUpdate).not.toHaveBeenCalled();
     versionUpdates.next(ready);
-    expect(apply).not.toHaveBeenCalled();
+    expect(activateUpdate).not.toHaveBeenCalled();
   });
 
   it('ignores version events other than VERSION_READY', () => {
-    const { svc, versionUpdates, apply } = setup(true);
+    const { svc, versionUpdates, activateUpdate } = setup(true);
     svc.start();
     versionUpdates.next({ type: 'VERSION_DETECTED' } as VersionEvent);
     versionUpdates.next({ type: 'NO_NEW_VERSION_DETECTED' } as VersionEvent);
-    expect(apply).not.toHaveBeenCalled();
+    expect(activateUpdate).not.toHaveBeenCalled();
   });
 
   it('re-checks for updates when the app becomes visible again (stale tab)', () => {
@@ -78,32 +77,32 @@ describe('SwUpdates', () => {
   });
 
   it('defers a mid-session update to the next backgrounding, not mid-use', () => {
-    const { svc, versionUpdates, apply } = setup(true);
+    const { svc, versionUpdates, activateUpdate } = setup(true);
     svc.start();
     vi.advanceTimersByTime(60_000); // long past the startup window
     versionUpdates.next(ready);
-    expect(apply).not.toHaveBeenCalled(); // user may be mid-edit
+    expect(activateUpdate).not.toHaveBeenCalled(); // user may be mid-edit
     setVisibility('hidden');
-    expect(apply).toHaveBeenCalledOnce(); // reloads invisibly once backgrounded
+    expect(activateUpdate).toHaveBeenCalledOnce(); // reloads invisibly once backgrounded
   });
 
   it('applies a mid-session update immediately when the app is hidden', () => {
-    const { svc, versionUpdates, apply } = setup(true);
+    const { svc, versionUpdates, activateUpdate } = setup(true);
     svc.start();
     vi.advanceTimersByTime(60_000);
     Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
     versionUpdates.next(ready);
-    expect(apply).toHaveBeenCalledOnce();
+    expect(activateUpdate).toHaveBeenCalledOnce();
   });
 
   it('checkNow applies immediately — the user explicitly asked', async () => {
-    const { svc, versionUpdates, checkForUpdate, apply } = setup(true);
+    const { svc, versionUpdates, checkForUpdate, activateUpdate } = setup(true);
     svc.start();
     vi.advanceTimersByTime(60_000);
     checkForUpdate.mockResolvedValueOnce(true);
     await expect(svc.checkNow()).resolves.toBe('updating');
     versionUpdates.next(ready);
-    expect(apply).toHaveBeenCalledOnce(); // no deferral on a manual check
+    expect(activateUpdate).toHaveBeenCalledOnce(); // no deferral on a manual check
   });
 
   it('checkNow reports current when no update was found', async () => {
@@ -116,29 +115,29 @@ describe('SwUpdates', () => {
     // The stale-phone bug: an update downloaded mid-session was deferred, then a
     // later checkForUpdate() sees nothing newer and returns false — so the manual
     // check must apply the pending build rather than say "you're on the latest".
-    const { svc, versionUpdates, checkForUpdate, apply } = setup(true);
+    const { svc, versionUpdates, checkForUpdate, activateUpdate } = setup(true);
     svc.start();
     vi.advanceTimersByTime(60_000); // mid-session, visible → the update defers
     versionUpdates.next(ready);
-    expect(apply).not.toHaveBeenCalled(); // held, not applied
+    expect(activateUpdate).not.toHaveBeenCalled(); // held, not applied
     checkForUpdate.mockResolvedValue(false); // nothing newer than the staged build
     await expect(svc.checkNow()).resolves.toBe('updating');
-    expect(apply).toHaveBeenCalledOnce();
+    expect(activateUpdate).toHaveBeenCalledOnce();
   });
 
   it('a failed manual check leaves the mid-session deferral armed', async () => {
     // checkForUpdate() rejects on any error — offline being the everyday one. If
     // that left "the user asked" latched on, the next background update would
     // reload straight through a half-typed form.
-    const { svc, versionUpdates, checkForUpdate, apply } = setup(true);
+    const { svc, versionUpdates, checkForUpdate, activateUpdate } = setup(true);
     svc.start();
     vi.advanceTimersByTime(60_000);
     checkForUpdate.mockRejectedValueOnce(new Error('offline'));
     await expect(svc.checkNow()).resolves.toBe('failed');
     versionUpdates.next(ready);
-    expect(apply).not.toHaveBeenCalled(); // still deferring, as if nothing was asked
+    expect(activateUpdate).not.toHaveBeenCalled(); // still deferring, as if nothing was asked
     setVisibility('hidden');
-    expect(apply).toHaveBeenCalledOnce();
+    expect(activateUpdate).toHaveBeenCalledOnce();
   });
 
   it('reports failure when a staged update cannot be activated, and keeps it staged', async () => {
