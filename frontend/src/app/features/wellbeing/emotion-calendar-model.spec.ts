@@ -193,6 +193,31 @@ describe('buildCalendar', () => {
     expect(days.filter((d) => d.checkins === 0)).toHaveLength(19);
   });
 
+  it('draws no range for readings that carried no usable score', () => {
+    // ⚠ Also not hypothetical, and the same shape as the missing `emotions`:
+    // `scoreTenths` is typed `number` and five stored docs did not have one.
+    // `Math.min(...[undefined])` is NaN and `NaN === 0` is false, so the day
+    // passed the "did it hold still" test and drew a bar at NaN% titled
+    // `score NaN–NaN`.
+    const bare = { ...doc('2026-09-01T09:00:00Z', ['Happy/Calm']) } as Partial<WellbeingDoc>;
+    delete bare.scoreTenths;
+    const [sep] = buildCalendar([bare as WellbeingDoc], LONDON);
+    const d = sep.cells.find((c) => c !== null)!;
+    expect(d).toMatchObject({ checkins: 1, scored: 0, scoreLow: null, scoreHigh: null, spread: null });
+    expect(d.bands).toHaveLength(1);
+  });
+
+  it('keeps the readings that do have a score when one in the day does not', () => {
+    const bare = { ...doc('2026-09-01T12:00:00Z', ['Sad/Low']) } as Partial<WellbeingDoc>;
+    delete bare.scoreTenths;
+    const [sep] = buildCalendar(
+      [doc('2026-09-01T09:00:00Z', ['Happy/Calm'], 45), bare as WellbeingDoc],
+      LONDON,
+    );
+    const d = sep.cells.find((c) => c !== null)!;
+    expect(d).toMatchObject({ checkins: 2, scored: 1, scoreLow: 45, scoreHigh: 45, spread: 0 });
+  });
+
   it('spans every month between the first and last reading, newest first', () => {
     // Newest first: the month you check against recent days opens the view
     // instead of sitting below four months of history.

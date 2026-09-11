@@ -127,7 +127,10 @@ const CALENDAR_WELLBEING = Array.from({ length: 80 }, (_, i) => 80 - i)
       recordedAt: hoursAgo(back * 24 - k * 3),
       // Swings on the mixed days, flat on the plain ones — the range bar has to
       // be absent most of the time or it says nothing when it appears.
-      scoreTenths: words.length > 2 ? [30, 45, 35, 40][k % 4] : 40,
+      // Day 21 carries NO score at all: `scoreTenths` is typed `number` and
+      // stored docs exist without one, which drew a bar at NaN% titled
+      // `score NaN–NaN` against the real log while every fixture set it.
+      ...(day === 21 ? {} : { scoreTenths: words.length > 2 ? [30, 45, 35, 40][k % 4] : 40 }),
       energyTenths: 40,
       // One day tagged nothing at all: present, pressable, uncoloured. Day 14
       // OMITS the field entirely rather than sending [] — `emotions` is absent
@@ -1170,6 +1173,11 @@ test('emotion calendar — the day grid and a selection fit @ phone width', asyn
   expect(await page.locator('.cal .month').count()).toBeGreaterThanOrEqual(3);
   // A skipped day renders as a box too — the gaps in the fixture.
   expect(await page.locator('.box.empty').count()).toBeGreaterThan(0);
+  // No day may advertise a range it could not compute: NaN reads as a broken app.
+  const titles = await page
+    .locator('.box')
+    .evaluateAll((els) => els.map((e) => e.getAttribute('title') ?? ''));
+  expect(titles.filter((t) => t.includes('NaN'))).toEqual([]);
 
   await expectViewportIsPhone(page);
   await expectNoHorizontalOverflow(page, testInfo, '.cal');

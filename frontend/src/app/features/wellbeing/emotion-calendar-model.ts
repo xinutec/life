@@ -33,6 +33,10 @@ export interface CalendarDay {
   dayOfMonth: number;
   /** Readings on this day. 0 = the day is outside the log or was skipped. */
   checkins: number;
+  /** How many of those readings carried a usable score. Can be fewer than
+   *  `checkins`, and zero while `checkins` is not — `scoreLow`/`scoreHigh` are
+   *  null in that case rather than NaN. */
+  scored: number;
   /** Families by share, largest first. Empty when nothing was tagged, which is
    *  NOT the same as no check-in — `checkins` tells those apart. */
   bands: readonly CalendarBand[];
@@ -138,7 +142,13 @@ function trimEmptyWeeks(cells: readonly (CalendarDay | null)[]): (CalendarDay | 
 }
 
 function dayFrom(key: string, entries: readonly WellbeingDoc[]): CalendarDay {
-  const scores = entries.map((e) => e.scoreTenths);
+  // ⚠ Finite-only, for the same reason `tagsOf` exists: the type promises a
+  // number and some stored docs do not have one. `Math.min(...[undefined])` is
+  // NaN, `NaN === 0` is false — so a day with an unusable score sailed past the
+  // "did it hold still" test and drew a range bar at NaN% with a `score NaN–NaN`
+  // tooltip. A doc with no usable score has no range to draw, which is what
+  // `null` already means here.
+  const scores = entries.map((e) => e.scoreTenths).filter((n) => Number.isFinite(n));
   const tokens: string[] = [];
   for (const e of entries) {
     for (const t of tagsOf(e)) if (!tokens.includes(t)) tokens.push(t);
@@ -149,6 +159,7 @@ function dayFrom(key: string, entries: readonly WellbeingDoc[]): CalendarDay {
     key,
     dayOfMonth: Number(key.slice(8, 10)),
     checkins: entries.length,
+    scored: scores.length,
     bands: bandsFor(entries),
     scoreLow: low,
     scoreHigh: high,

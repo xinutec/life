@@ -127,8 +127,15 @@ export class EmotionCalendar {
   title(day: CalendarDay): string {
     if (!day.checkins) return `${day.key} — no check-in`;
     const fams = day.bands.map((b) => `${b.core} ${Math.round(b.fraction * 100)}%`).join(', ');
+    // "no score" rather than a number, for a day whose readings carried none —
+    // this printed `score NaN–NaN` before, which reads as a broken app rather
+    // than as a doc that predates the field.
     const range =
-      day.spread === 0 ? `score ${day.scoreLow}` : `score ${day.scoreLow}–${day.scoreHigh}`;
+      day.scoreLow === null || day.scoreHigh === null
+        ? 'no score'
+        : day.spread === 0
+          ? `score ${day.scoreLow}`
+          : `score ${day.scoreLow}–${day.scoreHigh}`;
     const reads = `${day.checkins} check-in${day.checkins === 1 ? '' : 's'}`;
     return `${day.key} — ${reads}, ${range}${fams ? `, ${fams}` : ', nothing tagged'}`;
   }
