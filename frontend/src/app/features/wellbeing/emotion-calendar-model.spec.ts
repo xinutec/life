@@ -218,14 +218,14 @@ describe('buildCalendar', () => {
     expect(d).toMatchObject({ checkins: 2, scored: 1, scoreLow: 45, scoreHigh: 45, spread: 0 });
   });
 
-  it('spans every month between the first and last reading, newest first', () => {
-    // Newest first: the month you check against recent days opens the view
-    // instead of sitting below four months of history.
+  it('spans every month between the first and last reading, oldest first', () => {
+    // Chronological at both scales. Opening on the newest month is the view's
+    // job (it scrolls to the end), not the ordering's.
     const months = buildCalendar(
       [doc('2026-06-26T09:00:00Z', ['Happy/Calm']), doc('2026-09-11T09:00:00Z', ['Happy/Calm'])],
       LONDON,
     );
-    expect(months.map((m) => m.key)).toEqual(['2026-09', '2026-08', '2026-07', '2026-06']);
+    expect(months.map((m) => m.key)).toEqual(['2026-06', '2026-07', '2026-08', '2026-09']);
   });
 
   it('is empty for no readings at all', () => {

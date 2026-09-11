@@ -6,9 +6,22 @@
  *  score range, and it is there because the fill alone lies by averaging (see
  *  emotion-calendar-model.ts, which measures the case). A flat day has no bar.
  *
+ *  Months read oldest-first and the view scrolls to the end once, like a chat:
+ *  time runs one way and you still land on today. Doing it by ordering instead
+ *  (newest month first) made time run backwards at one scale and forwards at
+ *  the other — see emotion-calendar-model.ts.
+ *
  *  Selecting days is not decoration: the selection's tokens are the input a 3D
  *  render of a day takes, so `selected` is the handoff, not a highlight. */
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  afterRenderEffect,
+  computed,
+  inject,
+  signal,
+  untracked,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -56,6 +69,26 @@ export class EmotionCalendar {
   );
 
   private readonly picked = signal<readonly string[]>([]);
+
+  /** Once only. The check-ins arrive asynchronously, so the first render is
+   *  empty and there is nothing to scroll to yet — this waits for the render
+   *  that has months. It must not re-fire afterwards, or a background sync
+   *  would yank the page out from under someone reading July. */
+  private jumped = false;
+
+  constructor() {
+    afterRenderEffect(() => {
+      const ready = this.months().length > 0;
+      untracked(() => {
+        if (!ready || this.jumped) return;
+        this.jumped = true;
+        // The document scrolls, not an inner element — measured, rather than
+        // assumed from the template.
+        const el = document.scrollingElement ?? document.documentElement;
+        el.scrollTop = el.scrollHeight;
+      });
+    });
+  }
 
   readonly selected = computed<readonly CalendarDay[]>(() => {
     const keys = new Set(this.picked());

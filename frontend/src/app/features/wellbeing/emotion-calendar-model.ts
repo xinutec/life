@@ -168,11 +168,19 @@ function dayFrom(key: string, entries: readonly WellbeingDoc[]): CalendarDay {
   };
 }
 
-/** Group check-ins into calendar months, **newest month first**.
+/** Group check-ins into calendar months, **oldest month first**.
  *
- *  Newest first because this is a log you check against recent days: rendered
- *  oldest-first the current month is at the bottom, past four months of history,
- *  and the view opens on the month you care about least.
+ *  Chronological, like a chat: time runs one way everywhere, down the days of a
+ *  month and on down the months. Newest-first months were tried and reverted —
+ *  with days ascending inside a descending list of months, time ran backwards
+ *  at one scale and forwards at the other, and every month boundary was a seam.
+ *  Reversing the DAYS instead would have fixed the seam by breaking the most
+ *  familiar layout in the app: 1 at the bottom needs the weekday header
+ *  reversed too, and then a week reads right to left.
+ *
+ *  The reason newest-first was reached for — that the view should open on the
+ *  month you care about — is solved by scrolling to the end on load instead
+ *  (see emotion-calendar.ts), which costs nothing and keeps the order honest.
  *
  *  Every day BETWEEN the first and last reading gets a cell, including the ones
  *  with nothing on them — a gap is a fact about the log, and a grid that closed
@@ -227,7 +235,7 @@ export function buildCalendar(
       y += 1;
     }
   }
-  return months.reverse();
+  return months;
 }
 
 /** Every emotion across a set of selected days, deduplicated, first seen first.

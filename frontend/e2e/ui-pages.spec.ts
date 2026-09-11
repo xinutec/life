@@ -320,6 +320,12 @@ const CONFLICTS = [
 
 /** Mock every backend call: pulls return the seed docs, pushes accept all.
  *  Catch-all FIRST — Playwright runs handlers last-registered-first. */
+/** Compare "September 2026"-style month headings chronologically, so the
+ *  calendar's order can be asserted without hardcoding which months a
+ *  relative-dated fixture lands in. */
+const byMonthLabel = (a: string, b: string): number =>
+  Date.parse(`1 ${a}`) - Date.parse(`1 ${b}`);
+
 /** The incremental sync pull, as a route handler. Module-scope so a test that
  *  needs a different fixture than mockApi's can re-route the same collection —
  *  the emotion calendar wants a full log where the trend chart wants seven
@@ -1209,6 +1215,20 @@ test('emotion calendar — the day grid and a selection fit @ phone width', asyn
     .locator('.box')
     .evaluateAll((els) => els.map((e) => e.getAttribute('title') ?? ''));
   expect(titles.filter((t) => t.includes('NaN'))).toEqual([]);
+
+  // Chronological months, and the view jumps to the end on load — the ordering
+  // is honest and you still land on today. Asserted together because either one
+  // alone is the wrong product: oldest-first without the jump opens on the month
+  // you care about least, which is why newest-first was tried first.
+  const monthOrder = await page.locator('.cal .month h3').allTextContents();
+  expect(monthOrder).toEqual([...monthOrder].sort(byMonthLabel));
+  const scroll = await page.evaluate(() => {
+    const el = document.scrollingElement ?? document.documentElement;
+    return { top: el.scrollTop, max: el.scrollHeight - el.clientHeight };
+  });
+  // At the end, not merely scrolled: a partial jump would still show September.
+  expect(scroll.max).toBeGreaterThan(100);
+  expect(scroll.max - scroll.top).toBeLessThan(4);
 
   await expectViewportIsPhone(page);
   await expectNoHorizontalOverflow(page, testInfo, '.cal');
