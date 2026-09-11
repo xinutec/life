@@ -1173,6 +1173,37 @@ test('emotion calendar — the day grid and a selection fit @ phone width', asyn
   expect(await page.locator('.cal .month').count()).toBeGreaterThanOrEqual(3);
   // A skipped day renders as a box too — the gaps in the fixture.
   expect(await page.locator('.box.empty').count()).toBeGreaterThan(0);
+  // ⚠ Boxes that share a class must place their number identically. `.box` is on
+  // a <button> for a real day and a <span> for a skipped one, and a button is
+  // centred by the user agent where a span is not — so leaning on that default
+  // put the number dead centre on 75 boxes and 53px up-and-left on the other 3.
+  // Every absolute oracle (overlap, clipping, overflow) passed it: nothing was
+  // wrong with any single box, they just disagreed with each other.
+  const offsets = await page.locator('.box').evaluateAll((els) =>
+    els
+      .map((b) => {
+        const n = b.querySelector('.num');
+        if (!n) return null;
+        const B = b.getBoundingClientRect();
+        const N = n.getBoundingClientRect();
+        return {
+          tag: b.tagName,
+          dx: (N.left + N.right) / 2 - (B.left + B.right) / 2,
+          dy: (N.top + N.bottom) / 2 - (B.top + B.bottom) / 2,
+        };
+      })
+      .filter((v) => v !== null),
+  );
+  expect(offsets.length).toBeGreaterThan(10);
+  // Horizontal tolerance covers one glyph: "9" and "30" are different widths and
+  // centring each is correct. Vertical has no such excuse.
+  const dxs = offsets.map((o) => o.dx);
+  const dys = offsets.map((o) => o.dy);
+  expect({
+    dxSpread: Math.max(...dxs) - Math.min(...dxs),
+    dySpread: Math.max(...dys) - Math.min(...dys),
+  }).toEqual({ dxSpread: expect.closeTo(0, 0), dySpread: expect.closeTo(0, 0) });
+
   // No day may advertise a range it could not compute: NaN reads as a broken app.
   const titles = await page
     .locator('.box')

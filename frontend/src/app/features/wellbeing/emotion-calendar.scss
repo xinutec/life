@@ -38,6 +38,14 @@
 }
 
 .box {
+  // ⚠ Centre EXPLICITLY. A `<button>` is centred by the user agent and a
+  // `<span>` is not, and this class is on both — a real day is a button, a
+  // skipped one is a span because it is not interactive. Leaning on the UA
+  // default put the number dead centre on 75 boxes and 53px up and to the left
+  // on the other 3, which is what shipped.
+  display: flex;
+  align-items: center;
+  justify-content: center;
   position: relative;
   aspect-ratio: 1;
   padding: 0;
