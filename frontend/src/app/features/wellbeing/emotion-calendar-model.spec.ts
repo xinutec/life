@@ -7,7 +7,7 @@ import {
   bandsFor,
   buildCalendar,
   localDayKey,
-  tokensAcross,
+  tallyAcross,
 } from './emotion-calendar-model';
 
 /** ⚠ Every test that names a day passes an explicit `tz`. Without one these
@@ -248,22 +248,66 @@ describe('buildCalendar', () => {
   });
 });
 
-describe('tokensAcross', () => {
-  it('merges selected days without repeating a word', () => {
-    const months = buildCalendar(
-      [
-        doc('2026-09-07T09:00:00Z', ['Happy/Steady', 'Sad/Fragile']),
-        doc('2026-09-08T09:00:00Z', ['Sad/Fragile', 'Bad/Exhausted']),
-      ],
-      LONDON,
-    );
-    const days = months
+describe('tallyAcross', () => {
+  const selectedFrom = (docs: Parameters<typeof buildCalendar>[0]): CalendarDay[] =>
+    buildCalendar(docs, LONDON)
       .flatMap((m) => m.cells)
       .filter((c): c is CalendarDay => c !== null && c.checkins > 0);
-    expect(tokensAcross(days)).toEqual([
+
+  it('merges selected days without repeating a word', () => {
+    const tally = tallyAcross(
+      selectedFrom([
+        doc('2026-09-07T09:00:00Z', ['Happy/Steady', 'Sad/Fragile']),
+        doc('2026-09-08T09:00:00Z', ['Sad/Fragile', 'Bad/Exhausted']),
+      ]),
+    );
+    expect(tally.map((t) => t.token).sort()).toEqual([
+      'Bad/Exhausted',
       'Happy/Steady',
       'Sad/Fragile',
-      'Bad/Exhausted',
     ]);
+  });
+
+  // The panel bounds its height and scrolls, so this order decides what a
+  // reader never sees. A word on more days outranks one on fewer, whatever
+  // order the days arrived in.
+  it('puts the word covering most days first', () => {
+    const tally = tallyAcross(
+      selectedFrom([
+        doc('2026-09-07T09:00:00Z', ['Sad/Fragile']),
+        doc('2026-09-08T09:00:00Z', ['Sad/Fragile', 'Happy/Steady']),
+        doc('2026-09-09T09:00:00Z', ['Sad/Fragile']),
+      ]),
+    );
+    expect(tally).toEqual([
+      { token: 'Sad/Fragile', days: 3 },
+      { token: 'Happy/Steady', days: 1 },
+    ]);
+  });
+
+  // Counting readings instead of days would say 3, and would rank a day you
+  // happened to log three times above a feeling that actually recurred.
+  it('counts a word once per day however many check-ins named it', () => {
+    const tally = tallyAcross(
+      selectedFrom([
+        doc('2026-09-07T08:00:00Z', ['Happy/Steady']),
+        doc('2026-09-07T13:00:00Z', ['Happy/Steady']),
+        doc('2026-09-07T20:00:00Z', ['Happy/Steady']),
+      ]),
+    );
+    expect(tally).toEqual([{ token: 'Happy/Steady', days: 1 }]);
+  });
+
+  // Equal counts must not reshuffle as days are added, or the list appears to
+  // jump under the reader's finger.
+  it('breaks ties on the token so the order is stable', () => {
+    const tally = tallyAcross(
+      selectedFrom([doc('2026-09-07T09:00:00Z', ['Sad/Fragile', 'Bad/Exhausted', 'Happy/Steady'])]),
+    );
+    expect(tally.map((t) => t.token)).toEqual(['Bad/Exhausted', 'Happy/Steady', 'Sad/Fragile']);
+  });
+
+  it('is empty for no selection', () => {
+    expect(tallyAcross([])).toEqual([]);
   });
 });

@@ -238,10 +238,35 @@ export function buildCalendar(
   return months;
 }
 
-/** Every emotion across a set of selected days, deduplicated, first seen first.
- *  The handoff to whatever renders a selection. */
-export function tokensAcross(days: readonly CalendarDay[]): readonly string[] {
-  const out: string[] = [];
-  for (const d of days) for (const t of d.tokens) if (!out.includes(t)) out.push(t);
-  return out;
+/** One emotion across a selection, and how much of the selection it covers. */
+export interface TokenTally {
+  readonly token: string;
+  /** How many of the selected days named it. Never zero. */
+  readonly days: number;
+}
+
+/** Every emotion across a set of selected days, commonest first.
+ *  The handoff to whatever renders a selection, and the panel that lists it.
+ *
+ *  Counted by DAY, not by check-in: three check-ins on one day all tagged Calm
+ *  is one calm day, and counting readings would make a day you logged often
+ *  look like a day you felt it more.
+ *
+ *  ⚠ The ORDER is load-bearing, not cosmetic. The panel bounds its own height
+ *  and scrolls, so something is always out of sight on a wide selection — 76
+ *  distinct words across 75 days, measured on the real log. Commonest-first is
+ *  what makes that honest: what falls below the fold is the tail. The previous
+ *  order was first-day-that-named-it, which is arbitrary to a reader, and under
+ *  a cap it would have hidden a random slice.
+ *
+ *  Ties break on the token so the list is stable across renders rather than
+ *  reshuffling as days are added. */
+export function tallyAcross(days: readonly CalendarDay[]): readonly TokenTally[] {
+  const counts = new Map<string, number>();
+  // `CalendarDay.tokens` is already distinct per day, so a straight count of
+  // appearances IS a count of days.
+  for (const d of days) for (const t of d.tokens) counts.set(t, (counts.get(t) ?? 0) + 1);
+  return [...counts]
+    .map(([token, n]) => ({ token, days: n }))
+    .sort((a, b) => b.days - a.days || a.token.localeCompare(b.token));
 }

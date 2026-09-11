@@ -53,10 +53,24 @@
              destructive is a bug even when it does nothing of the sort. -->
         <button mat-button type="button" (click)="clear()">Deselect all</button>
       </header>
-      <p class="lead">Feelings recorded across these days</p>
+      <!-- The TOTAL, because the list below is capped and scrolls: it ends flush
+           with the panel edge, so 15 visible chips out of 33 look like all of
+           them. The header above already says how many days, so this says what
+           it found rather than repeating that. -->
+      <p class="lead">
+        {{ selectedChips().length }} feeling{{ selectedChips().length === 1 ? '' : 's' }} recorded,
+        commonest first
+      </p>
       <div class="words">
         @for (chip of selectedChips(); track chip.token) {
-          <span [class]="chip.cls">{{ chip.label }}</span>
+          <span [class]="chip.cls" [title]="chipTitle(chip)">
+            {{ chip.label }}
+            <!-- Bare, not "x5": the chip already reads as one thing, and the
+                 tooltip carries the sentence for anyone who wonders. -->
+            @if (chip.count; as n) {
+              <span class="n">{{ n }}</span>
+            }
+          </span>
         }
       </div>
     </aside>

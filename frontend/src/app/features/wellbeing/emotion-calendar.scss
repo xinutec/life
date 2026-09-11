@@ -120,6 +120,15 @@
   position: sticky;
   bottom: calc(60px + env(safe-area-inset-bottom));
   z-index: 6; // above the nav's shadow, below the nav itself (10)
+  // ⚠ BOUNDED AS A WHOLE, not per-part. Measured on the real log at 412px: a
+  // three-day selection filled 54% of the screen, a week 81%, a month 108% and
+  // the whole log 125% — so the wider the stretch you asked about, the less of
+  // the calendar you could see, and past a month the answer was taller than the
+  // phone. Capping the panel rather than the word list keeps the bound true
+  // whatever the header grows into.
+  display: flex;
+  flex-direction: column;
+  max-height: 38dvh;
   padding: 0.75rem;
   border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 10px;
@@ -150,6 +159,31 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem;
+    // Takes whatever the cap above leaves and scrolls the rest. `min-height: 0`
+    // is what lets it: a flex item defaults to its content's size and would
+    // push straight through the cap without it.
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    // Scrolling rather than truncating is only defensible because the tally is
+    // commonest-first (see emotion-calendar-model.ts) — what falls below the
+    // fold is the tail, not an arbitrary slice. A "+62 more" control was the
+    // alternative and it hides the same words behind an extra tap.
+    //
+    // Reaching the end of the words must not then scroll the months away.
+    overscroll-behavior: contain;
+  }
+  // The day count, riding on the chip. Reads as part of the word rather than as
+  // a badge stuck on it: same text colour at a smaller size, so the eye takes
+  // the word first and the weight second.
+  .n {
+    margin-left: 0.3rem;
+    // One step down the M3 scale from the chip's own label-large, not an ad-hoc
+    // ratio. ⚠ `font-variant-numeric` comes AFTER: the `font` shorthand resets
+    // it, so the other order silently loses the tabular figures.
+    font: var(--mat-sys-label-small);
+    font-variant-numeric: tabular-nums;
+    opacity: 0.75;
   }
 }
 

@@ -2,6 +2,9 @@ import { test, expect, type Page } from '@playwright/test';
 // The fleet-shared harness, published as @xinutec/ui-harness (source repo
 // ~/Code/ui-harness). Ships compiled JS, so it loads straight from node_modules.
 import type { Item, ItemFile } from '../src/app/models';
+// The real vocabulary, not a copy of it: the calendar fixture needs BREADTH
+// and a hand-written word list cannot keep it (see CAL_VOCAB).
+import { EMOTION_NODES } from '../src/app/shared/emotion-wheel';
 import {
   expectNoTextOverlaps,
   expectNoHorizontalOverflow,
@@ -115,12 +118,28 @@ const CAL_FAMILIES = [
   ['Neutral/Flat'],
   ['Happy/Relaxed', 'Happy/Present'],
 ];
+// ⚠ BREADTH, and it must come from the wheel rather than from a list here.
+// CAL_FAMILIES alone names 12 distinct words across 8 repeating sets, so the
+// vocabulary saturated after eight days: selecting a week and selecting the
+// whole 78-day log produced an IDENTICAL selection panel, 12 chips either way.
+// The fixture built to stress that panel therefore could not grow it, and the
+// panel-overflow bug was invisible to it — measured on the real log the same
+// day, 75 days carried 76 distinct words and a panel 125% of the phone's
+// height. Drawing from the wheel makes the tail track the real vocabulary,
+// including any word added to it later.
+const CAL_VOCAB = EMOTION_NODES.map((n) => n.token);
 const CALENDAR_WELLBEING = Array.from({ length: 80 }, (_, i) => 80 - i)
   // Two gaps, so a skipped day renders beside a busy one.
   .filter((back) => back !== 17 && back !== 44)
   .flatMap((back, day) => {
     const perDay = (day % 4) + 1;
-    const words = CAL_FAMILIES[day % CAL_FAMILIES.length];
+    const families = CAL_FAMILIES[day % CAL_FAMILIES.length];
+    // A long tail on top of the shaped families, strided across the wheel so
+    // each day contributes words the others mostly do not. This is HARSHER than
+    // his log rather than a model of it, which is the point: a bound that holds
+    // here holds at 76.
+    const tail = [0, 1, 2].map((n) => CAL_VOCAB[(day * 13 + n * 29) % CAL_VOCAB.length]);
+    const words = [...new Set([...families, ...tail])];
     return Array.from({ length: perDay }, (_, k) => ({
       ulid: `01CAL${String(day).padStart(3, '0')}${String(k)}`.padEnd(26, '0'),
       id: 1000 + day * 10 + k,
@@ -130,7 +149,9 @@ const CALENDAR_WELLBEING = Array.from({ length: 80 }, (_, i) => 80 - i)
       // Day 21 carries NO score at all: `scoreTenths` is typed `number` and
       // stored docs exist without one, which drew a bar at NaN% titled
       // `score NaN–NaN` against the real log while every fixture set it.
-      ...(day === 21 ? {} : { scoreTenths: words.length > 2 ? [30, 45, 35, 40][k % 4] : 40 }),
+      // Keyed on `families`, NOT `words`: the tail widens every day past two
+      // words, and a range bar on every single day says nothing at all.
+      ...(day === 21 ? {} : { scoreTenths: families.length > 2 ? [30, 45, 35, 40][k % 4] : 40 }),
       energyTenths: 40,
       // One day tagged nothing at all: present, pressable, uncoloured. Day 14
       // OMITS the field entirely rather than sending [] — `emotions` is absent
@@ -1249,6 +1270,57 @@ test('emotion calendar — the day grid and a selection fit @ phone width', asyn
   await expectNoClippedText(page, testInfo, '.selection');
   // The panel floats over the grid, so the controls under it must stay reachable
   // — the failure mode a sticky footer introduces and the clip oracle cannot see.
+  await expectNoOccludedControls(page, testInfo, '.selection');
+
+  // ⚠ TWO assertions, and the second is the one that matters. The panel must
+  // stay bounded as the selection grows, AND the fixture must be able to grow
+  // it — against the 12-word fixture this replaced, every selection produced
+  // the same 12 chips, so a bound check would have passed while the real app
+  // put a 125%-of-viewport panel over the calendar. Measured there: 3 days
+  // filled 54% of the screen, a week 81%, a month 108%.
+  await page.getByRole('button', { name: 'Deselect all' }).click();
+  // ⚠ Selected through the DOM, not with real clicks, and that is deliberate.
+  // An unbounded panel covers the grid, so a Playwright click fails its own
+  // actionability check FIRST and the run reports `locator.click: Test timeout
+  // of 90000ms exceeded` — measured, twice, with the cap ablated. That message
+  // sends you to the test instead of to the layout. Reachability is still
+  // asserted, by the occlusion oracle below, which names the right thing.
+  const selectFirst = (n: number) =>
+    page.evaluate((count) => {
+      document.querySelectorAll<HTMLElement>('.box:not(.empty)').forEach((b, i) => {
+        if (i < count && b.getAttribute('aria-pressed') !== 'true') b.click();
+      });
+    }, n);
+  const vh = page.viewportSize()!.height;
+  const growth: { days: number; chips: number; pct: number }[] = [];
+  for (const k of [1, 3, 7, 30]) {
+    await selectFirst(k);
+    // The panel's own count is the settle signal — no sleep, and it fails
+    // loudly if selection ever stops being one-click-one-day.
+    await expect(sel.locator('strong')).toHaveText(`${k} day${k === 1 ? '' : 's'} selected`);
+    const m = await sel.evaluate((e) => ({
+      h: e.getBoundingClientRect().height,
+      chips: e.querySelectorAll('.emo').length,
+    }));
+    const pct = Math.round((m.h / vh) * 100);
+    growth.push({ days: k, chips: m.chips, pct });
+    // Checked inside the loop so the failure names the selection size that
+    // breached rather than the last one measured.
+    expect({ days: k, tookMostOfTheScreen: pct > 40 }).toEqual({
+      days: k,
+      tookMostOfTheScreen: false,
+    });
+  }
+  // The instrument works: a wider selection really does name more words.
+  expect(growth.map((g) => g.chips)).toEqual([...growth].map((g) => g.chips).sort((a, b) => a - b));
+  expect(growth.at(-1)!.chips).toBeGreaterThan(growth[0].chips * 3);
+  // The calendar keeps the screen: the panel summarising it never takes half.
+  expect(growth.filter((g) => g.pct > 40)).toEqual([]);
+  // Bounded means scrollable, not truncated — every word stays reachable.
+  expect(
+    await page.locator('.selection .words').evaluate((e) => e.scrollHeight > e.clientHeight + 1),
+  ).toBe(true);
+  await expectNoClippedText(page, testInfo, '.selection');
   await expectNoOccludedControls(page, testInfo, '.selection');
 
   // ⚠ THE CALENDAR IS READ-ONLY, and this is the assertion that keeps it so.

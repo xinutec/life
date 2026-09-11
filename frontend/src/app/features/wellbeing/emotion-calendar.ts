@@ -28,7 +28,7 @@ import { MatIconModule } from '@angular/material/icon';
 
 import { emotionColor, emotionLabel } from '../../shared/emotion-wheel';
 import { WellbeingDoc, WellbeingStore } from '../../sync/wellbeing-store';
-import { CalendarDay, buildCalendar, tokensAcross } from './emotion-calendar-model';
+import { CalendarDay, buildCalendar, tallyAcross } from './emotion-calendar-model';
 
 /** Monday first, matching the grid the model pads for. */
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
@@ -98,19 +98,34 @@ export class EmotionCalendar {
       .filter((c): c is CalendarDay => !!c && keys.has(c.key));
   });
 
-  /** Every emotion across the selected days — what a render of the selection
-   *  would be given. */
-  readonly selectedTokens = computed(() => tokensAcross(this.selected()));
+  /** Every emotion across the selected days, commonest first — what a render of
+   *  the selection would be given. */
+  readonly selectedTally = computed(() => tallyAcross(this.selected()));
 
   /** Chips in the app's existing grammar: `emo emo-<family>`, so a word in the
-   *  selection looks identical to the same word in the picker. */
+   *  selection looks identical to the same word in the picker.
+   *
+   *  The count rides along because a wide selection is a list of words with no
+   *  weight otherwise: across the whole log that is 76 of them, and knowing
+   *  which ones recur is the entire reason to select a stretch rather than a
+   *  day. It is omitted at one, where it would only ever read "1". */
   readonly selectedChips = computed(() =>
-    this.selectedTokens().map((token) => ({
+    this.selectedTally().map(({ token, days }) => ({
       token,
       label: emotionLabel(token),
       cls: `emo emo-${emotionColor(token)}`,
+      count: days > 1 ? days : null,
     })),
   );
+
+  /** Spells the count out, because a bare number on a chip could be a score, a
+   *  rank or a tally. Says it against the size of the selection so "3" is read
+   *  as "3 of 30" rather than as "a lot". */
+  chipTitle(chip: { label: string; count: number | null }): string {
+    const total = this.selected().length;
+    const on = chip.count ?? 1;
+    return `${chip.label} — on ${on} of ${total} selected day${total === 1 ? '' : 's'}`;
+  }
 
   toggle(day: CalendarDay): void {
     // A day nobody checked in on has nothing to hand on, so it is not selectable
