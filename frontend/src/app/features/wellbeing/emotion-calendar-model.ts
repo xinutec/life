@@ -80,6 +80,19 @@ export function localDayKey(iso: string, tz?: string): string {
  *  rather than how the day went. (On real data the two agree closely — 71% vs
  *  74% on the worst case — so this is chosen for being defensible, not for
  *  changing the picture.) */
+/** A check-in's tags, for a doc that may not have the field at all.
+ *
+ *  ⚠ `WellbeingDoc` types `emotions` as `string[]`, and the RxDB schema does NOT
+ *  list it in `required` — so a locally-stored doc can legitimately lack it, and
+ *  the type is the thing that is wrong. `wellbeing-entry.ts` has always guarded
+ *  with `?? []`; this module did not, and `for (const t of e.emotions)` threw
+ *  `emotions is not iterable` against the real log while every test passed,
+ *  because the fixtures all set the field. Absent is not an error: it is the
+ *  "checked in, tagged nothing" day the model already has a state for. */
+function tagsOf(e: WellbeingDoc): readonly string[] {
+  return e.emotions ?? [];
+}
+
 export function bandsFor(entries: readonly WellbeingDoc[]): readonly CalendarBand[] {
   const weight = new Map<string, number>();
   // Carried from the node that named the family rather than derived from it.
@@ -90,7 +103,7 @@ export function bandsFor(entries: readonly WellbeingDoc[]): readonly CalendarBan
   let total = 0;
   for (const e of entries) {
     const cores = new Set<string>();
-    for (const t of e.emotions) {
+    for (const t of tagsOf(e)) {
       const node = emotionNode(t);
       if (!node) continue;
       cores.add(node.core);
@@ -128,7 +141,7 @@ function dayFrom(key: string, entries: readonly WellbeingDoc[]): CalendarDay {
   const scores = entries.map((e) => e.scoreTenths);
   const tokens: string[] = [];
   for (const e of entries) {
-    for (const t of e.emotions) if (!tokens.includes(t)) tokens.push(t);
+    for (const t of tagsOf(e)) if (!tokens.includes(t)) tokens.push(t);
   }
   const low = scores.length ? Math.min(...scores) : null;
   const high = scores.length ? Math.max(...scores) : null;

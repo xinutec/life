@@ -95,6 +95,24 @@ describe('bandsFor', () => {
   it('is empty for readings that tagged nothing', () => {
     expect(bandsFor([doc('2026-09-01T09:00:00Z', [])])).toEqual([]);
   });
+
+  it('survives a stored doc with no emotions field at all', () => {
+    // ⚠ Not hypothetical. `emotions` is absent from the RxDB schema's `required`
+    // list, so a local doc can lack it entirely — and `WellbeingDoc` typing it
+    // as `string[]` is the thing that is wrong. Every fixture here set the
+    // field, so the whole suite passed while the live calendar threw
+    // "emotions is not iterable" and rendered nothing at all.
+    const bare = { ...doc('2026-09-01T09:00:00Z', []) } as Partial<WellbeingDoc>;
+    delete bare.emotions;
+    expect(bandsFor([bare as WellbeingDoc])).toEqual([]);
+    const months = buildCalendar([bare as WellbeingDoc], LONDON);
+    expect(months).toHaveLength(1);
+    expect(months[0].cells.find((c) => c !== null)).toMatchObject({
+      checkins: 1,
+      bands: [],
+      tokens: [],
+    });
+  });
 });
 
 describe('buildCalendar', () => {

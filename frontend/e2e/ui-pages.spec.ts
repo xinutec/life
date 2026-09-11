@@ -129,8 +129,13 @@ const CALENDAR_WELLBEING = Array.from({ length: 80 }, (_, i) => 80 - i)
       // be absent most of the time or it says nothing when it appears.
       scoreTenths: words.length > 2 ? [30, 45, 35, 40][k % 4] : 40,
       energyTenths: 40,
-      // One day tagged nothing at all: present, pressable, uncoloured.
-      emotions: day === 9 ? [] : words.slice(0, (k % words.length) + 1),
+      // One day tagged nothing at all: present, pressable, uncoloured. Day 14
+      // OMITS the field entirely rather than sending [] — `emotions` is absent
+      // from the RxDB schema's `required` list, so a stored doc can lack it, and
+      // a fixture that always sets it cannot catch the reader that assumed
+      // otherwise. One did, and shipped: the live calendar threw
+      // "emotions is not iterable" and rendered an empty state.
+      ...(day === 14 ? {} : { emotions: day === 9 ? [] : words.slice(0, (k % words.length) + 1) }),
       note: null,
       rev: 500 + day * 10 + k,
       _deleted: false,
