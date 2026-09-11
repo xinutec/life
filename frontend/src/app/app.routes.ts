@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 
 import { Conflicts } from './features/conflicts/conflicts';
+import { EmotionCalendar } from './features/wellbeing/emotion-calendar';
 import { House } from './features/house/house';
 import { Inventory } from './features/inventory/inventory';
 import { Items } from './features/items/items';
@@ -24,6 +25,7 @@ export const routes: Routes = [
   { path: 'product/:id', title: 'Life · product', component: ProductPage },
   { path: 'todo', title: 'Life · to-do', component: Todo },
   { path: 'wellbeing', title: 'Life · wellbeing', component: Wellbeing },
+  { path: 'emotions', title: 'Life · emotion calendar', component: EmotionCalendar },
   { path: 'trash', title: 'Life · recently deleted', component: Trash },
   { path: 'conflicts', title: 'Life · sync conflicts', component: Conflicts },
   { path: 'settings', title: 'Life · settings', component: Settings },

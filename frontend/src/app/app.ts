@@ -141,6 +141,7 @@ export class App {
   // Less-common destinations live behind the hamburger menu.
   readonly more: NavItem[] = [
     { path: '/wellbeing', icon: 'mood', label: 'Wellbeing' },
+    { path: '/emotions', icon: 'calendar_month', label: 'Emotion calendar' },
     { path: '/house', icon: 'home', label: 'House' },
     { path: '/items', icon: 'inventory_2', label: 'All items' },
     { path: '/trash', icon: 'restore_from_trash', label: 'Recently deleted' },

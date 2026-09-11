@@ -1,0 +1,143 @@
+// Box size is driven by the grid, not fixed: seven columns of 1fr, so a phone at
+// 412px and a desktop both fill the width and the day stays square via
+// aspect-ratio. A fixed px box was the alternative and it either overflows at
+// phone width or wastes half the screen above it.
+.cal {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  // Room for the sticky selection panel to sit above the last month rather than
+  // over it.
+  padding-bottom: 0.5rem;
+}
+
+.month h3 {
+  margin: 0 0 0.4rem;
+  font: var(--mat-sys-title-small);
+  color: var(--mat-sys-on-surface);
+}
+
+.weekdays,
+.grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.weekdays {
+  margin-bottom: 3px;
+  span {
+    font: var(--mat-sys-label-small);
+    color: var(--mat-sys-on-surface-variant);
+    text-align: center;
+  }
+}
+
+.pad {
+  aspect-ratio: 1;
+}
+
+.box {
+  position: relative;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 6px;
+  background: var(--mat-sys-surface);
+  overflow: hidden;
+  cursor: pointer;
+  // The number sits ON the fill, so it needs to stay legible over eight hues.
+  // A flat on-surface colour fails over the darker families; a shadow costs
+  // nothing and works over all of them.
+  color: var(--mat-sys-on-surface);
+
+  // A day that was checked in but tagged with nothing: present, not coloured.
+  // Distinguished from a skipped day by having a border you can press.
+  &.untagged {
+    background: var(--mat-sys-surface-container);
+  }
+
+  &.empty {
+    border-style: dashed;
+    background: none;
+    cursor: default;
+    .num {
+      opacity: 0.45;
+    }
+  }
+
+  &.picked {
+    outline: 2px solid var(--mat-sys-primary);
+    outline-offset: 1px;
+  }
+}
+
+.fill {
+  position: absolute;
+  inset: 0;
+  // Tinted rather than laid on at full strength: the number has to read over it,
+  // and the picker's own chips tint the same palette the same way.
+  opacity: 0.62;
+}
+
+.num {
+  position: relative;
+  font: var(--mat-sys-label-medium);
+  font-variant-numeric: tabular-nums;
+  text-shadow:
+    0 0 3px var(--mat-sys-surface),
+    0 0 3px var(--mat-sys-surface);
+}
+
+// The score range, on the fixed 10..50 scale. Absent when the day did not move,
+// which is most days — so a bar showing up at all is the signal.
+.range {
+  position: absolute;
+  bottom: 3px;
+  height: 3px;
+  min-width: 3px;
+  border-radius: 2px;
+  background: var(--mat-sys-on-surface);
+  opacity: 0.7;
+}
+
+.selection {
+  // Sticky, because the grid is months long and a tap at the top of June put its
+  // own feedback below September — you selected a day and nothing appeared to
+  // happen. The picker's selected-set footer solves the same problem the same
+  // way, so this is the app's existing grammar rather than a new one.
+  // Above the fixed bottom nav, not behind it — the repo's existing offset (see
+  // shopping.scss .bought-actions), so a chip row is reachable rather than
+  // hidden under the tab bar.
+  position: sticky;
+  bottom: calc(60px + env(safe-area-inset-bottom));
+  z-index: 6; // above the nav's shadow, below the nav itself (10)
+  padding: 0.75rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 10px;
+  // Opaque: vocabulary scrolling behind a translucent footer reads as a
+  // collision rather than as occlusion.
+  background: var(--mat-sys-surface-container);
+  box-shadow: 0 -4px 12px color-mix(in srgb, var(--mat-sys-shadow) 18%, transparent);
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.6rem;
+  }
+  .count {
+    flex: 1;
+    font: var(--mat-sys-label-medium);
+    color: var(--mat-sys-on-surface-variant);
+  }
+  .words {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+}
+
+.none {
+  color: var(--mat-sys-on-surface-variant);
+}

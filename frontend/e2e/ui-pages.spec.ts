@@ -99,6 +99,44 @@ const WELLBEING = [
     emotions: [], note: null, rev: 7, _deleted: false },
 ];
 
+// A dense stretch for the emotion calendar: the grid is seven columns of squares
+// that must survive a phone, and seven scattered readings would not exercise it.
+// Deterministic (index-driven, no randomness) so the layout under test is the
+// same one every run, and shaped like the real log rather than uniformly —
+// mostly one family, a mixed run, varying readings per day, and two gaps,
+// because a grid that only ever sees full days never renders the empty box.
+const CAL_FAMILIES = [
+  ['Happy/Calm'],
+  ['Happy/Calm', 'Happy/Productive'],
+  ['Happy/Joyful', 'Bad/Sleepy'],
+  ['Happy/Steady', 'Sad/Fragile', 'Bad/Pressured'],
+  ['Sad/Low', 'Neutral/Uncertain'],
+  ['Happy/Mending', 'Sad/Fragile', 'Fearful/Worried', 'Bad/Drained', 'Angry/Annoyed'],
+  ['Neutral/Flat'],
+  ['Happy/Relaxed', 'Happy/Present'],
+];
+const CALENDAR_WELLBEING = Array.from({ length: 80 }, (_, i) => 80 - i)
+  // Two gaps, so a skipped day renders beside a busy one.
+  .filter((back) => back !== 17 && back !== 44)
+  .flatMap((back, day) => {
+    const perDay = (day % 4) + 1;
+    const words = CAL_FAMILIES[day % CAL_FAMILIES.length];
+    return Array.from({ length: perDay }, (_, k) => ({
+      ulid: `01CAL${String(day).padStart(3, '0')}${String(k)}`.padEnd(26, '0'),
+      id: 1000 + day * 10 + k,
+      recordedAt: hoursAgo(back * 24 - k * 3),
+      // Swings on the mixed days, flat on the plain ones — the range bar has to
+      // be absent most of the time or it says nothing when it appears.
+      scoreTenths: words.length > 2 ? [30, 45, 35, 40][k % 4] : 40,
+      energyTenths: 40,
+      // One day tagged nothing at all: present, pressable, uncoloured.
+      emotions: day === 9 ? [] : words.slice(0, (k % words.length) + 1),
+      note: null,
+      rev: 500 + day * 10 + k,
+      _deleted: false,
+    }));
+  });
+
 // ⚠ TYPED, and it has to stay that way. This started as a bare array literal
 // and silently lost `expiry_precision` when the field was added: the sheet then
 // rendered a toggle with NEITHER side selected, which reads as a broken control
@@ -274,6 +312,21 @@ const CONFLICTS = [
 
 /** Mock every backend call: pulls return the seed docs, pushes accept all.
  *  Catch-all FIRST — Playwright runs handlers last-registered-first. */
+/** The incremental sync pull, as a route handler. Module-scope so a test that
+ *  needs a different fixture than mockApi's can re-route the same collection —
+ *  the emotion calendar wants a full log where the trend chart wants seven
+ *  readings. */
+const syncRoute =
+  (docs: unknown[]) =>
+  (r: Parameters<Parameters<Page['route']>[1]>[0]) => {
+    if (r.request().method() === 'POST') return r.fulfill({ json: [] });
+    const since = Number(new URL(r.request().url()).searchParams.get('since') ?? '0');
+    // Incremental protocol: only send the seed once, else the pull loops forever.
+    const fresh = docs.filter((d) => (d as { rev: number }).rev > since);
+    const top = docs.reduce<number>((m, d) => Math.max(m, (d as { rev: number }).rev), since);
+    return r.fulfill({ json: { documents: fresh, checkpoint: { rev: top } } });
+  };
+
 async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/**', (r) =>
     r.request().method() === 'GET' ? r.fulfill({ json: [] }) : r.fulfill({ status: 204, body: '' }),
@@ -310,14 +363,7 @@ async function mockApi(page: Page): Promise<void> {
     r.fulfill({ json: { hit: ASDA_HITS[2], from_cache: false } }),
   );
   await page.route('**/api/conflicts*', (r) => r.fulfill({ json: CONFLICTS }));
-  const sync = (docs: unknown[]) => (r: Parameters<Parameters<Page['route']>[1]>[0]) => {
-    if (r.request().method() === 'POST') return r.fulfill({ json: [] });
-    const since = Number(new URL(r.request().url()).searchParams.get('since') ?? '0');
-    // Incremental protocol: only send the seed once, else the pull loops forever.
-    const fresh = docs.filter((d) => (d as { rev: number }).rev > since);
-    const top = docs.reduce<number>((m, d) => Math.max(m, (d as { rev: number }).rev), since);
-    return r.fulfill({ json: { documents: fresh, checkpoint: { rev: top } } });
-  };
+  const sync = syncRoute;
   await page.route('**/api/sync/todo?*', sync(TODOS));
   await page.route('**/api/sync/todo', sync(TODOS));
   await page.route('**/api/sync/todo_link*', sync([]));
@@ -1096,4 +1142,48 @@ test('to-do detail — tapping a to-do opens a clean edit sheet @ phone width', 
   // Sanity: the fields the form promises are actually rendered in the sheet.
   await expect(sheet.getByLabel('Title')).toHaveValue('Call the GP about the referral letter');
   await expect(sheet.getByText('Timing')).toBeVisible();
+});
+
+// The emotion calendar is a seven-column grid of squares — the layout class that
+// fails by overflowing a phone's right edge, and the one where a long month name
+// or a chip row in the selection panel shoves the grid sideways. Rendered with a
+// dense fixture (CALENDAR_WELLBEING) because seven scattered readings would leave
+// most of the grid empty and prove nothing about how it packs.
+test('emotion calendar — the day grid and a selection fit @ phone width', async ({
+  page,
+}, testInfo) => {
+  await mockApi(page);
+  // Registered after mockApi so it wins: the calendar needs a full log, not the
+  // seven readings the trend chart is built around.
+  await page.route('**/api/sync/wellbeing*', syncRoute(CALENDAR_WELLBEING));
+  await page.goto('/emotions');
+
+  const grid = page.locator('.cal .grid').first();
+  await grid.waitFor();
+  // Every month between the first and last reading is drawn, so ~80 days of
+  // fixture must produce at least three month grids.
+  expect(await page.locator('.cal .month').count()).toBeGreaterThanOrEqual(3);
+  // A skipped day renders as a box too — the gaps in the fixture.
+  expect(await page.locator('.box.empty').count()).toBeGreaterThan(0);
+
+  await expectViewportIsPhone(page);
+  await expectNoHorizontalOverflow(page, testInfo, '.cal');
+  await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoTextOverlaps(page, testInfo, '.cal');
+
+  // Selecting days is the handoff to a render, so the panel it opens is part of
+  // the layout: a wide selection wraps its chips rather than pushing the grid.
+  const days = page.locator('.box:not(.empty)');
+  await days.nth(5).click();
+  await days.nth(6).click();
+  const sel = page.locator('.selection');
+  await sel.waitFor();
+  await expect(sel.locator('.emo')).not.toHaveCount(0);
+  await expectNoHorizontalOverflow(page, testInfo, '.selection');
+  await expectNoTextOverlaps(page, testInfo, '.selection');
+  await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoClippedText(page, testInfo, '.selection');
+  // The panel floats over the grid, so the controls under it must stay reachable
+  // — the failure mode a sticky footer introduces and the clip oracle cannot see.
+  await expectNoOccludedControls(page, testInfo, '.selection');
 });

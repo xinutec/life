@@ -1,0 +1,61 @@
+<section class="cal">
+  @for (month of months(); track month.key) {
+    <section class="month">
+      <h3>{{ month.label }}</h3>
+      <div class="weekdays" aria-hidden="true">
+        @for (w of weekdays; track w) {
+          <span>{{ w }}</span>
+        }
+      </div>
+      <div class="grid">
+        @for (cell of month.cells; track $index) {
+          @if (cell === null) {
+            <span class="pad"></span>
+          } @else if (cell.checkins === 0) {
+            <span class="box empty" [title]="title(cell)">
+              <span class="num">{{ cell.dayOfMonth }}</span>
+            </span>
+          } @else {
+            <button
+              type="button"
+              class="box"
+              [class.untagged]="cell.bands.length === 0"
+              [class.picked]="isSelected(cell)"
+              [attr.aria-pressed]="isSelected(cell)"
+              [attr.aria-label]="title(cell)"
+              [title]="title(cell)"
+              (click)="toggle(cell)"
+            >
+              <span class="fill" [style.background]="fill(cell)"></span>
+              <span class="num">{{ cell.dayOfMonth }}</span>
+              @if (rangeBar(cell); as bar) {
+                <span
+                  class="range"
+                  [style.left.%]="bar.left"
+                  [style.width.%]="bar.width"
+                ></span>
+              }
+            </button>
+          }
+        }
+      </div>
+    </section>
+  } @empty {
+    <p class="none">No check-ins yet.</p>
+  }
+
+  @if (selected().length) {
+    <aside class="selection">
+      <header>
+        <strong>{{ selected().length }} day{{ selected().length === 1 ? '' : 's' }}</strong>
+        <span class="count">{{ selectedTokens().length }} feelings</span>
+        <button mat-button type="button" (click)="clear()">Clear</button>
+      </header>
+      <div class="words">
+        @for (chip of selectedChips(); track chip.token) {
+          <span [class]="chip.cls">{{ chip.label }}</span>
+        }
+      </div>
+    </aside>
+  }
+</section>
