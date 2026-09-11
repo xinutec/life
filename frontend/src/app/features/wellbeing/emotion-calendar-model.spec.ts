@@ -42,10 +42,12 @@ describe('localDayKey', () => {
 });
 
 describe('bandsFor', () => {
-  it('weights each check-in equally, not each tag', () => {
-    // One reading names six Happy chips, three name one Sad chip each. By tag
-    // that is 6:3 Happy. Per check-in it is 1:3 Sad, which is the day that
-    // actually happened.
+  it('weights each check-in equally however many words it used', () => {
+    // One reading names six Happy chips, three name one Sad chip each. Pooling
+    // words across the day would make it 6:3 Happy. Per check-in it is 1:3 Sad,
+    // which is the day that actually happened — a moment described in six words
+    // is not a longer moment. ⚠ This is the half of the weighting that amount
+    // does NOT touch; the test below is the half it does.
     const entries = [
       doc('2026-09-01T09:00:00Z', [
         'Happy/Calm',
@@ -67,6 +69,29 @@ describe('bandsFor', () => {
 
   it('splits one check-in across the families it names', () => {
     const bands = bandsFor([doc('2026-09-01T09:00:00Z', ['Happy/Calm', 'Sad/Low'])]);
+    expect(bands.map((b) => b.fraction)).toEqual([0.5, 0.5]);
+  });
+
+  it('weights a single reading by how many words name each family', () => {
+    // Three happy words and one sad one is three quarters happy. Splitting by
+    // distinct family instead — what this did first — painted half the box sad
+    // off one word in four, so the day read as far worse than it was recorded.
+    const bands = bandsFor([
+      doc('2026-09-01T09:00:00Z', ['Happy/Calm', 'Happy/Joyful', 'Happy/Present', 'Sad/Low']),
+    ]);
+    expect(bands).toEqual([
+      { core: 'Happy', color: 'happy', fraction: 0.75 },
+      { core: 'Sad', color: 'sad', fraction: 0.25 },
+    ]);
+  });
+
+  it('does not let a retired word dilute the families still in the wheel', () => {
+    // The dropped token must not count toward the denominator: two live words
+    // beside one retired one is 2/2, not 2/3 with a third of the box unpainted.
+    const bands = bandsFor([
+      doc('2026-09-01T09:00:00Z', ['Happy/Calm', 'Sad/Low', 'Angry/Fed up']),
+    ]);
+    expect(bands.reduce((n, b) => n + b.fraction, 0)).toBeCloseTo(1);
     expect(bands.map((b) => b.fraction)).toEqual([0.5, 0.5]);
   });
 

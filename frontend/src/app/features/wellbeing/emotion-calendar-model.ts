@@ -23,6 +23,9 @@ export interface CalendarBand {
   core: string;
   /** Colour key → `--emo-<color>`, the same hue the picker gives this family. */
   color: string;
+  /** Share of the day, 0..1, summing to 1 across the bands. Weighted by how
+   *  many words named this family — see `bandsFor` for why that is not the
+   *  same as how many readings did. */
   fraction: number;
 }
 
@@ -97,6 +100,21 @@ function tagsOf(e: WellbeingDoc): readonly string[] {
   return e.emotions ?? [];
 }
 
+/** How much of a day each family got, as fractions summing to 1.
+ *
+ *  **Two weightings, and they are deliberately different.**
+ *
+ *  WITHIN a check-in, weight is split by HOW MANY WORDS name each family: three
+ *  happy words and one sad one is 3/4 happy, not half and half. Splitting by
+ *  distinct family instead — which this did until Pippijn asked for amount —
+ *  made one sad word out of four repaint half the day, so the box said
+ *  something the reading did not.
+ *
+ *  ACROSS check-ins, each one still counts as exactly 1. A moment you described
+ *  in six words is not a longer moment than one you described in one, and
+ *  pooling raw word counts over the day would let a single talkative check-in
+ *  outvote three others. So amount decides the mix inside a reading, and
+ *  readings stay equal to each other. */
 export function bandsFor(entries: readonly WellbeingDoc[]): readonly CalendarBand[] {
   const weight = new Map<string, number>();
   // Carried from the node that named the family rather than derived from it.
@@ -106,16 +124,19 @@ export function bandsFor(entries: readonly WellbeingDoc[]): readonly CalendarBan
   const hue = new Map<string, string>();
   let total = 0;
   for (const e of entries) {
-    const cores = new Set<string>();
+    const perCore = new Map<string, number>();
+    let words = 0;
     for (const t of tagsOf(e)) {
       const node = emotionNode(t);
+      // An unknown token is not counted at all, so it cannot dilute the families
+      // that ARE known — a renamed word would otherwise silently shrink the rest.
       if (!node) continue;
-      cores.add(node.core);
+      perCore.set(node.core, (perCore.get(node.core) ?? 0) + 1);
       hue.set(node.core, node.color);
+      words += 1;
     }
-    if (!cores.size) continue;
-    const share = 1 / cores.size;
-    for (const c of cores) weight.set(c, (weight.get(c) ?? 0) + share);
+    if (!words) continue;
+    for (const [c, n] of perCore) weight.set(c, (weight.get(c) ?? 0) + n / words);
     total += 1;
   }
   if (!total) return [];
