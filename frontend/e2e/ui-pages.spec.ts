@@ -143,7 +143,15 @@ const CALENDAR_WELLBEING = Array.from({ length: 80 }, (_, i) => 80 - i)
     return Array.from({ length: perDay }, (_, k) => ({
       ulid: `01CAL${String(day).padStart(3, '0')}${String(k)}`.padEnd(26, '0'),
       id: 1000 + day * 10 + k,
-      recordedAt: hoursAgo(back * 24 - k * 3),
+      // ⚠ Pinned to a fixed hour of its OWN day with `at`, NOT offset from now
+      // with `hoursAgo`. It was `hoursAgo(back * 24 - k * 3)`, and that drifts:
+      // the k-offset is measured from whatever time the suite runs, so once the
+      // clock passes ~15:00 the later readings of a day cross local midnight and
+      // land on the day before. They landed in the deliberate GAPS, so
+      // `.box.empty` went to zero and the test failed on the same commit that
+      // had passed an hour earlier. A fixture keyed to the wall clock is not a
+      // fixture.
+      recordedAt: at(back, 9 + k * 3),
       // Swings on the mixed days, flat on the plain ones — the range bar has to
       // be absent most of the time or it says nothing when it appears.
       // Day 21 carries NO score at all: `scoreTenths` is typed `number` and
@@ -1198,8 +1206,11 @@ test('emotion calendar — the day grid and a selection fit @ phone width', asyn
   // Every month between the first and last reading is drawn, so ~80 days of
   // fixture must produce at least three month grids.
   expect(await page.locator('.cal .month').count()).toBeGreaterThanOrEqual(3);
-  // A skipped day renders as a box too — the gaps in the fixture.
-  expect(await page.locator('.box.empty').count()).toBeGreaterThan(0);
+  // A skipped day renders as a box too — the gaps in the fixture. EXACTLY the
+  // two of them: `> 0` let a drifting fixture put readings into one gap and
+  // still pass, and then quietly took both. A count that names the number is
+  // the instrument; a count that names a floor is a hope.
+  expect(await page.locator('.box.empty').count()).toBe(2);
   // ⚠ Boxes that share a class must place their number identically. `.box` is on
   // a <button> for a real day and a <span> for a skipped one, and a button is
   // centred by the user agent where a span is not — so leaning on that default
