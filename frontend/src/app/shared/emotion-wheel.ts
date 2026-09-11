@@ -1,8 +1,10 @@
-/** A three-tier emotional vocabulary — 7 core emotions, each with a ring of secondary
- *  feelings, each with fine-grained tertiary leaves. Static data, no backend: a check-in
- *  records a set of emotions and their path back up to the core is derived here for
- *  display and colour. Every node carries a plain-English gloss, so the picker can
- *  explain each feeling.
+/** A three-tier emotional vocabulary — a handful of core emotions, each with a ring of
+ *  secondary feelings, each with fine-grained tertiary leaves. [[EMOTION_WHEEL]] is the
+ *  count; this comment deliberately does not carry one, having already gone stale once.
+ *
+ *  Static data, no backend: a check-in records a set of emotions and their path back up
+ *  to the core is derived here for display and colour. Every node carries a
+ *  plain-English gloss, so the picker can explain each feeling.
  *
  *  It began as the Geoffrey Roberts "Feelings Wheel" (strictly two leaves per group) and
  *  is extended where that wheel leaves a real feeling with no word at all, so groups may
@@ -137,6 +139,15 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Respected', desc: 'Held in regard; your worth acknowledged by others.' },
           { name: 'Valued', desc: 'Treated as important and worth caring about.' },
+          {
+            // Accepted had two leaves while Caring — the same feeling pointed
+            // the other way — has four, so being cared FOR could only be
+            // recorded as Thankful, which is about you noticing rather than
+            // about them arriving. Not Safe, which is trust that no harm is
+            // coming; this is somebody turning up.
+            name: 'Supported',
+            desc: 'Somebody showed up for you, and you felt it.',
+          },
         ],
       },
       {
@@ -146,6 +157,16 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
           { name: 'Courageous', desc: 'Willing to face difficulty or fear with resolve.' },
           { name: 'Creative', desc: 'Inventive and generative; full of ideas.' },
           { name: 'Determined', desc: 'Set on seeing something through, however hard it gets.' },
+          {
+            // The wheel had no word for holding. Calm claims nothing is pulling
+            // at you, and something is; Mending claims you are further along
+            // than you were, and you may not be; Accepting claims you stopped
+            // fighting it. This is the effort itself — feeling it and keeping
+            // hold. Filed under agency rather than Peaceful because that is
+            // what it costs.
+            name: 'Steady',
+            desc: 'Something is pulling at you and you are holding it — not untroubled, but in hand.',
+          },
           {
             // The rest of Powerful is agency; this is the body. The wheel could
             // record the fatigue (Bad › Tired) but not the morning it lifts.
@@ -182,6 +203,14 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             desc: "The tension drops away — the thing you dreaded didn't happen.",
           },
           { name: 'Calm', desc: 'Unhurried and untroubled; nothing is pulling at you.' },
+          {
+            // Calm is nothing pulling at you; this is your guard down, which is
+            // a different thing and commonly arrives WITH tiredness — a pairing
+            // Calm cannot express, because it denies there was anything being
+            // held up in the first place.
+            name: 'Relaxed',
+            desc: 'Your guard is down and nothing is being held up.',
+          },
           {
             // Not Calm (which claims nothing is pulling at you — something is) and
             // not Apathetic (which claims you stopped caring — you didn't).
@@ -288,6 +317,16 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             // here would point you at two places at once.
             name: 'Eager',
             desc: "Keen for something that's on its way, and wanting it here now.",
+          },
+          {
+            // Not Eager, its neighbour, which is wanting a thing to ARRIVE, and
+            // not `Powerful/Energised`, which is fuel in the tank with nothing
+            // it is about. This is charge about something in particular — the
+            // kind that keeps you up past when you meant to sleep. Roberts put
+            // the only Excited under Surprised, so being keyed up about your
+            // own work could be recorded only as being caught off guard.
+            name: 'Excited',
+            desc: "Keyed up about something, in a way that won't quite let you settle.",
           },
         ],
       },
@@ -707,6 +746,15 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Excluded', desc: 'Left out and kept apart from the group.' },
           { name: 'Persecuted', desc: 'Singled out for unfair, hostile treatment.' },
+          {
+            // `Sad/Abandoned` is afterwards, once they have gone. This is while
+            // it is still happening and still uncertain — reading a short reply
+            // for whether someone is drifting out of your life. Not Excluded,
+            // which is being kept out of something: here the fear is about the
+            // person, not the door.
+            name: 'Losing them',
+            desc: 'Someone seems to be drifting away and you cannot tell for sure.',
+          },
         ],
       },
       {
@@ -724,6 +772,15 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             // is the not-acting itself.
             name: 'Hesitant',
             desc: 'Holding back from acting, because it might go badly.',
+          },
+          {
+            // Fear of what might happen (Nervous), of being seen (Exposed) and
+            // of acting (Hesitant) were all sayable; the continuous work of
+            // watching what you say in case it lands wrong was not. Not
+            // Hesitant, which is the not-acting — this is acting, carefully,
+            // all the way through.
+            name: 'Guarded',
+            desc: 'Weighing every word before it leaves, because of how it might land.',
           },
         ],
       },
@@ -782,6 +839,16 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Overwhelmed', desc: 'Buried under more than you can manage.' },
           { name: 'Out of control', desc: "Unable to steer what's happening to you." },
+          {
+            // `Fearful/Guarded` filters what goes out; this produces what isn't
+            // there — a face and a manner assembled for somebody else. Under
+            // Bad rather than Fearful because the cost is upkeep and not
+            // danger, and under Stressed because it is capacity being spent:
+            // the reason days in the same company get harder while nothing in
+            // them changes.
+            name: 'Performing',
+            desc: "Keeping up a face and a manner that aren't what you feel.",
+          },
         ],
       },
       {
@@ -795,6 +862,13 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             // fix it, so a day wiped out by treatment shared a token with a late night.
             name: 'Exhausted',
             desc: "Wrung out. Rest doesn't touch it.",
+          },
+          {
+            // Sleepy and Unfocused point at sleep, Exhausted at the body. None
+            // of them names the cost of PEOPLE — which does not show in an
+            // energy score, and lifts as soon as the room empties.
+            name: 'Drained',
+            desc: 'Spent by company rather than by effort or short sleep.',
           },
         ],
       },
@@ -911,6 +985,15 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             // filing that under fear would record a worry nobody had.
             name: 'Uncertain',
             desc: "Not sure what you're noticing or what it means — an open question, not self-doubt.",
+          },
+          {
+            // Uncertain is the doubt about what you are noticing; this is the
+            // thing noticed — your own machinery answering differently from how
+            // it used to, with nothing wrong in the moment. Not `Apart/Detached`,
+            // which is standing outside what is going on: here it is you that
+            // moved, not the room.
+            name: 'Not myself',
+            desc: 'Something in how you work has changed, and you cannot place when.',
           },
         ],
       },
