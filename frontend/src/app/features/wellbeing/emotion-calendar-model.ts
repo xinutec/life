@@ -24,8 +24,7 @@ export interface CalendarBand {
   /** Colour key → `--emo-<color>`, the same hue the picker gives this family. */
   color: string;
   /** Share of the day, 0..1, summing to 1 across the bands. Weighted by how
-   *  many words named this family — see `bandsFor` for why that is not the
-   *  same as how many readings did. */
+   *  many words named this family across every check-in that day. */
   fraction: number;
 }
 
@@ -102,19 +101,22 @@ function tagsOf(e: WellbeingDoc): readonly string[] {
 
 /** How much of a day each family got, as fractions summing to 1.
  *
- *  **Two weightings, and they are deliberately different.**
+ *  **Every word the day recorded, counted once, pooled across the whole day.**
+ *  Three happy words and one sad one is 3/4 happy, however many check-ins they
+ *  arrived in. Stated by Pippijn twice, both times as "in a day".
  *
- *  WITHIN a check-in, weight is split by HOW MANY WORDS name each family: three
- *  happy words and one sad one is 3/4 happy, not half and half. Splitting by
- *  distinct family instead — which this did until Pippijn asked for amount —
- *  made one sad word out of four repaint half the day, so the box said
- *  something the reading did not.
+ *  ⚠ It weighted each CHECK-IN equally for a few hours on 2026-09-11, splitting
+ *  by amount only inside a reading, on the reasoning that a moment described in
+ *  six words is not a longer moment than one described in one. **27 August is
+ *  the day that refuted it**: a one-word morning (`Bad/Sleepy`) and a
+ *  three-word evening (`Happy/Caring`, `Happy/Calm`, `Happy/Present`) came out
+ *  100% bad against 100% happy, averaging to half and half — a box reading
+ *  half-bad for a day that was three-quarters good. The rule that survives is
+ *  his, not the defensible-sounding one.
  *
- *  ACROSS check-ins, each one still counts as exactly 1. A moment you described
- *  in six words is not a longer moment than one you described in one, and
- *  pooling raw word counts over the day would let a single talkative check-in
- *  outvote three others. So amount decides the mix inside a reading, and
- *  readings stay equal to each other. */
+ *  What that costs, kept here so it is not rediscovered as a bug: a check-in
+ *  where he tapped six words now outweighs three where he tapped one. That is
+ *  the trade, and it was made knowingly. */
 export function bandsFor(entries: readonly WellbeingDoc[]): readonly CalendarBand[] {
   const weight = new Map<string, number>();
   // Carried from the node that named the family rather than derived from it.
@@ -122,26 +124,21 @@ export function bandsFor(entries: readonly WellbeingDoc[]): readonly CalendarBan
   // that guessed would pass every test and break silently the first time a
   // family's hue stops matching its name.
   const hue = new Map<string, string>();
-  let total = 0;
+  let words = 0;
   for (const e of entries) {
-    const perCore = new Map<string, number>();
-    let words = 0;
     for (const t of tagsOf(e)) {
       const node = emotionNode(t);
       // An unknown token is not counted at all, so it cannot dilute the families
       // that ARE known — a renamed word would otherwise silently shrink the rest.
       if (!node) continue;
-      perCore.set(node.core, (perCore.get(node.core) ?? 0) + 1);
+      weight.set(node.core, (weight.get(node.core) ?? 0) + 1);
       hue.set(node.core, node.color);
       words += 1;
     }
-    if (!words) continue;
-    for (const [c, n] of perCore) weight.set(c, (weight.get(c) ?? 0) + n / words);
-    total += 1;
   }
-  if (!total) return [];
+  if (!words) return [];
   return [...weight]
-    .map(([core, w]) => ({ core, color: hue.get(core)!, fraction: w / total }))
+    .map(([core, w]) => ({ core, color: hue.get(core)!, fraction: w / words }))
     // Largest first, then by name so equal shares order stably rather than by
     // whichever family the day happened to mention first.
     .sort((a, b) => b.fraction - a.fraction || a.core.localeCompare(b.core));

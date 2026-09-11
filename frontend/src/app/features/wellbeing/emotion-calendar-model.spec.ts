@@ -42,13 +42,26 @@ describe('localDayKey', () => {
 });
 
 describe('bandsFor', () => {
-  it('weights each check-in equally however many words it used', () => {
-    // One reading names six Happy chips, three name one Sad chip each. Pooling
-    // words across the day would make it 6:3 Happy. Per check-in it is 1:3 Sad,
-    // which is the day that actually happened — a moment described in six words
-    // is not a longer moment. ⚠ This is the half of the weighting that amount
-    // does NOT touch; the test below is the half it does.
-    const entries = [
+  // ⚠ THE REGRESSION, by date. 27 August 2026 is a real day of his: one word in
+  // the morning, three in the evening. Weighting each check-in equally made it
+  // 100% bad against 100% happy, averaging to half and half — a box that read
+  // half-bad for a day that was three-quarters good. Pooled, it says what the
+  // day said.
+  it('pools words across the day, so a one-word morning does not own half of it', () => {
+    const bands = bandsFor([
+      doc('2026-08-27T09:11:07Z', ['Bad/Sleepy']),
+      doc('2026-08-27T17:22:59Z', ['Happy/Caring', 'Happy/Calm', 'Happy/Present']),
+    ]);
+    expect(bands).toEqual([
+      { core: 'Happy', color: 'happy', fraction: 0.75 },
+      { core: 'Bad', color: 'bad', fraction: 0.25 },
+    ]);
+  });
+
+  // The cost of the rule above, asserted so it is a decision and not a surprise:
+  // a check-in carrying more words carries more of the day.
+  it('lets a reading with more words count for more of the day', () => {
+    const bands = bandsFor([
       doc('2026-09-01T09:00:00Z', [
         'Happy/Calm',
         'Happy/Joyful',
@@ -60,11 +73,11 @@ describe('bandsFor', () => {
       doc('2026-09-01T12:00:00Z', ['Sad/Low']),
       doc('2026-09-01T15:00:00Z', ['Sad/Low']),
       doc('2026-09-01T18:00:00Z', ['Sad/Low']),
-    ];
-    const bands = bandsFor(entries);
-    expect(bands.map((b) => b.core)).toEqual(['Sad', 'Happy']);
-    expect(bands[0].fraction).toBeCloseTo(0.75);
-    expect(bands[1].fraction).toBeCloseTo(0.25);
+    ]);
+    // Six happy words against three sad ones, not one reading against three.
+    expect(bands.map((b) => b.core)).toEqual(['Happy', 'Sad']);
+    expect(bands[0].fraction).toBeCloseTo(6 / 9);
+    expect(bands[1].fraction).toBeCloseTo(3 / 9);
   });
 
   it('splits one check-in across the families it names', () => {
@@ -76,6 +89,7 @@ describe('bandsFor', () => {
     // Three happy words and one sad one is three quarters happy. Splitting by
     // distinct family instead — what this did first — painted half the box sad
     // off one word in four, so the day read as far worse than it was recorded.
+    // Unchanged by the move to pooling: one reading IS the whole day here.
     const bands = bandsFor([
       doc('2026-09-01T09:00:00Z', ['Happy/Calm', 'Happy/Joyful', 'Happy/Present', 'Sad/Low']),
     ]);
