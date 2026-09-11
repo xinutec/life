@@ -259,7 +259,7 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
           },
           {
             // The rest of this group is warmth you DIRECT at someone; this is
-            // warmth that arrives and lands on you. Not In awe (which is about
+            // warmth that arrives and lands on you. Not Awestruck (which is about
             // scale) and not Tender (which is aimed at someone hurting) — the
             // wheel had no word for being affected.
             name: 'Moved',
@@ -639,7 +639,7 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
           {
             // Annoyed is a passing bother; Resentful and Bitter are grudges against
             // a person. Neither says "this has ground on too long".
-            name: 'Fed up',
+            name: 'Exasperated',
             desc: "It has gone on too long. You've had enough of it.",
           },
         ],
@@ -898,7 +898,7 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
           { name: 'Dismayed', desc: 'Thrown and disheartened by a bad turn.' },
           {
             // Surprised had no quiet register: plain "huh, didn't expect that" could
-            // only be filed as Astonished or In awe.
+            // only be filed as Astonished or Awestruck.
             name: 'Taken aback',
             desc: 'Not what you expected; it stops you for a second.',
           },
@@ -917,7 +917,7 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         desc: 'Struck by something remarkable.',
         leaves: [
           { name: 'Astonished', desc: 'Greatly surprised, almost disbelieving.' },
-          { name: 'In awe', desc: 'Filled with wonder and reverence.' },
+          { name: 'Awestruck', desc: 'Filled with wonder and reverence.' },
         ],
       },
       {
