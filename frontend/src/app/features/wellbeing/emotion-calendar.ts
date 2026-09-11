@@ -126,6 +126,10 @@ export class EmotionCalendar {
     return this.picked().includes(day.key);
   }
 
+  /** Drops the day SELECTION. Nothing here writes: this component reads
+   *  `items$` and owns no other store call, so no path through it can alter a
+   *  check-in. Stated because the control was read as deleting feelings, which
+   *  is the reading a label has to rule out rather than a comment. */
   clear(): void {
     this.picked.set([]);
   }

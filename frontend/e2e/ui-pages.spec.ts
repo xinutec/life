@@ -1250,4 +1250,20 @@ test('emotion calendar — the day grid and a selection fit @ phone width', asyn
   // The panel floats over the grid, so the controls under it must stay reachable
   // — the failure mode a sticky footer introduces and the clip oracle cannot see.
   await expectNoOccludedControls(page, testInfo, '.selection');
+
+  // ⚠ THE CALENDAR IS READ-ONLY, and this is the assertion that keeps it so.
+  // Its one control was read as deleting the feelings it lists; it deselects
+  // days. Watching for a write is worth more than the label, because a future
+  // edit could make the label true.
+  const writes: string[] = [];
+  page.on('request', (r) => {
+    if (r.method() !== 'GET' && r.url().includes('/api/')) writes.push(`${r.method()} ${r.url()}`);
+  });
+  await expect(sel.locator('.emo')).not.toHaveCount(0);
+  await page.getByRole('button', { name: 'Deselect all' }).click();
+  await expect(page.locator('.selection')).toHaveCount(0);
+  // Days come back selectable, so nothing about the underlying log changed.
+  await days.nth(5).click();
+  await expect(page.locator('.selection .emo')).not.toHaveCount(0);
+  expect(writes).toEqual([]);
 });

@@ -139,6 +139,13 @@
     font: var(--mat-sys-label-medium);
     color: var(--mat-sys-on-surface-variant);
   }
+  // Says what the chips ARE: a read-only summary of the days above, not a set
+  // you are editing. Without it the panel looks like a picker.
+  .lead {
+    margin: 0 0 0.5rem;
+    font: var(--mat-sys-label-medium);
+    color: var(--mat-sys-on-surface-variant);
+  }
   .words {
     display: flex;
     flex-wrap: wrap;
