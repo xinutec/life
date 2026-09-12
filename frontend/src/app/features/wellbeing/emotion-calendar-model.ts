@@ -208,10 +208,25 @@ function dayFrom(key: string, entries: readonly WellbeingDoc[]): CalendarDay {
  *  boxes they read as "you skipped this", which is a lie in both directions: the
  *  1st to the 25th of the first month is before you started, and the rest of the
  *  current month has not happened yet. Drawing 20 dashed boxes for the remainder
- *  of September says you missed three weeks you have not lived. */
+ *  of September says you missed three weeks you have not lived.
+ *
+ *  ⚠ **TODAY IS THE EXCEPTION AT THE TRAILING EDGE, and it used to be swept up
+ *  with the future.** The range ended at the last READING, so between midnight
+ *  and the day's first check-in the current day had no cell at all and could not
+ *  be seen or tapped — the grid simply stopped at yesterday. Both halves of the
+ *  argument above survive: a day before the first reading is genuinely before
+ *  you started, and tomorrow genuinely has not happened. Today is neither, and
+ *  an empty square for it is honest in exactly the way a gap between readings is
+ *  honest. So the end of the range is the LATER of the last reading and today,
+ *  and never anything past today.
+ *
+ *  `today` is a parameter rather than a call to the clock so that a test can
+ *  state which day it means. Read from `Date` here and every assertion about the
+ *  trailing edge would quietly depend on the day the suite happened to run. */
 export function buildCalendar(
   docs: readonly WellbeingDoc[],
   tz?: string,
+  today: string = localDayKey(new Date().toISOString(), tz),
 ): readonly CalendarMonth[] {
   const byDay = new Map<string, WellbeingDoc[]>();
   for (const d of docs) {
@@ -223,7 +238,11 @@ export function buildCalendar(
   if (!byDay.size) return [];
   const keys = [...byDay.keys()].sort();
   const first = keys[0];
-  const last = keys[keys.length - 1];
+  const lastReading = keys[keys.length - 1];
+  // String compare on `YYYY-MM-DD` is total, so `max` is the later spelling. A
+  // reading dated AFTER today — a device with a fast clock, or a doc synced from
+  // one — must still be drawn, which is why this is a max and not just `today`.
+  const last = today > lastReading ? today : lastReading;
 
   const months: CalendarMonth[] = [];
   let y = Number(first.slice(0, 4));

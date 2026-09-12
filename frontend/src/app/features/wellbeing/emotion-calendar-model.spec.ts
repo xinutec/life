@@ -144,7 +144,7 @@ describe('bandsFor', () => {
     const bare = { ...doc('2026-09-01T09:00:00Z', []) } as Partial<WellbeingDoc>;
     delete bare.emotions;
     expect(bandsFor([bare as WellbeingDoc])).toEqual([]);
-    const months = buildCalendar([bare as WellbeingDoc], LONDON);
+    const months = buildCalendar([bare as WellbeingDoc], LONDON, '2026-09-01');
     expect(months).toHaveLength(1);
     expect(months[0].cells.find((c) => c !== null)).toMatchObject({
       checkins: 1,
@@ -162,6 +162,7 @@ describe('buildCalendar', () => {
     const months = buildCalendar(
       [doc('2026-09-01T09:00:00Z', []), doc('2026-09-03T09:00:00Z', ['Happy/Calm'])],
       LONDON,
+      '2026-09-03',
     );
     const first = day(months, '2026-09-01')!;
     const skipped = day(months, '2026-09-02')!;
@@ -174,6 +175,7 @@ describe('buildCalendar', () => {
     const months = buildCalendar(
       [doc('2026-09-01T09:00:00Z', ['Happy/Calm']), doc('2026-09-05T09:00:00Z', ['Happy/Calm'])],
       LONDON,
+      '2026-09-05',
     );
     expect(day(months, '2026-09-03')).toBeDefined();
   });
@@ -186,6 +188,7 @@ describe('buildCalendar', () => {
         doc('2026-09-09T09:00:00Z', ['Happy/Calm'], 40),
       ],
       LONDON,
+      '2026-09-09',
     );
     expect(day(months, '2026-09-08')).toMatchObject({ scoreLow: 30, scoreHigh: 45, spread: 15 });
     expect(day(months, '2026-09-09')).toMatchObject({ spread: 0 });
@@ -197,6 +200,7 @@ describe('buildCalendar', () => {
     const [sep] = buildCalendar(
       [doc('2026-09-01T09:00:00Z', ['Happy/Calm']), doc('2026-09-30T09:00:00Z', ['Happy/Calm'])],
       LONDON,
+      '2026-09-30',
     );
     expect(sep.cells.slice(0, 1)).toEqual([null]);
     expect(sep.cells[1]).toMatchObject({ dayOfMonth: 1 });
@@ -211,6 +215,7 @@ describe('buildCalendar', () => {
     const [sep] = buildCalendar(
       [doc('2026-09-10T09:00:00Z', ['Happy/Calm']), doc('2026-09-12T09:00:00Z', ['Happy/Calm'])],
       LONDON,
+      '2026-09-12',
     );
     const present = sep.cells.filter((c): c is CalendarDay => c !== null);
     expect(present.map((c) => c.dayOfMonth)).toEqual([10, 11, 12]);
@@ -220,12 +225,57 @@ describe('buildCalendar', () => {
     expect(sep.cells).toHaveLength(7);
   });
 
+  it('keeps today on the grid before the day has its first check-in', () => {
+    // ⚠ The trailing edge is NOT the leading edge, and it inherited its rule by
+    // accident. A day before the first reading is "before you started" and a day
+    // after today "has not happened yet" — both are honestly padding. Today is
+    // neither. Ending the range at the last READING meant that every morning,
+    // until the first check-in, the calendar stopped at yesterday and today
+    // could not be seen or tapped.
+    const [sep] = buildCalendar([doc('2026-09-10T09:00:00Z', ['Happy/Calm'])], LONDON, '2026-09-12');
+    const present = sep.cells.filter((c): c is CalendarDay => c !== null);
+    expect(present.map((c) => c.dayOfMonth)).toEqual([10, 11, 12]);
+    expect(present[2]).toMatchObject({ dayOfMonth: 12, checkins: 0 });
+  });
+
+  it('stops at today rather than filling the rest of the month', () => {
+    // The other half, and why this is a `max` and not "extend to the end of the
+    // month": drawing the 13th to the 30th would claim eighteen days you have
+    // not lived.
+    const [sep] = buildCalendar([doc('2026-09-10T09:00:00Z', ['Happy/Calm'])], LONDON, '2026-09-12');
+    expect(sep.cells.filter((c) => c !== null)).toHaveLength(3);
+  });
+
+  it('opens the current month when the log stopped in an earlier one', () => {
+    // A month with no readings at all still has to exist once today is in it,
+    // or the calendar's last page is a month you have already left.
+    const months = buildCalendar([doc('2026-08-31T09:00:00Z', ['Happy/Calm'])], LONDON, '2026-09-02');
+    expect(months.map((m) => m.key)).toEqual(['2026-08', '2026-09']);
+    const sep = months[1].cells.filter((c): c is CalendarDay => c !== null);
+    expect(sep.map((c) => c.dayOfMonth)).toEqual([1, 2]);
+    expect(sep.every((c) => c.checkins === 0)).toBe(true);
+  });
+
+  it('keeps a reading dated after today rather than trimming it away', () => {
+    // `last` is the LATER of the two, not `today`. A device with a fast clock,
+    // or a document synced from one, must not vanish from the grid.
+    const [sep] = buildCalendar([doc('2026-09-14T09:00:00Z', ['Happy/Calm'])], LONDON, '2026-09-12');
+    expect(sep.cells.filter((c) => c !== null)).toHaveLength(1);
+  });
+
+  it('stays empty for someone who has never checked in', () => {
+    // Today extends a log; it does not invent one. No readings must still mean
+    // no calendar, rather than a single lonely square.
+    expect(buildCalendar([], LONDON, '2026-09-12')).toEqual([]);
+  });
+
   it('keeps a fully skipped week between readings', () => {
     // Trimming is for the ends only. A week you skipped in the middle is a fact
     // about the log and has to stay, or the grid silently closes time up.
     const [sep] = buildCalendar(
       [doc('2026-09-01T09:00:00Z', ['Happy/Calm']), doc('2026-09-21T09:00:00Z', ['Happy/Calm'])],
       LONDON,
+      '2026-09-21',
     );
     const days = sep.cells.filter((c): c is CalendarDay => c !== null);
     expect(days).toHaveLength(21);
@@ -240,7 +290,7 @@ describe('buildCalendar', () => {
     // `score NaN–NaN`.
     const bare = { ...doc('2026-09-01T09:00:00Z', ['Happy/Calm']) } as Partial<WellbeingDoc>;
     delete bare.scoreTenths;
-    const [sep] = buildCalendar([bare as WellbeingDoc], LONDON);
+    const [sep] = buildCalendar([bare as WellbeingDoc], LONDON, '2026-09-01');
     const d = sep.cells.find((c) => c !== null)!;
     expect(d).toMatchObject({ checkins: 1, scored: 0, scoreLow: null, scoreHigh: null, spread: null });
     expect(d.bands).toHaveLength(1);
@@ -252,6 +302,7 @@ describe('buildCalendar', () => {
     const [sep] = buildCalendar(
       [doc('2026-09-01T09:00:00Z', ['Happy/Calm'], 45), bare as WellbeingDoc],
       LONDON,
+      '2026-09-01',
     );
     const d = sep.cells.find((c) => c !== null)!;
     expect(d).toMatchObject({ checkins: 2, scored: 1, scoreLow: 45, scoreHigh: 45, spread: 0 });
@@ -263,12 +314,13 @@ describe('buildCalendar', () => {
     const months = buildCalendar(
       [doc('2026-06-26T09:00:00Z', ['Happy/Calm']), doc('2026-09-11T09:00:00Z', ['Happy/Calm'])],
       LONDON,
+      '2026-09-11',
     );
     expect(months.map((m) => m.key)).toEqual(['2026-06', '2026-07', '2026-08', '2026-09']);
   });
 
   it('is empty for no readings at all', () => {
-    expect(buildCalendar([], LONDON)).toEqual([]);
+    expect(buildCalendar([], LONDON, '2026-09-12')).toEqual([]);
   });
 
   it('keeps every tag of the day, including one it could not colour', () => {
@@ -278,6 +330,7 @@ describe('buildCalendar', () => {
         doc('2026-09-07T14:00:00Z', ['Sad/Fragile', 'Surprised/In awe']),
       ],
       LONDON,
+      '2026-09-07',
     );
     expect(day(months, '2026-09-07')!.tokens).toEqual([
       'Happy/Mending',
@@ -289,7 +342,7 @@ describe('buildCalendar', () => {
 
 describe('tallyAcross', () => {
   const selectedFrom = (docs: Parameters<typeof buildCalendar>[0]): CalendarDay[] =>
-    buildCalendar(docs, LONDON)
+    buildCalendar(docs, LONDON, '2026-09-30')
       .flatMap((m) => m.cells)
       .filter((c): c is CalendarDay => c !== null && c.checkins > 0);
 

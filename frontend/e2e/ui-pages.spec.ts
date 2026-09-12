@@ -1206,11 +1206,17 @@ test('emotion calendar — the day grid and a selection fit @ phone width', asyn
   // Every month between the first and last reading is drawn, so ~80 days of
   // fixture must produce at least three month grids.
   expect(await page.locator('.cal .month').count()).toBeGreaterThanOrEqual(3);
-  // A skipped day renders as a box too — the gaps in the fixture. EXACTLY the
-  // two of them: `> 0` let a drifting fixture put readings into one gap and
-  // still pass, and then quietly took both. A count that names the number is
+  // A skipped day renders as a box too. EXACTLY three of them, and naming which
+  // three is the point: `> 0` let a drifting fixture put readings into one gap
+  // and still pass, and then quietly took both. A count that names the number is
   // the instrument; a count that names a floor is a hope.
-  expect(await page.locator('.box.empty').count()).toBe(2);
+  //
+  // The two deliberate gaps in CALENDAR_WELLBEING (`back` 17 and 44), plus
+  // TODAY — the fixture's newest reading is `back: 1`, so the current day has
+  // none, and since #1568 an unwritten today gets an empty square rather than
+  // falling off the end of the grid. This number moved from 2 to 3 on purpose;
+  // if it moves again, something changed the range and not the fixture.
+  expect(await page.locator('.box.empty').count()).toBe(3);
   // ⚠ Boxes that share a class must place their number identically. `.box` is on
   // a <button> for a real day and a <span> for a skipped one, and a button is
   // centred by the user agent where a span is not — so leaning on that default
