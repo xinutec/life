@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { AuthState } from './auth-state';
 import { guardAuth, startHttpReplication } from './replication';
-import type { SyncStatus } from './sync-status';
+import { SyncStatus } from './sync-status';
 
 /** Minimal Response stand-in — guardAuth classifies status/ok/redirected/headers. */
 function res(over: { status?: number; contentType?: string | null; redirected?: boolean }): Response {
@@ -174,11 +174,14 @@ describe('startHttpReplication — the pull keeps going', () => {
       identifier: 'poll-spec-sync',
       path: '/api/sync/entries',
       syncError: signal<string | null>(null),
-      // Structural stand-in, like `res()` above: the heartbeat needs the two
-      // reporting calls and nothing else, and constructing the real injectable
-      // would drag Angular's DI into a test about an interval.
-      syncStatus: { reportError: () => {}, clearError: () => {} } as unknown as SyncStatus,
-      label: 'poll spec',
+      // ⚠ The REAL SyncStatus, not a stand-in. This was
+      // `{reportError, clearError} as unknown as SyncStatus`, and the assertion
+      // made an incomplete object claim to be a complete one: the day
+      // `reportSuccess` was added, the stub silently lacked it and the pull
+      // handler threw `undefined is not a function` — which surfaced as a five
+      // second timeout, not as a compile error. A real instance cannot drift.
+      syncStatus: new SyncStatus(),
+      label: 'wellbeing sync',
       onAuthLost: () => {},
       pollMs,
     });

@@ -4,8 +4,9 @@ import { replicateRxCollection } from 'rxdb/plugins/replication';
 import { EMPTY, Observable, fromEvent, interval, map, merge } from 'rxjs';
 
 import { assertNever, classifyFetchResponse } from '../shared/api-error';
+import { PULL_INTERVAL_MS } from './cadence';
 import { isRecord, numberField } from '../shared/narrow';
-import { SyncStatus } from './sync-status';
+import { SyncSource, SyncStatus } from './sync-status';
 
 /** Auth guard for sync fetches. An expired session shows up two ways: our API
  *  returns 401/403 JSON, or a stale cookie 302-redirects to a login page that
@@ -57,8 +58,9 @@ export function startHttpReplication<T>(opts: {
   /** App-wide sync-health aggregator — every cycle reports success/failure here
    *  so the shell can show a persistent "not synced" indicator. */
   syncStatus: SyncStatus;
-  /** console.warn tag + sync-status source key, e.g. 'shopping sync'. */
-  label: string;
+  /** console.warn tag + sync-status source key. A closed union, because it
+   *  keys the status maps — see `SyncSource`. */
+  label: SyncSource;
   /** Raised once the server refuses us for want of a session. Replication then
    *  STOPS: a 401 is not a transient error, and retrying it on a timer forever
    *  neither recovers nor informs — it just burns a request every few seconds
@@ -96,7 +98,7 @@ export function startHttpReplication<T>(opts: {
   // conflict handler. The leader polls and the shared IndexedDB carries the
   // result to every tab.
   const heartbeat$: Observable<'RESYNC'> = merge(
-    interval(opts.pollMs ?? 60_000),
+    interval(opts.pollMs ?? PULL_INTERVAL_MS),
     // Coming back from offline should not wait out the rest of the interval.
     typeof window === 'undefined' ? EMPTY : fromEvent(window, 'online'),
   ).pipe(map(() => 'RESYNC' as const));
@@ -127,6 +129,10 @@ export function startHttpReplication<T>(opts: {
         if (documents === null || rev === null) throw new Error('pull returned a malformed batch');
         opts.syncError.set(null);
         opts.syncStatus.clearError(opts.label);
+        // ⚠ A cycle that SUCCEEDS has to say so, not merely fail to fail. A
+        // stall throws nothing, so `clearError` had nothing to clear and the
+        // indicator went on claiming "All changes synced." for a day (#1567).
+        opts.syncStatus.reportSuccess(opts.label);
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
         return { documents: documents as (T & { _deleted: boolean })[], checkpoint: { rev } };
       },
@@ -144,6 +150,7 @@ export function startHttpReplication<T>(opts: {
         if (!res.ok) throw new Error(`push failed: ${res.status}`);
         opts.syncError.set(null);
         opts.syncStatus.clearError(opts.label);
+        opts.syncStatus.reportSuccess(opts.label);
         // The push response is the server's conflict list — same wire contract
         // as the pull rows, checked for being a list at all.
         const conflicts: unknown = await res.json();

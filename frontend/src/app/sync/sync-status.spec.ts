@@ -53,3 +53,78 @@ describe('SyncStatus — persistent sync-health signal', () => {
     expect(s.health()).toBe('synced');
   });
 });
+
+/** REGRESSION — the indicator said "synced" for a day while the log was stale.
+ *
+ *  `health()` had two inputs, `online` and a map of errors, so it could only
+ *  ever mean "nothing has failed" — and it was rendered as "All changes
+ *  synced.", which claims something stronger: that this device holds what the
+ *  server holds. On 2026-09-12 those diverged for about 24 hours. Replication
+ *  had pulled once and stopped (#1567); nothing threw, so nothing was reported,
+ *  so the shell reassured. That is worse than saying nothing, and it is why a
+ *  missing calendar square was first diagnosed as a calendar bug.
+ *
+ *  A success now has a TIME, and an old one is a state of its own. */
+describe('SyncStatus — a success that has gone stale', () => {
+  const T0 = 1_800_000_000_000;
+
+  it('stays synced while the last success is recent', () => {
+    goOnline();
+    const s = new SyncStatus();
+    s.reportSuccess('wellbeing sync', T0);
+    s.refresh(T0 + 60_000);
+    expect(s.health()).toBe('synced');
+  });
+
+  it('goes stale once nothing has succeeded for long enough, and says how long', () => {
+    goOnline();
+    const s = new SyncStatus();
+    s.reportSuccess('wellbeing sync', T0);
+    s.refresh(T0 + 6 * 60_000);
+    expect(s.health()).toBe('stale');
+    expect(s.message()).toContain('6 minutes');
+  });
+
+  it('a fresh success clears it', () => {
+    goOnline();
+    const s = new SyncStatus();
+    s.reportSuccess('wellbeing sync', T0);
+    s.refresh(T0 + 6 * 60_000);
+    expect(s.health()).toBe('stale');
+    s.reportSuccess('wellbeing sync', T0 + 6 * 60_000);
+    expect(s.health()).toBe('synced');
+  });
+
+  it('takes the NEWEST success across collections, not the oldest', () => {
+    // Four collections replicate. One quiet store lagging is not the app being
+    // stale; every store lagging is. Keyed on the oldest, a store nobody has
+    // touched would put the whole app in a warning state permanently.
+    goOnline();
+    const s = new SyncStatus();
+    s.reportSuccess('todo sync', T0);
+    s.reportSuccess('wellbeing sync', T0 + 6 * 60_000);
+    s.refresh(T0 + 6 * 60_000);
+    expect(s.health()).toBe('synced');
+  });
+
+  it('offline and error both outrank it', () => {
+    goOnline();
+    const s = new SyncStatus();
+    s.reportSuccess('wellbeing sync', T0);
+    s.refresh(T0 + 6 * 60_000);
+    s.reportError('wellbeing sync', 'Server unreachable.');
+    expect(s.health()).toBe('error');
+    goOffline();
+    expect(s.health()).toBe('offline');
+    goOnline();
+  });
+
+  it('is not stale before anything has ever succeeded', () => {
+    // A tab that has not replicated yet is not a tab showing old data, and a
+    // warning in the first seconds after boot would train the eye to ignore it.
+    goOnline();
+    const s = new SyncStatus();
+    s.refresh(T0 + 60 * 60_000);
+    expect(s.health()).toBe('synced');
+  });
+});

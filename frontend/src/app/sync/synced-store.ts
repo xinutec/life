@@ -14,7 +14,7 @@ import { TrashKind } from '../models';
 import { AuthState } from './auth-state';
 import { LifeDb } from './life-db';
 import { startHttpReplication } from './replication';
-import { SyncStatus } from './sync-status';
+import { SyncSource, SyncStatus } from './sync-status';
 
 /** The identity + server-managed fields every synced document carries. A
  *  collection's editable *content* is `Omit<T, keyof SyncDoc>`. */
@@ -43,7 +43,7 @@ export interface SyncedCollectionConfig<T> {
   /** Sync endpoint, e.g. '/api/sync/shopping'. */
   path: string;
   /** console.warn tag + sync-status source key, e.g. 'shopping sync'. */
-  label: string;
+  label: SyncSource;
   /** Trash table this collection restores from — required to offer a restorable
    *  delete (see {@link undoDelete}); omit for insert/delete-only collections
    *  that never surface an Undo. */
