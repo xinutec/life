@@ -1,5 +1,6 @@
 import { signal } from '@angular/core';
 import { createRxDatabase, type RxCollection, type RxJsonSchema } from 'rxdb';
+import { replicateRxCollection } from 'rxdb/plugins/replication';
 import { getRxStorageMemory } from 'rxdb/plugins/storage-memory';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -201,6 +202,79 @@ describe('startHttpReplication — the pull keeps going', () => {
     const { db, pulls, replication } = await harness(10_000);
     await new Promise((r) => setTimeout(r, 300));
     expect(pulls).toHaveLength(1);
+    await replication.cancel();
+    await db.close();
+  });
+});
+
+/** The rxdb semantics `SyncedStore.reSync` depends on (#1567 tail).
+ *
+ *  `reSync()` emits `'RESYNC'` into a plain Subject that only the INTERNAL
+ *  replication subscribes to, and that object does not exist until `start()`.
+ *  So on a replication that has never started — which is every non-leader tab,
+ *  since `waitForLeadership` gates `start()` on winning the election — a
+ *  `reSync()` is dropped on the floor with no error.
+ *
+ *  That is not academic. The Trash page restores a row on the server, removes
+ *  the entry from the trash list, and relies entirely on the pull to bring the
+ *  row back: "so the restored row is on screen when the user switches tabs". In
+ *  a non-leader tab it does not come back.
+ *
+ *  `start()` covers both cases — `_start` re-syncs when `wasStarted` and begins
+ *  the replication otherwise — which is why the store calls that instead. This
+ *  test pins the library behaviour the choice rests on, so an rxdb upgrade that
+ *  changes it fails here rather than in the Trash page.
+ *
+ *  `autoStart: false` stands in for "waiting for leadership": in both cases the
+ *  replication object exists and has never run. */
+describe('rxdb: reSync on a replication that never started', () => {
+  async function parked() {
+    // ast-grep-ignore: life-single-rxdb
+    const db = await createRxDatabase({
+      name: `parked-spec-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      storage: getRxStorageMemory(),
+      multiInstance: false,
+    });
+    const added = await db.addCollections({
+      entries: {
+        schema: {
+          version: 0,
+          primaryKey: 'ulid',
+          type: 'object',
+          properties: { ulid: { type: 'string', maxLength: 26 }, rev: { type: 'number' } },
+          required: ['ulid', 'rev'],
+        } as RxJsonSchema<{ ulid: string; rev: number }>,
+      },
+    });
+    const pulls: number[] = [];
+    const replication = replicateRxCollection<{ ulid: string; rev: number }, { rev: number }>({
+      collection: added.entries as RxCollection<{ ulid: string; rev: number }>,
+      replicationIdentifier: 'parked-spec-sync',
+      live: true,
+      autoStart: false,
+      pull: {
+        handler: () => {
+          pulls.push(Date.now());
+          return Promise.resolve({ documents: [], checkpoint: { rev: 0 } });
+        },
+      },
+    });
+    return { db, pulls, replication };
+  }
+
+  it('drops the reSync silently', async () => {
+    const { db, pulls, replication } = await parked();
+    replication.reSync();
+    await new Promise((r) => setTimeout(r, 200));
+    expect(pulls).toHaveLength(0);
+    await replication.cancel();
+    await db.close();
+  });
+
+  it('but honours start(), which is why the store calls that', async () => {
+    const { db, pulls, replication } = await parked();
+    await replication.start();
+    await vi.waitFor(() => expect(pulls.length).toBeGreaterThanOrEqual(1), { timeout: 2000 });
     await replication.cancel();
     await db.close();
   });

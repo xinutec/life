@@ -139,9 +139,23 @@ export abstract class SyncedStore<T extends SyncDoc> {
   }
 
   /** Ask replication to pull now — e.g. right after a server-side trash restore,
-   *  so a resurrected row appears without waiting for the next natural sync. */
+   *  so a resurrected row appears without waiting for the next natural sync.
+   *
+   *  ⚠ **`start()`, NOT `reSync()`, and the difference is silent.** rxdb's
+   *  `reSync()` emits into a Subject that only the INTERNAL replication
+   *  subscribes to, and that object does not exist until the replication has
+   *  started. `waitForLeadership` defaults to true and this database is
+   *  multi-instance, so in every tab that did not win the election the call was
+   *  dropped on the floor with no error. The Trash page is where that showed:
+   *  it restores the row on the server, removes the entry from the trash list,
+   *  and relies entirely on this pull to bring the row back — so in a non-leader
+   *  tab it did not come back.
+   *
+   *  `start()` covers both: rxdb's `_start` re-syncs when it has already run and
+   *  begins the replication when it has not. `replication.spec.ts` pins that
+   *  behaviour, since this line depends on it. */
   reSync(): void {
-    this.replication?.reSync();
+    void this.replication?.start();
   }
 
   protected async find(key: string) {
