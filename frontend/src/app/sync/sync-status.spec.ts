@@ -128,3 +128,30 @@ describe('SyncStatus — a success that has gone stale', () => {
     expect(s.health()).toBe('synced');
   });
 });
+
+/** The icon was a ternary in the template, so `stale` inherited the error glyph
+ *  the day it was added — nobody chose it (#1571). A `Record` over `SyncHealth`
+ *  will not compile until a new state names its own, and these assertions say
+ *  which is which, so a change to any of them is deliberate. */
+describe('SyncStatus — every state names its own glyph', () => {
+  const T0 = 1_800_000_000_000;
+
+  it('synced, offline, error and stale are four different icons', () => {
+    goOnline();
+    const s = new SyncStatus();
+    expect(s.icon()).toBe('cloud_done');
+
+    s.reportSuccess('wellbeing sync', T0);
+    s.refresh(T0 + 6 * 60_000);
+    expect(s.health()).toBe('stale');
+    // A weaker claim than an error — "this may be old", not "something broke".
+    expect(s.icon()).toBe('history');
+
+    s.reportError('wellbeing sync', 'Server unreachable.');
+    expect(s.icon()).toBe('sync_problem');
+
+    goOffline();
+    expect(s.icon()).toBe('cloud_off');
+    goOnline();
+  });
+});

@@ -50,7 +50,7 @@
         [matTooltip]="sync.message()"
         [attr.aria-label]="sync.message()"
       >
-        <mat-icon>{{ sync.health() === 'offline' ? 'cloud_off' : 'sync_problem' }}</mat-icon>
+        <mat-icon>{{ sync.icon() }}</mat-icon>
       </span>
     }
     <button class="acct-btn" type="button" mat-icon-button [matMenuTriggerFor]="acct" aria-label="Account">

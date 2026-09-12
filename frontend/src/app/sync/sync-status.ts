@@ -92,6 +92,32 @@ export class SyncStatus {
     return this.staleMinutes() === null ? 'synced' : 'stale';
   });
 
+  /** The glyph each state shows, spelled out per state.
+   *
+   *  ⚠ **Exhaustive over `SyncHealth`, and that is the point.** This was a
+   *  ternary in the template — `health() === 'offline' ? 'cloud_off' :
+   *  'sync_problem'` — so when `'stale'` was added it silently inherited the
+   *  error glyph. Nobody chose it; it fell through. A `Record` keyed on the
+   *  union will not compile until a new state names its own icon.
+   *
+   *  `history` rather than `sync_problem` for stale, because the claim is
+   *  weaker: not "something failed" but "this may be old". The error state keeps
+   *  the alarming one, and keeps the only red.
+   *
+   *  The `synced` entry never draws — the shell renders the indicator only when
+   *  health is NOT synced — and is here so the map stays total over the union.
+   *  `history` is already used by the item sheet, so the glyph is known to
+   *  exist in the bundled font; a mis-named icon renders as its own name. */
+  readonly icon = computed<string>(
+    () =>
+      ({
+        synced: 'cloud_done',
+        offline: 'cloud_off',
+        error: 'sync_problem',
+        stale: 'history',
+      })[this.health()],
+  );
+
   /** A short human message for the current health — tooltip + aria-label. */
   readonly message = computed<string>(() => {
     if (!this.online()) {
