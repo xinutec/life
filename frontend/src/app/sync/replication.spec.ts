@@ -1,8 +1,11 @@
 import { signal } from '@angular/core';
+import { createRxDatabase, type RxCollection, type RxJsonSchema } from 'rxdb';
+import { getRxStorageMemory } from 'rxdb/plugins/storage-memory';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AuthState } from './auth-state';
-import { guardAuth } from './replication';
+import { guardAuth, startHttpReplication } from './replication';
+import type { SyncStatus } from './sync-status';
 
 /** Minimal Response stand-in — guardAuth classifies status/ok/redirected/headers. */
 function res(over: { status?: number; contentType?: string | null; redirected?: boolean }): Response {
@@ -117,5 +120,88 @@ describe('AuthState', () => {
     // shell must not thrash between states because three stores each said so.
     auth.lose();
     expect(auth.lost()).toBe(true);
+  });
+});
+
+/** REGRESSION — sync pulls once and then stops (#1567, found 2026-09-12).
+ *
+ *  `live: true` is not enough on its own. RxDB subscribes to an ongoing pull
+ *  only under `if (this.pull && this.pull.stream$ && this.live)`, so without a
+ *  stream the replication performs its FIRST pull and nothing after it, bar a
+ *  local write or an explicit `reSync()`. A tab left open therefore freezes at
+ *  whatever the server held when it loaded — silently, and read-only, with no
+ *  error anywhere. It showed up as a calendar missing the current day while the
+ *  phone had it: 248 documents locally against 249 on the server.
+ *
+ *  This drives the real function against a stubbed endpoint and asserts the one
+ *  thing the bug turned off — that a SECOND pull happens on its own. */
+describe('startHttpReplication — the pull keeps going', () => {
+  async function harness(pollMs: number) {
+    // ast-grep-ignore: life-single-rxdb
+    const db = await createRxDatabase({
+      name: `poll-spec-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      storage: getRxStorageMemory(),
+      // Leadership gates `start()` only when the database is multi-instance;
+      // off here so this test measures the heartbeat and not the election.
+      multiInstance: false,
+    });
+    const added = await db.addCollections({
+      entries: {
+        schema: {
+          version: 0,
+          primaryKey: 'ulid',
+          type: 'object',
+          properties: { ulid: { type: 'string', maxLength: 26 }, rev: { type: 'number' } },
+          required: ['ulid', 'rev'],
+        } as RxJsonSchema<{ ulid: string; rev: number }>,
+      },
+    });
+    const pulls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        pulls.push(String(url));
+        return Promise.resolve(
+          new Response(JSON.stringify({ documents: [], checkpoint: { rev: 0 } }), {
+            headers: { 'content-type': 'application/json' },
+          }),
+        );
+      }),
+    );
+    const replication = startHttpReplication({
+      collection: added.entries as RxCollection<{ ulid: string; rev: number }>,
+      identifier: 'poll-spec-sync',
+      path: '/api/sync/entries',
+      syncError: signal<string | null>(null),
+      // Structural stand-in, like `res()` above: the heartbeat needs the two
+      // reporting calls and nothing else, and constructing the real injectable
+      // would drag Angular's DI into a test about an interval.
+      syncStatus: { reportError: () => {}, clearError: () => {} } as unknown as SyncStatus,
+      label: 'poll spec',
+      onAuthLost: () => {},
+      pollMs,
+    });
+    await replication.awaitInitialReplication();
+    return { db, pulls, replication };
+  }
+
+  it('pulls again on its own after the first cycle', async () => {
+    const { db, pulls, replication } = await harness(40);
+    expect(pulls).toHaveLength(1);
+    await vi.waitFor(() => expect(pulls.length).toBeGreaterThanOrEqual(3), { timeout: 2000 });
+    expect(pulls.every((u) => u.startsWith('/api/sync/entries?since='))).toBe(true);
+    await replication.cancel();
+    await db.close();
+  });
+
+  it('waits for the interval rather than spinning', async () => {
+    // The other half of the same change: a stream that emitted immediately, or
+    // on every tick of something faster than it claims, would fix the freeze by
+    // hammering the server instead. One request per interval, no more.
+    const { db, pulls, replication } = await harness(10_000);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(pulls).toHaveLength(1);
+    await replication.cancel();
+    await db.close();
   });
 });

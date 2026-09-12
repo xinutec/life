@@ -1,6 +1,7 @@
 import { WritableSignal } from '@angular/core';
 import { RxCollection } from 'rxdb';
 import { replicateRxCollection } from 'rxdb/plugins/replication';
+import { EMPTY, Observable, fromEvent, interval, map, merge } from 'rxjs';
 
 import { assertNever, classifyFetchResponse } from '../shared/api-error';
 import { isRecord, numberField } from '../shared/narrow';
@@ -64,10 +65,41 @@ export function startHttpReplication<T>(opts: {
    *  until the tab is closed. Only a fresh login can help, so we say so and
    *  stand down. */
   onAuthLost: () => void;
+  /** How often to ask the server whether anything is new, in milliseconds.
+   *  Overridable only so tests need not wait a minute; nothing in the app sets
+   *  it. */
+  pollMs?: number;
 }) {
   // Set by the guard inside a handler; read in error$, which is where we have the
   // replication object to cancel.
   let authLost = false;
+
+  // ⚠ **`live: true` DOES NOT MEAN "keeps pulling", and this is the whole of
+  // #1567.** RxDB subscribes to an ongoing pull only under
+  // `if (this.pull && this.pull.stream$ && this.live)` — with no stream it
+  // performs the first pull and then nothing, bar a local write or an explicit
+  // `reSync()`. A tab left open froze at whatever the server held when it
+  // loaded: on 2026-09-12 the browser had 248 of the server's 249 check-ins and
+  // drew a calendar with no square for the current day, while the phone — a
+  // single WebView, so always its own leader and started that morning — had it.
+  // It fails silently and read-only, so nothing on screen tells the two apart.
+  //
+  // `reSync()` emits into `remoteEvents$`, which IS the internal
+  // `masterChangeStream$`, so a stream of 'RESYNC' is the mechanism the plugin
+  // intends rather than a timer bolted alongside it.
+  //
+  // ⚠ **`waitForLeadership` stays at its default of true.** With
+  // `multiInstance: true` that gates `start()` on winning the election, which
+  // is why a second tab pulls nothing at all — but leadership is also what
+  // stops N tabs pushing the same local changes at one endpoint. Curing a pull
+  // problem by turning it off would buy a push problem, paid for in the
+  // conflict handler. The leader polls and the shared IndexedDB carries the
+  // result to every tab.
+  const heartbeat$: Observable<'RESYNC'> = merge(
+    interval(opts.pollMs ?? 60_000),
+    // Coming back from offline should not wait out the rest of the interval.
+    typeof window === 'undefined' ? EMPTY : fromEvent(window, 'online'),
+  ).pipe(map(() => 'RESYNC' as const));
 
   const replication = replicateRxCollection<T, { rev: number }>({
     collection: opts.collection,
@@ -76,6 +108,7 @@ export function startHttpReplication<T>(opts: {
     retryTime: 5000,
     pull: {
       batchSize: 200,
+      stream$: heartbeat$,
       handler: async (checkpoint, batchSize) => {
         const since = checkpoint?.rev ?? 0;
         const res = await fetch(`${opts.path}?since=${since}&limit=${batchSize}`, {
