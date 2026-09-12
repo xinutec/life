@@ -75,8 +75,9 @@ in  { name = "life"
         G.Check::{
         , name = "tests (against a real MariaDB)"
         , argv =
-              G.inDevShell [ "nix", "run", "../dev-lint#with-test-db", "--" ]
-            # [ "--database"
+            G.withTestDb
+              "../"
+              [ "--database"
               , "life"
               , "--user"
               , "life"
@@ -180,7 +181,7 @@ in  { name = "life"
         , argv =
             [ "nix"
             , "develop"
-            , "../../recall#android"
+            , "git+file:../../recall?ref=HEAD#android"
             , "--no-warn-dirty"
             , "--command"
             , "./gradlew"

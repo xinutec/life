@@ -65,7 +65,7 @@
         "--command",
         "nix",
         "run",
-        "../dev-lint#with-test-db",
+        "git+file:../dev-lint?ref=HEAD#with-test-db",
         "--",
         "--database",
         "life",
@@ -226,7 +226,7 @@
       "argv": [
         "nix",
         "develop",
-        "../../recall#android",
+        "git+file:../../recall?ref=HEAD#android",
         "--no-warn-dirty",
         "--command",
         "./gradlew",
