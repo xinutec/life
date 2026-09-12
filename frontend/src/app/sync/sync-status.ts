@@ -83,7 +83,13 @@ export class SyncStatus {
     const last = this.freshest();
     if (last === null) return null;
     const age = this.now() - last;
-    return age > STALE_AFTER_MS ? Math.floor(age / 60_000) : null;
+    if (age <= STALE_AFTER_MS) return null;
+    // ⚠ Never zero. `Math.floor` of an age under a minute is 0, and "Nothing has
+    // synced for 0 minutes" is a sentence that says nothing is wrong while the
+    // icon says something is. Unreachable at the shipped five-minute threshold,
+    // and reachable the moment anybody shortens it — which is exactly how it was
+    // seen, driving the state with the cadence turned down to render it.
+    return Math.max(1, Math.floor(age / 60_000));
   });
 
   readonly health = computed<SyncHealth>(() => {

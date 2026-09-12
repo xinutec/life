@@ -374,6 +374,40 @@ async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/**', (r) =>
     r.request().method() === 'GET' ? r.fulfill({ json: [] }) : r.fulfill({ status: 204, body: '' }),
   );
+  // ⚠ **The catch-all above answers `[]`, and a sync pull needs the batch
+  // OBJECT.** `isRecord([])` is true (it only excludes null), so the array
+  // sailed past the guard, `documents` came back undefined, and every
+  // collection this fixture does not override failed its pull — three of four,
+  // in every test in this file, since the suite began. Nothing showed it: the
+  // goldens are of a sheet, not the shell, so the error indicator they would
+  // have carried was never in frame. A harness that renders the app in a
+  // permanently-erroring sync state is not rendering the app anybody sees.
+  //
+  // Registered AFTER the catch-all so it wins — Playwright matches the most
+  // recently added route first. A test needing real rows re-routes its own
+  // collection with `syncRoute`, which lands later still.
+  await page.route('**/api/sync/**', (r) => {
+    if (r.request().method() === 'POST') return r.fulfill({ json: [] });
+    const since = Number(new URL(r.request().url()).searchParams.get('since') ?? '0');
+    return r.fulfill({ json: { documents: [], checkpoint: { rev: since } } });
+  });
+  // ⚠ **The catch-all above answers `[]`, and a sync pull needs the batch
+  // OBJECT.** `isRecord([])` is true (it only excludes null), so the array
+  // sailed past the guard, `documents` came back undefined, and every
+  // collection this fixture does not override failed its pull — three of four,
+  // in every test in this file, since the suite began. Nothing showed it: the
+  // goldens are of a sheet, not the shell, so the error indicator they would
+  // have carried was never in frame. A harness that renders the app in a
+  // permanently-erroring sync state is not rendering the app anybody sees.
+  //
+  // Registered AFTER the catch-all so it wins — Playwright matches the most
+  // recently added route first. A test needing real rows re-routes its own
+  // collection with `syncRoute`, which lands later still.
+  await page.route('**/api/sync/**', (r) => {
+    if (r.request().method() === 'POST') return r.fulfill({ json: [] });
+    const since = Number(new URL(r.request().url()).searchParams.get('since') ?? '0');
+    return r.fulfill({ json: { documents: [], checkpoint: { rev: since } } });
+  });
   await page.route('**/api/me', (r) => r.fulfill({ json: ME }));
   // No worker in a test run: nothing suggested, nothing pretending to think.
   await page.route('**/api/wellbeing/suggest-emotions', (r) =>

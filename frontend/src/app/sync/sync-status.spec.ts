@@ -119,6 +119,19 @@ describe('SyncStatus — a success that has gone stale', () => {
     goOnline();
   });
 
+  it('never says zero minutes', () => {
+    // Seen by rendering it: with the cadence turned down to make the state
+    // reachable, the tooltip read "Nothing has synced for 0 minutes", which
+    // reassures while the icon warns. Unreachable at the shipped threshold and
+    // one shortening away from being reachable again.
+    goOnline();
+    const s = new SyncStatus();
+    s.reportSuccess('wellbeing sync', T0);
+    s.refresh(T0 + 6 * 60_000 + 1);
+    expect(s.message()).toContain('6 minutes');
+    expect(s.message()).not.toContain('0 minutes');
+  });
+
   it('is not stale before anything has ever succeeded', () => {
     // A tab that has not replicated yet is not a tab showing old data, and a
     // warning in the first seconds after boot would train the eye to ignore it.

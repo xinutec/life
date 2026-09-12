@@ -47,7 +47,14 @@ const TODO = {
 
 /** Minimal backend: the to-do sync serves the one seed doc; every other sync /
  *  read is empty so the stores settle without error. Incremental protocol, so
- *  the pull terminates instead of re-sending the seed forever. */
+ *  the pull terminates instead of re-sending the seed forever.
+ *
+ *  ⚠ **The collection is `todo-link`, with a HYPHEN** — `todo-link-store.ts`
+ *  says so. This read `todo_link*` and matched nothing, so that one pull fell
+ *  through to the catch-all's `[]`, which is an array where the handler needs
+ *  the batch object, and it failed every run. The claim above was false for one
+ *  of the four and nothing could show it: the golden is of a sheet, so the
+ *  shell's error indicator was never in frame. */
 async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/**', (r) =>
     r.request().method() === 'GET' ? r.fulfill({ json: [] }) : r.fulfill({ status: 204, body: '' }),
@@ -66,7 +73,7 @@ async function mockApi(page: Page): Promise<void> {
   };
   await page.route('**/api/sync/todo?*', sync([TODO]));
   await page.route('**/api/sync/todo', sync([TODO]));
-  await page.route('**/api/sync/todo_link*', sync([]));
+  await page.route('**/api/sync/todo-link*', sync([]));
   await page.route('**/api/sync/shopping*', sync([]));
   await page.route('**/api/sync/wellbeing*', sync([]));
 }
