@@ -820,6 +820,34 @@ test('inventory — items + places: lays out cleanly @ phone width', async ({ pa
   await expectNoHorizontalOverflow(page, testInfo);
 });
 
+// Every row action lives behind the ⋮ now, so the menu IS the interface — a row
+// whose only control does not open, or opens something that does not fit, leaves
+// the screen read-only. Naming the three items rather than counting them: a
+// count passes when the wrong one is present.
+test('inventory — the row menu opens and carries all three actions @ phone width', async ({
+  page,
+}, testInfo) => {
+  await mockApi(page);
+  await page.goto('/inventory');
+  await page.getByRole('button', { name: 'More actions for Milk (semi-skimmed)' }).click();
+  const menu = page.getByRole('menu');
+  await menu.waitFor();
+  // `waitFor` returns when the panel becomes VISIBLE, which is the START of its
+  // fade — measuring there reads a half-transparent menu with the list showing
+  // through, and leaves a screenshot that looks like a contrast bug.
+  await expect
+    .poll(() => menu.evaluate((el) => Number(getComputedStyle(el).opacity)))
+    .toBe(1);
+  for (const action of ['Record using some', 'Add to Buy list', 'Delete']) {
+    await expect(menu.getByRole('menuitem', { name: action })).toBeVisible();
+  }
+  // Scoped to the panel, as the sheet tests are: an open menu is OPAQUE and
+  // covers the list, but getClientRects cannot see occlusion, so a whole-page
+  // scan reads the covered rows as colliding with the menu drawn over them.
+  await expectNoTextOverlaps(page, testInfo, '.mat-mdc-menu-panel');
+  await expectNoClippedText(page, testInfo, '.mat-mdc-menu-panel');
+});
+
 // The product picker — successor to the Find-on-Waitrose dialog this oracle was
 // built for, whose outline "Search" label was sheared in half by
 // mat-dialog-content's zeroed top padding; nothing caught it until it shipped.

@@ -159,6 +159,45 @@ h3 {
   font-weight: 500;
 }
 
+// The second line of a list row: facts, then the expiry. Global, beside the
+// .expiry colours above, because All items and Inventory both need it and the
+// second one shipped without it — ellipsising at "1 bottle · Kitchen › …" and
+// cutting the expiry off an INVENTORY.
+//
+// ⚠ The class is repeated for the same reason `.expiry` above repeats it.
+// Material sets `.mdc-list-item__secondary-text { display: block }`, one class,
+// so a plain `.meta-line` ties and loses on source order. It only worked while
+// this lived in a component, where emulated encapsulation appends an attribute
+// and wins the tie for you; hoisting it here dropped that and the
+// month-precision expiry went straight back to spilling 73.9px off the edge.
+//
+// The second line of a row: facts, then the expiry. The expiry keeps its width
+// and the FACTS give way, because a truncated place name still tells you which
+// cupboard and a truncated expiry tells you nothing. A month-precision one is
+// the long case — "expired since June 2026" against "in 1d" — and it spilled 81
+// px past the right edge before this, ellipsised out of sight rather than shown.
+.meta-line.meta-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+
+  .facts {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .expiry {
+    flex: 0 0 auto;
+
+    &::before {
+      content: '· ';
+    }
+  }
+}
+
 // Emotion chips — the feelings-wheel grammar, shared by the picker dialog, the
 // wellbeing entry sheet and the timeline. Family hues approximate the printed
 // wheel; chips tint them over the surface via color-mix so both themes stay

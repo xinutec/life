@@ -32,21 +32,15 @@
           (keydown.space)="editItem(it); $event.preventDefault()"
           >{{ it.name }}</span
         >
-        <span matListItemLine>
-          {{ qty(it) }}
-          @if (it.location_id) { · {{ shortLoc(it.location_id) }} }
+        <span matListItemLine class="meta-line">
+          <span class="facts">
+            {{ qty(it) }}
+            @if (it.location_id) { · {{ shortLoc(it.location_id) }} }
+          </span>
           @if (it.expiry) {
-            · <span class="expiry" [class]="expiryOf(it).cls">{{ expiryOf(it).label }}</span>
+            <span class="expiry" [class]="expiryOf(it).cls">{{ expiryOf(it).label }}</span>
           }
         </span>
-        <button
-          matListItemMeta
-          mat-icon-button
-          (click)="useItem(it)"
-          [attr.aria-label]="'Record using some ' + it.name"
-        >
-          <mat-icon>remove_circle_outline</mat-icon>
-        </button>
         <button
           matListItemMeta
           mat-icon-button
@@ -62,12 +56,16 @@
 </section>
 
 <!-- Same shape as the Buy list's row menu, and for the same reason: Material
-     sizes the meta area to its content, so a third button was taken out of the
-     title's width and item names arrived as "Milk (…". Using some is the daily
-     action and stays on the row; the other two are occasional and destructive,
-     which is what a menu is for. -->
+     sizes the meta area to its content, so every button here is width taken off
+     the name, and item names were arriving as "Milk (…". All three actions live
+     in the menu and the row keeps ONE trailing control, which is what /items
+     does and what leaves room for the second line to say what it means. -->
 <mat-menu #itemMenu>
   <ng-template matMenuContent let-it="it">
+    <button mat-menu-item (click)="useItem(it)">
+      <mat-icon>remove_circle_outline</mat-icon>
+      <span>Record using some</span>
+    </button>
     <button mat-menu-item (click)="addToBuy(it)">
       <mat-icon>add_shopping_cart</mat-icon>
       <span>Add to Buy list</span>
