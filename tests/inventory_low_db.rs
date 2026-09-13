@@ -2,11 +2,8 @@
 //! LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on
 //! the SQL reads as a passing one.
 //!
-//! The event exists because the MEASUREMENT never arrives: `used` shipped
-//! 2026-07-31 and had not been written once six weeks later. Nobody logs pouring
-//! milk; everybody puts the empty thing on the shopping list. These assert the
-//! judgement is recorded, that it changes nothing else, and that recording it
-//! twice is allowed — a repeated one is signal, not an error.
+//! `low` exists because `used` never gets written — nobody logs pouring milk.
+//! These assert the judgement is recorded, changes nothing else, and may repeat.
 
 mod common;
 

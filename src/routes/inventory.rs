@@ -352,14 +352,9 @@ pub async fn mark_low_by_identity(
 
 /// POST /api/items/{id}/low → record that you judged this to be running out.
 ///
-/// Written when the item goes from the cupboard onto the Buy list, which is the
-/// moment the judgement is actually made. Returns 204: nothing about the item
-/// changed, and there is no new state for the caller to reconcile.
-///
-/// ⚠ Best-effort by design. The caller adds to the Buy list first and this
-/// second, and a failure here must not undo that — putting the thing on the
-/// list is what the person asked for, and the history row is a by-product they
-/// never see. A dropped signal costs one data point.
+/// 204: nothing about the item changes. ⚠ Callers treat a failure here as
+/// nothing — the Buy-list add is what was asked for, and a dropped signal costs
+/// one data point where an error box would cost trust.
 pub async fn mark_low(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,

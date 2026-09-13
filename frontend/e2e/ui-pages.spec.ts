@@ -1444,17 +1444,10 @@ test('emotion calendar — the day grid and a selection fit @ phone width', asyn
   expect(writes).toEqual([]);
 });
 
-// The house screen is the one route with no layout check at all, and the only
-// one whose main content is a WebGL canvas rather than DOM. Its three states
-// have never been rendered in CI.
-//
-// ⚠ What is NOT asserted here, deliberately: that the 3D scene looks right.
-// `expectCanvasLegible` reads pixels through a 2D context, which a three.js
-// canvas does not have, and `toDataURL` on a WebGL canvas comes back blank
-// unless `preserveDrawingBuffer` is set — which it is not, and turning it on to
-// satisfy a test would change the thing under test. So this checks the states
-// around the canvas, and says so, rather than claiming a pixel check it is not
-// making.
+// ⚠ The 3D scene is NOT pixel-checked. `expectCanvasLegible` reads through a 2D
+// context, which a WebGL canvas has not, and `toDataURL` returns blank without
+// `preserveDrawingBuffer` — enabling that would change the thing under test.
+// These cover the states around the canvas, and that it gets real size.
 const HOUSE_SCENE = {
   height: 2.4,
   rooms: [

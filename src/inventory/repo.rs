@@ -380,14 +380,10 @@ pub async fn update_item(
 
 /// Record `low` against whatever stocked item a Buy row names, if any.
 ///
-/// The judgement is made on the Buy list, where the item id is not to hand — and
-/// the client cannot resolve it either, because the Buy screen never loads the
-/// inventory catalogue. Matching here means it works from any client and any
-/// path, cached or not.
-///
-/// Identity is the list's own rule: catalog link, then barcode, then name,
-/// case-insensitive. `Ok(false)` = nothing stocked by that name, which is the
-/// ordinary case for a one-off purchase and not an error.
+/// ⚠ Matched here, not client-side: the Buy screen never loads the inventory
+/// catalogue, so a client match reads an empty store. Identity is the list's own
+/// rule — catalog link, barcode, then case-insensitive name. `Ok(false)` = a
+/// one-off purchase, which is ordinary.
 pub async fn mark_low_matching(
     pool: &MySqlPool,
     user_id: &str,
@@ -423,13 +419,9 @@ pub async fn mark_low_matching(
 
 /// Record that a stock row was judged to be running low.
 ///
-/// No quantity moves. This is a decision, not a measurement — see
-/// [`ItemEvent::Low`] — so there is nothing to lock and no transaction: one
-/// INSERT that says "on this date, you thought you were running out of this".
-/// Writing the same judgement twice in a day is not an error; the rhythm is read
-/// from the gaps between them, and a repeated one is itself a signal.
-///
-/// `Ok(false)` = no such live item for this user.
+/// A decision, not a measurement: nothing moves, so no transaction. Repeats are
+/// allowed — the rhythm is the gaps between them. `Ok(false)` = no such live
+/// item for this user.
 pub async fn mark_low(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
     // The location rides along so the history reads the same as every other
     // event, and so "ran out of the one in the fridge" stays answerable.
