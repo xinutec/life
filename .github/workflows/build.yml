@@ -12,6 +12,17 @@ name: build
 # the fresh image (:latest ⇒ imagePullPolicy: Always):
 #   ssh root@isis.xinutec.org "kubectl -n life rollout restart deploy/life-app \
 #     && kubectl -n life rollout status deploy/life-app --timeout=180s"
+# ⚠ Runs are serialised, newest wins. `:latest` is one mutable tag, so whichever
+# build finishes LAST is what the cluster pulls — and GitHub's queue does not
+# deliver in order. Measured 2026-09-13: three pushes ten minutes apart, and the
+# newest commit's build went green while its own ANCESTOR sat pending for over
+# forty minutes, ready to republish `:latest` from a superseded tree with nothing
+# in any diff to explain it. `cancel-in-progress` is right here because this
+# branch only ever ships its tip: an older run's image is never wanted.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
@@ -66,7 +77,13 @@ jobs:
         with:
           context: .
           push: true
-          tags: xinutec/life:latest
+          # The sha tag is not for deploying — the Deployment still pins
+          # `:latest`. It is so an image is IDENTIFIABLE after the fact: with one
+          # mutable tag, the only way to tell which commit a pod serves is to
+          # grep a string out of the bundle it happens to be serving.
+          tags: |
+            xinutec/life:latest
+            xinutec/life:${{ github.sha }}
           # Commit stamp for the build-version the app surfaces (Dockerfile ARG).
           build-args: |
             GIT_SHA=${{ github.sha }}
