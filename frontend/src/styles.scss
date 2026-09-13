@@ -172,10 +172,18 @@ h3 {
 // month-precision expiry went straight back to spilling 73.9px off the edge.
 //
 // The second line of a row: facts, then the expiry. The expiry keeps its width
-// and the FACTS give way, because a truncated place name still tells you which
-// cupboard and a truncated expiry tells you nothing. A month-precision one is
-// the long case — "expired since June 2026" against "in 1d" — and it spilled 81
-// px past the right edge before this, ellipsised out of sight rather than shown.
+// and the FACTS give way, because a HALF-shown expiry tells you nothing at all
+// while a half-shown fact line still leads with the quantity. A month-precision
+// expiry is the long case — "expired since June 2026" against "in 1d" — and it
+// spilled 81px past the right edge before this, ellipsised out of sight.
+//
+// ⚠ Know what this costs, because the first version of this comment did not.
+// It claimed a truncated fact line "still tells you which cupboard". Measured on
+// the rows where the rule actually bites, it does not: against a long expiry the
+// facts collapse to 46px and render as "1 box…", with the location and category
+// both gone. The trade is real and deliberate — an expiry is actionable and a
+// cupboard is a lookup you can do by opening the item — but it is a trade, not a
+// free win, and on those rows the location is simply not on the screen.
 .meta-line.meta-line {
   display: flex;
   align-items: baseline;
