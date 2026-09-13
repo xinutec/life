@@ -378,6 +378,47 @@ pub async fn update_item(
     get_item(pool, user_id, id).await
 }
 
+/// Record that a stock row was judged to be running low.
+///
+/// No quantity moves. This is a decision, not a measurement — see
+/// [`ItemEvent::Low`] — so there is nothing to lock and no transaction: one
+/// INSERT that says "on this date, you thought you were running out of this".
+/// Writing the same judgement twice in a day is not an error; the rhythm is read
+/// from the gaps between them, and a repeated one is itself a signal.
+///
+/// `Ok(false)` = no such live item for this user.
+pub async fn mark_low(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
+    // The location rides along so the history reads the same as every other
+    // event, and so "ran out of the one in the fridge" stays answerable.
+    // ⚠ A 1-tuple `query_as`, not `query_scalar`. Both express the same thing —
+    // "the row may be absent, and the column may be NULL" — but as
+    // `Option<Option<u64>>` the two Options are indistinguishable to
+    // DL-SQLX-ROW-TYPES, which peels every leading Option and then reads the
+    // target as a non-nullable `u64` against a NULLable column. The tuple stops
+    // the peeling at the right place, so the check sees what is actually there.
+    let row: Option<(Option<u64>,)> = sqlx::query_as(
+        "SELECT location_id FROM items WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
+    )
+    .bind(id)
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await?;
+    let Some((location_id,)) = row else {
+        return Ok(false);
+    };
+    sqlx::query(
+        "INSERT INTO item_history (item_id, user_id, location_id, event, quantity) \
+         VALUES (?, ?, ?, ?, NULL)",
+    )
+    .bind(id)
+    .bind(user_id)
+    .bind(location_id)
+    .bind(ItemEvent::Low)
+    .execute(pool)
+    .await?;
+    Ok(true)
+}
+
 /// Take an amount out of a stock row: "I used 200g of flour."
 ///
 /// The read and the write happen in one transaction, with the row locked, so

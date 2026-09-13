@@ -142,6 +142,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/items/{id}/move", post(inventory::move_item))
         .route("/items/{id}/use", post(inventory::use_item))
+        .route("/items/{id}/low", post(inventory::mark_low))
         .route("/recipes", get(recipes::list).post(recipes::create))
         .route(
             "/recipes/{id}",

@@ -167,6 +167,17 @@ str_enum! {
         /// Some of it was used up. The only event that carries a *delta* rather
         /// than a state: `quantity` is how much went, not how much is left.
         Used => "used",
+        /// You judged it to be running low, by putting it on the Buy list.
+        ///
+        /// ⚠ Not a measurement and not consumption — a DECISION, and the only
+        /// event here that records one. It exists because the measurement never
+        /// arrives: `used` shipped 2026-07-31 and had not been written once six
+        /// weeks later, because logging every time you pour milk is not a habit
+        /// anybody forms. Adding the thing to the Buy list is the same judgement,
+        /// it already happens, and it was being thrown away. Intervals between
+        /// these are a repurchase rhythm, which is what "running low" wanted the
+        /// consumption data for.
+        Low => "low",
     }
 }
 

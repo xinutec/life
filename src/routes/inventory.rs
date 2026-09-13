@@ -320,6 +320,28 @@ pub async fn move_item(
         .ok_or(AppError::NotFound)
 }
 
+/// POST /api/items/{id}/low → record that you judged this to be running out.
+///
+/// Written when the item goes from the cupboard onto the Buy list, which is the
+/// moment the judgement is actually made. Returns 204: nothing about the item
+/// changed, and there is no new state for the caller to reconcile.
+///
+/// ⚠ Best-effort by design. The caller adds to the Buy list first and this
+/// second, and a failure here must not undo that — putting the thing on the
+/// list is what the person asked for, and the history row is a by-product they
+/// never see. A dropped signal costs one data point.
+pub async fn mark_low(
+    State(app): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<u64>,
+) -> Result<StatusCode, AppError> {
+    if repo::mark_low(&app.pool, &user.user_id, id).await? {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(AppError::NotFound)
+    }
+}
+
 /// POST /api/items/{id}/use → take an amount out of a stock row.
 ///
 /// Returns the item as it now stands. A quantity the row can't be measured

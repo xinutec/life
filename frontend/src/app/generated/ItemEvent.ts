@@ -9,4 +9,4 @@
  * "how much is left" and "what am I running out of" answerable), so the set it
  * is keyed on should be something the compiler knows.
  */
-export type ItemEvent = "added" | "moved" | "removed" | "restored" | "used";
+export type ItemEvent = "added" | "moved" | "removed" | "restored" | "used" | "low";

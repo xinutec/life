@@ -102,6 +102,11 @@ export class LifeApi {
   useItem(id: number, quantity: number, unit: string | null): Observable<Item> {
     return this.http.post<Item>(`/api/items/${id}/use`, { quantity, unit });
   }
+
+  /** Record that you judged an item to be running out. 204, nothing changes. */
+  markLow(id: number): Observable<void> {
+    return this.http.post<void>(`/api/items/${id}/low`, {});
+  }
   /** What has happened to one stock row, newest first. Empty for a row added
    *  before the audit existed — "no history" is an answer, not a failure. */
   /** Everything the history dialog shows: the events, and what was paid. The

@@ -42,6 +42,9 @@ const SHAPE: Record<ItemEvent, { icon: string; verb: string }> = {
   used: { icon: 'remove_circle_outline', verb: 'Used' },
   removed: { icon: 'delete_outline', verb: 'Deleted' },
   restored: { icon: 'undo', verb: 'Restored' },
+  // A judgement, not a movement — the icon is a shopping trolley because that is
+  // literally what happened: it went on the Buy list.
+  low: { icon: 'add_shopping_cart', verb: 'Running low' },
 };
 
 /** Everything that has happened to one stock row.

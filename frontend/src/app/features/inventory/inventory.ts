@@ -188,6 +188,16 @@ export class Inventory {
       product_id: it.product_id,
     });
     this.feedback.notify(`Added ${it.name} to the Buy list.`);
+    // ⚠ AFTER the add, and its failure is swallowed on purpose. Putting the
+    // thing on the list is what was asked for; this is a by-product nobody sees,
+    // and a lost signal costs one data point where a surfaced error would cost
+    // trust in an action that worked. The signal itself is the whole reason the
+    // history table will ever hold anything: `used` shipped in July and had not
+    // been written once by September, because nobody logs pouring milk — but
+    // everybody puts the empty thing on the shopping list.
+    if (it.id !== undefined) {
+      this.api.markLow(it.id).subscribe({ error: () => undefined });
+    }
   }
 
   deleteItem(id: number): void {
