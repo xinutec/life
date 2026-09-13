@@ -481,6 +481,7 @@ test('to-do list — pills in rows: lays out cleanly @ phone width', async ({ pa
   await page.getByText('overdue', { exact: false }).first().waitFor();
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoClippedText(page, testInfo);
 });
 
 test('wellbeing — chart + timeline: lays out cleanly @ phone width', async ({ page }, testInfo) => {
@@ -491,6 +492,7 @@ test('wellbeing — chart + timeline: lays out cleanly @ phone width', async ({ 
   await page.getByText('Energy · last 7 days').waitFor();
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo, null, CHART_SCROLLERS);
+  await expectNoClippedText(page, testInfo);
 });
 
 test('wellbeing — after logging, saying more is one tap and the strip still works', async ({
@@ -639,6 +641,7 @@ test('wellbeing — the charts pan back through history, and the axis stays put'
 
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo, null, CHART_SCROLLERS);
+  await expectNoClippedText(page, testInfo);
 
   // Changing zoom while panned must re-seat the scroller. The window's end is a
   // timestamp, so it survives the change and the charts still look right — but
@@ -680,6 +683,7 @@ test('buy — list + bought bar: lays out cleanly @ phone width', async ({ page 
   await expect(page.getByRole('button', { name: 'Add to the list' })).toBeVisible();
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoClippedText(page, testInfo);
 });
 
 test('plan-a-trip sheet — shop, time and list lay out cleanly @ phone width', async ({
@@ -818,6 +822,7 @@ test('inventory — items + places: lays out cleanly @ phone width', async ({ pa
   await page.getByText('Kitchen › Fridge', { exact: true }).waitFor();
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoClippedText(page, testInfo);
 });
 
 // Every row action lives behind the ⋮ now, so the menu IS the interface — a row
@@ -1032,6 +1037,7 @@ test('all items — filter + brand + expiry rows: lays out cleanly @ phone width
   await page.getByText('Waitrose Essential', { exact: false }).waitFor();
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoClippedText(page, testInfo);
 });
 
 test('recipes — ingredient-chip cards: lays out cleanly @ phone width', async ({ page }, testInfo) => {
@@ -1041,6 +1047,7 @@ test('recipes — ingredient-chip cards: lays out cleanly @ phone width', async 
   await page.getByText('cookable with what', { exact: false }).waitFor();
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoClippedText(page, testInfo);
 });
 
 test('product page — prices, panel, chips: lays out cleanly @ phone width', async ({ page }, testInfo) => {
@@ -1063,6 +1070,7 @@ test('product page — prices, panel, chips: lays out cleanly @ phone width', as
   // as a collision. Overflow stays whole-page — that's the body scroller's job.
   await expectNoTextOverlaps(page, testInfo, 'app-product-page');
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoClippedText(page, testInfo);
 });
 
 test('product page — the Asda match reads cleanly @ phone width', async ({ page }, testInfo) => {
@@ -1075,6 +1083,7 @@ test('product page — the Asda match reads cleanly @ phone width', async ({ pag
   await page.getByText('same barcode', { exact: false }).waitFor();
   await expectNoTextOverlaps(page, testInfo, 'app-product-page');
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoClippedText(page, testInfo);
 });
 
 test('product page — the reconcile panel lays out cleanly @ phone width', async ({ page }, testInfo) => {
@@ -1113,6 +1122,7 @@ test('product page — the reconcile panel lays out cleanly @ phone width', asyn
   await page.getByRole('button', { name: 'Apply' }).waitFor();
   await expectNoTextOverlaps(page, testInfo, 'app-product-page');
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoClippedText(page, testInfo);
 });
 
 test('trash — restorable rows: lays out cleanly @ phone width', async ({ page }, testInfo) => {
@@ -1121,6 +1131,7 @@ test('trash — restorable rows: lays out cleanly @ phone width', async ({ page 
   await page.getByText('Oat milk', { exact: false }).waitFor();
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoClippedText(page, testInfo);
 });
 
 test('conflicts — kept/theirs cards: lays out cleanly @ phone width', async ({ page }, testInfo) => {
@@ -1130,6 +1141,7 @@ test('conflicts — kept/theirs cards: lays out cleanly @ phone width', async ({
   await page.getByRole('button', { name: 'Use theirs' }).waitFor();
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoClippedText(page, testInfo);
 });
 
 // The emotion picker is the layout class that breaks silently: a full-screen
@@ -1203,6 +1215,7 @@ test('emotion picker ⓘ — the gloss opens in place, one at a time @ phone wid
 
   // An open gloss must not widen the surface.
   await expectNoHorizontalOverflow(page, testInfo, '.picker');
+  await expectNoClippedText(page, testInfo, '.picker');
   await expectNoTextOverlaps(page, testInfo, '.picker .body');
 
   // The same ⓘ closes it.
@@ -1241,6 +1254,7 @@ test('to-do detail — tapping a to-do opens a clean edit sheet @ phone width', 
   await expectNoTextOverlaps(page, testInfo, '.detail');
   // The sheet's content must fit the sheet's width, whatever it works out to.
   await expectNoHorizontalOverflow(page, testInfo, '.detail');
+  await expectNoClippedText(page, testInfo, '.detail');
   // And the page as a whole must never scroll sideways.
   await expectNoHorizontalOverflow(page, testInfo);
 
