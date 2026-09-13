@@ -198,6 +198,17 @@ h3 {
   }
 }
 
+// The house screen's WebGL canvas. Global, and it has to be: three.js APPENDS
+// the element at runtime, so it carries no `_ngcontent` attribute and no scoped
+// selector in the component can reach it. It read `:global(canvas)` in
+// house.scss for as long as it existed and compiled to NOTHING — zero
+// occurrences survive into the built CSS — so the rule had never once applied.
+// `::ng-deep` would work and is what DL-SCSS-NG-DEEP exists to refuse.
+// Without it the canvas is inline, sits on a text baseline and leaves a gap.
+app-house .canvas canvas {
+  display: block;
+}
+
 // Emotion chips — the feelings-wheel grammar, shared by the picker dialog, the
 // wellbeing entry sheet and the timeline. Family hues approximate the printed
 // wheel; chips tint them over the surface via color-mix so both themes stay

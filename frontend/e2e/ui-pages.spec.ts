@@ -1432,3 +1432,74 @@ test('emotion calendar — the day grid and a selection fit @ phone width', asyn
   await expect(page.locator('.selection .emo')).not.toHaveCount(0);
   expect(writes).toEqual([]);
 });
+
+// The house screen is the one route with no layout check at all, and the only
+// one whose main content is a WebGL canvas rather than DOM. Its three states
+// have never been rendered in CI.
+//
+// ⚠ What is NOT asserted here, deliberately: that the 3D scene looks right.
+// `expectCanvasLegible` reads pixels through a 2D context, which a three.js
+// canvas does not have, and `toDataURL` on a WebGL canvas comes back blank
+// unless `preserveDrawingBuffer` is set — which it is not, and turning it on to
+// satisfy a test would change the thing under test. So this checks the states
+// around the canvas, and says so, rather than claiming a pixel check it is not
+// making.
+const HOUSE_SCENE = {
+  height: 2.4,
+  rooms: [
+    {
+      name: 'Kitchen',
+      start: [0, 0] as [number, number],
+      walls: [
+        [3.2, 0],
+        [0, 2.8],
+        [-3.2, 0],
+        [0, -2.8],
+      ] as [number, number][],
+    },
+  ],
+  furniture: [{ cx: 1.6, cz: 0.6, w: 0.6, d: 0.6, h: 0.9 }],
+};
+
+test('house — a 404 reads as "no layout yet", not as an error @ phone width', async ({
+  page,
+}, testInfo) => {
+  await mockApi(page);
+  // 404 is the ABSENT case and must stay distinguishable from offline, which is
+  // the whole reason the component branches on it.
+  await page.route('**/api/house', (r) => r.fulfill({ status: 404, body: '' }));
+  await page.goto('/house');
+  await page.getByText('No house layout yet.').waitFor();
+  await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoClippedText(page, testInfo);
+});
+
+test('house — a 500 offers a retry rather than claiming the house is empty', async ({ page }) => {
+  await mockApi(page);
+  await page.route('**/api/house', (r) => r.fulfill({ status: 500, body: '' }));
+  await page.goto('/house');
+  // The distinction the component exists to make: a failed load must never read
+  // as "you have not built one yet".
+  await expect(page.getByText('No house layout yet.')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /retry|try again/i })).toBeVisible();
+});
+
+test('house — a scene gives the canvas real size and no layout faults @ phone width', async ({
+  page,
+}, testInfo) => {
+  await mockApi(page);
+  await page.route('**/api/house', (r) => r.fulfill({ json: HOUSE_SCENE }));
+  await page.goto('/house');
+  const canvas = page.locator('.canvas canvas');
+  await canvas.waitFor();
+  // A zero-height canvas is the failure this catches: the host is sized by CSS,
+  // and three.js takes its size from the host at init, so a layout regression
+  // upstream leaves a renderer drawing into nothing while the page looks fine.
+  const box = await canvas.boundingBox();
+  expect(box?.width ?? 0).toBeGreaterThan(200);
+  expect(box?.height ?? 0).toBeGreaterThan(200);
+  await expect(page.getByText('No house layout yet.')).toHaveCount(0);
+  await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo);
+});

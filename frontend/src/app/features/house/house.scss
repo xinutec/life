@@ -16,15 +16,33 @@
   position: absolute;
   inset: 0;
 
-  :global(canvas) {
-    display: block;
-  }
+  // The canvas itself is styled from styles.scss, not here — see the note there.
+  // This said `:global(canvas)` and compiled to NOTHING.
 }
 
 // The shared loading/error/empty triad, floated over the canvas (which is
 // absolutely positioned and would otherwise paint above in-flow content).
+//
+// ⚠ The theme's colours are wrong HERE and only here. <app-list-state> sets
+// `color: var(--mat-sys-on-surface-variant)` on its own `.state`, chosen to sit
+// on the app's surface — but on this screen it lands on the three.js scene, a
+// hardcoded #101418 the theme knows nothing about. Measured: rgb(67,72,63) on
+// rgb(16,20,24) is **1.97:1** at 14px, against the 4.5:1 AA asks for.
+//
+// The token is not wrong, the BACKDROP moved, so this redefines the token for
+// this subtree rather than reaching into the child with `::ng-deep`: a custom
+// property inherits across a component boundary, where a scoped selector cannot,
+// and it keeps the child free to decide what it does with its own colours. Fixed
+// values, not tokens, because NO token can serve here: the scene is #101418 in
+// both schemes, so `inverse-on-surface` — the one token meaning "text on a dark
+// surface" — is correct in light mode and inverts to dark in dark mode, exactly
+// where it must not. A token that is right half the time is worse than a waived
+// constant. The real removal is making the scene follow the theme, which is a
+// house.ts change and not this one.
 .status {
   position: absolute;
   inset: 0 0 auto 0;
   z-index: 1;
+  // dev-lint: allow-hardcoded-color the scene is a fixed dark surface in BOTH schemes
+  --mat-sys-on-surface-variant: #e3e6e8;
 }
