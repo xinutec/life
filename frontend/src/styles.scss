@@ -159,31 +159,14 @@ h3 {
   font-weight: 500;
 }
 
-// The second line of a list row: facts, then the expiry. Global, beside the
-// .expiry colours above, because All items and Inventory both need it and the
-// second one shipped without it — ellipsising at "1 bottle · Kitchen › …" and
-// cutting the expiry off an INVENTORY.
+// A list row's second line: facts, then expiry. The expiry keeps its width and
+// the facts give way — against a long expiry they collapse to "1 box…", losing
+// the location. Deliberate: an expiry is actionable, a cupboard is a lookup.
 //
-// ⚠ The class is repeated for the same reason `.expiry` above repeats it.
-// Material sets `.mdc-list-item__secondary-text { display: block }`, one class,
-// so a plain `.meta-line` ties and loses on source order. It only worked while
-// this lived in a component, where emulated encapsulation appends an attribute
-// and wins the tie for you; hoisting it here dropped that and the
-// month-precision expiry went straight back to spilling 73.9px off the edge.
-//
-// The second line of a row: facts, then the expiry. The expiry keeps its width
-// and the FACTS give way, because a HALF-shown expiry tells you nothing at all
-// while a half-shown fact line still leads with the quantity. A month-precision
-// expiry is the long case — "expired since June 2026" against "in 1d" — and it
-// spilled 81px past the right edge before this, ellipsised out of sight.
-//
-// ⚠ Know what this costs, because the first version of this comment did not.
-// It claimed a truncated fact line "still tells you which cupboard". Measured on
-// the rows where the rule actually bites, it does not: against a long expiry the
-// facts collapse to 46px and render as "1 box…", with the location and category
-// both gone. The trade is real and deliberate — an expiry is actionable and a
-// cupboard is a lookup you can do by opening the item — but it is a trade, not a
-// free win, and on those rows the location is simply not on the screen.
+// ⚠ The class is repeated to beat Material's one-class
+// `.mdc-list-item__secondary-text { display: block }`, which a plain
+// `.meta-line` ties and loses to on source order. Inside a component,
+// encapsulation won that tie for you; here nothing does.
 .meta-line.meta-line {
   display: flex;
   align-items: baseline;
@@ -206,13 +189,10 @@ h3 {
   }
 }
 
-// The house screen's WebGL canvas. Global, and it has to be: three.js APPENDS
-// the element at runtime, so it carries no `_ngcontent` attribute and no scoped
-// selector in the component can reach it. It read `:global(canvas)` in
-// house.scss for as long as it existed and compiled to NOTHING — zero
-// occurrences survive into the built CSS — so the rule had never once applied.
-// `::ng-deep` would work and is what DL-SCSS-NG-DEEP exists to refuse.
-// Without it the canvas is inline, sits on a text baseline and leaves a gap.
+// The house screen's WebGL canvas, which three.js appends at runtime — so it has
+// no `_ngcontent` attribute and nothing scoped in the component can reach it.
+// Global is the only option: `::ng-deep` is what DL-SCSS-NG-DEEP refuses, and
+// `:global()` is not Angular syntax and compiles to nothing.
 app-house .canvas canvas {
   display: block;
 }
