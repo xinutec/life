@@ -891,9 +891,12 @@ early rather than leaning on the margin.
       - Applied as **deltas** with a floor (`GREATEST(quantity - ?, 0)`) in one
         transaction, so no arithmetic here can leave a negative amount of flour
         in a cupboard.
-- [ ] **Shopping list refinements** — low-stock auto-suggestions, which are only
-      worth building once the two consumption paths above have produced real
-      history to derive a rate from — otherwise it is a guess wearing a number.
+- [ ] **Shopping list refinements** — low-stock auto-suggestions, which need
+      history to derive from, or they are a guess wearing a number. ⚠ Derive from
+      `ItemEvent::Low`, not from the consumption paths above: `used` went six
+      weeks without a single row, because nobody logs pouring milk. `low` is
+      written whenever something goes on the Buy list, which already happens, and
+      the interval between them is the rhythm (#128).
       Originally scoped as ~~Add a
       recipe's missing ingredients to the Buy list in one tap~~ DONE 2026-07-27
       (the shopping-list panel on a recipe card grows an "Add N to Buy" button;
