@@ -111,6 +111,11 @@ export class ShoppingItemSheet {
     }
     // Optimistic, local — succeeds offline. Stay open for the next item.
     void this.store.add(fields);
+    // Putting a thing on the list IS "I am running out of it". The server works
+    // out whether the cupboard holds it; best-effort, never surfaced.
+    this.api
+      .markLowByIdentity({ name, barcode, product_id: this.productId() })
+      .subscribe({ error: () => undefined });
     this.feedback.notify(`Added ${name}`);
     this.name.set('');
     this.quantity.set(null);

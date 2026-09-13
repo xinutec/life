@@ -107,6 +107,16 @@ export class LifeApi {
   markLow(id: number): Observable<void> {
     return this.http.post<void>(`/api/items/${id}/low`, {});
   }
+
+  /** The same, from the Buy list, where only the row's identity is to hand. The
+   *  server matches it to a stocked item; 204 whether or not one exists. */
+  markLowByIdentity(identity: {
+    name: string;
+    barcode: string | null;
+    product_id: number | null;
+  }): Observable<void> {
+    return this.http.post<void>('/api/items/low', identity);
+  }
   /** What has happened to one stock row, newest first. Empty for a row added
    *  before the audit existed — "no history" is an answer, not a failure. */
   /** Everything the history dialog shows: the events, and what was paid. The

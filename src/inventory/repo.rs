@@ -378,6 +378,49 @@ pub async fn update_item(
     get_item(pool, user_id, id).await
 }
 
+/// Record `low` against whatever stocked item a Buy row names, if any.
+///
+/// The judgement is made on the Buy list, where the item id is not to hand — and
+/// the client cannot resolve it either, because the Buy screen never loads the
+/// inventory catalogue. Matching here means it works from any client and any
+/// path, cached or not.
+///
+/// Identity is the list's own rule: catalog link, then barcode, then name,
+/// case-insensitive. `Ok(false)` = nothing stocked by that name, which is the
+/// ordinary case for a one-off purchase and not an error.
+pub async fn mark_low_matching(
+    pool: &MySqlPool,
+    user_id: &str,
+    name: &str,
+    barcode: Option<&str>,
+    product_id: Option<u64>,
+) -> Result<bool> {
+    // Strongest key first, so a renamed row still resolves by barcode or link.
+    let row: Option<(u64,)> = sqlx::query_as(
+        "SELECT id FROM items \
+         WHERE user_id = ? AND deleted_at IS NULL \
+           AND (  (? IS NOT NULL AND product_id = ?) \
+               OR (? IS NOT NULL AND barcode = ?) \
+               OR LOWER(name) = LOWER(?)) \
+         ORDER BY (product_id <=> ?) DESC, (barcode <=> ?) DESC \
+         LIMIT 1",
+    )
+    .bind(user_id)
+    .bind(product_id)
+    .bind(product_id)
+    .bind(barcode)
+    .bind(barcode)
+    .bind(name.trim())
+    .bind(product_id)
+    .bind(barcode)
+    .fetch_optional(pool)
+    .await?;
+    let Some((id,)) = row else {
+        return Ok(false);
+    };
+    mark_low(pool, user_id, id).await
+}
+
 /// Record that a stock row was judged to be running low.
 ///
 /// No quantity moves. This is a decision, not a measurement — see

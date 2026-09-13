@@ -320,6 +320,36 @@ pub async fn move_item(
         .ok_or(AppError::NotFound)
 }
 
+/// What a Buy row calls itself — enough to find the cupboard row it names.
+#[derive(Debug, Deserialize)]
+pub struct LowByIdentity {
+    pub name: String,
+    #[serde(default)]
+    pub barcode: Option<String>,
+    #[serde(default)]
+    pub product_id: Option<u64>,
+}
+
+/// POST /api/items/low → the same judgement, made from the Buy list.
+///
+/// 204 whether or not anything matched: a one-off purchase that is not in the
+/// cupboard is the ordinary case, and the caller has nothing to do differently.
+pub async fn mark_low_by_identity(
+    State(app): State<AppState>,
+    AuthUser(user): AuthUser,
+    Json(body): Json<LowByIdentity>,
+) -> Result<StatusCode, AppError> {
+    repo::mark_low_matching(
+        &app.pool,
+        &user.user_id,
+        &body.name,
+        body.barcode.as_deref(),
+        body.product_id,
+    )
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// POST /api/items/{id}/low → record that you judged this to be running out.
 ///
 /// Written when the item goes from the cupboard onto the Buy list, which is the

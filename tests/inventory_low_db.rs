@@ -101,3 +101,77 @@ async fn an_unknown_item_says_so_rather_than_writing_a_row() {
         "no such item"
     );
 }
+
+// ---- matching a Buy row to the cupboard ------------------------------------
+
+async fn lows_for(pool: &sqlx::MySqlPool, user: &str) -> i64 {
+    sqlx::query_scalar(
+        "SELECT COUNT(*) FROM item_history h JOIN items i ON i.id = h.item_id \
+         WHERE i.user_id = ? AND h.event = 'low'",
+    )
+    .bind(user)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn a_buy_row_naming_a_stocked_item_marks_it_low() {
+    // The judgement is made on the Buy list, where no item id is to hand — and
+    // the client cannot supply one, because that screen never loads the
+    // catalogue. Case and surrounding space must not decide it.
+    let pool = connect().await;
+    let user = "test-user-low-match";
+    fresh(&pool, user).await;
+    let item = repo::create_item(&pool, user, milk())
+        .await
+        .expect("create");
+
+    assert!(
+        repo::mark_low_matching(&pool, user, "  MILK (semi-skimmed) ", None, None)
+            .await
+            .expect("match")
+    );
+    assert_eq!(lows_for(&pool, user).await, 1);
+    let after = repo::get_item(&pool, user, item.id)
+        .await
+        .expect("get")
+        .expect("live");
+    assert_eq!(after.quantity, Some(1.0), "quantity untouched");
+}
+
+#[tokio::test]
+async fn a_one_off_purchase_matches_nothing_and_is_not_an_error() {
+    let pool = connect().await;
+    let user = "test-user-low-nomatch";
+    fresh(&pool, user).await;
+    repo::create_item(&pool, user, milk())
+        .await
+        .expect("create");
+
+    assert!(
+        !repo::mark_low_matching(&pool, user, "Birthday candles", None, None)
+            .await
+            .expect("query")
+    );
+    assert_eq!(lows_for(&pool, user).await, 0);
+}
+
+#[tokio::test]
+async fn another_users_cupboard_is_never_matched() {
+    let pool = connect().await;
+    let mine = "test-user-low-mine";
+    let theirs = "test-user-low-theirs";
+    fresh(&pool, mine).await;
+    fresh(&pool, theirs).await;
+    repo::create_item(&pool, theirs, milk())
+        .await
+        .expect("create");
+
+    assert!(
+        !repo::mark_low_matching(&pool, mine, "Milk (semi-skimmed)", None, None)
+            .await
+            .expect("query")
+    );
+    assert_eq!(lows_for(&pool, theirs).await, 0);
+}

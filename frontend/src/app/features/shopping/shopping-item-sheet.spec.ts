@@ -39,6 +39,7 @@ describe('ShoppingItemSheet', () => {
         of({ id: 42, barcode: opts.scanned, name: 'Nomadic', brand: 'Lassi', quantity_label: null, has_image: false }),
       ),
       productImageUrl: (b: string) => `/api/products/${b}/image`,
+      markLowByIdentity: vi.fn(() => of(undefined)),
     };
     const store = {
       items$: of(opts.items ?? []),
@@ -59,7 +60,7 @@ describe('ShoppingItemSheet', () => {
     // The sheet imports MatDialogModule, which re-provides the real MatDialog at
     // the component injector — overrideProvider forces our stub at every level.
     TestBed.overrideProvider(MatDialog, { useValue: dialog });
-    return { fixture: TestBed.createComponent(ShoppingItemSheet), store, ref };
+    return { fixture: TestBed.createComponent(ShoppingItemSheet), store, ref, api };
   }
 
   it('fills the barcode field and prefills the name from the scanned product', async () => {
@@ -106,6 +107,21 @@ describe('ShoppingItemSheet', () => {
     expect(ref.dismiss).not.toHaveBeenCalled();
     expect(c.name()).toBe('');
     expect(c.quantity()).toBeNull();
+  });
+
+  it('add mode: tells the server the row may name something stocked', () => {
+    // Putting a thing on the list IS "I am running out of it" (#128). The
+    // matching is the server's — the Buy screen never loads the catalogue — so
+    // what this asserts is that the identity leaves the client at all.
+    const { fixture, api } = setup();
+    const c = fixture.componentInstance;
+    c.name.set(' Milk ');
+    c.save();
+    expect(api.markLowByIdentity).toHaveBeenCalledWith({
+      name: 'Milk',
+      barcode: null,
+      product_id: null,
+    });
   });
 
   it('add mode: ignores an empty name', () => {
