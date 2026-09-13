@@ -74,3 +74,19 @@
     padding-block: 0.5rem;
   }
 }
+
+// Same shear as .bins below, on the to-do titles: Material's list title is
+// nowrap + ellipsis, so "Call the GP about the referral letter" arrived as
+// "Call the GP abo…". A to-do you cannot read is not a reminder. Wrapping is
+// unbounded on purpose — a two-line clamp reads as a limit and, on a
+// blockified flex item, silently enforces nothing.
+.attention {
+  .tappable {
+    white-space: normal;
+  }
+
+  mat-list-item {
+    height: auto;
+    padding-block: 0.5rem;
+  }
+}

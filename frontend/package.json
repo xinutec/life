@@ -31,7 +31,7 @@
     "@angular/router": "^22.0.4",
     "@angular/service-worker": "^22.0.4",
     "@fontsource/roboto": "^5.2.10",
-    "@xinutec/ui-harness": "github:xinutec/ui-harness#370cf4e99d1acf0e4fd00bcbe4a39ace2da234a8",
+    "@xinutec/ui-harness": "github:xinutec/ui-harness#c2696bc93ba08f8b1b89014db11c8372e58549ad",
     "dexie": "^4.4.4",
     "material-icons": "^1.13.14",
     "rxdb": "^17.3.0",
