@@ -3,6 +3,7 @@ import { MatBottomSheet, MatBottomSheetModule } from "@angular/material/bottom-s
 import { MatButtonModule } from "@angular/material/button";
 import { MatIconModule } from "@angular/material/icon";
 import { MatListModule } from "@angular/material/list";
+import { MatMenuModule } from "@angular/material/menu";
 
 import { amount } from "../../shared/amount";
 import { onlineHint } from "../../shared/api-error";
@@ -27,6 +28,7 @@ import { UseSheet, UseSheetData } from "./use-sheet";
     MatListModule,
     MatIconModule,
     MatButtonModule,
+    MatMenuModule,
     ProductThumb,
     ListState,
   ],

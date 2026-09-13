@@ -50,18 +50,34 @@
         <button
           matListItemMeta
           mat-icon-button
-          (click)="addToBuy(it)"
-          aria-label="Add to Buy list"
+          [matMenuTriggerFor]="itemMenu"
+          [matMenuTriggerData]="{ it }"
+          [attr.aria-label]="'More actions for ' + it.name"
         >
-          <mat-icon>add_shopping_cart</mat-icon>
-        </button>
-        <button matListItemMeta mat-icon-button (click)="deleteItem(it.id)" aria-label="Delete">
-          <mat-icon>delete</mat-icon>
+          <mat-icon>more_vert</mat-icon>
         </button>
       </mat-list-item>
     }
   </mat-list>
 </section>
+
+<!-- Same shape as the Buy list's row menu, and for the same reason: Material
+     sizes the meta area to its content, so a third button was taken out of the
+     title's width and item names arrived as "Milk (…". Using some is the daily
+     action and stays on the row; the other two are occasional and destructive,
+     which is what a menu is for. -->
+<mat-menu #itemMenu>
+  <ng-template matMenuContent let-it="it">
+    <button mat-menu-item (click)="addToBuy(it)">
+      <mat-icon>add_shopping_cart</mat-icon>
+      <span>Add to Buy list</span>
+    </button>
+    <button mat-menu-item (click)="deleteItem(it.id)">
+      <mat-icon>delete</mat-icon>
+      <span>Delete</span>
+    </button>
+  </ng-template>
+</mat-menu>
 
 <section>
   <h3>Places</h3>

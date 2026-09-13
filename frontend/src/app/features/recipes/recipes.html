@@ -24,7 +24,7 @@
         }
       </mat-card-title>
       @if (recipe.servings) {
-        <mat-card-subtitle>{{ recipe.servings }} servings</mat-card-subtitle>
+        <mat-card-subtitle>{{ recipe.servings }} serving{{ recipe.servings === 1 ? '' : 's' }}</mat-card-subtitle>
       }
     </mat-card-header>
 
