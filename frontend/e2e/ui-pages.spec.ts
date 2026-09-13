@@ -10,6 +10,7 @@ import {
   expectNoHorizontalOverflow,
   expectNoClippedText,
   expectNoOccludedControls,
+  expectNoStarvedText,
   expectViewportIsPhone,
 } from '@xinutec/ui-harness';
 
@@ -472,6 +473,9 @@ test('today — busy composition: lays out cleanly @ phone width', async ({ page
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
   await expectNoClippedText(page, testInfo);
+  // #1577 was this screen shearing 65-75% off every to-do title, on a green gate.
+  // Nothing here truncates now — the titles wrap — so the check is unqualified.
+  await expectNoStarvedText(page, testInfo);
 });
 
 test('to-do list — pills in rows: lays out cleanly @ phone width', async ({ page }, testInfo) => {
@@ -482,6 +486,9 @@ test('to-do list — pills in rows: lays out cleanly @ phone width', async ({ pa
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
   await expectNoClippedText(page, testInfo);
+  // The note read "ask for …" — 19% of itself — until it got its own line. This
+  // is the assertion that would have caught it, and now keeps it caught.
+  await expectNoStarvedText(page, testInfo);
 });
 
 test('wellbeing — chart + timeline: lays out cleanly @ phone width', async ({ page }, testInfo) => {
@@ -823,6 +830,10 @@ test('inventory — items + places: lays out cleanly @ phone width', async ({ pa
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
   await expectNoClippedText(page, testInfo);
+  // Item NAMES must read; the fact line beside them is starved on purpose so the
+  // expiry survives at full width (styles.scss .meta-line). Exempted by name, so
+  // a title going the same way is still a failure.
+  await expectNoStarvedText(page, testInfo, null, ['.facts']);
 });
 
 // Every row action lives behind the ⋮ now, so the menu IS the interface — a row

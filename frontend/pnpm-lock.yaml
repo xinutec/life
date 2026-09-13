@@ -44,8 +44,8 @@ importers:
         specifier: ^5.2.10
         version: 5.2.10
       '@xinutec/ui-harness':
-        specifier: github:xinutec/ui-harness#5aa8de41b5b9aafde3cc06f95efd5c72e84fdd48
-        version: https://codeload.github.com/xinutec/ui-harness/tar.gz/5aa8de41b5b9aafde3cc06f95efd5c72e84fdd48(@playwright/test@1.61.1)
+        specifier: github:xinutec/ui-harness#ca0f895b4915dcf60f658063f0836d381cf2075c
+        version: https://codeload.github.com/xinutec/ui-harness/tar.gz/ca0f895b4915dcf60f658063f0836d381cf2075c(@playwright/test@1.61.1)
       dexie:
         specifier: ^4.4.4
         version: 4.4.4
@@ -1540,8 +1540,8 @@ packages:
   '@vitest/utils@4.1.9':
     resolution: {integrity: sha512-A51o8ymO5PpqlWNnBP9ZHPXDIpuMtTLlGSjN7la4US+LJzoUMyhwjA5QXlm39JexgwHKW4Xjs8Z2d3dLCXOeuA==}
 
-  '@xinutec/ui-harness@https://codeload.github.com/xinutec/ui-harness/tar.gz/5aa8de41b5b9aafde3cc06f95efd5c72e84fdd48':
-    resolution: {gitHosted: true, integrity: sha512-FFHUoIP2UYYq5VBglWOD17Rpq7rxstdb4rE571YtygdfxJVRXq0qpJmVmytcF1v6gGJTSiMut5aZh3RsntQMmw==, tarball: https://codeload.github.com/xinutec/ui-harness/tar.gz/5aa8de41b5b9aafde3cc06f95efd5c72e84fdd48}
+  '@xinutec/ui-harness@https://codeload.github.com/xinutec/ui-harness/tar.gz/ca0f895b4915dcf60f658063f0836d381cf2075c':
+    resolution: {gitHosted: true, integrity: sha512-yzPQrzAcIGqd/UpueESPPddxQA/ijDKkqw/E+u6IlV3dSqijKmQVE2YBIEM2u299ebCkL6yCCpNA2CHOnz2dOQ==, tarball: https://codeload.github.com/xinutec/ui-harness/tar.gz/ca0f895b4915dcf60f658063f0836d381cf2075c}
     version: 0.1.0
     peerDependencies:
       '@playwright/test': '>=1.61.0'
@@ -4618,7 +4618,7 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
 
-  '@xinutec/ui-harness@https://codeload.github.com/xinutec/ui-harness/tar.gz/5aa8de41b5b9aafde3cc06f95efd5c72e84fdd48(@playwright/test@1.61.1)':
+  '@xinutec/ui-harness@https://codeload.github.com/xinutec/ui-harness/tar.gz/ca0f895b4915dcf60f658063f0836d381cf2075c(@playwright/test@1.61.1)':
     dependencies:
       '@types/node': 24.13.3
     optionalDependencies:
