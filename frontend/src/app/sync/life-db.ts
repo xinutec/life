@@ -8,6 +8,7 @@ import {
   type RxDatabase,
   type RxJsonSchema,
 } from 'rxdb';
+import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
 
 /** The single shared RxDB database. Every offline collection (shopping, todo,
@@ -27,12 +28,16 @@ export class LifeDb {
   private db(): Promise<RxDatabase> {
     this.dbPromise ??= (async () => {
       if (isDevMode()) {
+        // Imported statically it would SHIP: a dev-mode plugin in production is
+        // worse than the split it avoids.
+        // dev-lint: allow-dynamic-import a dev-mode plugin must not reach production
         const { RxDBDevModePlugin } = await import('rxdb/plugins/dev-mode');
         addRxPlugin(RxDBDevModePlugin);
       }
       // Schema migrations (e.g. the todo `type` enum widening) run at collection
-      // add-time, so the plugin must be registered in prod too, not just dev.
-      const { RxDBMigrationSchemaPlugin } = await import('rxdb/plugins/migration-schema');
+      // add-time, so the plugin must be registered in prod too, not just dev —
+      // which is why it is imported statically. It ships either way; loading it
+      // dynamically only moved it into a second request at first DB use.
       addRxPlugin(RxDBMigrationSchemaPlugin);
       // THE single place the shared 'lifedb' is created; every store goes
       // through this service's collection(). Exempt from the singleton rule:
