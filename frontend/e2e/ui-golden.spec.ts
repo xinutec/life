@@ -20,10 +20,9 @@ import { swipeUp } from '@xinutec/ui-harness';
  *   2. the seed to-do carries an ABSOLUTE due date and no start-gate, so
  *      nothing in the sheet is computed relative to now.
  *
- * SW blocked (layout, not offline) and fonts awaited (a golden taken mid-FOUT
- * would diff against itself).
+ * SW blocked by the harness (layout, not offline) and fonts awaited (a golden
+ * taken mid-FOUT would diff against itself).
  */
-test.use({ serviceWorkers: 'block' });
 
 const ME = { userId: 'test', displayName: 'Test User', avatarUrl: '', nextcloud: 'active' };
 

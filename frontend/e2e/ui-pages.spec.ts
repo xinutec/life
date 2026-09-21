@@ -23,11 +23,7 @@ import {
  *      the title were exactly this), and
  *   2. nothing spills past the right edge (a bottom sheet's toggle-groups are
  *      the classic culprit).
- *
- * The service worker is blocked: SW-controlled fetches bypass page.route,
- * and these tests are about layout, not offline (e2e/offline*.spec.ts).
  */
-test.use({ serviceWorkers: 'block' });
 
 const iso = (daysFromNow: number): string => {
   const d = new Date();
