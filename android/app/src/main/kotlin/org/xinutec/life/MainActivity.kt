@@ -662,7 +662,7 @@ class MainActivity : WebShellActivity() {
         // life's own web app, so life can't inject a Done control into it — a native
         // escape button is the correct design here, not web chrome.
         val done =
-            // dev-lint: android-native-chrome allow — external login overlay
+            // dev-lint: allow-native-chrome — external login overlay
             Button(this).apply {
                 text = "Done"
                 setOnClickListener { closeShopConnect() }
