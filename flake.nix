@@ -27,7 +27,7 @@
           };
           sdk = (pkgs.androidenv.composeAndroidPackages {
             cmdLineToolsVersion = "13.0";
-            platformToolsVersion = "35.0.2"; # adb
+            platformToolsVersion = "37.0.1"; # adb
             buildToolsVersions = [ "36.0.0" ];
             platformVersions = [ "36" ];
             abiVersions = [ ];
