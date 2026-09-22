@@ -123,12 +123,12 @@ class MainActivity : WebShellActivity() {
         // real browser passes the bot wall a server-side client can't) to fetch
         // product data, supplying the shop-specific URLs + extractor JS. Nothing
         // shop-specific lives here.
-        listen(web, "ShopBridge", ::onShopMessage)
+        listen(web, "ShopBridge") { body, _ -> onShopMessage(body) }
         // Reminders: the web app schedules device-local notifications (e.g. the
         // daily wellbeing check-in nudge) at a wall-clock time, fired by
         // AlarmManager → ReminderReceiver even when the app is closed. Generic —
         // the web app owns the "when", the copy, and the deep-link target.
-        listen(web, "ReminderBridge", ::onReminderMessage)
+        listen(web, "ReminderBridge") { body, _ -> onReminderMessage(body) }
     }
 
     /** Register [name] for the app's own origin, refusing anything else before the
@@ -164,8 +164,9 @@ class MainActivity : WebShellActivity() {
     /** `{op:"run", url, extractorJs, requestId}` / `{op:"connect", loginUrl,
      *  requestId}`. Both answer through `window.__shopResolve` /
      *  `window.__shopConnected` as they always did — a hidden WebView's result
-     *  arrives long after the message that asked for it. */
-    private fun onShopMessage(body: JSONObject, proxy: JavaScriptReplyProxy) {
+     *  arrives long after the message that asked for it. So no reply proxy: a
+     *  handler that never answers on the message channel does not hold one. */
+    private fun onShopMessage(body: JSONObject) {
         val requestId = body.optString("requestId")
         when (body.optString("op")) {
             "run" -> {
@@ -179,7 +180,7 @@ class MainActivity : WebShellActivity() {
     }
 
     /** `{op:"schedule", id, whenMs, title, body, url}` / `{op:"cancel", id}`. */
-    private fun onReminderMessage(body: JSONObject, proxy: JavaScriptReplyProxy) {
+    private fun onReminderMessage(body: JSONObject) {
         val id = body.optString("id")
         if (id.isEmpty()) return
         when (body.optString("op")) {
