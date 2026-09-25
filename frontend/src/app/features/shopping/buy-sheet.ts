@@ -54,9 +54,8 @@ export class BuySheet {
   readonly typed = signal<Record<number, string>>({});
 
   /** The text typed for a row, or ''. A method rather than indexing in the
-   *  template: `noUncheckedIndexedAccess` is off (see #138), so the index type
-   *  is not `| undefined` and the template's `?? ''` reads as dead code to the
-   *  compiler while being load-bearing at runtime. */
+   *  template: without `noUncheckedIndexedAccess` the template's `?? ''` reads
+   *  as dead code while being load-bearing at runtime. */
   priceText(id: number): string {
     return this.typed()[id] ?? '';
   }
@@ -92,7 +91,7 @@ export class BuySheet {
     this.ref.dismiss({ shop, prices });
   }
 
-  /** Buy them without recording anything — the old behaviour, kept reachable. */
+  /** Buy them without recording anything. */
   skip(): void {
     this.ref.dismiss('skip');
   }

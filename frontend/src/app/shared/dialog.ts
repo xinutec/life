@@ -6,7 +6,7 @@ import { MatDialogModule } from '@angular/material/dialog';
  *  get the composition wrong. Project the body as default content and the
  *  buttons with a `dialogActions` attribute:
  *
- *    <app-dialog title="Find on Waitrose">
+ *    <app-dialog title="Find a product">
  *      <mat-form-field>…</mat-form-field>
  *      <button dialogActions mat-button (click)="close()">Cancel</button>
  *    </app-dialog>

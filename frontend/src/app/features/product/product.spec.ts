@@ -227,8 +227,7 @@ describe('ProductPage', () => {
   });
 
   it('shows the confirmed match and adds it under its own barcode', () => {
-    // The backend hands back the one hit it confirmed by EAN — the client no
-    // longer sifts a result list, so there's nothing to rank here.
+    // The backend hands back the one hit it confirmed by EAN.
     const confirmed = hit({
       external_id: '9020290',
       barcode: '5063089281581',
@@ -334,7 +333,7 @@ describe('ProductPage', () => {
     expect(lookup(fixture.componentInstance, 'asda').state).toBe('error');
   });
 
-  // --- A shop only the app can see (increment 7b) ---
+  // --- A shop only the app can see ---
 
   const CANDIDATES = [
     { external_id: '271100', name: 'Balsamic Vinegar 500ml', image_url: 'https://x/1.jpg' },

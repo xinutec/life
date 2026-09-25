@@ -89,9 +89,7 @@ describe('ItemSheet product linking', () => {
   });
 
   it('a pack size fills the quantity, so a linked row starts out measured', async () => {
-    // 75 of 84 rows in the cupboard are linked to a product and 3 carry a
-    // quantity: the label held the number all along and had no way to hand it
-    // over. This is that way.
+    // The label holds the pack's amount; linking a product hands it over.
     const { cmp } = setup({
       pick: {
         name: 'Greek Yoghurt',
@@ -144,8 +142,7 @@ describe('ItemSheet product linking', () => {
   });
 
   // Only this form sees the keystroke, so only this form can say whose name it
-  // is. The server sees a name and a linked product and cannot tell them apart —
-  // guessing there froze scribbles as intentions and stripped real overrides.
+  // is; the server cannot tell a typed name from a prefilled one.
   it('claims the name only when it was typed by hand', () => {
     const { cmp, api } = setup();
     cmp.renameByHand('Oregano');

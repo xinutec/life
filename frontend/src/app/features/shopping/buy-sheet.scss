@@ -1,15 +1,7 @@
-// The price list is the only part that grows: one field per ticked row, and a
-// big shop is fifteen of them. Left to itself the sheet grew past the screen and
-// pushed "Record" out of sight — with just TWO rows, measured — so the primary
-// action was invisible on open and the sheet read as having no way to finish.
-//
-// The layout oracles could not see this: nothing was clipped, overlapping or
-// wider than the viewport, all of which stayed true while the button sat below
-// the fold. It took looking at the render.
-//
-// So the list scrolls and everything else holds still. `40vh` leaves room for
-// the shop field above and the actions below at phone height, which is the size
-// this is used at.
+// The price list is the only part that grows (one field per ticked row), so it
+// scrolls and everything else holds still — or "Record" is pushed below the
+// fold, which no layout oracle sees. `40vh` leaves room for the shop field and
+// the actions at phone height.
 .prices {
   display: flex;
   flex-direction: column;

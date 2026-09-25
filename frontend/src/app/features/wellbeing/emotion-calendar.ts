@@ -1,18 +1,13 @@
 /** The emotion history as a calendar: one box per day, coloured by the families
  *  that day's check-ins named.
  *
- *  Reading it: the FILL is how the day went, as a proportion — a solid box is one
- *  family all day, stripes are a day that moved. The BAR under the number is the
- *  score range, and it is there because the fill alone lies by averaging (see
- *  emotion-calendar-model.ts, which measures the case). A flat day has no bar.
+ *  The FILL is how the day went, as a proportion — a solid box is one family
+ *  all day, stripes a day that moved. The BAR under the number is the score
+ *  range, because a proportion hides a bad stretch in a mostly-fine day; a flat
+ *  day has no bar.
  *
- *  Months read oldest-first and the view scrolls to the end once, like a chat:
- *  time runs one way and you still land on today. Doing it by ordering instead
- *  (newest month first) made time run backwards at one scale and forwards at
- *  the other — see emotion-calendar-model.ts.
- *
- *  Selecting days is not decoration: the selection's tokens are the input a 3D
- *  render of a day takes, so `selected` is the handoff, not a highlight. */
+ *  Months read oldest-first and the view scrolls to the end once, like a chat
+ *  (see emotion-calendar-model.ts). */
 import {
   ChangeDetectionStrategy,
   Component,
@@ -105,10 +100,8 @@ export class EmotionCalendar {
   /** Chips in the app's existing grammar: `emo emo-<family>`, so a word in the
    *  selection looks identical to the same word in the picker.
    *
-   *  The count rides along because a wide selection is a list of words with no
-   *  weight otherwise: across the whole log that is 76 of them, and knowing
-   *  which ones recur is the entire reason to select a stretch rather than a
-   *  day. It is omitted at one, where it would only ever read "1". */
+   *  The count shows which words recur across the selected days; it is omitted
+   *  at one, where it would only ever read "1". */
   readonly selectedChips = computed(() =>
     this.selectedTally().map(({ token, days }) => ({
       token,
@@ -141,10 +134,7 @@ export class EmotionCalendar {
     return this.picked().includes(day.key);
   }
 
-  /** Drops the day SELECTION. Nothing here writes: this component reads
-   *  `items$` and owns no other store call, so no path through it can alter a
-   *  check-in. Stated because the control was read as deleting feelings, which
-   *  is the reading a label has to rule out rather than a comment. */
+  /** Drops the day SELECTION; nothing in this component writes a check-in. */
   clear(): void {
     this.picked.set([]);
   }
@@ -179,9 +169,7 @@ export class EmotionCalendar {
   title(day: CalendarDay): string {
     if (!day.checkins) return `${day.key} — no check-in`;
     const fams = day.bands.map((b) => `${b.core} ${Math.round(b.fraction * 100)}%`).join(', ');
-    // "no score" rather than a number, for a day whose readings carried none —
-    // this printed `score NaN–NaN` before, which reads as a broken app rather
-    // than as a doc that predates the field.
+    // "no score" for a day whose readings carried none.
     const range =
       day.scoreLow === null || day.scoreHigh === null
         ? 'no score'

@@ -58,8 +58,8 @@ describe('wellbeing migrationStrategies', () => {
   });
 
   it('v4 keeps an unrecorded energy unrecorded (not a zero)', () => {
-    // 0 tenths would be a reading below the bottom of the scale — and would say
-    // he felt drained on every check-in where he never said anything at all.
+    // 0 tenths would be a reading below the bottom of the scale, recorded on
+    // every check-in that never stated an energy.
     expect(migrationStrategies[4]({ score: 3, energy: null })).toMatchObject({
       energyTenths: null,
     });
@@ -73,8 +73,7 @@ describe('wellbeing migrationStrategies', () => {
 
   it('the whole chain carries an original check-in through to tenths', () => {
     // The device that has been closed since v0: every strategy runs in turn. A 4
-    // logged a year ago must still be a 4 — this chain is the only thing standing
-    // between his history and a silently rescaled one.
+    // logged a year ago must still be a 4.
     let doc: Record<string, unknown> = { ulid: 'u', score: 4, note: 'gym day' };
     for (const v of [1, 2, 3, 4] as const) doc = migrationStrategies[v](doc);
     expect(doc).toMatchObject({

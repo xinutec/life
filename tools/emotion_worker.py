@@ -150,18 +150,15 @@ class Model:
             with urllib.request.urlopen(req, timeout=GENERATE_TIMEOUT) as resp:
                 answer: str = json.loads(resp.read())["text"]
         except urllib.error.HTTPError as e:
-            # 5xx is the holder failing, not this job being unanswerable — a bug
-            # in it (2026-07-22: a crash in its own logging) 500'd every job, and
-            # reporting those cached real notes as having no feelings in them.
-            # Defer instead, and let a retry sort it out once the holder is fixed.
-            # Only a 4xx says something about the request itself.
+            # 5xx is the holder failing, not this job being unanswerable:
+            # reporting it would cache a real note as having no feelings in it.
+            # Defer, and retry once the holder is fixed. Only a 4xx says
+            # something about the request itself.
             if e.code >= 500:
                 raise HolderDown(f"llm-host is failing: HTTP {e.code}") from e
             raise RuntimeError(f"llm-host refused the job: HTTP {e.code}") from e
         except (urllib.error.URLError, TimeoutError, OSError) as e:
-            # Say which it was. "no llm-host" for a request that had in fact
-            # reached a perfectly healthy daemon busy reading weights sent a
-            # later reader hunting a dead process for an hour.
+            # Say which it was: a daemon busy loading weights is not a dead one.
             busy = self.loading()
             if busy is not None:
                 raise HolderDown(f"llm-host is loading {busy}") from e
@@ -195,12 +192,9 @@ def run(base: str, token: str, model: Model) -> None:
         prompt = job.get("prompt") or {}
 
         # A load already in flight will not go faster for being asked again, and
-        # asking costs a full GENERATE_TIMEOUT of not polling — during which
-        # life's claim goes stale and it declares this worker dead, so the picker
-        # stops waiting for an answer that is still on its way. Same shape of bug
-        # as the 90s poll heartbeat in 2026-07-24, one layer down. Come back
-        # round the loop instead: the poll keeps the claim fresh, and the job is
-        # handed straight back to us.
+        # asking costs a full GENERATE_TIMEOUT of not polling — long enough for
+        # life to declare this worker dead. Poll instead: that keeps the claim
+        # fresh, and the job is handed straight back.
         busy = model.loading()
         if busy is not None:
             if not announced_wait:
@@ -209,14 +203,9 @@ def run(base: str, token: str, model: Model) -> None:
             time.sleep(RETRY_SECS)
             continue
         if announced_wait:
-            # Deliberately no duration. Any clock started above can only stop
-            # when the NEXT job arrives, because this check sits after
-            # `if job is None: continue` — with nobody asking, the worker cannot
-            # see the load end. It used to report the gap between jobs as the
-            # load time, once claiming 8h15m for a load that had finished
-            # overnight, and fleet-health graded the model on that number.
-            # llm-host times its own load from inside it and logs
-            # "loaded <model> in Ns"; that is the measurement, and this is not.
+            # Deliberately no duration: this runs only when the NEXT job arrives,
+            # so it cannot see when the load ended. llm-host logs its own load
+            # time ("loaded <model> in Ns").
             LOG.info("llm-host finished loading")
             announced_wait = False
 

@@ -51,10 +51,8 @@ function setup(
     ),
   };
   const feedback = { notify: vi.fn(), error: vi.fn(), undo: vi.fn() };
-  // buyDone now asks where the shopping happened before it buys anything, so a
-  // bare `open` mock would leave every buy test waiting on a sheet that never
-  // answers. `dismissed` is what the sheet handed back: 'skip' is the
-  // buy-without-prices path these tests were written against.
+  // buyDone asks where the shopping happened before buying; `dismissed` is what
+  // that sheet hands back, and 'skip' is the buy-without-prices path.
   let dismissed: unknown = 'skip';
   const setDismissed = (v: unknown) => {
     dismissed = v;

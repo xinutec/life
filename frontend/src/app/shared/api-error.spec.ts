@@ -74,9 +74,8 @@ describe('classifyFetchResponse — the raw-fetch sibling, same taxonomy', () =>
   });
 
   it('maps the service worker’s bodiless synthetic 504 to offline, never auth', () => {
-    // ngsw intercepts every fetch and answers network failure with a 504 that
-    // has no body and no content-type. Reading that as "logged out" is the
-    // 2026-07-16 offline-boot bug; it is the offline signal.
+    // ngsw answers network failure with a 504 that has no body and no
+    // content-type: the offline signal, never auth.
     expect(classifyFetchResponse(fetchRes({ status: 504, contentType: null }))).toEqual({
       kind: 'offline',
     });

@@ -22,9 +22,8 @@ export type SyncSource = 'shopping sync' | 'todo sync' | 'todo-link sync' | 'wel
 const TICK_MS = 30_000;
 
 /** The one place that knows whether local edits have actually reached the
- *  server. Before this, a stalled/failed push was silent — data looked saved
- *  (it's in IndexedDB) but never synced, with no signal anywhere. Every
- *  replication reports its cycle outcome here; the shell renders a persistent
+ *  server — data in IndexedDB looks saved either way. Every replication
+ *  reports its cycle outcome here; the shell renders a persistent
  *  indicator whenever health() isn't `synced`.
  *
  *  Kept dependency-free and push-updated (no polling): signals in, computed
@@ -57,10 +56,8 @@ export class SyncStatus {
 
   /** A replication cycle for `source` completed cleanly, at `at`.
    *
-   *  ⚠ Distinct from `clearError`, which only says "the last failure is over".
-   *  A stall does not fail, so it never cleared anything and never reported
-   *  anything — which is exactly how the indicator came to claim "All changes
-   *  synced." for a day while the log was a day old (#1567). */
+   *  ⚠ Distinct from `clearError`, which only says "the last failure is over":
+   *  a stall never fails, so only a success can show the log is current. */
   reportSuccess(source: SyncSource, at: number = Date.now()): void {
     this.lastOk.update((m) => ({ ...m, [source]: at }));
     this.now.set(at);
@@ -84,11 +81,8 @@ export class SyncStatus {
     if (last === null) return null;
     const age = this.now() - last;
     if (age <= STALE_AFTER_MS) return null;
-    // ⚠ Never zero. `Math.floor` of an age under a minute is 0, and "Nothing has
-    // synced for 0 minutes" is a sentence that says nothing is wrong while the
-    // icon says something is. Unreachable at the shipped five-minute threshold,
-    // and reachable the moment anybody shortens it — which is exactly how it was
-    // seen, driving the state with the cadence turned down to render it.
+    // ⚠ Never zero: "Nothing has synced for 0 minutes" reassures while the
+    // icon warns. Unreachable at the five-minute threshold, until it is shortened.
     return Math.max(1, Math.floor(age / 60_000));
   });
 
@@ -100,20 +94,13 @@ export class SyncStatus {
 
   /** The glyph each state shows, spelled out per state.
    *
-   *  ⚠ **Exhaustive over `SyncHealth`, and that is the point.** This was a
-   *  ternary in the template — `health() === 'offline' ? 'cloud_off' :
-   *  'sync_problem'` — so when `'stale'` was added it silently inherited the
-   *  error glyph. Nobody chose it; it fell through. A `Record` keyed on the
-   *  union will not compile until a new state names its own icon.
+   *  ⚠ **Exhaustive over `SyncHealth`**: a `Record` keyed on the union will not
+   *  compile until a new state names its own icon, rather than inheriting one.
    *
-   *  `history` rather than `sync_problem` for stale, because the claim is
-   *  weaker: not "something failed" but "this may be old". The error state keeps
-   *  the alarming one, and keeps the only red.
-   *
-   *  The `synced` entry never draws — the shell renders the indicator only when
-   *  health is NOT synced — and is here so the map stays total over the union.
-   *  `history` is already used by the item sheet, so the glyph is known to
-   *  exist in the bundled font; a mis-named icon renders as its own name. */
+   *  `history` for stale: not "something failed" but "this may be old". The
+   *  error state keeps the alarming glyph and the only red. `synced` never
+   *  draws — the indicator shows only when not synced — and is here to keep the
+   *  map total. */
   readonly icon = computed<string>(
     () =>
       ({

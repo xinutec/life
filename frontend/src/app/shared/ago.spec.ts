@@ -2,9 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { ago } from './ago';
 
-/** `ago` had no test, because until the clock became a parameter there was no
- *  instant to test it at — every case would have been arithmetic against
- *  whatever moment the suite ran. */
+/** `now` is a parameter, so every case states its instant. */
 describe('ago', () => {
   const NOW = Date.UTC(2026, 8, 12, 12, 0, 0); // 2026-09-12T12:00:00Z
   const hoursBefore = (h: number) => NOW - h * 3_600_000;

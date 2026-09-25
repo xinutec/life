@@ -38,11 +38,8 @@
 }
 
 .box {
-  // ⚠ Centre EXPLICITLY. A `<button>` is centred by the user agent and a
-  // `<span>` is not, and this class is on both — a real day is a button, a
-  // skipped one is a span because it is not interactive. Leaning on the UA
-  // default put the number dead centre on 75 boxes and 53px up and to the left
-  // on the other 3, which is what shipped.
+  // ⚠ Centre EXPLICITLY: a real day is a <button>, centred by the user agent;
+  // a skipped day is a <span>, which is not.
   display: flex;
   align-items: center;
   justify-content: center;
@@ -110,22 +107,14 @@
 }
 
 .selection {
-  // Sticky, because the grid is months long and a tap at the top of June put its
-  // own feedback below September — you selected a day and nothing appeared to
-  // happen. The picker's selected-set footer solves the same problem the same
-  // way, so this is the app's existing grammar rather than a new one.
-  // Above the fixed bottom nav, not behind it — the repo's existing offset (see
-  // shopping.scss .bought-actions), so a chip row is reachable rather than
-  // hidden under the tab bar.
+  // Sticky, so selecting a day high up shows its feedback on screen — the
+  // picker footer's grammar. Above the fixed bottom nav (the offset of
+  // shopping.scss .bought-actions), not behind it.
   position: sticky;
   bottom: calc(60px + env(safe-area-inset-bottom));
   z-index: 6; // above the nav's shadow, below the nav itself (10)
-  // ⚠ BOUNDED AS A WHOLE, not per-part. Measured on the real log at 412px: a
-  // three-day selection filled 54% of the screen, a week 81%, a month 108% and
-  // the whole log 125% — so the wider the stretch you asked about, the less of
-  // the calendar you could see, and past a month the answer was taller than the
-  // phone. Capping the panel rather than the word list keeps the bound true
-  // whatever the header grows into.
+  // ⚠ BOUNDED AS A WHOLE, not per part: a wide selection would otherwise grow
+  // the panel past the screen and hide the calendar it summarises.
   display: flex;
   flex-direction: column;
   max-height: 38dvh;
@@ -165,10 +154,8 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
-    // Scrolling rather than truncating is only defensible because the tally is
-    // commonest-first (see emotion-calendar-model.ts) — what falls below the
-    // fold is the tail, not an arbitrary slice. A "+62 more" control was the
-    // alternative and it hides the same words behind an extra tap.
+    // Scrolling rather than truncating works because the tally is
+    // commonest-first: what falls below the fold is the tail.
     //
     // Reaching the end of the words must not then scroll the months away.
     overscroll-behavior: contain;

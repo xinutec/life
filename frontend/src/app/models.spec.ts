@@ -16,8 +16,7 @@ describe('item categories', () => {
   });
 
   it('offers "other" last', () => {
-    // A fallback offered early gets picked early — which is how `other` came to
-    // hold an avocado and a protein drink alongside the pans.
+    // A fallback offered early gets picked early.
     expect(ITEM_CATEGORIES.at(-1)).toBe('other');
   });
 

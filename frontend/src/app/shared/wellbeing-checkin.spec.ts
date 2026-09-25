@@ -122,10 +122,8 @@ describe('WellbeingCheckin — saying more than a score', () => {
   }
 
   it('offers a way into the entry it just logged', async () => {
-    // Logging a bare score is the RARE case: 196 of 207 entries were edited
-    // after creation, and a trace caught the edit tap landing in the same batch
-    // as the log. Without this the only route back in is to find the entry in
-    // the timeline and press Edit.
+    // Logging a bare score is the rare case; the way back in must not be the
+    // timeline's Edit.
     const { fixture } = setup();
     const cmp = fixture.componentInstance;
     expect(cmp.justLogged()).toBeNull();
@@ -167,8 +165,7 @@ describe('WellbeingCheckin — saying more than a score', () => {
 
 describe('WellbeingCheckin — the offer does not outlive its moment', () => {
   it('withdraws the offer once the amend window lapses', async () => {
-    // Found by looking at the render: nothing cleared it, so an hour later the
-    // strip would still be inviting you to say more about a finished check-in.
+    // Or an hour later the strip still invites you to say more.
     vi.useFakeTimers();
     try {
       const store = {

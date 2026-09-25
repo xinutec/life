@@ -5,11 +5,8 @@ mat-list {
 
 // The head gives way and the tail never does — so `…_manual.pdf` stays readable
 // at any width, which a single ellipsis on the whole string cannot do.
-// ⚠ The class is doubled to win a specificity fight, and it is not decoration.
-// Material sets `display: block` on a list item's primary-text slot, which ties
-// a single class and wins on source order — measured: the anchor computed to
-// `block`, so the head never shrank and BOTH ends overflowed a 192 px row. The
-// same fight the `.expiry` colour lost on the Today card.
+// ⚠ The class is doubled to beat Material's one-class `display: block` on a
+// list item's primary-text slot, which wins on source order.
 .fname.fname {
   display: flex;
   // The ellipsis truncates at a character boundary, so the head box is a little

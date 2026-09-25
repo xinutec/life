@@ -26,16 +26,11 @@ export function warrantyInfo(until: string | null, now: Date = new Date()): Warr
   if (!until) return null;
   const end = new Date(until);
   if (Number.isNaN(end.getTime())) return null;
-  // DAY to DAY, not instant to instant. `until` is a datetime and the purchase
-  // it comes from is stored at MIDDAY UTC (see `bought_at_from` in the
-  // purchases repo, which picks midday precisely so no zone offset can move the
-  // day). Subtracting the raw instants leaks that half-day into the count: 2
-  // July to 1 August came out as 31 days, and a warranty ending today read as
-  // "another 1 days".
+  // DAY to DAY, not instant to instant: the purchase is stored at MIDDAY UTC
+  // (see `bought_at_from` in the purchases repo), and subtracting raw instants
+  // leaks that half-day into the count.
   const endDay = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate());
-  // The READER'S day on the other side, not Greenwich's — the same fault
-  // `expiry.ts` and `bins.ts` both had. Between midnight and 01:00 BST the UTC
-  // date is still yesterday, so anything keyed to a UTC day is a day behind.
+  // The READER'S day on the other side, not Greenwich's (see `bins.ts`).
   const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
   const days = Math.round((endDay - today) / DAY_MS);
   if (days < 0) return { label: `warranty ended ${date(end)}`, cls: 'expired' };

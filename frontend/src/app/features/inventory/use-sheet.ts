@@ -60,8 +60,7 @@ export class UseSheet {
   readonly unit = this.item.unit ?? '';
 
   /** An amount written the way the rest of the app writes one — "950 g", but
-   *  "1 bottle" rather than "1bottle". This sheet used to concatenate them, so
-   *  every word-unit row read as a typo. */
+   *  "1 bottle" rather than "1bottle". */
   private how(quantity: number): string {
     return amount(quantity, this.item.unit);
   }

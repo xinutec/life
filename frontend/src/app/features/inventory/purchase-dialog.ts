@@ -20,16 +20,9 @@ export interface PurchaseDialogData {
 /**
  * Record what something cost, for something already owned.
  *
- * The buy-list flow writes a purchase when you tick a row off in a shop, and it
- * was the only thing that did — so a dishwasher, a pan, anything acquired before
- * the app existed had no way to carry a price or a date. That matters beyond the
- * money: a warranty is measured FROM a purchase, so without one there is nothing
- * to count from.
- *
- * A dialog over the item sheet, not a second bottom sheet: Material holds one
- * sheet at a time and a second would dismiss the edit form under it, taking any
- * unsaved typing with it. Same reason the history dialog and the product picker
- * are dialogs.
+ * For anything not bought through the Buy list; a warranty is measured FROM a
+ * purchase. A dialog over the item sheet, like History: Material holds one
+ * bottom sheet at a time.
  */
 @Component({
   selector: 'app-purchase-dialog',

@@ -12,11 +12,9 @@ import { ProductImages, showThumb } from './product-image';
  * The native clipboard port the Android WebView wrapper injects (see the app's
  * MainActivity). Present only inside the custom app; absent in a browser.
  *
- * A message port rather than the one plain method it used to be. The wrapper
- * injects it with `WebViewCompat.addWebMessageListener`, whose origin rules keep
- * it out of any frame that isn't this app — the API it replaced was injected into
- * every frame in the WebView, including iframes, and what sat behind it was the
- * system clipboard.
+ * An origin-scoped message port (`WebViewCompat.addWebMessageListener`), so it
+ * is never injected into a frame that isn't this app — it reads the system
+ * clipboard.
  */
 interface AndroidClipboard {
   postMessage(message: string): void;

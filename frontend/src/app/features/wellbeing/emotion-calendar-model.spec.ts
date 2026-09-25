@@ -42,11 +42,8 @@ describe('localDayKey', () => {
 });
 
 describe('bandsFor', () => {
-  // ⚠ THE REGRESSION, by date. 27 August 2026 is a real day of his: one word in
-  // the morning, three in the evening. Weighting each check-in equally made it
-  // 100% bad against 100% happy, averaging to half and half — a box that read
-  // half-bad for a day that was three-quarters good. Pooled, it says what the
-  // day said.
+  // One word in the morning, three in the evening: weighting each check-in
+  // equally would make that half bad; pooled, it is three quarters good.
   it('pools words across the day, so a one-word morning does not own half of it', () => {
     const bands = bandsFor([
       doc('2026-08-27T09:11:07Z', ['Bad/Sleepy']),
@@ -86,10 +83,8 @@ describe('bandsFor', () => {
   });
 
   it('weights a single reading by how many words name each family', () => {
-    // Three happy words and one sad one is three quarters happy. Splitting by
-    // distinct family instead — what this did first — painted half the box sad
-    // off one word in four, so the day read as far worse than it was recorded.
-    // Unchanged by the move to pooling: one reading IS the whole day here.
+    // Three happy words and one sad one is three quarters happy, not half and
+    // half by distinct family.
     const bands = bandsFor([
       doc('2026-09-01T09:00:00Z', ['Happy/Calm', 'Happy/Joyful', 'Happy/Present', 'Sad/Low']),
     ]);
@@ -136,11 +131,7 @@ describe('bandsFor', () => {
   });
 
   it('survives a stored doc with no emotions field at all', () => {
-    // ⚠ Not hypothetical. `emotions` is absent from the RxDB schema's `required`
-    // list, so a local doc can lack it entirely — and `WellbeingDoc` typing it
-    // as `string[]` is the thing that is wrong. Every fixture here set the
-    // field, so the whole suite passed while the live calendar threw
-    // "emotions is not iterable" and rendered nothing at all.
+    // The RxDB schema does not require `emotions`, so a stored doc can lack it.
     const bare = { ...doc('2026-09-01T09:00:00Z', []) } as Partial<WellbeingDoc>;
     delete bare.emotions;
     expect(bandsFor([bare as WellbeingDoc])).toEqual([]);
@@ -226,12 +217,8 @@ describe('buildCalendar', () => {
   });
 
   it('keeps today on the grid before the day has its first check-in', () => {
-    // ⚠ The trailing edge is NOT the leading edge, and it inherited its rule by
-    // accident. A day before the first reading is "before you started" and a day
-    // after today "has not happened yet" — both are honestly padding. Today is
-    // neither. Ending the range at the last READING meant that every morning,
-    // until the first check-in, the calendar stopped at yesterday and today
-    // could not be seen or tapped.
+    // Today is neither "before you started" nor "not happened yet", so it gets a
+    // square before its first check-in.
     const [sep] = buildCalendar([doc('2026-09-10T09:00:00Z', ['Happy/Calm'])], LONDON, '2026-09-12');
     const present = sep.cells.filter((c): c is CalendarDay => c !== null);
     expect(present.map((c) => c.dayOfMonth)).toEqual([10, 11, 12]);
@@ -283,11 +270,7 @@ describe('buildCalendar', () => {
   });
 
   it('draws no range for readings that carried no usable score', () => {
-    // ⚠ Also not hypothetical, and the same shape as the missing `emotions`:
-    // `scoreTenths` is typed `number` and five stored docs did not have one.
-    // `Math.min(...[undefined])` is NaN and `NaN === 0` is false, so the day
-    // passed the "did it hold still" test and drew a bar at NaN% titled
-    // `score NaN–NaN`.
+    // Some stored docs have no `scoreTenths`; `Math.min(...[undefined])` is NaN.
     const bare = { ...doc('2026-09-01T09:00:00Z', ['Happy/Calm']) } as Partial<WellbeingDoc>;
     delete bare.scoreTenths;
     const [sep] = buildCalendar([bare as WellbeingDoc], LONDON, '2026-09-01');

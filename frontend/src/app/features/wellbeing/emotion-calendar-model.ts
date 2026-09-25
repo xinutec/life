@@ -1,20 +1,12 @@
 /** Aggregating check-ins into calendar days.
  *
- *  A day, not a check-in, is the unit here. Measured over the whole log: 69% of
- *  individual check-ins touch a single emotion family, so a per-entry colour is
- *  one flat hue nearly every time. Rolled up to the day only 23% are, because a
- *  day collects several readings — so the day is the smallest grain at which the
- *  mixing is visible at all.
+ *  A day, not a check-in, is the unit: most single check-ins touch one family,
+ *  so the mixing only becomes visible across a day's readings.
  *
  *  ⚠ Two channels, because one cannot say it. The bands answer "how did the day
- *  go", and they are a PROPORTION, which hides a significant minority: 8
- *  September 2026 reads 71% Happy — eight check-ins, most of them genuinely
- *  fine — and is also the day that ended in a decision to cut contact. Weighting
- *  differently does not fix it (by-tag gives 74%, the same picture). So `spread`
- *  answers the second question, "did it hold still", from the score range. A day
- *  that was steadily fine and a day that averaged fine are different days, and
- *  24 of 66 multi-reading days have a spread of zero, so the channel separates
- *  them rather than colouring noise. */
+ *  go" as a PROPORTION, which hides a significant minority — a mostly-fine day
+ *  can still have ended badly. So `spread` answers "did it hold still", from the
+ *  score range: a steadily fine day and a day that averaged fine differ. */
 import { emotionNode } from '../../shared/emotion-wheel';
 import { WellbeingDoc } from '../../sync/wellbeing-store';
 
@@ -78,23 +70,11 @@ export function localDayKey(iso: string, tz?: string): string {
   return parts;
 }
 
-/** Family shares for one day's readings.
- *
- *  Weighted per CHECK-IN, not per tag: each reading contributes one unit split
- *  across the distinct families it names. A reading with six chips would
- *  otherwise outvote three readings with one, which measures how much was typed
- *  rather than how the day went. (On real data the two agree closely — 71% vs
- *  74% on the worst case — so this is chosen for being defensible, not for
- *  changing the picture.) */
 /** A check-in's tags, for a doc that may not have the field at all.
  *
- *  ⚠ `WellbeingDoc` types `emotions` as `string[]`, and the RxDB schema does NOT
- *  list it in `required` — so a locally-stored doc can legitimately lack it, and
- *  the type is the thing that is wrong. `wellbeing-entry.ts` has always guarded
- *  with `?? []`; this module did not, and `for (const t of e.emotions)` threw
- *  `emotions is not iterable` against the real log while every test passed,
- *  because the fixtures all set the field. Absent is not an error: it is the
- *  "checked in, tagged nothing" day the model already has a state for. */
+ *  ⚠ The RxDB schema does not require `emotions`, so a stored doc can lack it
+ *  whatever `WellbeingDoc` says. Absent is the "checked in, tagged nothing"
+ *  day, not an error. */
 function tagsOf(e: WellbeingDoc): readonly string[] {
   return e.emotions ?? [];
 }
@@ -103,20 +83,11 @@ function tagsOf(e: WellbeingDoc): readonly string[] {
  *
  *  **Every word the day recorded, counted once, pooled across the whole day.**
  *  Three happy words and one sad one is 3/4 happy, however many check-ins they
- *  arrived in. Stated by Pippijn twice, both times as "in a day".
+ *  arrived in. Weighting each check-in equally instead turns a one-word bad
+ *  morning and a three-word good evening into half and half.
  *
- *  ⚠ It weighted each CHECK-IN equally for a few hours on 2026-09-11, splitting
- *  by amount only inside a reading, on the reasoning that a moment described in
- *  six words is not a longer moment than one described in one. **27 August is
- *  the day that refuted it**: a one-word morning (`Bad/Sleepy`) and a
- *  three-word evening (`Happy/Caring`, `Happy/Calm`, `Happy/Present`) came out
- *  100% bad against 100% happy, averaging to half and half — a box reading
- *  half-bad for a day that was three-quarters good. The rule that survives is
- *  his, not the defensible-sounding one.
- *
- *  What that costs, kept here so it is not rediscovered as a bug: a check-in
- *  where he tapped six words now outweighs three where he tapped one. That is
- *  the trade, and it was made knowingly. */
+ *  The cost, chosen knowingly: a check-in with six words outweighs three with
+ *  one. */
 export function bandsFor(entries: readonly WellbeingDoc[]): readonly CalendarBand[] {
   const weight = new Map<string, number>();
   // Carried from the node that named the family rather than derived from it.
@@ -146,11 +117,8 @@ export function bandsFor(entries: readonly WellbeingDoc[]): readonly CalendarBan
 
 /** Drop whole weeks with nothing in them from either end.
  *
- *  Padding cells hold a square each, so the first and last months of a log —
- *  which are mostly outside it — rendered three or four rows of nothing. The
- *  month is not the unit anybody is looking at; the days are. Interior weeks are
- *  kept whatever they hold, because a fully skipped week is a real week that was
- *  skipped. */
+ *  Padding cells hold a square each, so the first and last months would render
+ *  rows of nothing. Interior weeks are kept: a skipped week is a real one. */
 function trimEmptyWeeks(cells: readonly (CalendarDay | null)[]): (CalendarDay | null)[] {
   const weeks: (CalendarDay | null)[][] = [];
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
@@ -160,12 +128,8 @@ function trimEmptyWeeks(cells: readonly (CalendarDay | null)[]): (CalendarDay | 
 }
 
 function dayFrom(key: string, entries: readonly WellbeingDoc[]): CalendarDay {
-  // ⚠ Finite-only, for the same reason `tagsOf` exists: the type promises a
-  // number and some stored docs do not have one. `Math.min(...[undefined])` is
-  // NaN, `NaN === 0` is false — so a day with an unusable score sailed past the
-  // "did it hold still" test and drew a range bar at NaN% with a `score NaN–NaN`
-  // tooltip. A doc with no usable score has no range to draw, which is what
-  // `null` already means here.
+  // ⚠ Finite-only, for the reason `tagsOf` exists: some stored docs have no
+  // score, and `Math.min(...[undefined])` is NaN.
   const scores = entries.map((e) => e.scoreTenths).filter((n) => Number.isFinite(n));
   const tokens: string[] = [];
   for (const e of entries) {
@@ -188,41 +152,19 @@ function dayFrom(key: string, entries: readonly WellbeingDoc[]): CalendarDay {
 
 /** Group check-ins into calendar months, **oldest month first**.
  *
- *  Chronological, like a chat: time runs one way everywhere, down the days of a
- *  month and on down the months. Newest-first months were tried and reverted —
- *  with days ascending inside a descending list of months, time ran backwards
- *  at one scale and forwards at the other, and every month boundary was a seam.
- *  Reversing the DAYS instead would have fixed the seam by breaking the most
- *  familiar layout in the app: 1 at the bottom needs the weekday header
- *  reversed too, and then a week reads right to left.
+ *  Chronological, like a chat: time runs one way at every scale, and the view
+ *  scrolls to the end on load (emotion-calendar.ts) to open on today.
+ *  Newest-first months would run time backwards at one scale and forwards at
+ *  the other.
  *
- *  The reason newest-first was reached for — that the view should open on the
- *  month you care about — is solved by scrolling to the end on load instead
- *  (see emotion-calendar.ts), which costs nothing and keeps the order honest.
+ *  Every day BETWEEN the first reading and the end gets a cell, including empty
+ *  ones: a gap is a fact about the log.
  *
- *  Every day BETWEEN the first and last reading gets a cell, including the ones
- *  with nothing on them — a gap is a fact about the log, and a grid that closed
- *  up around missing days would hide it.
+ *  ⚠ Days OUTSIDE that range are padding (`null`), not empty days — before you
+ *  started, or not lived yet. The end is the LATER of the last reading and
+ *  `today`: today gets a square before its first check-in, the future never.
  *
- *  ⚠ Days OUTSIDE that range are padding (`null`), not empty days. Rendered as
- *  boxes they read as "you skipped this", which is a lie in both directions: the
- *  1st to the 25th of the first month is before you started, and the rest of the
- *  current month has not happened yet. Drawing 20 dashed boxes for the remainder
- *  of September says you missed three weeks you have not lived.
- *
- *  ⚠ **TODAY IS THE EXCEPTION AT THE TRAILING EDGE, and it used to be swept up
- *  with the future.** The range ended at the last READING, so between midnight
- *  and the day's first check-in the current day had no cell at all and could not
- *  be seen or tapped — the grid simply stopped at yesterday. Both halves of the
- *  argument above survive: a day before the first reading is genuinely before
- *  you started, and tomorrow genuinely has not happened. Today is neither, and
- *  an empty square for it is honest in exactly the way a gap between readings is
- *  honest. So the end of the range is the LATER of the last reading and today,
- *  and never anything past today.
- *
- *  `today` is a parameter rather than a call to the clock so that a test can
- *  state which day it means. Read from `Date` here and every assertion about the
- *  trailing edge would quietly depend on the day the suite happened to run. */
+ *  `today` is a parameter so a test can state which day it means. */
 export function buildCalendar(
   docs: readonly WellbeingDoc[],
   tz?: string,
@@ -285,16 +227,12 @@ export interface TokenTally {
 /** Every emotion across a set of selected days, commonest first.
  *  The handoff to whatever renders a selection, and the panel that lists it.
  *
- *  Counted by DAY, not by check-in: three check-ins on one day all tagged Calm
- *  is one calm day, and counting readings would make a day you logged often
- *  look like a day you felt it more.
+ *  Counted by DAY, not by check-in: three check-ins tagged Calm on one day are
+ *  one calm day.
  *
- *  ⚠ The ORDER is load-bearing, not cosmetic. The panel bounds its own height
- *  and scrolls, so something is always out of sight on a wide selection — 76
- *  distinct words across 75 days, measured on the real log. Commonest-first is
- *  what makes that honest: what falls below the fold is the tail. The previous
- *  order was first-day-that-named-it, which is arbitrary to a reader, and under
- *  a cap it would have hidden a random slice.
+ *  ⚠ The ORDER is load-bearing: the panel bounds its height and scrolls, so on
+ *  a wide selection something is always out of sight, and commonest-first makes
+ *  that the tail.
  *
  *  Ties break on the token so the list is stable across renders rather than
  *  reshuffling as days are added. */

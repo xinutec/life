@@ -51,9 +51,9 @@ export class LifeApi {
     return this.http.post('/logout', {});
   }
 
-  /** Ask the backend to rank feelings against a check-in note (Claude, online-only).
-   *  Best-effort: with no API key or offline it resolves to an empty list, so the
-   *  picker degrades to the plain wheel. */
+  /** Emotion suggestions for a check-in note, from the Mac's local model (see
+   *  src/routes/wellbeing.rs). With no worker it answers with none, and the
+   *  picker is the plain wheel. */
   suggestEmotions(body: SuggestEmotionsRequest): Observable<SuggestEmotionsResponse> {
     return this.http.post<SuggestEmotionsResponse>('/api/wellbeing/suggest-emotions', body);
   }
@@ -125,18 +125,12 @@ export class LifeApi {
   itemHistory(id: number): Observable<ItemHistory> {
     return this.http.get<ItemHistory>(`/api/items/${id}/history`);
   }
-  /** Record what an item cost, after the fact.
-   *
-   *  The buy-list flow already wrote purchases and was the ONLY thing that did,
-   *  so anything not bought through the app — the dishwasher, the pans,
-   *  everything owned before it existed — could never carry a price or a date.
-   *  A warranty needs a start, and this is where it comes from. */
+  /** Record what an item cost, after the fact — for anything not bought through
+   *  the Buy list. A warranty is measured from it. */
   recordPurchase(id: number, purchase: NewPurchase): Observable<Purchase> {
     return this.http.post<Purchase>(`/api/items/${id}/purchases`, purchase);
   }
-  /** Unmake a purchase. Money, so a typo has to be removable rather than merely
-   *  regrettable — and without an inverse the write path cannot be exercised
-   *  against production without leaving a fabricated number in the record. */
+  /** Unmake a purchase: a mistyped price must be removable. */
   deletePurchase(itemId: number, purchaseId: number): Observable<unknown> {
     return this.http.delete(`/api/items/${itemId}/purchases/${purchaseId}`);
   }
@@ -326,9 +320,8 @@ export class LifeApi {
    *  current one ({field, choice: 'keep'}), or sets our own typed value
    *  ({field, choice: 'user', value}).
    *
-   *  `FieldChoice` is the backend's own request type, so a field name or choice
-   *  it doesn't accept can't be sent — the 400 it used to answer with is now a
-   *  compile error. Returns the re-read detail with the divergence list updated. */
+   *  `FieldChoice` is the backend's own request type, so a field or choice it
+   *  doesn't accept fails to compile. Returns the re-read detail. */
   reconcile(id: number, decisions: FieldChoice[]): Observable<ProductDetail> {
     return this.http.post<ProductDetail>(`/api/products/id/${id}/reconcile`, decisions);
   }

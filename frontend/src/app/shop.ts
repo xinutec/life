@@ -139,15 +139,11 @@ export interface ShopProvider {
 /**
  * The native port injected by the Android wrapper (absent in a browser).
  *
- * A message port rather than the three plain methods it used to be. The wrapper
- * injects it with `WebViewCompat.addWebMessageListener`, whose origin rules keep
- * it out of any frame that isn't this app — the API it replaced was injected into
- * every frame in the WebView, including iframes, and this bridge takes a URL
- * *and JavaScript to run against it*.
- *
- * Only the outbound direction changed: results still arrive through
- * `window.__shopResolve` / `__shopConnected`, because a hidden WebView's answer
- * comes back long after the message that asked for it.
+ * An origin-scoped message port (`WebViewCompat.addWebMessageListener`), so it
+ * is never injected into a frame that isn't this app — it takes a URL *and
+ * JavaScript to run against it*. Results arrive through `window.__shopResolve`
+ * / `__shopConnected`, because a hidden WebView's answer comes back long after
+ * the message that asked for it.
  */
 interface Bridge {
   postMessage(message: string): void;
@@ -187,14 +183,9 @@ export class Shops {
     };
   }
 
-  /** True only inside the Android app.
-   *
-   *  The port's presence *is* the answer now: the wrapper only injects it for
-   *  this app's own origin, so there is nothing for an `available()` call to
-   *  establish that being able to ask hasn't already established. An app older
-   *  than this page injects the previous shape, which has no `postMessage` — that
-   *  reads as no bridge, and shop features are quietly absent until it's updated,
-   *  rather than throwing on the first call. */
+  /** True only inside the Android app: the port is injected only for this
+   *  app's own origin. An older app injects a shape without `postMessage`,
+   *  which reads as absent rather than throwing. */
   get available(): boolean {
     return typeof this.bridge?.postMessage === 'function';
   }

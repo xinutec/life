@@ -11,26 +11,19 @@ import { filter } from 'rxjs';
 export type { UpdateOutcome };
 
 /** Marks that we have already auto-reloaded out of an unrecoverable service worker
- *  state. Session-scoped so it survives that very reload. Unchanged from when this
- *  logic lived here, so a tab mid-recovery across the upgrade still sees its mark. */
+ *  state. Session-scoped so it survives that very reload. */
 const RECOVERY_KEY = 'life.sw-recovery-attempted';
 
 /**
- * Self-update — the Angular wiring. **The rules moved to
- * `@xinutec/ui-harness/sw-updates`** on 2026-09-10 and this is now the adapter.
- *
- * They were written and debugged here, and were the fleet's only copy: hold a
- * mid-session reload so it cannot eat a half-typed form; re-check on becoming
- * visible, because ngsw only re-checks at a navigation and a resumed long-lived tab
- * never performs one; spend exactly one automatic recovery per tab. fleetwatch needed
- * all of it and had none of it, so rather than copy the file the policy was lifted
- * out — see #1384.
+/**
+ * Self-update — the Angular wiring over `@xinutec/ui-harness/sw-updates`, which
+ * holds the policy: no mid-session reload that could eat a half-typed form; a
+ * re-check on becoming visible, because ngsw only re-checks at a navigation;
+ * one automatic recovery per tab.
  *
  * ⚠ **The policy is deliberately not an `@Injectable`.** ui-harness compiles with
  * plain `tsc`, so a decorated service would ship without the metadata `ngtsc`
- * generates and fail to inject in an AOT build. It is therefore free of Angular and
- * rxjs entirely, and unit-tested against a fake — which it never was while welded to
- * a real service worker.
+ * generates and fail to inject in an AOT build.
  *
  * What stays here is what a fake cannot reach: that `SwUpdate.versionUpdates` really
  * feeds it, filtered to VERSION_READY, and that a reload really happens.

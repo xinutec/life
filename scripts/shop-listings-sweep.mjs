@@ -2,21 +2,10 @@
 // Find the shop listing for catalogue products that have none, so "where can I
 // buy this" and "cheapest shop" have something to compare.
 //
-// Measured 2026-08-31: 78 products, 77 with a barcode, and SIX with any shop
-// listing. The prices those views need were never gathered — not withheld,
-// never collected.
-//
-// ⚠ NAME to discover, BARCODE to confirm. Asda's search does not match EANs
-// (a barcode query returns nothing), so discovery has to go by name — and a
-// name is fuzzy enough that bulk-linking on it would manufacture wrong links at
-// scale. That is exactly how an oyster sauce came to be filed as honey (#1281),
-// and doing it 72 times is worse than doing it once. So a hit is accepted ONLY
-// when its barcode equals the product's, and everything else is reported and
-// skipped rather than guessed at.
-//
-// Hit rate under that rule, measured 2026-08-31: 4 of 6 on the first sample,
-// then 5 of 15 on the first real batch — call it a THIRD, not the two thirds the
-// small sample suggested. Six products was not enough to quote a rate from.
+// ⚠ NAME to discover, BARCODE to confirm. Asda's search does not match EANs,
+// so discovery goes by name — and bulk-linking on a fuzzy name would file the
+// wrong product at scale. A hit is accepted ONLY when its barcode equals the
+// product's; everything else is reported and skipped.
 //
 // The misses are mostly honest: a shop's own barcode for an own-brand line is
 // not the manufacturer EAN that Open Food Facts holds, and some things (a
@@ -30,7 +19,7 @@
 //   ./scripts/shop-listings-sweep.mjs --commit --limit 10 --delay 30
 //
 // Paced on purpose and capped per run: this is somebody else's storefront, and a
-// burst of 72 searches is a scraper. The default spreads a full sweep over
+// burst of searches is a scraper. The default spreads a full sweep over
 // several runs; --limit exists so it can be run little and often.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -46,10 +35,8 @@ const commit = argv.includes('--commit');
 const limit = Number(flag('--limit', '25'));
 const delayMs = Number(flag('--delay', '20')) * 1000;
 const source = flag('--source', 'asda');
-// Products already asked about, so a second run does not spend somebody else's
-// bandwidth re-asking. Found the hard way: the first two batches shared TEN of
-// fifteen products, because a miss left no trace and the sweep restarted from
-// the same place every time.
+// Products already asked about, so a second run does not re-ask: without it a
+// miss leaves no trace and every run restarts from the same place.
 //
 // Outside the repo: it is a record of what is in one person's cupboard, and this
 // repository is public.

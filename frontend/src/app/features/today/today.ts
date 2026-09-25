@@ -133,13 +133,7 @@ export class Today {
     this.sheet.open(TodoDetail, { data: { ulid: todo.ulid } });
   }
 
-  /** Say more about the check-in just logged here.
-   *
-   *  Today carries the same strip as Wellbeing, so it had the same problem: the
-   *  score commits on the first tap and everything else meant finding the entry
-   *  again on another screen. It was left out when this shipped on the reasoning
-   *  that Today has no edit sheet — which was simply wrong, it opens one for
-   *  to-dos two lines above. */
+  /** Say more about the check-in just logged here, as on Wellbeing. */
   addDetail(ulid: string): void {
     this.sheet.open(WellbeingEntry, { data: { ulid } });
   }

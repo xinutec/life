@@ -65,9 +65,8 @@ if (!shop || !op) {
 }
 
 // Waitrose is the only ShopProvider. Asda's search is answered SERVER-side
-// (`GET /api/products/shop/asda?q=`), so there is no {url, js} pair here to
-// drive — asda.ts exports facts-parsing only. Saying "unknown shop: asda" sent
-// me looking for a typo instead of at the architecture.
+// (`GET /api/products/shop/asda?q=`), so there is no {url, js} pair to drive;
+// the error says so rather than "unknown shop".
 const { WAITROSE } = await import('../frontend/src/app/shops/waitrose.ts');
 const provider = { waitrose: WAITROSE }[shop];
 if (!provider) {
@@ -96,10 +95,8 @@ const out = execFileSync(CDP, [
   '--ua', MOBILE_UA,
   '--mobile',
   '--result-js', 'window.__shopOut',
-  // Its own tab, not whichever one is in front: the default is the
-  // most-recently-active tab, so this used to navigate away from whatever a
-  // person was reading. Same Chrome profile either way, so a hand-made shop
-  // login still applies — that is what makes the product op work at all.
+  // Its own tab, not the most-recently-active one a person may be reading. Same
+  // Chrome profile, so a hand-made shop login still applies.
   '--new-tab',
 ], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
 

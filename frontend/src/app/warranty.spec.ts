@@ -57,8 +57,7 @@ describe('warrantyInfo', () => {
   });
 
   it("reads the day in the reader's zone, not Greenwich's", () => {
-    // 00:30 on 15 Aug in London is still 14 Aug in UTC — the hour that produced
-    // a real off-by-a-day in the expiry code twice.
+    // 00:30 on 15 Aug in London is still 14 Aug in UTC.
     const afterMidnight = new Date('2026-08-14T23:30:00Z');
     expect(warrantyInfo(at('2026-08-15'), afterMidnight)).toEqual({
       label: 'warranty ends today',

@@ -16,12 +16,10 @@ import { SyncSource, SyncStatus } from './sync-status';
  *  friendly message wins over "pull failed: 401".
  *
  *  What counts as auth loss is decided by `classifyFetchResponse` — the shared
- *  boundary, NOT re-derived here. This guard once read status/content-type
- *  inline and treated every non-JSON response as "logged out", which signed
- *  users out on the service worker's offline 504 and wiped their cached
- *  identity (2026-07-16). An offline/server failure returns normally so the
- *  caller's generic !res.ok throw retries it quietly. Pure(ish) and exported
- *  so the branching is unit-testable. */
+ *  boundary, NOT re-derived here — so the service worker's offline 504 is never
+ *  a sign-out. An offline/server failure returns normally so the caller's
+ *  generic !res.ok throw retries it quietly. Exported so the branching is
+ *  unit-testable. */
 export function guardAuth(
   res: Response,
   syncError: WritableSignal<string | null>,
@@ -76,15 +74,10 @@ export function startHttpReplication<T>(opts: {
   // replication object to cancel.
   let authLost = false;
 
-  // ⚠ **`live: true` DOES NOT MEAN "keeps pulling", and this is the whole of
-  // #1567.** RxDB subscribes to an ongoing pull only under
-  // `if (this.pull && this.pull.stream$ && this.live)` — with no stream it
-  // performs the first pull and then nothing, bar a local write or an explicit
-  // `reSync()`. A tab left open froze at whatever the server held when it
-  // loaded: on 2026-09-12 the browser had 248 of the server's 249 check-ins and
-  // drew a calendar with no square for the current day, while the phone — a
-  // single WebView, so always its own leader and started that morning — had it.
-  // It fails silently and read-only, so nothing on screen tells the two apart.
+  // ⚠ **`live: true` DOES NOT MEAN "keeps pulling".** RxDB subscribes to an
+  // ongoing pull only under `if (this.pull && this.pull.stream$ && this.live)`
+  // — with no stream it performs the first pull and then nothing, bar a local
+  // write or an explicit `reSync()`, so an open tab silently freezes.
   //
   // `reSync()` emits into `remoteEvents$`, which IS the internal
   // `masterChangeStream$`, so a stream of 'RESYNC' is the mechanism the plugin
@@ -129,9 +122,8 @@ export function startHttpReplication<T>(opts: {
         if (documents === null || rev === null) throw new Error('pull returned a malformed batch');
         opts.syncError.set(null);
         opts.syncStatus.clearError(opts.label);
-        // ⚠ A cycle that SUCCEEDS has to say so, not merely fail to fail. A
-        // stall throws nothing, so `clearError` had nothing to clear and the
-        // indicator went on claiming "All changes synced." for a day (#1567).
+        // ⚠ A cycle that SUCCEEDS has to say so: a stall throws nothing, so
+        // `clearError` alone would let the indicator claim "synced" forever.
         opts.syncStatus.reportSuccess(opts.label);
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- _deleted is what the pull rows carry; the type adds RxDB's flag to T
         return { documents: documents as (T & { _deleted: boolean })[], checkpoint: { rev } };

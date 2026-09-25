@@ -2,19 +2,16 @@ import { describe, expect, it } from 'vitest';
 
 import { isRecord, numberField, stringField } from './narrow';
 
-/** These are the boundary guards — every untrusted blob in the app comes through
- *  them — and until 2026-09-12 they had no test of their own. */
+/** The boundary guards every untrusted blob in the app comes through. */
 describe('isRecord', () => {
   it('accepts a plain object', () => {
     expect(isRecord({})).toBe(true);
     expect(isRecord({ a: 1 })).toBe(true);
   });
 
-  it('rejects an ARRAY, which is the case that cost an afternoon', () => {
-    // `typeof [] === 'object'` and it is not null, so an array used to satisfy a
-    // guard named `isRecord`. The sync pull then read `body['documents']` off an
-    // array, got undefined, and reported a malformed batch — describing the
-    // symptom rather than "this is a list, not a batch".
+  it('rejects an ARRAY', () => {
+    // `typeof [] === 'object'`, so an array must be excluded explicitly or a
+    // sync pull reads `documents` off a list and reports a malformed batch.
     expect(isRecord([])).toBe(false);
     expect(isRecord([1, 2])).toBe(false);
   });

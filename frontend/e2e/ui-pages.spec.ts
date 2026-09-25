@@ -15,14 +15,9 @@ import {
 } from '@xinutec/ui-harness';
 
 /**
- * UI-measurement checks (ported from the health-sync frontend): render the
- * main screens at a phone viewport (Pixel 9, 412px — see playwright.config)
- * with the backend mocked and busy data, and assert the two layout failure
- * classes that read fine in source and only show on a real phone:
- *   1. no two pieces of rendered text collide (the to-do rows' pills crowding
- *      the title were exactly this), and
- *   2. nothing spills past the right edge (a bottom sheet's toggle-groups are
- *      the classic culprit).
+ * Layout checks at a phone viewport (Pixel 9, 412px — see playwright.config),
+ * backend mocked with busy data: the ui-harness oracles, which catch what reads
+ * fine in source and only shows on a real phone.
  */
 
 const iso = (daysFromNow: number): string => {
@@ -115,15 +110,8 @@ const CAL_FAMILIES = [
   ['Neutral/Flat'],
   ['Happy/Relaxed', 'Happy/Present'],
 ];
-// ⚠ BREADTH, and it must come from the wheel rather than from a list here.
-// CAL_FAMILIES alone names 12 distinct words across 8 repeating sets, so the
-// vocabulary saturated after eight days: selecting a week and selecting the
-// whole 78-day log produced an IDENTICAL selection panel, 12 chips either way.
-// The fixture built to stress that panel therefore could not grow it, and the
-// panel-overflow bug was invisible to it — measured on the real log the same
-// day, 75 days carried 76 distinct words and a panel 125% of the phone's
-// height. Drawing from the wheel makes the tail track the real vocabulary,
-// including any word added to it later.
+// ⚠ BREADTH, drawn from the wheel: a hand-written list saturates after a few
+// days, so the selection panel could never grow as it does on a real log.
 const CAL_VOCAB = EMOTION_NODES.map((n) => n.token);
 const CALENDAR_WELLBEING = Array.from({ length: 80 }, (_, i) => 80 - i)
   // Two gaps, so a skipped day renders beside a busy one.
@@ -132,38 +120,24 @@ const CALENDAR_WELLBEING = Array.from({ length: 80 }, (_, i) => 80 - i)
     const perDay = (day % 4) + 1;
     const families = CAL_FAMILIES[day % CAL_FAMILIES.length];
     // A long tail on top of the shaped families, strided across the wheel so
-    // each day contributes words the others mostly do not. This is HARSHER than
-    // his log rather than a model of it, which is the point: a bound that holds
-    // here holds at 76.
+    // each day contributes words the others mostly do not.
     const tail = [0, 1, 2].map((n) => CAL_VOCAB[(day * 13 + n * 29) % CAL_VOCAB.length]);
     const words = [...new Set([...families, ...tail])];
     return Array.from({ length: perDay }, (_, k) => ({
       ulid: `01CAL${String(day).padStart(3, '0')}${String(k)}`.padEnd(26, '0'),
       id: 1000 + day * 10 + k,
-      // ⚠ Pinned to a fixed hour of its OWN day with `at`, NOT offset from now
-      // with `hoursAgo`. It was `hoursAgo(back * 24 - k * 3)`, and that drifts:
-      // the k-offset is measured from whatever time the suite runs, so once the
-      // clock passes ~15:00 the later readings of a day cross local midnight and
-      // land on the day before. They landed in the deliberate GAPS, so
-      // `.box.empty` went to zero and the test failed on the same commit that
-      // had passed an hour earlier. A fixture keyed to the wall clock is not a
-      // fixture.
+      // ⚠ A fixed hour of its OWN day, not an offset from now: an offset lets a
+      // late-running suite push readings across midnight into the gaps.
       recordedAt: at(back, 9 + k * 3),
       // Swings on the mixed days, flat on the plain ones — the range bar has to
       // be absent most of the time or it says nothing when it appears.
-      // Day 21 carries NO score at all: `scoreTenths` is typed `number` and
-      // stored docs exist without one, which drew a bar at NaN% titled
-      // `score NaN–NaN` against the real log while every fixture set it.
+      // Day 21 carries NO score: stored docs exist without one.
       // Keyed on `families`, NOT `words`: the tail widens every day past two
       // words, and a range bar on every single day says nothing at all.
       ...(day === 21 ? {} : { scoreTenths: families.length > 2 ? [30, 45, 35, 40][k % 4] : 40 }),
       energyTenths: 40,
-      // One day tagged nothing at all: present, pressable, uncoloured. Day 14
-      // OMITS the field entirely rather than sending [] — `emotions` is absent
-      // from the RxDB schema's `required` list, so a stored doc can lack it, and
-      // a fixture that always sets it cannot catch the reader that assumed
-      // otherwise. One did, and shipped: the live calendar threw
-      // "emotions is not iterable" and rendered an empty state.
+      // Day 9 is tagged nothing; day 14 OMITS the field, which the RxDB schema
+      // allows, so a reader assuming it is present fails here.
       ...(day === 14 ? {} : { emotions: day === 9 ? [] : words.slice(0, (k % words.length) + 1) }),
       note: null,
       rev: 500 + day * 10 + k,
@@ -171,13 +145,8 @@ const CALENDAR_WELLBEING = Array.from({ length: 80 }, (_, i) => 80 - i)
     }));
   });
 
-// ⚠ TYPED, and it has to stay that way. This started as a bare array literal
-// and silently lost `expiry_precision` when the field was added: the sheet then
-// rendered a toggle with NEITHER side selected, which reads as a broken control
-// rather than as a stale mock. A mock that is missing what the server always
-// sends does not fail — it lies, and the lie looks like a bug in the code under
-// test. `Item[]` turns the next such addition into a compile error, which is
-// what the gate's e2e typecheck row is for.
+// ⚠ TYPED: an untyped mock silently lacks a field the server always sends, and
+// the gap looks like a bug in the code under test.
 // A long filename is the overflow case here — phones name a scan
 // "IMG_20240315_143022_receipt_dishwasher.pdf" without being asked.
 const FILES: ItemFile[] = [
@@ -371,35 +340,9 @@ async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/**', (r) =>
     r.request().method() === 'GET' ? r.fulfill({ json: [] }) : r.fulfill({ status: 204, body: '' }),
   );
-  // ⚠ **The catch-all above answers `[]`, and a sync pull needs the batch
-  // OBJECT.** `isRecord([])` is true (it only excludes null), so the array
-  // sailed past the guard, `documents` came back undefined, and every
-  // collection this fixture does not override failed its pull — three of four,
-  // in every test in this file, since the suite began. Nothing showed it: the
-  // goldens are of a sheet, not the shell, so the error indicator they would
-  // have carried was never in frame. A harness that renders the app in a
-  // permanently-erroring sync state is not rendering the app anybody sees.
-  //
-  // Registered AFTER the catch-all so it wins — Playwright matches the most
-  // recently added route first. A test needing real rows re-routes its own
-  // collection with `syncRoute`, which lands later still.
-  await page.route('**/api/sync/**', (r) => {
-    if (r.request().method() === 'POST') return r.fulfill({ json: [] });
-    const since = Number(new URL(r.request().url()).searchParams.get('since') ?? '0');
-    return r.fulfill({ json: { documents: [], checkpoint: { rev: since } } });
-  });
-  // ⚠ **The catch-all above answers `[]`, and a sync pull needs the batch
-  // OBJECT.** `isRecord([])` is true (it only excludes null), so the array
-  // sailed past the guard, `documents` came back undefined, and every
-  // collection this fixture does not override failed its pull — three of four,
-  // in every test in this file, since the suite began. Nothing showed it: the
-  // goldens are of a sheet, not the shell, so the error indicator they would
-  // have carried was never in frame. A harness that renders the app in a
-  // permanently-erroring sync state is not rendering the app anybody sees.
-  //
-  // Registered AFTER the catch-all so it wins — Playwright matches the most
-  // recently added route first. A test needing real rows re-routes its own
-  // collection with `syncRoute`, which lands later still.
+  // ⚠ A sync pull needs the batch OBJECT, not the catch-all's `[]`. Registered
+  // after it so it wins (Playwright matches the newest route first); a test
+  // needing real rows re-routes its collection with `syncRoute`.
   await page.route('**/api/sync/**', (r) => {
     if (r.request().method() === 'POST') return r.fulfill({ json: [] });
     const since = Number(new URL(r.request().url()).searchParams.get('since') ?? '0');
@@ -445,9 +388,7 @@ async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/sync/wellbeing*', sync(WELLBEING));
 }
 
-// The checker-checker: this suite once ran at 1280×720 for months while its
-// titles said "phone width" (a device spread overrode the viewport). If
-// emulation ever silently drops again, fail HERE, loudly.
+// The checker-checker: a device spread can silently override the viewport.
 test('the suite really runs at phone geometry', async ({ page }) => {
   await mockApi(page);
   await page.goto('/today');
@@ -469,8 +410,7 @@ test('today — busy composition: lays out cleanly @ phone width', async ({ page
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
   await expectNoClippedText(page, testInfo);
-  // #1577 was this screen shearing 65-75% off every to-do title, on a green gate.
-  // Nothing here truncates now — the titles wrap — so the check is unqualified.
+  // Titles wrap rather than truncate, so the check is unqualified.
   await expectNoStarvedText(page, testInfo);
 });
 
@@ -482,8 +422,7 @@ test('to-do list — pills in rows: lays out cleanly @ phone width', async ({ pa
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
   await expectNoClippedText(page, testInfo);
-  // The note read "ask for …" — 19% of itself — until it got its own line. This
-  // is the assertion that would have caught it, and now keeps it caught.
+  // The note has its own line, and must not be starved.
   await expectNoStarvedText(page, testInfo);
 });
 
@@ -501,9 +440,7 @@ test('wellbeing — chart + timeline: lays out cleanly @ phone width', async ({ 
 test('wellbeing — after logging, saying more is one tap and the strip still works', async ({
   page,
 }, testInfo) => {
-  // The check-in is the app's most-used interaction, and logging a bare score is
-  // the rare case: 196 of 207 entries were edited after creation. This measures
-  // the state that appears straight after a tap, which nothing covered before.
+  // The state straight after a tap on the check-in strip.
   await mockApi(page);
   await page.goto('/wellbeing');
   await page.getByRole('button', { name: 'Log feeling: good' }).click();
@@ -524,11 +461,9 @@ test('wellbeing — the two charts agree on where the days are', async ({ page }
   await mockApi(page);
   await page.goto('/wellbeing');
   await page.getByText('Energy · last 7 days').waitFor();
-  // Mood and energy share one x axis (the same window, the same instant), so a
-  // midnight must land on the same pixel in both — otherwise the day rules stagger
-  // down the page and the charts can't be read against each other. Measure the RULES
-  // themselves, not the svg boxes: the boxes matched even when the axis words had
-  // collapsed to nothing, which is exactly how this test missed a broken chart once.
+  // Mood and energy share one x axis, so a midnight must land on the same pixel
+  // in both. Measure the RULES themselves, not the svg boxes: the boxes match
+  // even when the axis words collapse.
   const rules = (chart: number) =>
     page
       .locator('svg.chart')
@@ -566,12 +501,8 @@ test('wellbeing — the axis words are actually on the screen', async ({ page })
   await mockApi(page);
   await page.goto('/wellbeing');
   await page.getByText('Energy · last 7 days').waitFor();
-  // The check the others were all missing: can he READ them? Absolutely-positioned
-  // axis words once collapsed their own column to zero width and slid off the left
-  // edge of the phone — while a same-x/same-y test, a vertical-alignment test and
-  // the shared overflow harness (which only measures the RIGHT edge) all passed.
-  // Count first: "no word is off-screen" is also true when there are no words, and
-  // a vacuous pass is how the last three tests missed a chart he couldn't read.
+  // Can the axis words be READ? Count first: "no word is off-screen" is also
+  // true when there are no words.
   const words = page.locator('svg.chart text.axis-word');
   await expect(words).toHaveCount(6); // three on each of the two charts
   const offscreen = await words.evaluateAll((els) =>
@@ -586,11 +517,9 @@ test('wellbeing — each axis word sits level with the dot it names', async ({ p
   await mockApi(page);
   await page.goto('/wellbeing');
   await page.getByText('Energy · last 7 days').waitFor();
-  // "great"/"okay"/"awful" claim to name the 5, the 3 and the 1, so each must sit at
-  // the height that reading actually plots at. Spaced evenly down a CSS column
-  // instead (the obvious way, and what this used to do) "awful" landed 14px above
-  // where a 1 plots. The y here is the plot's own: viewBox 0 0 300 96, padTop 8,
-  // padBottom 18 — so a 5, a 3 and a 1 plot at 8, 44 and 78.
+  // "great"/"okay"/"awful" name the 5, the 3 and the 1, so each must sit where
+  // that reading plots. viewBox 0 0 300 96, padTop 8, padBottom 18 — so a 5, a
+  // 3 and a 1 plot at 8, 44 and 78.
   const svg = (await page.locator('svg.chart').first().boundingBox())!;
   const scale = svg.height / 96;
   const levels = [8, 44, 78].map((u) => svg.y + u * scale);
@@ -652,10 +581,8 @@ test('wellbeing — the charts pan back through history, and the axis stays put'
   // NEXT touch teleports the window, so the assertion is: a scroll event that
   // moves nothing changes nothing.
   //
-  // The sequencing matters, and got this wrong once: read the caption while a pan
-  // update is still in flight and the wait below resolves on THAT transition
-  // instead of the zoom's, which makes the test pass or fail for the wrong reason.
-  // So let each change land before provoking the next.
+  // Let each change land before provoking the next, or the wait resolves on the
+  // pan's transition instead of the zoom's.
   const caption = page.locator('.caption').first();
   const atOldest = (await caption.textContent())!;
   await pan.evaluate((el) => (el.scrollLeft = (el.scrollWidth - el.clientWidth) * 0.5));
@@ -722,10 +649,8 @@ test('bought sheet — a price per row lays out cleanly @ phone width', async ({
   // the sheet grows a field per ticked row, so the list is the other risk.
   await mockApi(page);
   await page.goto('/shopping');
-  // By role and name, which also pins the fix that made this possible: these
-  // checkboxes bound `[attr.aria-label]`, which lands on the mat-checkbox HOST
-  // and never reaches the inner input — so every tick control on Buy, Today and
-  // To-do was reaching a screen reader as an unnamed "checkbox".
+  // By role and name: `[attr.aria-label]` on a mat-checkbox never reaches the
+  // inner input.
   await page.getByRole('checkbox', { name: 'Bought Greek yoghurt (the big tubs)' }).check();
   await page.getByRole('button', { name: /add to inventory/ }).click();
 
@@ -735,10 +660,8 @@ test('bought sheet — a price per row lays out cleanly @ phone width', async ({
   await sheet.getByLabel('Greek yoghurt (the big tubs)').fill('3.30');
   await expect(sheet.getByRole('button', { name: 'Record' })).toBeEnabled();
 
-  // The button that finishes the job must be ON the screen when the sheet opens.
-  // The clipping/overlap/overflow oracles are all silent about this — they were
-  // green while "Record" sat below the fold, because a sheet taller than the
-  // viewport is not a clipped element, it is a scrolled one. Measured instead.
+  // The button that finishes the job must be ON the screen when the sheet
+  // opens. The layout oracles cannot see a sheet taller than the viewport.
   const button = sheet.getByRole('button', { name: 'Record' });
   await expect(button).toBeInViewport({ ratio: 1 });
   await expectNoClippedText(page, testInfo, 'app-buy-sheet');
@@ -753,10 +676,7 @@ test('bought sheet — the not-a-price message lays out cleanly @ phone width', 
   // person only sees when they have already made a mistake.
   await mockApi(page);
   await page.goto('/shopping');
-  // By role and name, which also pins the fix that made this possible: these
-  // checkboxes bound `[attr.aria-label]`, which lands on the mat-checkbox HOST
-  // and never reaches the inner input — so every tick control on Buy, Today and
-  // To-do was reaching a screen reader as an unnamed "checkbox".
+  // By role and name, as above.
   await page.getByRole('checkbox', { name: 'Bought Greek yoghurt (the big tubs)' }).check();
   await page.getByRole('button', { name: /add to inventory/ }).click();
 
@@ -860,15 +780,14 @@ test('inventory — the row menu opens and carries all three actions @ phone wid
   await expectNoClippedText(page, testInfo, '.mat-mdc-menu-panel');
 });
 
-// The product picker — successor to the Find-on-Waitrose dialog this oracle was
-// built for, whose outline "Search" label was sheared in half by
-// mat-dialog-content's zeroed top padding; nothing caught it until it shipped.
+// The product picker: an outline field's label is sheared by
+// mat-dialog-content's zeroed top padding unless the dialog shell reserves it.
 // Open it and assert no text is clipped. The shop bridge is Android-only, so
 // stub it so the shop tier renders too.
 test('product-picker dialog — the Search label is not sheared @ phone width', async ({ page }, testInfo) => {
   await page.addInitScript(() => {
-    // The native side is an origin-scoped message port now; its presence is what
-    // makes the shop tier render, so the stub only has to be able to receive.
+    // The shop tier renders when the bridge is present, so the stub only has
+    // to be able to receive.
     (window as unknown as { ShopBridge: unknown }).ShopBridge = {
       postMessage: () => {},
     };
@@ -916,13 +835,9 @@ test('item history dialog — the timeline lays out cleanly @ phone width', asyn
 /**
  * The expiry label's URGENCY COLOUR, measured rather than inspected.
  *
- * `.expiry.expired` was in the DOM on both screens and correct on one of them.
- * Where the label is a list row's trailing meta — Today's "Expiring soon" card,
- * the one screen where an expired thing has to shout — Material's
- * `.mdc-list-item.mdc-list-item--with-trailing-meta .mdc-list-item__end` is a
- * class more specific and simply won: "expired 1d ago" rendered the same grey at
- * the same weight as "in 1d". Nothing in the source said so, and the class list
- * agreed with the intent all the way down.
+ * On Today's "Expiring soon" card the label is a list row's trailing meta, and
+ * Material's more specific rule for that slot can override the urgency colour
+ * while the class list still reads right.
  *
  * So this asserts the COMPUTED colour, on both screens, against the theme's own
  * error token rather than a hex — a re-themed app should move both together.
@@ -979,11 +894,8 @@ test('files dialog — the empty state and the attach button fit @ phone width',
   await expectNoHorizontalOverflow(page, testInfo, 'app-files-dialog');
 });
 
-// Recording a purchase for something already owned — the path that did not
-// exist until 2026-09-03, so nothing you did not buy through the Buy list could
-// carry a price or a date. A dialog OVER the item sheet (two stacked surfaces),
-// with a price/date field pair and a suffixed unit, which is the composition
-// this file's header names as the classic overflow culprit.
+// Recording a purchase for something already owned: a dialog OVER the item
+// sheet, with a price/date pair and a suffixed unit.
 test('purchase dialog — the price/date pair and the months suffix fit @ phone width', async ({
   page,
 }, testInfo) => {
@@ -1067,8 +979,8 @@ test('product page — prices, panel, chips: lays out cleanly @ phone width', as
   await page.getByText('of which saturates').waitFor();
   await page.getByText('may contain milk').waitFor();
   await page.getByText('Open Food Facts').waitFor();
-  // The two newest things on this page, both unmeasured until now: what was
-  // paid (a second money list, above the shop prices) and the picture control.
+  // What was paid (a second money list, above the shop prices) and the picture
+  // control.
   await page.getByText('What you paid').waitFor();
   await page.getByRole('button', { name: /picture/ }).waitFor();
   // Scoped to the page's own text: this screen is the first that genuinely
@@ -1085,7 +997,7 @@ test('product page — the Asda match reads cleanly @ phone width', async ({ pag
   await page.goto('/product/43');
   await page.getByRole('button', { name: 'Find at Asda' }).click();
   // The confirmed match — the product itself, which Asda's own relevance order
-  // ranks last. That rule is enforced (and tested) server-side now.
+  // ranks last.
   await page.getByText('Extra Special Balsamic Vinegar of Modena').waitFor();
   await page.getByText('same barcode', { exact: false }).waitFor();
   await expectNoTextOverlaps(page, testInfo, 'app-product-page');
@@ -1234,7 +1146,7 @@ test('emotion picker ⓘ — the gloss opens in place, one at a time @ phone wid
   await expect(page.getByRole('button', { name: 'Add Absorbed' })).toBeVisible();
 });
 
-// The one the user asked for by name: tapping a to-do opens the edit sheet — a
+// Tapping a to-do opens the edit sheet — a
 // dense form (two mat-button-toggle-groups, notes, two date rows with presets,
 // connections, a search box, delete). Everything the overlap check can't catch
 // on a static page lives here: this sheet is where a too-wide toggle-group
@@ -1289,23 +1201,12 @@ test('emotion calendar — the day grid and a selection fit @ phone width', asyn
   // Every month between the first and last reading is drawn, so ~80 days of
   // fixture must produce at least three month grids.
   expect(await page.locator('.cal .month').count()).toBeGreaterThanOrEqual(3);
-  // A skipped day renders as a box too. EXACTLY three of them, and naming which
-  // three is the point: `> 0` let a drifting fixture put readings into one gap
-  // and still pass, and then quietly took both. A count that names the number is
-  // the instrument; a count that names a floor is a hope.
-  //
-  // The two deliberate gaps in CALENDAR_WELLBEING (`back` 17 and 44), plus
-  // TODAY — the fixture's newest reading is `back: 1`, so the current day has
-  // none, and since #1568 an unwritten today gets an empty square rather than
-  // falling off the end of the grid. This number moved from 2 to 3 on purpose;
-  // if it moves again, something changed the range and not the fixture.
+  // Skipped days render as boxes too: EXACTLY three — the fixture's gaps at
+  // `back` 17 and 44, plus today, which has no reading yet. A floor would let a
+  // drifting fixture fill a gap and still pass.
   expect(await page.locator('.box.empty').count()).toBe(3);
-  // ⚠ Boxes that share a class must place their number identically. `.box` is on
-  // a <button> for a real day and a <span> for a skipped one, and a button is
-  // centred by the user agent where a span is not — so leaning on that default
-  // put the number dead centre on 75 boxes and 53px up-and-left on the other 3.
-  // Every absolute oracle (overlap, clipping, overflow) passed it: nothing was
-  // wrong with any single box, they just disagreed with each other.
+  // ⚠ A real day is a <button> and a skipped one a <span>; only the button is
+  // centred by the user agent, so the number must be centred explicitly.
   const offsets = await page.locator('.box').evaluateAll((els) =>
     els
       .map((b) => {
@@ -1337,10 +1238,8 @@ test('emotion calendar — the day grid and a selection fit @ phone width', asyn
     .evaluateAll((els) => els.map((e) => e.getAttribute('title') ?? ''));
   expect(titles.filter((t) => t.includes('NaN'))).toEqual([]);
 
-  // Chronological months, and the view jumps to the end on load — the ordering
-  // is honest and you still land on today. Asserted together because either one
-  // alone is the wrong product: oldest-first without the jump opens on the month
-  // you care about least, which is why newest-first was tried first.
+  // Chronological months, and the view jumps to the end on load: either alone
+  // is wrong.
   const monthOrder = await page.locator('.cal .month h3').allTextContents();
   expect(monthOrder).toEqual([...monthOrder].sort(byMonthLabel));
   const scroll = await page.evaluate(() => {
@@ -1372,19 +1271,12 @@ test('emotion calendar — the day grid and a selection fit @ phone width', asyn
   // — the failure mode a sticky footer introduces and the clip oracle cannot see.
   await expectNoOccludedControls(page, testInfo, '.selection');
 
-  // ⚠ TWO assertions, and the second is the one that matters. The panel must
-  // stay bounded as the selection grows, AND the fixture must be able to grow
-  // it — against the 12-word fixture this replaced, every selection produced
-  // the same 12 chips, so a bound check would have passed while the real app
-  // put a 125%-of-viewport panel over the calendar. Measured there: 3 days
-  // filled 54% of the screen, a week 81%, a month 108%.
+  // ⚠ Two assertions: the panel stays bounded as the selection grows, AND the
+  // fixture can grow it — or the bound check passes vacuously.
   await page.getByRole('button', { name: 'Deselect all' }).click();
-  // ⚠ Selected through the DOM, not with real clicks, and that is deliberate.
-  // An unbounded panel covers the grid, so a Playwright click fails its own
-  // actionability check FIRST and the run reports `locator.click: Test timeout
-  // of 90000ms exceeded` — measured, twice, with the cap ablated. That message
-  // sends you to the test instead of to the layout. Reachability is still
-  // asserted, by the occlusion oracle below, which names the right thing.
+  // Selected through the DOM, not clicks: an unbounded panel covers the grid,
+  // and a click then fails as a test timeout instead of naming the layout.
+  // Reachability is asserted by the occlusion oracle below.
   const selectFirst = (n: number) =>
     page.evaluate((count) => {
       document.querySelectorAll<HTMLElement>('.box:not(.empty)').forEach((b, i) => {
@@ -1423,10 +1315,7 @@ test('emotion calendar — the day grid and a selection fit @ phone width', asyn
   await expectNoClippedText(page, testInfo, '.selection');
   await expectNoOccludedControls(page, testInfo, '.selection');
 
-  // ⚠ THE CALENDAR IS READ-ONLY, and this is the assertion that keeps it so.
-  // Its one control was read as deleting the feelings it lists; it deselects
-  // days. Watching for a write is worth more than the label, because a future
-  // edit could make the label true.
+  // ⚠ THE CALENDAR IS READ-ONLY; watching for a write keeps it so.
   const writes: string[] = [];
   page.on('request', (r) => {
     if (r.method() !== 'GET' && r.url().includes('/api/')) writes.push(`${r.method()} ${r.url()}`);

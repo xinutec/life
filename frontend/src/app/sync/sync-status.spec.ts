@@ -54,17 +54,9 @@ describe('SyncStatus — persistent sync-health signal', () => {
   });
 });
 
-/** REGRESSION — the indicator said "synced" for a day while the log was stale.
- *
- *  `health()` had two inputs, `online` and a map of errors, so it could only
- *  ever mean "nothing has failed" — and it was rendered as "All changes
- *  synced.", which claims something stronger: that this device holds what the
- *  server holds. On 2026-09-12 those diverged for about 24 hours. Replication
- *  had pulled once and stopped (#1567); nothing threw, so nothing was reported,
- *  so the shell reassured. That is worse than saying nothing, and it is why a
- *  missing calendar square was first diagnosed as a calendar bug.
- *
- *  A success now has a TIME, and an old one is a state of its own. */
+/** "All changes synced." claims this device holds what the server holds, not
+ *  merely that nothing has failed: a stalled replication throws nothing. So a
+ *  success has a TIME, and an old one is a state of its own. */
 describe('SyncStatus — a success that has gone stale', () => {
   const T0 = 1_800_000_000_000;
 
@@ -120,10 +112,7 @@ describe('SyncStatus — a success that has gone stale', () => {
   });
 
   it('never says zero minutes', () => {
-    // Seen by rendering it: with the cadence turned down to make the state
-    // reachable, the tooltip read "Nothing has synced for 0 minutes", which
-    // reassures while the icon warns. Unreachable at the shipped threshold and
-    // one shortening away from being reachable again.
+    // "Nothing has synced for 0 minutes" would reassure while the icon warns.
     goOnline();
     const s = new SyncStatus();
     s.reportSuccess('wellbeing sync', T0);
@@ -142,10 +131,8 @@ describe('SyncStatus — a success that has gone stale', () => {
   });
 });
 
-/** The icon was a ternary in the template, so `stale` inherited the error glyph
- *  the day it was added — nobody chose it (#1571). A `Record` over `SyncHealth`
- *  will not compile until a new state names its own, and these assertions say
- *  which is which, so a change to any of them is deliberate. */
+/** A `Record` over `SyncHealth` will not compile until a new state names its
+ *  own glyph; these assertions make a change to any of them deliberate. */
 describe('SyncStatus — every state names its own glyph', () => {
   const T0 = 1_800_000_000_000;
 

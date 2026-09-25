@@ -4,9 +4,8 @@ import { tap } from 'rxjs/operators';
 import { LifeApi } from './life-api';
 
 /** Single source for "should this row show a product thumbnail?". Shopping,
- *  Inventory and All-items each track their own `imgFailed` set + render the
- *  <img>/icon (Material list slots differ), but the *rule* lives here so it
- *  can't drift between them — it did once, on the `has_image` check. */
+ *  Inventory and All-items each render the <img>/icon themselves (Material list
+ *  slots differ), but the *rule* lives here. */
 export interface ThumbSource {
   barcode: string | null;
   /** A linked catalog product with no EAN (a shop product): its image is

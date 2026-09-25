@@ -1,9 +1,7 @@
 // Wire types shared with the Rust backend.
 //
 // The API DTOs are GENERATED from the Rust types by ts-rs (scripts/gen-types.sh
-// → ./generated/) so they can't drift — do not hand-edit ./generated. A drift
-// gate (scripts/check-types.sh, in the pre-push hook) fails if the Rust types
-// change without regenerating.
+// → ./generated/) — do not hand-edit ./generated. The gate fails if they drift.
 export type { BinDay } from './generated/BinDay';
 export type { PlannedTrip } from './generated/PlannedTrip';
 export type { ConnectionStatus } from './generated/ConnectionStatus';
@@ -73,8 +71,7 @@ import { keysOf } from './shared/narrow';
  *  keys make the compiler prove the list is exhaustive and duplicate-free — a
  *  new enum value won't build until it's placed here. */
 // Ordered as a person would scan it, not alphabetically: the everyday ones
-// first, `other` last because it is the fallback and a fallback offered early
-// gets picked early — which is how `other` came to hold an avocado.
+// first, `other` last because a fallback offered early gets picked early.
 export const ITEM_CATEGORIES = keysOf({
   food: true,
   cookware: true,

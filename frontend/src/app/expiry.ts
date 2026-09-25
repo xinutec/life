@@ -14,12 +14,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /**
  * Human urgency for a `YYYY-MM-DD` expiry. `now` is injectable for tests.
  *
- * `precision` says how much of the date was printed on the thing. A medicine box
- * carries MM/YYYY and nothing else, and the column is a DATE, so a day gets
- * invented to store it — the month's last, because a box marked 06/2028 is good
- * THROUGH June. Rendering that as "30 Jun 2028" states a day that appears
- * nowhere on the box, and counting "in 2d" through the end of the month claims
- * an overnight change that does not happen. So the month path prints a month.
+ * `precision` says how much of the date was printed. A medicine box carries
+ * MM/YYYY, stored as the month's last day; the month path prints a month, never
+ * a day or a day countdown the box never stated.
  */
 export function expiryInfo(
   expiry: string,
@@ -29,10 +26,7 @@ export function expiryInfo(
   const date = new Date(`${expiry}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) return { label: expiry, cls: 'ok' };
   if (precision === 'month') return monthInfo(date, now);
-  // ⚠ The READER'S day, not Greenwich's — see `daysUntil` in `bins.ts`, which
-  // had this same line and the same fault. Between midnight and 01:00 BST the
-  // UTC date is still yesterday, so food expiring today read as `in 1d`: the
-  // wrong way round to be wrong about something you are deciding whether to eat.
+  // ⚠ The READER'S day, not Greenwich's (see `daysUntil` in `bins.ts`).
   const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
   const days = Math.round((date.getTime() - today) / DAY_MS);
   if (days < 0) return { label: `expired ${-days}d ago`, cls: 'expired' };

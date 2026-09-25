@@ -1,14 +1,8 @@
 import { expect, test } from '@playwright/test';
 
-// The regression this pins (2026-07-16): opening the app OFFLINE dumped a
-// signed-in user onto the sign-in screen — and erased the cached identity, so
-// every later offline launch went straight to login too. The chain: ngsw
-// intercepts every fetch and answers network failure with a bodiless synthetic
-// 504 (it never lets the fetch reject); the sync auth guard read any non-JSON
-// response as "logged out"; AuthState.lost then wiped `me` AND the localStorage
-// cache. offline.spec.ts couldn't see this — it never signs in, so it happily
-// asserted the sign-in screen renders offline. This test holds the invariant
-// that actually matters: a signed-in app opened offline STAYS signed in.
+// A signed-in app opened OFFLINE must stay signed in. ngsw answers a failed
+// fetch with a bodiless synthetic 504, which must not read as "logged out" —
+// or the shell drops to sign-in and erases the cached identity.
 test('a signed-in app opened offline stays signed in', async ({ page, context }) => {
   // Record page-context fetches so the test can prove a sync cycle really ran
   // before declaring victory — "no sign-in card yet" is vacuous otherwise.

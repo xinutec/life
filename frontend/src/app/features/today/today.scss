@@ -59,11 +59,8 @@
 }
 
 // Three bins go out on one morning, and their joined names are the longest
-// line Today renders. Material's list title is `nowrap` + ellipsis, which on a
-// phone hid the third one — precisely the morning the card exists for. Two
-// classes deep so this beats Material's single-class rule on the same element
-// rather than relying on stylesheet order; the row grows to fit rather than
-// shearing, which is what the height rules are for.
+// line Today renders. Material's list title is `nowrap` + ellipsis; two classes
+// deep beats its single-class rule regardless of stylesheet order.
 .bins {
   .kinds {
     white-space: normal;
@@ -75,11 +72,8 @@
   }
 }
 
-// Same shear as .bins below, on the to-do titles: Material's list title is
-// nowrap + ellipsis, so "Call the GP about the referral letter" arrived as
-// "Call the GP abo…". A to-do you cannot read is not a reminder. Wrapping is
-// unbounded on purpose — a two-line clamp reads as a limit and, on a
-// blockified flex item, silently enforces nothing.
+// The same for to-do titles: a to-do you cannot read is not a reminder.
+// Unbounded on purpose — a line clamp on a blockified flex item is inert.
 .attention {
   .tappable {
     white-space: normal;

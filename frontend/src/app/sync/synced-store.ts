@@ -21,8 +21,8 @@ import { SyncSource, SyncStatus } from './sync-status';
 export interface SyncDoc {
   /** Stable client identity (ULID); the RxDB primary key. */
   ulid: string;
-  /** Server autoincrement — null until the row has synced; used only to bridge
-   *  legacy id-keyed endpoints and to know whether a delete reached the server. */
+  /** Server autoincrement — null until the row has synced; used only by
+   *  id-keyed endpoints and to know whether a delete reached the server. */
   id: number | null;
   /** Last server revision seen (set by sync, never by a local edit). */
   rev: number;
@@ -57,8 +57,7 @@ export interface SyncedCollectionConfig<T> {
  *  reactive/offline read + optimistic write grammar. A concrete store supplies
  *  its {@link SyncedCollectionConfig} via {@link config} and exposes a typed
  *  reactive list through {@link liveQuery}; the patch / remove / revive / undo
- *  mechanics are inherited so they can't drift between collections — the same
- *  discipline B6 imposed on the server half.
+ *  mechanics are inherited so they can't drift between collections.
  *
  *  The `collection` promise is initialised on a microtask (`Promise.resolve()
  *  .then(...)`) so `config()` is read AFTER every subclass field initialiser has
@@ -141,19 +140,11 @@ export abstract class SyncedStore<T extends SyncDoc> {
   /** Ask replication to pull now — e.g. right after a server-side trash restore,
    *  so a resurrected row appears without waiting for the next natural sync.
    *
-   *  ⚠ **`start()`, NOT `reSync()`, and the difference is silent.** rxdb's
-   *  `reSync()` emits into a Subject that only the INTERNAL replication
-   *  subscribes to, and that object does not exist until the replication has
-   *  started. `waitForLeadership` defaults to true and this database is
-   *  multi-instance, so in every tab that did not win the election the call was
-   *  dropped on the floor with no error. The Trash page is where that showed:
-   *  it restores the row on the server, removes the entry from the trash list,
-   *  and relies entirely on this pull to bring the row back — so in a non-leader
-   *  tab it did not come back.
-   *
-   *  `start()` covers both: rxdb's `_start` re-syncs when it has already run and
-   *  begins the replication when it has not. `replication.spec.ts` pins that
-   *  behaviour, since this line depends on it. */
+   *  ⚠ **`start()`, NOT `reSync()`.** rxdb's `reSync()` emits into a Subject
+   *  that exists only once the replication has started, and a tab that lost
+   *  the leadership election never starts it — so the call is silently dropped
+   *  and a restored row never comes back. `start()` re-syncs when started and
+   *  starts otherwise; `replication.spec.ts` pins that behaviour. */
   reSync(): void {
     void this.replication?.start();
   }

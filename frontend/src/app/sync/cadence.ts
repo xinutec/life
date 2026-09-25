@@ -1,14 +1,8 @@
-/** How often replication asks, and how long silence is tolerated.
- *
- *  Both numbers live here because one is defined in terms of the other, and
- *  they were briefly duplicated: `replication.ts` polled every 60s while
- *  `sync-status.ts` carried its own `5 * 60_000` and a comment claiming that
- *  was five missed heartbeats. Nothing checked the claim, so moving the poll
- *  interval would have left the comment true-looking and false.
- */
+/** How often replication asks, and how long silence is tolerated — together,
+ *  because one is defined in terms of the other. */
 
 /** The pull heartbeat. Without one, `live: true` performs a single pull and
- *  stops — see the note in `replication.ts` (#1567). */
+ *  stops — see the note in `replication.ts`. */
 export const PULL_INTERVAL_MS = 60_000;
 
 /** Silence long enough to admit the device may be showing old data. Five missed

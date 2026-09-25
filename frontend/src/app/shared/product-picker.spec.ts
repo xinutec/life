@@ -212,8 +212,7 @@ describe('ProductPicker', () => {
     await new Promise((r) => setTimeout(r));
 
     // The price rides along to be recorded as an observation, and so does the
-    // pack — dropping it here left the imported row unmeasured, so a pick from
-    // the shop tier could not fill a quantity the hit had been carrying all along.
+    // pack, so a pick from the shop tier can fill a quantity.
     expect(api.importProduct).toHaveBeenCalledWith(
       expect.objectContaining({
         source: 'asda',
@@ -297,9 +296,7 @@ describe('ProductPicker', () => {
       expect.objectContaining({
         source: 'waitrose',
         external_id: '062593',
-        // The pack the shop sells. Dropping it here is invisible — the import
-        // succeeds and the product simply arrives unmeasured, so stock linked
-        // from a Waitrose pick starts out not knowing how much it holds.
+        // The pack the shop sells, so linked stock starts out measured.
         quantity_label: '200g',
         // The shop's own quote, recorded here as it is everywhere else — a price
         // this path dropped would make "cheapest shop" depend on which screen
@@ -320,8 +317,7 @@ describe('ProductPicker', () => {
   });
 
   it('a picked catalog product carries its pack size to the form', async () => {
-    // The point of parsing the label: a product knew its pack size all along
-    // and could not hand it over, so stock linked to it started out untracked.
+    // The label, parsed, fills the quantity of stock linked to it.
     const { fixture, ref } = setup({
       catalog: [product({ id: 7, name: 'Greek Yoghurt', quantity_label: '950g', pack: { value: 950, unit: 'g' } })],
     });

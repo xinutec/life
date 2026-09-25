@@ -2,11 +2,9 @@
 // One authenticated request against a RUNNING Life, borrowing the browser's
 // session instead of handling anybody's credentials.
 //
-// Why this exists rather than another curl script: seed-demo.sh talks to a local
-// server and logs in through `dev-login`, which production does not have. The
-// live app authenticates through Nextcloud, and its session belongs to a person
-// who logged in by hand — so the only honest way to reach it is to ask the
-// browser that already holds that session to make the call.
+// seed-demo.sh logs in through `dev-login`, which production does not have; the
+// live session belongs to a person who signed in by hand, so the browser that
+// holds it makes the call.
 //
 //   ./scripts/life-api.mjs GET  /api/items
 //   ./scripts/life-api.mjs POST /api/locations '{"kind":"room","name":"Bedroom"}'
@@ -35,10 +33,8 @@ if (!method || !path) {
 if (!path.startsWith('/')) throw new Error(`path must start with "/": ${path}`);
 if (body !== undefined) JSON.parse(body); // fail here, not inside the browser
 
-// `eval` against an already-open tab, NOT `run`. `run` navigates, and this app
-// is a single-page app: the navigation tears down the execution context
-// mid-script, so a multi-step call dies with "Inspected target navigated or
-// closed" AFTER its first write has already landed. Measured the hard way.
+// `eval` against an already-open tab, NOT `run`: `run` navigates, which tears
+// down the SPA's context mid-script — after its first write has landed.
 const host = new URL(BASE).host;
 const js = `
 (async () => {

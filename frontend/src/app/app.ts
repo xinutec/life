@@ -151,10 +151,8 @@ export class App {
 
   constructor() {
     // Replication is usually the first to learn the session has lapsed — it polls,
-    // and the user may be sitting on a page that asks the server for nothing. Take
-    // its word for it and drop to the sign-in prompt, rather than leaving a shell
-    // that looks signed in but can no longer sync (and, before this, silently
-    // retried a doomed request every 5s for as long as the tab stayed open).
+    // and the user may be on a page that asks the server for nothing — so drop
+    // to the sign-in prompt rather than show a shell that can no longer sync.
     effect(() => {
       if (this.auth.lost()) {
         this.me.set(null);

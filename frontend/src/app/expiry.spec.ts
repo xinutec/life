@@ -47,13 +47,8 @@ describe('expiryInfo', () => {
 const AFTER_MIDNIGHT = new Date('2026-08-14T23:30:00Z');
 
 /**
- * The same hour, and the same fault — `bins.ts` cited this function as the
- * pattern it was following, and it was following it into the bug.
- *
- * Between midnight and 01:00 BST the UTC date is still yesterday, so anything
- * keyed to `now.getUTCDate()` is a day behind. Food that expires today read as
- * `in 1d`, which is the wrong way round to be wrong about something you are
- * deciding whether to eat.
+ * Between midnight and 01:00 BST the UTC date is still yesterday: food that
+ * expires today must not read as `in 1d`.
  */
 describe('expiryInfo across midnight, local time', () => {
   it('says today for something expiring today', () => {
@@ -110,9 +105,8 @@ describe('expiryInfo at month precision', () => {
   });
 
   it('reads the month in the reader\'s zone, not Greenwich\'s', () => {
-    // 00:30 on 15 Aug London is still 14 Aug UTC — the same hour that produced a
-    // real off-by-a-day in the day path. Here it is an off-by-a-MONTH risk on
-    // the 1st, so the local month is what the comparison uses.
+    // 00:30 on 15 Aug London is still 14 Aug UTC: on the 1st that is a month
+    // boundary, so the local month is what the comparison uses.
     expect(expiryInfo('2026-08-31', 'month', AFTER_MIDNIGHT)).toEqual({
       label: 'expires this month',
       cls: 'soon',

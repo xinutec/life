@@ -11,22 +11,17 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { makeConflictHandler } from './conflict-merge';
 
-/** REGRESSION — silent push-loss (found 2026-07-03, via a wellbeing date edit
- *  that "saved" on the phone but never reached the server).
+/** Every local field edit must be pushed.
  *
- *  RxDB's replication upstream asks the collection's conflict handler
- *  `isEqual(assumedMaster, current, 'upstream-check-if-equal')` to decide
- *  whether a local doc still needs pushing — `false` is what queues the push.
- *  Our handler compared only `rev` + `_deleted`, and a local edit changes
- *  NEITHER (revs are server-minted), so every field edit was judged "already
- *  replicated" and dropped without a trace: no push, no error, nothing in the
- *  server log. Inserts (no assumed master) and deletes (`_deleted` flips)
- *  still synced, which made sync look healthy.
+ *  RxDB's replication upstream asks the conflict handler
+ *  `isEqual(assumedMaster, current, 'upstream-check-if-equal')` whether a local
+ *  doc still needs pushing — `false` queues the push. Revs are server-minted, so
+ *  a local edit changes neither `rev` nor `_deleted`; a handler comparing only
+ *  those drops every field edit silently, while inserts and deletes still sync.
  *
- *  Unit tests on the handler can't catch a wrong *contract*, so this spec
- *  drives the REAL replication protocol (memory storage, live replication,
- *  our real handler) and asserts the only thing that matters: an
- *  `incrementalPatch` of a content field must reach the push handler. */
+ *  A wrong *contract* is invisible to unit tests of the handler, so this drives
+ *  the REAL replication protocol and asserts an `incrementalPatch` of a content
+ *  field reaches the push handler. */
 
 interface Doc {
   ulid: string;

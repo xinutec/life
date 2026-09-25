@@ -3,10 +3,8 @@ import { Injectable } from '@angular/core';
 /**
  * The native port injected by the Android wrapper (absent in a browser).
  *
- * A message port rather than the three plain methods it used to be. The wrapper
- * injects it with `WebViewCompat.addWebMessageListener`, whose origin rules keep
- * it out of any frame that isn't this app — the API it replaced was injected into
- * every frame in the WebView, including iframes, and this one could schedule a
+ * An origin-scoped message port (`WebViewCompat.addWebMessageListener`), so it
+ * is never injected into a frame that isn't this app — it can schedule a
  * notification saying anything and deep-linking anywhere.
  *
  * Everything here is fire-and-forget, so nothing needs a reply.
@@ -36,14 +34,9 @@ type ReminderRequest =
 export class Reminders {
   private readonly bridge = (window as ReminderWindow).ReminderBridge;
 
-  /** True only inside the Android app.
-   *
-   *  The port's presence *is* the answer now: the wrapper only injects it for
-   *  this app's own origin, so there is nothing left for an `available()` call to
-   *  establish that being able to ask hasn't already established. An app older
-   *  than this page injects the previous shape, which has no `postMessage` — that
-   *  reads as no bridge, and reminders are quietly unavailable until it's
-   *  updated, rather than throwing on the first call. */
+  /** True only inside the Android app: the port is injected only for this
+   *  app's own origin. An older app injects a shape without `postMessage`,
+   *  which reads as absent rather than throwing. */
   get available(): boolean {
     return typeof this.bridge?.postMessage === 'function';
   }

@@ -155,11 +155,8 @@ describe('Settings', () => {
     });
 
     it('settles itself when the page comes back, without any timer', async () => {
-      // The bug this replaced: approving happens on NEXTCLOUD'S page, which on
-      // a phone takes over the foreground — so a timer in this app is not
-      // running while the only interesting thing happens. On 2026-08-10 the
-      // credential landed server-side and the card sat on "Waiting for
-      // approval" forever, having made exactly one status request.
+      // Approving happens on Nextcloud's page, which takes over the foreground,
+      // so no timer here is running; coming back is what settles it.
       vi.spyOn(window, 'open').mockReturnValue(null);
       const { fixture, feedback, setStatus } = await mount({ ncStatus: 'not_linked' });
       connectButton(fixture)?.click();
@@ -175,8 +172,7 @@ describe('Settings', () => {
     });
 
     it('coming back still unlinked re-enables the button rather than trapping you', async () => {
-      // Abandoning the grant used to leave "waiting" on screen with the button
-      // disabled, and nothing would ever end it — a dead end with no way out.
+      // A "waiting" state with the button disabled would be a dead end.
       vi.spyOn(window, 'open').mockReturnValue(null);
       const { fixture } = await mount({ ncStatus: 'not_linked' });
       connectButton(fixture)?.click();

@@ -8,8 +8,8 @@ import { keysOf } from '../shared/narrow';
 
 /** A shopping row as stored locally. `ulid` is the stable identity; `rev` is the
  *  last server revision seen (set by sync, not by local edits); `id` is the
- *  server autoincrement (null until synced) used only to bridge the legacy
- *  /buy endpoint. RxDB manages `_deleted` (tombstone) + its own internal fields. */
+ *  server autoincrement (null until synced) used only by the /buy endpoint.
+ *  RxDB manages `_deleted` (tombstone) + its own internal fields. */
 // dev-lint: allow-wire-mirror RxDB owns the _deleted tombstone dimension;
 // the wire type adds it in the replication layer, not in this local doc.
 export interface ShoppingDoc {

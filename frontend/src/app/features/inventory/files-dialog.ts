@@ -131,12 +131,9 @@ export class FilesDialog {
  * trimming the right leaves a column of identical `IMG_2024…` rows with nothing
  * to tell the receipt from the manual.
  *
- * ⚠ Two spans, not a character count. The first attempt trimmed to 34
- * characters and it was still clipped: the row is 192 px and 34 characters
- * rendered at 307, so it produced TWO ellipses and cut the extension anyway.
- * A character budget cannot be right — glyphs are different widths and the row
- * changes with the viewport. So the head shrinks under CSS and the tail is
- * `flex: 0 0 auto`, which is correct at every width by construction.
+ * ⚠ Two spans, not a character count: glyph widths vary and the row changes
+ * with the viewport. The head shrinks under CSS and the tail is `flex: 0 0
+ * auto`, correct at every width by construction.
  */
 function split(name: string): { head: string; tail: string; full: string } {
   const keep = Math.min(12, name.length);

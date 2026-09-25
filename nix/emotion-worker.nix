@@ -2,14 +2,11 @@
 # instead of a script inside the working tree. Referenced by
 # deploy/hm-agents.nix and exposed as `packages.<system>.emotion-worker`.
 #
-# Why this one is packageable at all: since it asks recall's llm-host to
-# generate (tools/emotion_worker.py), it imports nothing but the standard
-# library — so "the runtime" is just a python3, and the whole thing is one file.
-# The heavy MLX stack stays where it belongs, in recall's uv venv.
+# The worker asks recall's llm-host to generate, so it imports only the
+# standard library: the runtime is just a python3.
 #
 # The token deliberately does NOT come from the store (which is world-readable):
-# the wrapper reads ~/.config/life/worker.env at runtime, the same file the old
-# shell wrapper sourced.
+# the wrapper reads ~/.config/life/worker.env at runtime.
 { python3, writeShellApplication }:
 
 writeShellApplication {

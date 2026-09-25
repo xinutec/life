@@ -114,10 +114,8 @@ describe('Today', () => {
   });
 
   it('opens the just-logged check-in, rather than sending you to another screen', () => {
-    // Today carries the same strip, so it had the same defect. It was left out
-    // of the first fix on the reasoning that Today has no edit sheet — wrong, it
-    // opens one for to-dos. Checking in from the landing screen must not be the
-    // worse flow.
+    // Today carries the same strip and opens a sheet for to-dos, so it can open
+    // the check-in too.
     const { c, sheet } = setup({});
     c.addDetail('01ABCDEF0000000000000000AB');
     expect(sheet.open).toHaveBeenCalledWith(WellbeingEntry, {

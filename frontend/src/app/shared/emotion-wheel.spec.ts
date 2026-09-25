@@ -109,12 +109,8 @@ describe('emotion-wheel', () => {
   });
 
   it('makes every twinned name say what its own core contributes', () => {
-    // A duplicated name is only useful if the picker can tell you WHICH one you
-    // are choosing, and the gloss is the only thing that can. This held for the
-    // Sad copies of Withdrawn/Numb from the day they were added while the Angry
-    // originals still read as being about nobody in particular — a half-made
-    // distinction, which is worse than none. Asserted for every twin so the next
-    // duplicate cannot land with an inherited gloss.
+    // A duplicated name is only useful if the gloss tells you WHICH one you are
+    // choosing, so every twin must say what its own core contributes.
     const twins = EMOTION_NODES.filter(
       (n) => EMOTION_NODES.filter((m) => m.name === n.name).length > 1,
     );

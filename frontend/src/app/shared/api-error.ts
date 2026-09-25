@@ -40,9 +40,8 @@ export function classifyApiError(e: unknown): ApiFailure {
  *  A non-ok non-JSON response is NOT an auth signal. The service worker answers
  *  every fetch it can't reach the network for with a bodiless synthetic 504 —
  *  that's "offline" — and a downed backend serves the ingress's HTML error page.
- *  Conflating those with "logged out" is the bug this function exists to
- *  prevent: it threw offline users onto the sign-in screen and erased their
- *  cached identity (2026-07-16). */
+ *  Conflating those with "logged out" would throw offline users onto the
+ *  sign-in screen and erase their cached identity. */
 export function classifyFetchResponse(res: Response): { kind: 'ok' } | ApiFailure {
   if (res.status === 401 || res.status === 403) return { kind: 'unauthenticated' };
   const json = (res.headers.get('content-type') ?? '').includes('application/json');

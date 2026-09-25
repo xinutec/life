@@ -1,5 +1,4 @@
-// The shared empty / error state: a centred icon + message (+ Retry on error),
-// replacing the bare left-aligned `<p class="empty">` each screen used to roll.
+// The shared empty / error state: a centred icon + message (+ Retry on error).
 .state {
   display: flex;
   flex-direction: column;

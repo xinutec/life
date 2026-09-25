@@ -1,6 +1,5 @@
 /** A three-tier emotional vocabulary — a handful of core emotions, each with a ring of
- *  secondary feelings, each with fine-grained tertiary leaves. [[EMOTION_WHEEL]] is the
- *  count; this comment deliberately does not carry one, having already gone stale once.
+ *  secondary feelings, each with fine-grained tertiary leaves.
  *
  *  Static data, no backend: a check-in records a set of emotions and their path back up
  *  to the core is derived here for display and colour. Every node carries a
@@ -21,11 +20,8 @@
  *  Within one core a name is unique across both rings, so a token names exactly one
  *  node, and `/` is safe because no name contains one.
  *
- *  ⚠ Every stored emotion is a token. Bare leaf names were the pre-qualification format,
- *  resolved by a first-occurrence fallback until migration 0039 rewrote the last 15.
- *  That fallback is gone, and with it the hazard that adding a word ahead of an existing
- *  one silently re-pointed old history to a core it never meant — so adding to the wheel
- *  no longer affects what is already recorded. */
+ *  ⚠ Every stored emotion is a token (migration 0039 rewrote the last bare names), so
+ *  adding to the wheel cannot re-point anything already recorded. */
 
 /** One outer-ring (tertiary) leaf: the word plus a brief gloss. */
 export interface EmotionLeafDef {
@@ -64,11 +60,8 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         desc: 'In high spirits and up for fun, teasing, or mischief.',
         leaves: [
           {
-            // The inherited gloss ("stimulated and keenly alert") described plain
-            // alertness, which is `Surprised/Energetic`, and said nothing about
-            // play at all. What this word is for under Playful is the charge that
-            // makes you want to play — including the frankly sexual reading, which
-            // the old gloss neither named nor excluded.
+            // Under Playful: the charge that makes you want to play, including the
+            // sexual reading. Plain alertness is `Surprised/Energetic`.
             name: 'Aroused',
             desc: 'Switched on and keyed up — the charge that wants an outlet.',
           },
@@ -83,10 +76,8 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Free', desc: 'Unburdened and able to be yourself, without constraint.' },
           {
-            // "Bright, buoyant gladness that lifts you" contradicted its own group
-            // ("quietly satisfied and at ease") and described what Elated now
-            // holds — Overjoyed, Thrilled. Since Elated arrived, this is free to be
-            // the quiet kind: gladness that is simply there, with no event under it.
+            // The quiet kind: gladness simply there, with no event under it. The
+            // loud kind is Elated.
             name: 'Joyful',
             desc: 'Gladness that is just there, without anything having happened.',
           },
@@ -102,13 +93,10 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
           {
             // A species of Joyful rather than a sibling of it: the feeling IS
             // gladness, and the work going is what the gladness is about.
-            // Deliberately not under Powerful, where it first went — capability
-            // is the occasion here, not the experience, and filing it as agency
-            // loses the only part that makes it worth recording. Not Savouring,
-            // which is noticing something small and good and could be about
-            // anything; not `Proud/Successful`, which is satisfaction at a
-            // finished thing, afterwards. This one is glad while it is still
-            // going.
+            // Not under Powerful: capability is the occasion here, not the
+            // experience. Not Savouring, which could be about anything; not
+            // `Proud/Successful`, which is afterwards. This is glad while it is
+            // still going.
             name: 'Productive',
             desc: 'The particular gladness of things getting done.',
           },
@@ -190,10 +178,8 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         desc: 'Calm, settled contentment.',
         leaves: [
           {
-            // "Warm and tender affection toward others" described the Caring group,
-            // not this one — and a name is unique within a core, so this cannot
-            // simply be duplicated there. What Peaceful contributes is the
-            // settledness: love with nothing to resolve, prove or repair.
+            // Love with nothing to resolve, prove or repair — the settledness is
+            // what Peaceful contributes. Affection toward others is Caring.
             name: 'Loving',
             desc: 'Affection with nothing to resolve — settled, unstriving warmth.',
           },
@@ -393,9 +379,8 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         desc: 'Exposed and easily hurt.',
         leaves: [
           {
-            // The inherited gloss described only what someone DID to you, which is
-            // where Angry › Bitter › Violated lives. Under Vulnerable the feeling
-            // is the exposure it leaves behind — being the one things get done to.
+            // The exposure left behind — being the one things get done to. What
+            // someone DID to you is Angry › Bitter › Violated.
             name: 'Victimised',
             desc: 'Something was done to you, and it left you open to it happening again.',
           },
@@ -648,10 +633,7 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         name: 'Distant',
         desc: 'Anger that withdraws and shuts down.',
         leaves: [
-          // Both of these have a twin under Sad › Depressed, and for a while only
-          // the twins said what their core contributed — these two read as though
-          // they were about nobody in particular, which is exactly the half of the
-          // distinction a picker cannot show you. The anger is the POINT here:
+          // Both have a twin under Sad › Depressed. Here the anger is the POINT:
           // shutting down is what this anger does instead of shouting.
           {
             name: 'Withdrawn',
@@ -858,8 +840,8 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
           { name: 'Sleepy', desc: 'Drowsy and needing rest.' },
           { name: 'Unfocused', desc: 'Scattered; unable to concentrate.' },
           {
-            // Tired could only whisper: Sleepy and Unfocused both imply sleep would
-            // fix it, so a day wiped out by treatment shared a token with a late night.
+            // Sleepy and Unfocused both imply sleep would fix it; this is the
+            // tiredness rest does not touch.
             name: 'Exhausted',
             desc: "Wrung out. Rest doesn't touch it.",
           },

@@ -16,10 +16,9 @@ const w = window as unknown as TestWin;
 let lastRun: { url: string; js: string; id: string } | undefined;
 let lastConnect: { loginUrl: string; id: string } | undefined;
 
-/** The native side is a message port now — origin-scoped, so it can't be reached
- *  from an embedded frame the way the old injected object could. Requests arrive
- *  as JSON; results still come back through `window.__shopResolve`, because a
- *  hidden WebView's answer lands long after the message that asked for it. */
+/** The native side is an origin-scoped message port. Requests arrive as JSON;
+ *  results come back through `window.__shopResolve`, because a hidden WebView's
+ *  answer lands long after the message that asked for it. */
 function fakeBridge() {
   lastRun = undefined;
   lastConnect = undefined;
@@ -132,9 +131,8 @@ describe('Waitrose provider', () => {
   });
 
   it('the extractor reads the pack size off the weights block', () => {
-    // Waitrose puts it on `weights.sizeDescription` ("42g", "100g") rather than
-    // beside the name, so a reader looking near `name` finds nothing and the
-    // product arrives unmeasured — which is what this used to do.
+    // Waitrose puts it on `weights.sizeDescription` ("42g", "100g"), not beside
+    // the name.
     const { js } = WAITROSE.product('062593');
     expect(js).toContain('w.sizeDescription');
     expect(js).toContain('quantity_label');

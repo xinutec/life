@@ -89,9 +89,8 @@ describe('Wellbeing history', () => {
       entry({ ulid: 'c', recordedAt: hoursAgo(1), scoreTenths: 40 }), // a 4
     ]).fixture.componentInstance;
     const [three, half, four] = c.chart().dots;
-    // Halfway up, to within the 0.1-unit rounding the dots are stored at: it must
-    // not land on either neighbour, or the reading he took the trouble to hedge is
-    // lost. (A whole step is 18 units here, so 0.05 is nowhere near ambiguous.)
+    // Halfway up, to within the 0.1-unit rounding the dots are stored at: on
+    // neither neighbour. (A whole step is 18 units, so 0.05 is unambiguous.)
     expect(Math.abs(half.cy - (three.cy + four.cy) / 2)).toBeLessThanOrEqual(0.05);
     // ...and its colour is the blend of the two rungs, so height and hue agree.
     expect(half.fill).toContain('color-mix');
@@ -239,7 +238,7 @@ describe('Wellbeing history', () => {
 
     /** jsdom has no layout, so the rail is given a phone's geometry and a
      *  scrollLeft that ROUNDS on write, as a browser's does. That rounding is
-     *  the fault under test — take it away and this test cannot fail. #1293. */
+     *  the fault under test — take it away and this test cannot fail. */
     it('ignores a scroll reporting the position the re-seat itself left', async () => {
       const { fixture } = setup(month());
       const c = fixture.componentInstance;
@@ -270,9 +269,8 @@ describe('Wellbeing history', () => {
       expect(el.scrollLeft).toBe(seated);
       expect(c.endMs()).toBe(settled);
 
-      // ⚠ A guard that ignored EVERY scroll would pass the two lines above, and
-      // that is how the August attempt failed: the flag stuck set and deliberate
-      // pans went dead too. So a real one must still land.
+      // ⚠ A guard that ignored EVERY scroll would pass the two lines above, so a
+      // real pan must still land.
       el.scrollLeft = seated - 40;
       c.onPan(el);
       expect(c.endMs()).toBeLessThan(settled);

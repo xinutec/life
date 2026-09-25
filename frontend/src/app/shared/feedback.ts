@@ -7,8 +7,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
  *  - `error()`  — a consistent failure notice (uniform fallback copy + duration).
  *  - `notify()` — a brief neutral confirmation ("Added to inventory.").
  *  - `undo()`   — the "Deleted X — Undo" safety net; commits the deletion when
- *                 the bar dismisses without an Undo tap. Generalised from the
- *                 to-do / shopping delete flow so any screen offers the same net. */
+ *                 the bar dismisses without an Undo tap. */
 @Injectable({ providedIn: 'root' })
 export class Feedback {
   private snack = inject(MatSnackBar);

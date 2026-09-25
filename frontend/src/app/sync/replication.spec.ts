@@ -37,10 +37,8 @@ describe('guardAuth — expired-session detection on sync fetches', () => {
   });
 
   it('tells the caller the session is gone, so replication can stand down', () => {
-    // The bug this pins (2026-07-13): a 401 was treated as transient, so a
-    // signed-out tab re-ran the sync every 5s forever — never recovering, never
-    // saying anything, and taking a 401 each time. Only a fresh login can help,
-    // so the guard must report the loss rather than just throw.
+    // A 401 is not transient: retrying it forever neither recovers nor
+    // informs, so the guard must report the loss rather than just throw.
     for (const status of [401, 403]) {
       const lost = vi.fn();
       expect(() => guardAuth(res({ status }), signal<string | null>(null), lost)).toThrow();
@@ -79,12 +77,9 @@ describe('guardAuth — expired-session detection on sync fetches', () => {
   });
 
   it('does NOT sign the user out on the service worker’s offline 504', () => {
-    // The bug this pins (2026-07-16): opening the app offline dumped the user on
-    // the sign-in screen AND erased the cached identity. ngsw intercepts every
-    // fetch; with no network it answers a bodiless synthetic 504 (no
-    // content-type) instead of letting the fetch reject — and the old inline
-    // "non-JSON means logged out" heuristic read that as an expired session.
-    // Offline is never proof of auth loss; the cycle must retry quietly.
+    // ngsw answers a failed fetch with a bodiless synthetic 504 (no
+    // content-type). Offline is never proof of auth loss; the cycle must retry
+    // quietly.
     const err = signal<string | null>(null);
     const lost = vi.fn();
     expect(() => guardAuth(res({ status: 504, contentType: null }), err, lost)).not.toThrow();
@@ -124,18 +119,11 @@ describe('AuthState', () => {
   });
 });
 
-/** REGRESSION — sync pulls once and then stops (#1567, found 2026-09-12).
+/** The pull must keep going on its own.
  *
- *  `live: true` is not enough on its own. RxDB subscribes to an ongoing pull
- *  only under `if (this.pull && this.pull.stream$ && this.live)`, so without a
- *  stream the replication performs its FIRST pull and nothing after it, bar a
- *  local write or an explicit `reSync()`. A tab left open therefore freezes at
- *  whatever the server held when it loaded — silently, and read-only, with no
- *  error anywhere. It showed up as a calendar missing the current day while the
- *  phone had it: 248 documents locally against 249 on the server.
- *
- *  This drives the real function against a stubbed endpoint and asserts the one
- *  thing the bug turned off — that a SECOND pull happens on its own. */
+ *  `live: true` is not enough: without a pull stream RxDB performs the FIRST
+ *  pull and nothing after it, so an open tab silently freezes at whatever the
+ *  server held when it loaded. This asserts a SECOND pull happens unprompted. */
 describe('startHttpReplication — the pull keeps going', () => {
   async function harness(pollMs: number) {
     // ast-grep-ignore: life-single-rxdb
@@ -174,12 +162,8 @@ describe('startHttpReplication — the pull keeps going', () => {
       identifier: 'poll-spec-sync',
       path: '/api/sync/entries',
       syncError: signal<string | null>(null),
-      // ⚠ The REAL SyncStatus, not a stand-in. This was
-      // `{reportError, clearError} as unknown as SyncStatus`, and the assertion
-      // made an incomplete object claim to be a complete one: the day
-      // `reportSuccess` was added, the stub silently lacked it and the pull
-      // handler threw `undefined is not a function` — which surfaced as a five
-      // second timeout, not as a compile error. A real instance cannot drift.
+      // ⚠ The REAL SyncStatus: a partial stub cast to it fails at runtime, not
+      // at compile time, when a method is added.
       syncStatus: new SyncStatus(),
       label: 'wellbeing sync',
       onAuthLost: () => {},
@@ -210,18 +194,12 @@ describe('startHttpReplication — the pull keeps going', () => {
   });
 });
 
-/** The rxdb semantics `SyncedStore.reSync` depends on (#1567 tail).
+/** The rxdb semantics `SyncedStore.reSync` depends on.
  *
  *  `reSync()` emits `'RESYNC'` into a plain Subject that only the INTERNAL
  *  replication subscribes to, and that object does not exist until `start()`.
- *  So on a replication that has never started — which is every non-leader tab,
- *  since `waitForLeadership` gates `start()` on winning the election — a
- *  `reSync()` is dropped on the floor with no error.
- *
- *  That is not academic. The Trash page restores a row on the server, removes
- *  the entry from the trash list, and relies entirely on the pull to bring the
- *  row back: "so the restored row is on screen when the user switches tabs". In
- *  a non-leader tab it does not come back.
+ *  So in a non-leader tab, whose replication never started, a `reSync()` is
+ *  silently dropped — and a row restored from the Trash never comes back.
  *
  *  `start()` covers both cases — `_start` re-syncs when `wasStarted` and begins
  *  the replication otherwise — which is why the store calls that instead. This

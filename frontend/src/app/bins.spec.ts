@@ -105,13 +105,7 @@ describe('nextCollections', () => {
   it('names the day the council stated, whatever the hour it is read at', () => {
     // The feed states a bare day with no timezone, and it must appear as that
     // day — never the one before, however late the reader is up.
-    //
-    // ⚠ **This used to assert `tomorrow` for a collection on the very day the
-    // reader was already in**, from a `now` of 23:30Z — which is 00:30 the next
-    // morning in London. The comment was about how the DATE is parsed, but the
-    // assertion pinned the reference day, and pinned it wrong: the bins were
-    // going out that morning. It also only meant that in a zone east of UTC, so
-    // on a machine in UTC it quietly tested nothing. The parsing it was actually
+    // Only the parsing is under test here; the reference day is covered below.
     // guarding is checked here, and the reference day below.
     const lateAtNight = new Date('2026-08-10T23:30:00Z');
     const rows = nextCollections([day('2026-09-24', 'Rubbish collection')], lateAtNight);
@@ -129,11 +123,9 @@ const AFTER_MIDNIGHT = new Date('2026-08-14T23:30:00Z');
 /**
  * The hour when the local day and the UTC day are different days.
  *
- * ⚠ **Every other case in this file is set mid-morning UTC, where the two agree
- * — which is why none of them could see this.** `daysUntil` took its idea of
- * "today" from the UTC fields, so between midnight and 01:00 BST the app was a
- * whole day behind: a collection happening THAT MORNING read as "tomorrow",
- * which is how a bin gets missed, and the next morning's read as "in 2 days".
+ * Every other case here is set mid-morning UTC, where the two agree. Between
+ * midnight and 01:00 BST a collection happening THAT MORNING must still read as
+ * "today".
  */
 describe('nextCollections across midnight, local time', () => {
   it('calls this morning’s collection today, not tomorrow', () => {

@@ -55,11 +55,8 @@
   </mat-list>
 </section>
 
-<!-- Same shape as the Buy list's row menu, and for the same reason: Material
-     sizes the meta area to its content, so every button here is width taken off
-     the name, and item names were arriving as "Milk (…". All three actions live
-     in the menu and the row keeps ONE trailing control, which is what /items
-     does and what leaves room for the second line to say what it means. -->
+<!-- Same shape as the Buy list's row menu: Material sizes the meta area to its
+     content, so every trailing button is width taken off the item name. -->
 <mat-menu #itemMenu>
   <ng-template matMenuContent let-it="it">
     <button mat-menu-item (click)="useItem(it)">

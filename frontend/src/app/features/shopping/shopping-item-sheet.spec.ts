@@ -27,9 +27,8 @@ const doc = (over: Partial<ShoppingDoc>): ShoppingDoc => ({
 });
 
 /**
- * Carries the zoneless scan-prefill regression coverage (a scan sets form
- * fields inside an async dialog-close → HTTP callback; signals are what make
- * the zoneless view update) — now living in the bottom sheet.
+ * Includes the zoneless scan-prefill case: a scan sets form fields inside an
+ * async dialog-close → HTTP callback, and only signals make the view update.
  */
 describe('ShoppingItemSheet', () => {
   function setup(opts: { scanned?: string | null; data?: { ulid: string } | null; items?: ShoppingDoc[] } = {}) {
@@ -110,7 +109,7 @@ describe('ShoppingItemSheet', () => {
   });
 
   it('add mode: tells the server the row may name something stocked', () => {
-    // Putting a thing on the list IS "I am running out of it" (#128). The
+    // Putting a thing on the list IS "I am running out of it". The
     // matching is the server's — the Buy screen never loads the catalogue — so
     // what this asserts is that the identity leaves the client at all.
     const { fixture, api } = setup();

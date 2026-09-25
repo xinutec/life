@@ -11,15 +11,7 @@
 
 /** A value that can be indexed by string — i.e. worth asking about a field. */
 export function isRecord(value: unknown): value is Record<string, unknown> {
-  // ⚠ **Arrays are excluded, and they used not to be.** `typeof [] === 'object'`
-  // and it is not null, so an array satisfied a guard named `isRecord` and was
-  // handed on as `Record<string, unknown>` — true of the runtime, false of the
-  // name. It cost an afternoon on 2026-09-12: the e2e mock answered `[]` to a
-  // sync pull, the array passed this guard, `documents` came back `undefined`
-  // from an index that cannot hold it, and the failure read as a malformed
-  // BATCH rather than as the wrong shape entirely. Every caller either checks
-  // the field's own type straight after or asks for strings an array cannot
-  // have, so no behaviour changes here — only what the predicate promises.
+  // ⚠ Arrays are excluded: `typeof [] === 'object'`, and a list is not a record.
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 

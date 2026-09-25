@@ -161,11 +161,8 @@ export class WellbeingCheckin {
 
   /** The entry just logged, while the amend window is still open.
    *
-   *  A signal rather than reading `pending`, which the template cannot see. It
-   *  exists because logging a bare score is the RARE case: 196 of 207 entries
-   *  were edited after creation, and a trace on 2026-08-31 caught the edit tap
-   *  landing in the same batch as the log — the flow committed a number, then
-   *  made the person reopen it to say what they actually meant.
+   *  A signal rather than reading `pending`, which the template cannot see.
+   *  Logging a bare score is the rare case; most check-ins get more said.
    *
    *  ⚠ Deliberately NOT an auto-opened sheet. Tapping an adjacent face inside
    *  this same window is how a half-step (a 3.5) is recorded, and a sheet

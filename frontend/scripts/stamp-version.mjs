@@ -1,12 +1,9 @@
-// Writes src/app/build-info.ts with the current git sha + build time, so the
-// running bundle can show which build it is. Embedded at build time (not fetched
-// at runtime) on purpose: a stale cached tab then shows its OWN old stamp, which
-// is the whole point — it lets you spot a stale cache instead of being reassured
-// by the server's current version. The generated file is gitignored.
+// Writes src/app/build-info.ts with the current git sha + build time. Embedded
+// at build time, not fetched: a stale cached tab then shows its OWN old stamp.
+// The generated file is gitignored.
 //
-// Mirrors recall's scripts/stamp-version.mjs, adapted for a Docker build with no
-// .git in context: the CI passes the commit as GIT_SHA (see Dockerfile +
-// .github/workflows/docker.yml); local dev falls back to `git`.
+// Docker has no .git in context, so CI passes the commit as GIT_SHA (see
+// Dockerfile); local builds fall back to `git`.
 import { execSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

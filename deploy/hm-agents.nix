@@ -17,12 +17,10 @@
 # The agent runs a STORE PATH (nix/emotion-worker.nix), not a script in the
 # working tree: what launchd runs is then whatever was committed and pinned in
 # the flake lock, and an uncommitted edit in ~/Code/life cannot become the
-# running daemon. Possible here precisely because the worker imports nothing but
-# the standard library — recall's ML agents stay on their uv venv.
+# running daemon. Possible because the worker imports only the standard library.
 #
-# Logs go to ~/Library/Logs/life for the same reason: launchd opens the stdio
-# paths before any code runs, so a repo that moves or is unreadable takes the
-# agent down with an empty log (see recall's exit-78 history).
+# Logs go to ~/Library/Logs/life: launchd opens the stdio paths before any code
+# runs, so a log path inside a repo that moves takes the agent down silently.
 #
 # The token is NOT in the nix store (it would be world-readable there): the
 # wrapper reads ~/.config/life/worker.env at runtime, holding

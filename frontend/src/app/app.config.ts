@@ -14,12 +14,8 @@ import { provideServiceWorker } from "@angular/service-worker";
 import { routes } from "./app.routes";
 
 // `DatePipe` reads LOCALE_ID, which Angular defaults to `en-US` whatever the
-// browser is set to — so Trash and Sync conflicts told a UK reader a version was
-// kept at "Sep 13, 2026, 10:12:45 AM". This is not the same knob as
-// `toLocaleString()`, which follows the browser and was already right on a
-// phone; the two disagreed inside one render and only this one was wrong for
-// real users. Registering the data is required as well as naming the id: without
-// it the pipe throws on any format that needs month or day names.
+// browser says; `toLocaleString()` follows the browser. The locale data must be
+// registered too, or the pipe throws on month and day names.
 registerLocaleData(localeEnGb);
 
 export const appConfig: ApplicationConfig = {

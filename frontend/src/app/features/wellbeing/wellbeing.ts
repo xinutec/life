@@ -33,12 +33,10 @@ interface Day {
   entries: WellbeingDoc[];
 }
 
-// The whole chart lives in ONE coordinate system: the axis words, the dots, the
-// midnight rules and the weekday names are all placed in these viewBox units. The
-// words used to be CSS-positioned beside the svg, which is what let them drift off
-// the levels they name and (once absolutely positioned) slide off the screen —
-// two geometries that only agreed by luck. padLeft is the strip the words sit in;
-// padBottom the strip the weekday names sit in.
+// The whole chart lives in ONE coordinate system: axis words, dots, midnight
+// rules and weekday names are all placed in these viewBox units, so a word is
+// level with the dot it names by construction. padLeft is the strip the words
+// sit in; padBottom the strip the weekday names sit in.
 const CHART = { w: 300, h: 96, padLeft: 48, padRight: 6, padTop: 8, padBottom: 18 };
 
 /** Where the axis words end (right-aligned against the plot). */
@@ -195,10 +193,8 @@ export class Wellbeing {
           // and the rounded number is what the scroll event will report.
           this.lastLeft = el.scrollLeft;
         }
-        // ⚠ On EVERY path, including the one with no rail. An earlier attempt
-        // cleared this only after seating, behind an early return — the flag
-        // stuck set, every pan was ignored, and the failure rate went from
-        // 2-in-10 to 7-in-10. Measured both ways (#1293).
+        // ⚠ On EVERY path, including the one with no rail, or the flag sticks
+        // and every pan is ignored.
         this.reseating.set(false);
       });
     });
@@ -250,9 +246,9 @@ export class Wellbeing {
    *  The rail holds whole pixels and one is ~50 MINUTES at a 14-day window on a
    *  phone, so re-deriving the window's end from a position we ourselves wrote
    *  loses up to half a pixel of time — and the caption names both edges as
-   *  days, so near local midnight that read as the window jumping a day
-   *  (#1293). Provenance, not a tolerance: ignoring small changes would swallow
-   *  the smallest real pan and still drift once several were made. */
+   *  loses up to half a pixel of time, which near local midnight reads as the
+   *  window jumping a day. Provenance, not a tolerance: ignoring small changes
+   *  would swallow the smallest real pan and still drift once several were made. */
   private lastLeft = Number.NaN;
 
   /** Map the scroller's position onto the window's right edge.

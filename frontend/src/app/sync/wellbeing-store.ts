@@ -120,11 +120,9 @@ export class WellbeingStore extends SyncedStore<WellbeingDoc> {
             conflicts,
           ),
       }),
-      // '-v2': replication-state reset (2026-07-03). The isEqual push-loss bug
-      // (conflict-merge.ts) advanced the push checkpoint past field edits
-      // without sending them; a fresh identifier makes RxDB re-examine every
-      // doc on next start so stranded edits finally push. Local state wins —
-      // downstream defers to upstream for forks without meta (rxdb#7804).
+      // '-v2': a fresh identifier made RxDB re-examine every doc, pushing edits
+      // an earlier isEqual bug had skipped. Local state wins — downstream
+      // defers to upstream for forks without meta (rxdb#7804).
       identifier: 'wellbeing-http-sync-v2',
       path: '/api/sync/wellbeing',
       label: 'wellbeing sync',

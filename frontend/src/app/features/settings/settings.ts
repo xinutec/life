@@ -18,12 +18,10 @@ import {
 } from '../../shared/wellbeing-reminder';
 import { SwUpdates } from '../../sw-updates';
 
-/** Settings — the natural home for app-level bits (the build version today; NC
- *  link, preferences, etc. later). The version is stamped into the bundle at
- *  build time (see scripts/stamp-version.mjs), so what shows here is the build
- *  actually running in *this* tab — a stale PWA reveals its own old sha rather
- *  than the server's current one. "Check for updates" forces the service worker
- *  to fetch a newer build and reload. */
+/** Settings: the build version, the Nextcloud calendar link and reminders. The
+ *  version is stamped into the bundle at build time, so it is the build running
+ *  in *this* tab — a stale PWA shows its own old sha. "Check for updates" forces
+ *  the service worker to fetch a newer build and reload. */
 @Component({
   selector: 'app-settings',
   templateUrl: './settings.html',
@@ -50,11 +48,8 @@ export class Settings {
     : '';
   protected readonly checking = signal(false);
 
-  // The Nextcloud calendar link (app password, Login Flow v2). Separate from
-  // signing in: identity OAuth cannot reach the DAV endpoints, so the calendar
-  // needs its own long-lived credential (docs/design/overview.md §2b). The
-  // backend has served this flow since before there was a button for it, which
-  // is why nothing was ever linked.
+  // The Nextcloud calendar link (app password, Login Flow v2): identity OAuth
+  // cannot reach the DAV endpoints, so the calendar needs its own credential.
   protected readonly ncStatus = signal<ConnectionStatus | null>(null);
   protected readonly ncBusy = signal(false);
   /** The approval URL, kept so it stays tappable if the popup was blocked —
@@ -68,15 +63,9 @@ export class Settings {
     // one would invite a re-link that replaces a working credential.
     this.readNcStatus();
     // And again whenever this page comes back to the front.
-    //
-    // Approving the grant happens on NEXTCLOUD'S page, which on a phone takes
-    // over the foreground — so the app that started the flow is backgrounded or
-    // replaced while the only interesting thing happens elsewhere. A timer
-    // running in that app is worthless: on 2026-08-10 the credential landed
-    // server-side and the card sat on "Waiting for approval" indefinitely,
-    // having made exactly ONE status request, the one on page load. Coming back
-    // is the event worth listening to, and it fires whether the page was
-    // backgrounded, replaced, or never left at all.
+    // Approving happens on NEXTCLOUD'S page, which on a phone takes over the
+    // foreground, so a timer here would not be running. Coming back to the
+    // front is the event worth listening to.
     const onReturn = (): void => {
       if (document.visibilityState === 'visible') this.readNcStatus();
     };

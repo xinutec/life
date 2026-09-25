@@ -137,9 +137,7 @@ describe('FilesDialog', () => {
   });
 
 it('splits a phone-named scan so the extension cannot be trimmed away', () => {
-    // The head is what CSS is allowed to eat; the tail is pinned. A character
-    // budget was tried first and was wrong by 60% — the row is 192px and 34
-    // characters render at 307 — which is why the split is structural.
+    // The head is what CSS is allowed to eat; the tail is pinned.
     const { cmp } = setup({
       files: [file({ name: 'IMG_20240315_143022_receipt_dishwasher_manual.pdf' })],
     });

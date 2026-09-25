@@ -95,23 +95,15 @@ class MainActivity : WebShellActivity() {
      * The three native capabilities the web app drives, exposed to the life app's
      * own pages and to nothing else in the WebView.
      *
-     * ⚠ These were `addJavascriptInterface`, which Android documents as "available to
-     * every frame within the WebView, including iframes. It lacks origin-based access
-     * control." Two re-checked `web.url` per call — the *main frame*, so it still says
-     * "life" when the caller is a sub-frame — and the reminders bridge checked nothing.
-     * Nothing untrusted is embedded today, but behind that sat the clipboard, arbitrary
-     * notifications, and a shop bridge taking a URL **and JavaScript to run against
-     * it**. One embedded widget would be enough, and by then the hole is old.
-     *
      * `addWebMessageListener` is origin-scoped: each object is injected only into frames
-     * matching [ALLOWED_ORIGINS]. Each listener also checks `sourceOrigin` and
-     * `isMainFrame`, per Android's guidance, rather than trusting the rules alone — so
-     * the per-call `web.url` gates are replaced by one that is about the caller.
+     * matching [ALLOWED_ORIGINS], and each listener also checks `sourceOrigin` and
+     * `isMainFrame`. `addJavascriptInterface` reaches every frame, iframes included, and
+     * behind these sit the clipboard, arbitrary notifications, and a shop bridge taking
+     * a URL **and JavaScript to run against it**.
      *
      * ⚠ Without [WebViewFeature.WEB_MESSAGE_LISTENER] the bridges are absent and the web
-     * app feature-detects its way to browser behaviour, which all of these already do.
-     * Falling back to `addJavascriptInterface` would re-open the hole on exactly the
-     * devices least able to afford it.
+     * app feature-detects its way to browser behaviour. Never fall back to
+     * `addJavascriptInterface`.
      */
     override fun onWebViewCreated(web: WebView) {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return
@@ -143,10 +135,8 @@ class MainActivity : WebShellActivity() {
             name,
             ALLOWED_ORIGINS,
         ) { _, message, origin, isMainFrame, proxy ->
-            // The origin rules already did this. Checked again because a bridge
-            // that depends on one line being right elsewhere is a bridge that
-            // breaks when that line is edited by someone who doesn't know it is
-            // load-bearing.
+            // The origin rules already did this; checked again so the bridge does not
+            // depend on one line elsewhere staying right.
             if (isMainFrame && sameOrigin(LIFE_ORIGIN, origin.toString())) {
                 val body = message.data?.let { runCatching { JSONObject(it) }.getOrNull() }
                 if (body != null) handle(body, proxy)
@@ -416,11 +406,8 @@ class MainActivity : WebShellActivity() {
      * The image on the system clipboard as a `data:` URL, or null if there isn't
      * one. A WebView can't read a clipboard image itself, so the page asks us.
      *
-     * No thread hop and no origin check of its own any more: a web-message
-     * listener is called on the UI thread, which is what `ClipboardManager`
-     * requires, and only for the app's own origin — so the `FutureTask` that used
-     * to bounce a binder-thread call onto the UI thread, and the `web.url` test
-     * that asked about the main frame rather than the caller, are both gone.
+     * Called on the UI thread, which `ClipboardManager` requires, and only for the
+     * app's own origin.
      */
     private fun readClipboardImageDataUrl(): String? {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -446,10 +433,8 @@ class MainActivity : WebShellActivity() {
      */
     @SuppressLint("SetJavaScriptEnabled") // the WebView runs the app's own bundle
     private fun shopRun(url: String, extractorJs: String, requestId: String) {
-        // No origin gate here any more: the only caller is the web-message
-        // listener, which refuses anything that isn't the app's own main frame
-        // before this is reached. The test that stood here asked whether the *main
-        // frame* was life, which is not the same question as who called.
+        // No origin gate here: the web-message listener already refused anything
+        // that isn't the app's own main frame.
         if (!isShopUrl(url)) {
             resolveShop(requestId, """{"ok":false,"error":"host not allowed"}""")
             return

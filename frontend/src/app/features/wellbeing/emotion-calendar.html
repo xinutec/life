@@ -48,9 +48,8 @@
     <aside class="selection">
       <header>
         <strong>{{ selected().length }} day{{ selected().length === 1 ? '' : 's' }} selected</strong>
-        <!-- ⚠ Names its object. Labelled "Clear", sitting above a row of emotion
-             chips, it read as "delete these feelings" — and a control that looks
-             destructive is a bug even when it does nothing of the sort. -->
+        <!-- ⚠ Names its object: a bare "Clear" above emotion chips reads as
+             "delete these feelings". -->
         <button mat-button type="button" (click)="clear()">Deselect all</button>
       </header>
       <!-- The TOTAL, because the list below is capped and scrolls: it ends flush

@@ -48,16 +48,9 @@ export default tseslint.config(
     },
   },
   {
-    // The layout harness and its specs. The blocks above say `src`, so until
-    // this existed the e2e tree was linted by nothing, on top of being
-    // type-checked by nothing (see tsconfig.e2e.json). It is the only gate that
-    // can see what a phone actually suffers, which makes "nobody checks it" the
-    // wrong property for it to have.
-    //
-    // Type-aware, and that is the point: the rule that pays here is
-    // no-floating-promises. A `route.fulfill(...)` dropped inside a route
-    // handler still mocks the request, so the test passes and nothing says the
-    // handler returned before the fulfilment finished.
+    // The layout harness and its specs. Type-aware for no-floating-promises: a
+    // `route.fulfill(...)` dropped inside a handler still mocks the request, so
+    // the test passes without the fulfilment having finished.
     files: ["e2e/**/*.ts", "playwright.config.ts"],
     extends: [...tseslint.configs.recommendedTypeChecked, ...tseslint.configs.stylisticTypeChecked],
     languageOptions: {
@@ -68,13 +61,8 @@ export default tseslint.config(
     },
   },
   {
-    // The same exemption the src specs get, for the same reason, quoted from the
-    // block above: a double asserted into the interface it stands in for is the
-    // whole point of a double; getting it wrong fails a test, it never reaches a
-    // user. An e2e spec is a test, so the reasoning applies unchanged — it is
-    // where `window.ShopBridge` gets stubbed and where a service worker's JSON
-    // gets named. What stays on is no-floating-promises, which is the rule that
-    // catches a mock silently not finishing.
+    // The same exemption the src specs get: a test double asserted into its
+    // interface can only fail a test.
     files: ["e2e/**/*.spec.ts"],
     rules: {
       "@typescript-eslint/no-unsafe-type-assertion": "off",

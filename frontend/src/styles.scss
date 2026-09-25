@@ -16,14 +16,10 @@ html {
     )
   );
 
-  // Lift dialogs off the base surface. Angular Material 3 maps the dialog
-  // container to `surface` (@angular/material 22 _m3-dialog.scss) — the SAME
-  // token as the page body and a hair off the bottom sheet (surface-container-low).
-  // On the dark scheme all three are near-black (#121410 / #1a1c18) and the
-  // elevation shadow is invisible, so a dialog has no visible boundary against
-  // what it floats over (seen live: the "Find on Waitrose" dialog bleeding into
-  // the item sheet behind it). M3's own spec puts dialogs on surface-container-high;
-  // this restores that tonal step, which is what separates them on dark.
+  // Lift dialogs off the base surface. Material 3 puts the dialog container on
+  // `surface`, the page body's token, and on the dark scheme the elevation
+  // shadow is invisible, so a dialog has no boundary against what it floats
+  // over. M3's own spec puts dialogs on surface-container-high.
   @include mat.dialog-overrides(
     (
       container-color: var(--mat-sys-surface-container-high),
@@ -43,8 +39,7 @@ html {
 }
 
 // Universal border-box reset (fleet convention, DL-ANGULAR-BOX-SIZING-RESET):
-// without it `width: 100%` + side padding renders wider than the viewport and
-// the page scrolls sideways on a phone. Previously patched per-element here.
+// without it `width: 100%` + side padding renders wider than the viewport.
 *,
 *::before,
 *::after {
@@ -139,17 +134,10 @@ h3 {
   font-variant-numeric: tabular-nums;
 }
 
-// ⚠ The class is repeated to win a specificity fight, and it is not decoration.
-// Where the expiry IS a list row's trailing meta — Today's "Expiring soon" card,
-// the one screen where "expired" has to shout — Material colours the slot with
-// `.mdc-list-item.mdc-list-item--with-trailing-meta .mdc-list-item__end`, three
-// classes, and weights it with a two-class rule that a plain `.expiry.expired`
-// ties and then loses on source order. It lost both: measured on that card,
-// "expired 1d ago", "expired since June 2026" and "in 1d" all rendered
-// rgb(67,72,63) at weight 500 — identical grey, no urgency at all — against
-// rgb(186,26,26)/700 for the same markup on the All-items list, where nothing
-// competes. Four classes clears the colour rule outright, so neither screen
-// depends on which stylesheet happens to load last.
+// ⚠ The class is repeated to win a specificity fight. On Today's "Expiring
+// soon" card the expiry is a list row's trailing meta, which Material colours
+// and weights with a three-class rule; four classes win regardless of
+// stylesheet order.
 .expiry.expiry.expiry.expired {
   color: var(--mat-sys-error);
   font-weight: 700;

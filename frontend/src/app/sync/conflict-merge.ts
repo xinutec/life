@@ -85,12 +85,11 @@ function logMergeTrace(t: MergeTrace): void {
 /** Build a field-level 3-way-merge conflict handler for a synced collection.
  *
  *  A conflict means the same row changed on two devices while one was offline.
- *  The old whole-document rule (local wins) silently dropped the other
- *  device's edits even on fields this device never touched. Instead, diff
- *  against the assumed base (the state this device last synced):
+ *  A conflict means the same row changed on two devices while one was offline.
+ *  Diff against the assumed base (the state this device last synced):
  *
  *  - a field only I changed → mine;
- *  - a field only they changed → theirs — nothing of theirs is lost anymore;
+ *  - a field only they changed → theirs;
  *  - a field we BOTH changed → mine (the user pushing is the latest intent),
  *    and the losing value is handed to `onConflicts` for the conflict log —
  *    decided, but never silently discarded.
@@ -125,9 +124,8 @@ export function makeConflictHandler<
      *  upstream one is load-bearing: `isEqual(assumedMaster, current,
      *  'upstream-check-if-equal')` decides whether a local doc still needs
      *  pushing — `false` is what queues the push. Revs are server-minted, so
-     *  a local edit changes content but NOT `rev`; comparing rev alone judged
-     *  every field edit "already replicated" and silently dropped it (the
-     *  2026-07-03 push-loss bug — see replication-push.spec.ts). The content
+     *  a local edit changes content but NOT `rev`, so comparing rev alone
+     *  would drop every field edit (see replication-push.spec.ts). The content
      *  fields must be compared too — under each field's declared strategy, so
      *  array fields (emotions) don't read as forever-changed (see [[eqBy]]). */
     isEqual: (a, b) =>

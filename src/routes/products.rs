@@ -333,7 +333,7 @@ async fn build_detail(
 ) -> Result<ProductDetail, AppError> {
     let product = repo::get_by_id(pool, id).await?.ok_or(AppError::NotFound)?;
     // By id AND barcode: a purchase made before this catalogue row existed, or
-    // one whose link was corrected (#1281), is still this person's purchase.
+    // one whose link was corrected, is still this person's purchase.
     let purchases = purchases_repo::history(
         pool,
         user_id,

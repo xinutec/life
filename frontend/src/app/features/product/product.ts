@@ -71,9 +71,8 @@ interface FactConflict {
  *
  *  `none` = the shop's own results were checked and none carried this barcode.
  *  `unknown` = nobody has ever looked, and this device can't: the shop is behind
- *  a bot-wall only the app's hidden WebView gets through. The two were one state
- *  while Asda was the only shop, which would have made this screen say "Waitrose
- *  doesn't have it" when the truth was "we never asked". */
+ *  a bot-wall only the app's hidden WebView gets through. Saying "doesn't have
+ *  it" for that would claim an answer nobody asked for. */
 type ShopLookup = 'idle' | 'searching' | 'found' | 'none' | 'unknown' | 'error';
 
 /** The shops a product can be looked up at, in the order they're offered. Both
@@ -553,9 +552,8 @@ export class ProductPage {
 
   // --- Our own brand + pack size: hand corrections, same as the name ---
   //
-  // The pack size is where this started: a shop's own casing ("250ML") that no
-  // source disagrees with, so the picker can't fix it — only our own layer can.
-  // Brand rides along for the same reason.
+  // A shop's own casing ("250ML") that no source disagrees with can only be
+  // fixed in our own layer.
 
   readonly editingDetails = signal(false);
   readonly brandDraft = signal('');
@@ -731,19 +729,9 @@ export class ProductPage {
   /**
    * Give this product a picture from a file the person picks.
    *
-   * The whole path underneath already existed and nothing called it — the PUT
-   * endpoint, the API client, and `ProductImages.replace` with its cache-buster
-   * were all written and unreachable. So 17 of 84 items showed no picture and
-   * there was no way to give them one, which is the actual gap here; a wiped
-   * cache was always hypothetical.
-   *
-   * Keyed on the barcode because that is what the endpoint takes, and every one
-   * of those 17 items has one. A shop product with no EAN cannot be reached this
-   * way, so the control is hidden rather than offered and failing.
-   *
-   * `capture` is deliberately NOT set on the input: it would force the camera and
-   * take away the photo library, and a picture of the thing is often already on
-   * the phone. The system picker offers the camera anyway.
+   * Keyed on the barcode, which is what the endpoint takes; a shop product
+   * with no EAN gets no control rather than a failing one. No `capture` on the
+   * input: it would force the camera and hide the photo library.
    */
   pickImage(ev: Event): void {
     // A guard, not a cast: `ev.target` is EventTarget and narrowing it by

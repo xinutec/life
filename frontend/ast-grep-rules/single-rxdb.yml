@@ -1,7 +1,7 @@
 # Every offline store must share ONE RxDB database via the LifeDb service. A store
 # calling createRxDatabase() itself is fine alone but throws in PRODUCTION when a
-# second store loads at the same time (ignoreDuplicate is dev-only) — which shipped
-# empty to-do/shopping lists to prod once. Inject LifeDb and use .collection(...).
+# second store loads at the same time (ignoreDuplicate is dev-only). Inject LifeDb
+# and use .collection(...).
 # The single legitimate call, in sync/life-db.ts, is suppressed inline.
 id: life-single-rxdb
 language: typescript

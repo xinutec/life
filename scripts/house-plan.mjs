@@ -2,16 +2,10 @@
 // A top-down plan of the house, with every furniture box NUMBERED — so a person
 // can say "3 is the tall cupboard" instead of reading coordinates.
 //
-// Why numbers and not names: scenes/house.json's furniture carries geometry
-// only (cx/cz/w/d/h/y0/color) and no labels, so nothing in the file says which
-// box is which. That is exactly the gap between having locations in the
-// database and placing them in the scene (#134) — and it is a question only
-// somebody who has stood in the room can answer.
+// Numbers, because scenes/house.json's furniture carries geometry only and no
+// labels.
 //
-// Reuses `perimeter` from the app rather than re-deriving the turtle walk: the
-// convention (turn THEN step, heading in degrees, +X at 0) is stated in one
-// place and tested there, and a second copy would drift the first time either
-// changed.
+// Reuses `perimeter` from the app rather than re-deriving the turtle walk.
 //
 //   ./scripts/house-plan.mjs > /tmp/plan.svg
 //   ./scripts/house-plan.mjs --room kitchen > /tmp/kitchen.svg
@@ -56,9 +50,8 @@ const bounds = (pts) => ({
 const inAny = (f) =>
   outlines.some(({ pts }) => {
     const b = bounds(pts);
-    // No padding. A tolerance of 0.3m pulled the dining room's boxes into the
-    // kitchen plan, which is worse than missing one on the boundary: a number
-    // pointing at furniture in another room cannot be answered at all.
+    // No padding: a tolerance pulls a neighbouring room's boxes into the plan,
+    // which is worse than missing one on the boundary.
     return f.cx >= b.x0 && f.cx <= b.x1 && f.cz >= b.z0 && f.cz <= b.z1;
   });
 
@@ -85,10 +78,8 @@ const parts = [
   `<svg xmlns="http://www.w3.org/2000/svg" width="${W.toFixed(0)}" height="${H.toFixed(0)}" viewBox="0 0 ${W.toFixed(0)} ${H.toFixed(0)}">`,
   `<rect width="100%" height="100%" fill="#fbfbf7"/>`,
 ];
-// ⚠ Split by HEIGHT, in two panels. Seen from above, a wall unit sits exactly
-// on top of the base unit below it, so a single plan stacks their numbers into
-// an unreadable pile — measured: seven numbers overlapping in one run of
-// counter. A plan nobody can read is not a question anybody can answer.
+// ⚠ Split by HEIGHT, in two panels: seen from above, a wall unit sits exactly
+// on the base unit below it and their numbers pile up.
 const WALL_UNIT_Y = 1.2; // metres: above worktop height, so it is on the wall
 const panels = [
   { title: 'At floor level', of: boxes.filter((x) => (x.y0 ?? 0) < WALL_UNIT_Y) },
@@ -183,14 +174,8 @@ if (iso) {
     const [lx, ly] = P(cx, y1, cz).split(',');
     labels.push({ n: box.n, x: Number(lx), y: Number(ly) + 5 });
   }
-  // ⚠ EVERY label after ALL the geometry. Drawn with its box, a number is
-  // painted over by whatever is drawn in front of it — 25 and 20 came out as
-  // ghosts under the units in front, which is precisely the boxes a person most
-  // needs to name.
-  //
-  // Nudged apart where two land within a few pixels: coincident labels are as
-  // unreadable as hidden ones, and this is a picture whose whole job is to let
-  // somebody say a number.
+  // ⚠ EVERY label after ALL the geometry, or a box drawn in front paints over
+  // it. Nudged apart where two land within a few pixels.
   labels.sort((a, b2) => a.y - b2.y || a.x - b2.x);
   for (const [i, l] of labels.entries()) {
     for (const other of labels.slice(0, i)) {
