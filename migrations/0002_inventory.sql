@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS locations (
         REFERENCES locations (id) ON DELETE CASCADE
 );
 
--- A tracked thing. Generic: `category` is food/medication/tool/document/other.
+-- A tracked thing. Generic: `category` is an ItemCategory (src/inventory/types.rs).
 -- `quantity`/`unit`/`expiry` are first-class (not food-only). `location_id`
 -- points at the current node (typically a layer).
 CREATE TABLE IF NOT EXISTS items (

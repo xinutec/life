@@ -7,7 +7,7 @@
 -- Global monotonic revision. Bumped inside each write transaction via
 -- `UPDATE sync_rev SET val = LAST_INSERT_ID(val + 1)`; the row lock serialises
 -- assignment to *commit* order, so a pull can never advance its checkpoint past a
--- rev that is assigned but not yet committed (review S1).
+-- rev that is assigned but not yet committed.
 CREATE TABLE IF NOT EXISTS sync_rev (
     id  TINYINT UNSIGNED NOT NULL PRIMARY KEY,
     val BIGINT UNSIGNED  NOT NULL

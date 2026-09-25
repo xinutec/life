@@ -1,6 +1,7 @@
 -- life schema, migration 0001: auth tables.
--- Applied at boot by sqlx::migrate! (src/db.rs). Append-only: never edit a
--- shipped migration; add a new file instead.
+-- Applied at boot by sqlx::migrate! (src/db.rs). Append-only: never change the
+-- SQL of a shipped migration; add a new file instead. A comment-only edit needs
+-- scripts/rechecksum-migrations.sh.
 
 CREATE TABLE IF NOT EXISTS sessions (
     id           CHAR(64)     NOT NULL PRIMARY KEY,

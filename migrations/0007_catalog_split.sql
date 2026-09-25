@@ -8,8 +8,7 @@
 -- catalog-vs-inventory split.
 --
 -- Single-user app, so `products` is simply Pippijn's catalog (no per-user
--- sharing concerns). Additive + backfilled; the redundant items.barcode/name
--- are kept for now and dropped in a later migration once reads go via product.
+-- sharing concerns). Additive + backfilled; items.barcode/name are kept.
 
 -- products: surrogate id PK + optional, unique barcode + catalog fields.
 ALTER TABLE products MODIFY COLUMN barcode VARCHAR(32) NULL;

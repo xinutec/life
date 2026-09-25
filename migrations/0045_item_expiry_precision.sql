@@ -1,9 +1,8 @@
 -- Life schema, migration 0045: say how much of an expiry date is real.
 
 -- `items.expiry` is a DATE, so it always has a day, and a medicine box does not.
--- Boxes are printed MM/YYYY. The first medication added to the app was given as
--- **06/2028** and had to be stored as **2028-06-30** — the end of the month,
--- because a box marked 06/2028 is good THROUGH June and storing the 1st would
+-- Boxes are printed MM/YYYY. A box marked 06/2028 is stored as 2028-06-30 — the
+-- end of the month, because it is good THROUGH June and storing the 1st would
 -- expire it twenty-nine days early.
 --
 -- That is the right date to store. The problem is that nothing recorded it as a

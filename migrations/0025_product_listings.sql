@@ -15,8 +15,7 @@
 -- sources onto it by barcode.
 --
 -- Non-destructive (expand phase): `products.source`/`external_id` are left in
--- place but become vestigial (the listing is authoritative). A later migration
--- drops them once no code reads them.
+-- place but become vestigial (the listing is authoritative).
 
 CREATE TABLE IF NOT EXISTS product_listings (
     id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
