@@ -5,6 +5,8 @@
 export type { BinDay } from './generated/BinDay';
 export type { PlannedTrip } from './generated/PlannedTrip';
 export type { ConnectionStatus } from './generated/ConnectionStatus';
+export type { ConnectStarted } from './generated/ConnectStarted';
+export type { ConnectState } from './generated/ConnectState';
 export type { Me } from './generated/Me';
 export type { LocationKind } from './generated/LocationKind';
 export type { Loc } from './generated/Loc';

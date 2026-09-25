@@ -5,7 +5,8 @@ import {
   AsdaHit,
   BinDay,
   ConflictEntry,
-  ConnectionStatus,
+  ConnectStarted,
+  ConnectState,
   ConflictKind,
   CoverageQuery,
   FieldChoice,
@@ -69,12 +70,12 @@ export class LifeApi {
    *  backend then polls NC in the background for up to five minutes and stores
    *  the app password itself — this returns as soon as there is a URL to open,
    *  not when the grant completes. Poll {@link nextcloudStatus} for that. */
-  nextcloudConnect(): Observable<{ login_url: string }> {
-    return this.http.post<{ login_url: string }>('/api/nextcloud/connect/init', {});
+  nextcloudConnect(): Observable<ConnectStarted> {
+    return this.http.post<ConnectStarted>('/api/nextcloud/connect/init', {});
   }
   /** Whether the app password is in hand. Cheap — no Nextcloud round-trip. */
-  nextcloudStatus(): Observable<{ status: ConnectionStatus }> {
-    return this.http.get<{ status: ConnectionStatus }>('/api/nextcloud/connect/status');
+  nextcloudStatus(): Observable<ConnectState> {
+    return this.http.get<ConnectState>('/api/nextcloud/connect/status');
   }
 
   locations(): Observable<Loc[]> {

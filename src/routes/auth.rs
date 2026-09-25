@@ -8,11 +8,12 @@ use axum::extract::{Query, State};
 use axum::response::Redirect;
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use chrono::Utc;
-use serde::Deserialize;
-use serde_json::{Value, json};
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::error::AppError;
-use crate::nextcloud::{credentials, identity, login_flow};
+use crate::nextcloud::credentials::{self, LinkStatus};
+use crate::nextcloud::{identity, login_flow};
 use crate::pending_login;
 use crate::session::{AuthUser, COOKIE_NAME, UserSession, create_session, destroy_session};
 use crate::state::AppState;
@@ -133,12 +134,26 @@ pub async fn logout(
     Ok((jar.remove(Cookie::from(COOKIE_NAME)), Redirect::to("/")))
 }
 
+/// Where to approve the calendar link.
+#[derive(Debug, Serialize, TS)]
+#[ts(export)]
+pub struct ConnectStarted {
+    pub login_url: String,
+}
+
+/// Whether the calendar link is usable.
+#[derive(Debug, Serialize, TS)]
+#[ts(export)]
+pub struct ConnectState {
+    pub status: LinkStatus,
+}
+
 /// POST /api/nextcloud/connect/init → start Login Flow v2, return the grant
 /// URL, and poll for completion in the background until granted or timeout.
 pub async fn connect_init(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
-) -> Result<Json<Value>, AppError> {
+) -> Result<Json<ConnectStarted>, AppError> {
     let init = login_flow::initiate(&app.http, &app.cfg.nc_base_url).await?;
     let login_url = init.login_url.clone();
 
@@ -169,8 +184,7 @@ pub async fn connect_init(
         }
     });
 
-    // dev-lint: allow-wire-untyped pre-standard debt (DL-WIRE-UNTYPED-RESPONSE landed 2026-09-03): give this handler a Serialize response struct when the route is next touched
-    Ok(Json(json!({ "login_url": login_url })))
+    Ok(Json(ConnectStarted { login_url }))
 }
 
 /// GET /dev-login → DEV ONLY. Mints a session for `DEV_LOGIN_USER` with no
@@ -193,8 +207,7 @@ pub async fn dev_login(
 pub async fn connect_status(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
-) -> Result<Json<Value>, AppError> {
+) -> Result<Json<ConnectState>, AppError> {
     let status = credentials::status(&app.pool, &user.user_id).await?;
-    // dev-lint: allow-wire-untyped pre-standard debt (DL-WIRE-UNTYPED-RESPONSE landed 2026-09-03): give this handler a Serialize response struct when the route is next touched
-    Ok(Json(json!({ "status": status })))
+    Ok(Json(ConnectState { status }))
 }
