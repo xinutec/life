@@ -1,10 +1,9 @@
-//! The set-only tombstone rule, per collection (B6): a sync push can NEVER
+//! The set-only tombstone rule, per collection: a sync push can NEVER
 //! clear `deleted_at`, even with the correct assumed rev — the explicit trash
 //! restore is the one undelete path. The shopping copy of this test lives in
-//! `trash_db.rs`; with pull/push now shared over `SyncSpec`, these prove the
+//! `trash_db.rs`; with pull/push shared over `SyncSpec`, these prove the
 //! remaining collections ride the same implementation. One sequential test
-//! (parallel tests contend on sync_rev and can deadlock). Runs only when
-//! LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on the SQL reads as a passing one.
+//! (parallel tests contend on sync_rev and can deadlock).
 
 mod common;
 

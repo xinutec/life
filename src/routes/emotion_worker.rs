@@ -1,17 +1,11 @@
 //! The channel the emotion-suggestion worker talks to.
 //!
-//! The model lives on the Mac, which is a deliberately one-way WireGuard peer:
-//! it may open connections into the fleet, and nothing in the fleet may open one
-//! toward it (the point being that a compromised server must not be able to reach
-//! the machine holding the originals). So the fleet cannot call the model — the
-//! worker calls in, asks for work, and posts the answer back. That inversion is
-//! the whole reason this module exists.
+//! The model lives on the Mac, a one-way WireGuard peer: it may connect into the
+//! fleet, never the reverse, so a compromised server cannot reach it. So the
+//! worker calls in, asks for work, and posts the answer back.
 //!
-//! Waiting happens here rather than on the worker: [`next`] holds the request open
-//! until a job appears or the poll window runs out. A worker that hammered a
-//! plain "anything for me?" endpoint would either burn a request a second or make
-//! you watch a note sit unread for the length of its sleep; holding the socket
-//! costs nothing and gets a note picked up the moment you finish writing it.
+//! [`next`] long-polls, so a note is picked up the moment it is written without
+//! the worker hammering the endpoint.
 //!
 //! Authentication is a bearer token, not a session: the worker is a daemon, not a
 //! browser, and it acts for no user — the jobs it is handed carry a prompt and

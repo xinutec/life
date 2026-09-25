@@ -1,14 +1,8 @@
 //! **A missing FILE must 404, not be handed the page.**
 //!
-//! #1478, measured across the fleet 2026-09-08: `GET /media/nope.woff2` came
-//! back `200 text/html` — the SPA shell, to a browser that asked for a font. It
-//! renders broken icons and reports nothing at all, so the failure is silent on
-//! both sides, and the wrong answer being a `200` is what makes it invisible.
-//!
-//! The rule is a dot in the last path segment: `/today` is a route and
-//! `/main-ABC123.js` is a file. A heuristic, and the alternative — enumerating
-//! the bundle's own asset names — would have to be rebuilt whenever `ng build`
-//! changes a hash.
+//! A font answered with `200 text/html` renders as broken icons and reports
+//! nothing. The rule is a dot in the last path segment: `/today` is a route and
+//! `/main-ABC123.js` is a file.
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};

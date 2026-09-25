@@ -1,6 +1,6 @@
-//! The raw-document archive (product_documents, 0034): keep every fetched source
-//! payload verbatim, one per (product, source, kind), so we never fetch it twice.
-//! Runs only when LIFE_TEST_DATABASE_URL is set.
+//! The raw-document archive (product_documents, 0034): keep every fetched
+//! source payload verbatim, one per (product, source, kind), so we never fetch
+//! it twice.
 
 mod common;
 

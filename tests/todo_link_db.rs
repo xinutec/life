@@ -1,6 +1,5 @@
-//! To-do connections against a real MariaDB. Runs only when LIFE_TEST_DATABASE_URL
-//! is set; fails otherwise, because a skipped check on the SQL reads as a passing one. Covers link CRUD (kinds + soft refs) and a sync
-//! pull/push round-trip.
+//! To-do connections against a real MariaDB. Covers link CRUD (kinds + soft
+//! refs) and a sync pull/push round-trip.
 
 mod common;
 

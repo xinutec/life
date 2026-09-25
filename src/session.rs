@@ -2,7 +2,6 @@
 //! request after that authenticates against this opaque session.
 //!
 //! Cookie layout: `<id>.<hex hmac_sha256(id)>`, verified constant-time.
-//! Modelled on the health app's session.ts.
 
 use anyhow::Result;
 use axum::extract::{FromRef, FromRequestParts};
@@ -113,11 +112,8 @@ pub async fn create_session(pool: &MySqlPool, secret: &str, user: &UserSession) 
 /// Resolve a signed cookie to a session, sliding its expiry forward as a side
 /// effect. Lazily deletes the row if expired.
 ///
-/// The slide is the point: without it the expiry is written once at login and
-/// never touched, so you are signed out exactly [[SESSION_TTL_DAYS]] after
-/// logging in however much you use the app — which is what happened on
-/// 2026-07-13. The cookie deliberately outlives the row (see
-/// `routes::auth::session_cookie`), so this row is the only clock.
+/// The cookie deliberately outlives the row (see `routes::auth::session_cookie`),
+/// so this row is the only clock.
 pub async fn resolve_session(
     pool: &MySqlPool,
     secret: &str,
@@ -202,10 +198,8 @@ where
     }
 }
 
-/// Delete expired session rows. Expiry is otherwise only enforced lazily when
-/// the same cookie is presented again, so abandoned sessions would accumulate
-/// forever. Called at boot + hourly (see main.rs). Sessions are dead auth
-/// artifacts, not user data — the no-purge rule doesn't apply.
+/// Delete expired session rows, which lazy expiry never reaches for an abandoned
+/// cookie. Sessions are not user data, so the no-purge rule doesn't apply.
 pub async fn sweep_expired(pool: &MySqlPool) -> Result<u64> {
     let res = sqlx::query("DELETE FROM sessions WHERE expires_at < NOW()")
         .execute(pool)

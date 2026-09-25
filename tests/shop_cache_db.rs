@@ -1,6 +1,5 @@
 //! The shop-listing cache against a real MariaDB: remembering what a shop query
 //! showed us, and answering "does this shop carry this barcode?" from memory.
-//! Runs only when LIFE_TEST_DATABASE_URL is set.
 
 mod common;
 
@@ -89,8 +88,7 @@ async fn a_thinner_sighting_never_erases_what_we_already_learned() {
     .unwrap();
 
     // ...then a later Waitrose *search* re-sees the same line number with no
-    // barcode (search hits don't carry one). It must not blank the EAN — this
-    // is the silent-erasure shape that bit product_dietary_flags in inc 6.
+    // barcode (search hits don't carry one). It must not blank the EAN.
     let thin = CachedListing {
         barcode: None,
         brand: None,
@@ -191,10 +189,7 @@ async fn a_search_that_found_nothing_stores_nothing_and_does_not_error() {
     // A shop query with no hits reaches here with an empty batch — `search_asda`
     // and `find_at_shop` both hand `remember_hits` whatever the search returned.
     //
-    // It matters because the batch became ONE multi-row INSERT: a builder given
-    // no rows emits `INSERT INTO … ()`, which is a syntax error. And the only
-    // caller logs the failure rather than raising it, so without this the break
-    // would show up as nothing at all — a warning in a pod log, on the path that
-    // fills the cache every search.
+    // The batch is ONE multi-row INSERT, and a builder given no rows emits a
+    // syntax error — which the caller only logs, so nothing else would notice.
     shop_cache::remember(&pool, &[]).await.unwrap();
 }

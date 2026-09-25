@@ -1,6 +1,5 @@
-//! Increment 4 semantics: deep links derived from listing identity (pure), and
-//! the canonical-name preference across sources against a real MariaDB (those
-//! tests run only when LIFE_TEST_DATABASE_URL is set).
+//! Deep links derived from listing identity (pure), and the canonical-name
+//! preference across sources against a real MariaDB.
 
 mod common;
 
@@ -81,7 +80,7 @@ async fn canonical_name_is_sticky_a_new_source_does_not_silently_switch_it() {
     // A retailer listing arrives with a cleaner title. It does NOT silently take
     // over the canonical name — no source overwrites another behind your back.
     // The retailer's name is captured on its own listing as a candidate to
-    // approve (that reconciliation is a later increment), and the canonical name
+    // approve, and the canonical name
     // stays exactly what it was.
     let p = repo::upsert_external(
         &pool,

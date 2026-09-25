@@ -1,6 +1,6 @@
 //! Price observations against a real MariaDB: append-only history hanging off a
 //! product_listing, and the latest-price-per-shop query that feeds the
-//! "cheapest shop" view. Runs only when LIFE_TEST_DATABASE_URL is set.
+//! "cheapest shop" view.
 
 mod common;
 

@@ -1,4 +1,4 @@
-//! What a client's WebView may teach the shop cache (increment 7b).
+//! What a client's WebView may teach the shop cache.
 //!
 //! Pure — no DB. The rule these tests pin is which reports are trustworthy
 //! enough to enter the `(source, barcode)` identity index, and which parts of a

@@ -1,7 +1,6 @@
 //! The catalog/holding split against a real MariaDB: an item linked to a
-//! catalog product resolves its display name/brand/image from the product;
-//! a barcode-less item stands alone on its own name. Gated on
-//! LIFE_TEST_DATABASE_URL.
+//! catalog product resolves its display name/brand/image from the product; a
+//! barcode-less item stands alone on its own name.
 
 mod common;
 

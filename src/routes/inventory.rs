@@ -116,17 +116,10 @@ pub async fn item_history(
 
 /// POST /api/items/{id}/purchases → record what this item cost, after the fact.
 ///
-/// The buy-list flow already writes purchases, and it was the ONLY thing that
-/// did — so anything you did not buy through the app could never have a price or
-/// a date. That is most of a house: the dishwasher, the pans, everything owned
-/// before the app existed. Measured 2026-09-03: one appliance in the inventory,
-/// zero purchases against it.
+/// For anything not bought through the Buy list — most of a house.
 ///
-/// ⚠ A bad price is a 400 here, where the buy flow logs it and carries on. That
-/// asymmetry is deliberate and not an inconsistency: there, the purchase is a
-/// note attached to something you are holding, and refusing the buy over a
-/// mistyped price would lose the larger thing. Here the purchase IS the request,
-/// so silently declining it would report success for a row that does not exist.
+/// ⚠ A bad price is a 400 here, where the buy flow logs it and carries on:
+/// there the purchase is a note on the buy, here it IS the request.
 pub async fn record_purchase(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -162,14 +155,8 @@ pub async fn record_purchase(
 
 /// DELETE /api/items/{id}/purchases/{purchase_id} → unmake a purchase.
 ///
-/// A purchase is money, and the point of the table is that its numbers are
-/// true — so a mistyped price or the wrong item has to be removable, not just
-/// regrettable. Until this existed the only route was POST, and a typo in the
-/// spending history was permanent.
-///
-/// It also makes the WRITE path testable. Without an inverse, exercising the
-/// success path against production means leaving a fabricated number in the
-/// record forever, so `record_purchase` shipped verified by its refusals alone.
+/// A mistyped price must be removable, or the spending history is not true. It
+/// also lets the write path be exercised against production and cleaned up.
 pub async fn delete_purchase(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -197,11 +184,8 @@ pub async fn list_files(
 /// POST /api/items/{id}/files → attach raw bytes. `X-File-Name` names it and
 /// `X-Purchase-Id` optionally ties it to the purchase it is evidence of.
 ///
-/// Raw body, not multipart: the client already holds a `File`/`Blob` and sends
-/// it straight through, which is what the product-image route does and there is
-/// nothing to parse. Bounded by a per-route `DefaultBodyLimit` and re-checked
-/// here, because a limit enforced in only one of those places is a limit that
-/// depends on the router still being wired the way you remember.
+/// Raw body, not multipart, as the product-image route. Bounded by a per-route
+/// `DefaultBodyLimit` and re-checked here, so the limit survives re-wiring.
 ///
 /// ⚠ The STORED mime is sniffed from the bytes, never the declared
 /// `Content-Type`. These files are served back on our own origin, so bytes

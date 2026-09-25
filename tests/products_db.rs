@@ -1,5 +1,5 @@
 //! Product cache against a real MariaDB (no Open Food Facts call — pure cache
-//! layer). Runs only when LIFE_TEST_DATABASE_URL is set.
+//! layer).
 
 mod common;
 
@@ -15,8 +15,7 @@ async fn product_cache_against_real_db() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    // A real EAN shape: `Barcode` is the type of a catalogue key now, so a
-    // test can no longer stand one in that the catalogue could never hold.
+    // A real EAN shape: a catalogue key is a `Barcode`.
     let bc: Barcode = "9990000000001".parse().unwrap();
     sqlx::query("DELETE FROM products WHERE barcode = ?")
         .bind(&bc)

@@ -1,8 +1,7 @@
-//! F4 — reconciling the source-picked facts (nutrition, ingredients). The pure
-//! rules (which disagreements surface, how a pick settles them, how the merge
-//! honours a pick) are tested without a database; the persistence round-trip
-//! (pick a source → it drives the merge and settles the divergence) runs only
-//! when LIFE_TEST_DATABASE_URL is set.
+//! Reconciling the source-picked facts (nutrition, ingredients): the pure rules
+//! (which disagreements surface, how a pick settles them, how the merge honours
+//! a pick), and the round-trip against a real MariaDB (a pick drives the merge
+//! and settles the divergence).
 
 mod common;
 

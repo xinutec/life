@@ -195,10 +195,6 @@ fn empty_results_yield_no_hits() {
 }
 
 // --- match_barcode: which hit IS this product ---
-//
-// Ported from the frontend's `eanMatch` when the lookup moved server-side (the
-// backend now answers "does Asda carry this barcode?" so it can check its own
-// memory first). The rule is unchanged and so are these cases.
 
 fn hit(external_id: &str, barcode: Option<&str>, name: &str) -> asda::AsdaHit {
     asda::AsdaHit {

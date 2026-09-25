@@ -1,10 +1,7 @@
 //! What a file's leading bytes say it is.
 //!
-//! Two callers ask this question with different allowlists: item attachments
-//! take everything here, product images take neither PDF nor HEIC. They used to
-//! ask it with two separate `match` blocks, and the ISO-BMFF arms drifted — a
-//! real AVIF read as HEIC on one path and AVIF on the other (#1448). One table,
-//! and the allowlist stays at the caller.
+//! One table for both callers; each keeps its own allowlist (item attachments
+//! take everything here, product images take neither PDF nor HEIC).
 
 /// A type identifiable from magic bytes alone.
 ///
@@ -72,12 +69,9 @@ pub fn sniff(bytes: &[u8]) -> Option<Media> {
 
     // ISO-BMFF: "<4-byte size>ftyp<major brand><compatible brands…>".
     if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" {
-        // ⚠ AVIF is tested BEFORE HEIC, and by scanning the whole box rather
-        // than reading the major brand. Real encoders set the major brand to
-        // `mif1`/`msf1` and list `avif` only among the compatible brands — and
-        // `mif1` is HEIC's brand too, so a major-brand match calls such a file
-        // HEIC. That was #1448. A genuine HEIC lists `heic`/`heix` and never
-        // `avif`, so the wider test cannot capture one.
+        // ⚠ AVIF is tested BEFORE HEIC, over the whole box: encoders set the
+        // major brand to `mif1`/`msf1`, which HEIC shares, and list `avif` only
+        // among the compatible brands. A HEIC never lists `avif`.
         let end = bytes.len().min(64);
         if bytes[8..end]
             .windows(4)

@@ -1,5 +1,4 @@
-//! The emotion-suggestion cache and job queue against a real MariaDB. Runs only
-//! when LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on the SQL reads as a passing one.
+//! The emotion-suggestion cache and job queue against a real MariaDB.
 //!
 //! What's worth pinning down here is the behaviour a person actually feels:
 //! reopening the picker doesn't restart the clock, editing the note does, and an

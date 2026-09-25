@@ -8,25 +8,16 @@
 //! impl FromStr   match on &str  -> `other => Err(..)` -> a new variant COMPILES
 //! ```
 //!
-//! So a variant added without its `FromStr` arm writes to the database happily,
-//! and then every later READ of that row fails — this codebase's "an unknown
-//! stored value fails the read loudly" rule firing in production, against data
-//! already stored, instead of at compile time.
-//!
-//! ⚠ **A round-trip test over an `ALL` array does not close that**, which is why
-//! there isn't one: `ALL` is itself hand-written, so forgetting a variant there
-//! is the same bug wearing a different coat. Generating both directions from one
-//! table is the only construction in which they cannot disagree.
+//! So a variant added without its `FromStr` arm is written happily and then fails
+//! every read. A round-trip test over a hand-written `ALL` has the same hole;
+//! generating both directions from one table closes it.
 
 /// Declare a string-backed enum, its `ALL`, and both directions of its mapping.
 ///
-/// The human name after the `:` is the one that appears in a parse failure —
-/// `unknown location kind "attic"`. It is user-facing: these errors surface as
-/// the 400 body when a sync push carries a value this server cannot read, so it
-/// says what a person would call the field rather than what Rust calls the type.
+/// The name after the `:` appears in parse failures — `unknown location kind
+/// "attic"` — which reach the user as a sync push's 400 body.
 ///
-/// Everything else passes through, so the derives, `#[serde]`, `#[ts]` and the
-/// per-variant doc comments live where they always did.
+/// Attributes and doc comments pass through.
 ///
 /// ```ignore
 /// str_enum! {
@@ -58,9 +49,6 @@ macro_rules! str_enum {
 
         impl $name {
             /// Every variant, in declaration order.
-            ///
-            /// Generated from the same table as the mapping below, so it cannot
-            /// fall behind the way a hand-written list does.
             pub const ALL: &'static [Self] = &[ $( Self::$variant ),+ ];
 
             /// The value stored in the database and sent on the wire.

@@ -171,15 +171,9 @@ pub fn note_hash(note: &str) -> String {
 /// Fetch the user's own labelled check-ins (note + chosen feelings) for the
 /// few-shot, most recent first — but only through the end of YESTERDAY (UTC).
 ///
-/// Excluding today is what keeps the few-shot, and therefore the whole system
-/// prompt, byte-identical for a day. That stability is what lets the worker's
-/// model cache the prompt's KV prefix to disk once and reuse it across the day's
-/// requests (the prefill of that prefix is most of a request); a sliding
-/// "latest 80" would shift on every new tagging and never hit the cache. The cost
-/// is that a feeling tagged today does not inform today's suggestions until
-/// tomorrow — negligible against 80 examples of history, and the whole point of
-/// the cutoff. `id DESC` breaks `recorded_at` ties so the set — and thus the cache
-/// key derived from the prompt — is deterministic.
+/// Excluding today keeps the system prompt byte-identical for a day, so the
+/// worker's KV-prefix cache hits; today's taggings inform tomorrow. `id DESC`
+/// breaks ties so the set, and the cache key, is deterministic.
 pub async fn fetch_examples(
     pool: &MySqlPool,
     user_id: &str,
@@ -214,10 +208,8 @@ pub const ROLLOVER_WARM_AFTER_MIDNIGHT: Duration = Duration::from_secs(5 * 60);
 
 /// How long to wait, from `now`, before the next rollover preload.
 ///
-/// Pure and therefore testable, which is the point: a scheduler that computes
-/// its own delay from the clock it also reads is untestable exactly where it is
-/// most likely to be wrong (the boundary). Always strictly positive — landing on
-/// the target instant schedules the NEXT day rather than looping.
+/// Pure, so the boundary is testable. Always strictly positive: landing on the
+/// target instant schedules the NEXT day rather than looping.
 pub fn until_rollover_warm(now: DateTime<Utc>) -> Duration {
     let target = |day: NaiveDate| {
         day.and_time(NaiveTime::MIN).and_utc()

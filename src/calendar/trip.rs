@@ -38,10 +38,7 @@ const MAX_MINUTES: i64 = 8 * 60;
 
 /// Who wrote the event, in the `PRODID` every calendar client can read.
 ///
-/// The `icalendar` crate defaults this to its own name, which would tell anyone
-/// looking at a shared calendar that the event came from a Rust library — true
-/// and useless. This is a household calendar with more than one writer in it, so
-/// an event should say which of them put it there.
+/// The `icalendar` crate would otherwise name itself.
 const PRODID: &str = "-//Xinutec//life//EN";
 
 /// The most items to spell out in the description. A Buy list is a trolley, not

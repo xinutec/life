@@ -35,22 +35,16 @@ pub struct Config {
     /// Path to the house geometry scene (served at GET /api/house).
     pub house_scene: String,
 
-    /// Shared secret the emotion-suggestion worker authenticates with. The worker
-    /// runs on the Mac and *dials in* (the Mac is a one-way VPN peer, so the pod
-    /// cannot dial it); this is the only credential on that channel, and it is a
-    /// bearer token rather than a session because the worker is not a browser.
-    /// OPTIONAL: unset means no worker channel exists, the queue is never drained,
-    /// and the picker quietly shows the plain wheel.
+    /// Bearer token the emotion-suggestion worker authenticates with. The worker
+    /// runs on the Mac and dials in, because the pod cannot dial the Mac. Unset:
+    /// no worker channel, and the picker shows the plain wheel.
     pub emotion_worker_token: Option<String>,
 
     /// The council's public bin-collection iCal subscription, e.g. Brent's
     /// `https://recyclingservices.brent.gov.uk/waste/<property>/calendar.ics`.
     ///
-    /// Configuration and never a constant in the source: the URL carries a
-    /// property id that identifies one address, and this repository is public
-    /// about its code. OPTIONAL — unset means the app simply has no bin
-    /// collections to show, which is the right answer for anyone whose council
-    /// does not publish one.
+    /// Never a constant in this public source: the URL identifies one address.
+    /// Unset: no bins card.
     pub bins_ical_url: Option<String>,
 }
 

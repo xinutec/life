@@ -19,10 +19,9 @@ use crate::state::AppState;
 
 /// The cookie deliberately outlives the session it names: the `sessions` row is
 /// the only clock, and it slides forward on every request (see
-/// `session::resolve_session`). A cookie that expired with the row would sign you
-/// out 7 days after logging in no matter how much you used the app — the bug this
-/// pairs with. Presenting a cookie whose row is gone is simply a 401, so the long
-/// life costs nothing. 400 days is the browser's own ceiling.
+/// `session::resolve_session`); a cookie that expired with it would end a session
+/// still in use. A cookie whose row is gone is simply a 401. 400 days is the
+/// browser's own ceiling.
 fn session_cookie(value: String) -> Cookie<'static> {
     Cookie::build((COOKIE_NAME, value))
         .path("/")

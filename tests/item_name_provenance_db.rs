@@ -1,12 +1,8 @@
-//! Which name an item shows, and why. Real MariaDB; runs only when
-//! LIFE_TEST_DATABASE_URL is set.
+//! Which name an item shows, and why. Real MariaDB.
 //!
-//! The rule under test is provenance, not precedence. The read path used to be
-//! `COALESCE(p.name, i.name, '')`, so the catalogue won whenever it had anything
-//! — including an Open Food Facts record whose "name" is a marketing sentence.
-//! Measured on the live data before this change: an item typed as "Oregano"
-//! displayed as "GENTLY DRIED TO HELP PRESERVE THE NATAL GRUNA FLAV", and there
-//! was no way to overrule it.
+//! The rule under test is provenance, not precedence: a plain
+//! `COALESCE(p.name, i.name, '')` lets an Open Food Facts marketing sentence
+//! replace a typed "Oregano" with no way to overrule it.
 
 mod common;
 
@@ -116,7 +112,7 @@ async fn a_typed_name_outranks_the_catalogue_but_a_left_alone_one_follows_it() {
         .expect("present");
     assert_eq!(got.name, "Cooks' Ingredients Black Peppercorns");
 
-    // The property the old COALESCE had and which must NOT be lost: correcting a
+    // Must hold: correcting a
     // product reaches items already in the cupboard, with no refresh step.
     sqlx::query("UPDATE products SET name = ? WHERE id = ?")
         .bind("Cooks' Ingredients Black Peppercorns 100g")
@@ -243,9 +239,7 @@ async fn the_trash_shows_an_item_under_the_name_it_was_last_seen_under() {
     // The cupboard and the trash resolve the name in two separate queries, and
     // they must agree: you look for a deleted thing by the name you last saw it
     // under, so a row that renames itself on the way into the trash is a row you
-    // cannot find. This was the second copy of the old COALESCE, and grepping for
-    // it is what turned it up — fixing only the cupboard would have left the
-    // belief alive here.
+    // cannot find.
     let pool = db::connect(&common::test_db_url()).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
     let user = "test-user-item-names-trash";

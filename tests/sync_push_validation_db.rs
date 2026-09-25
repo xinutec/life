@@ -1,7 +1,6 @@
-//! Push-boundary validation against a real MariaDB (B5): a doc the typed REST
+//! Push-boundary validation against a real MariaDB: a doc the typed REST
 //! boundary could not read back is rejected with a 400-class error and nothing
-//! is stored — accepted-then-500-on-read is the inverse of fail-loudly. Runs
-//! only when LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on the SQL reads as a passing one.
+//! is stored — accepted-then-500-on-read is the inverse of fail-loudly.
 
 mod common;
 
@@ -207,7 +206,7 @@ async fn invalid_docs_are_rejected_and_nothing_is_stored() {
     );
     // The scale holds tenths but the app only records HALF-points, and a reading
     // off that grid is a bug somewhere — a client sending 3.7 gets told so, rather
-    // than having it quietly rounded into a reading he never gave.
+    // than having it quietly rounded into a reading never given.
     assert_invalid(
         sync_repo::push_wellbeing(
             &pool,

@@ -1,5 +1,4 @@
-//! Authenticated API surface. Grows the inventory/recipe/3D endpoints later;
-//! for now just identity echo + NC link status.
+//! Identity echo and the house scene.
 
 use anyhow::Context;
 use axum::Json;

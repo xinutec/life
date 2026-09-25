@@ -109,13 +109,9 @@ pub async fn suggest_emotions(
         }
     };
 
-    // A better answer is genuinely coming when a worker is on it: either one has
-    // claimed this job and is generating right now — the strongest liveness signal
-    // there is, and crucially the one that survives a long generation, during which
-    // the blocked worker cannot poll and the "seen recently" clock goes stale — or
-    // no one has claimed it yet but a worker polled recently and will. Keying
-    // pending on `worker_alive()` alone made the picker give up ~90s into a
-    // generation that takes ~100-145s and would have succeeded.
+    // A better answer is coming if a worker has claimed this job — which survives
+    // a long generation, when the blocked worker cannot poll — or one polled
+    // recently and will.
     let pending = queued.being_worked || app.worker_alive();
     Ok(Json(SuggestEmotionsResponse {
         stale: !suggestions.is_empty(),
@@ -150,11 +146,8 @@ pub async fn warm_emotions(
 /// Keep the vocabulary the picker just sent, so the rollover timer can rebuild
 /// this prompt at midnight with nobody waiting (see `suggest_store`, 0038).
 ///
-/// Deliberately infallible from the caller's side, and logged rather than
-/// swallowed: this is a hint for tomorrow, and failing today's suggestion over it
-/// would be the wrong trade — but a store that quietly never writes would look
-/// exactly like one that works, and the only symptom would be a slow morning
-/// nobody could explain.
+/// Infallible for the caller — a hint for tomorrow must not fail today's
+/// suggestion — but logged, or a store that never writes looks like one that does.
 async fn remember_vocabulary(app: &AppState, user_id: &str, candidates: &[EmotionCandidate]) {
     if let Err(e) = suggest_store::remember_vocabulary(&app.pool, user_id, candidates).await {
         tracing::warn!("could not remember the emotion vocabulary: {e:#}");

@@ -70,10 +70,8 @@ fn a_bidi_override_cannot_disguise_what_the_line_says() {
 }
 
 // ---------------------------------------------------------------------------
-// `label` was the only field flattened, but it is not the only one the client
-// chooses. `kind` and `path` are deserialised straight off the wire and were
-// written into the log line verbatim — so the forgery this file exists to
-// prevent was reachable through either of them.
+// `kind` and `path` are client-chosen too, so the same forgery is reachable
+// through them.
 
 use life::routes::telemetry::{TelemetryEvent, sanitise};
 

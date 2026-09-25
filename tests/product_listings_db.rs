@@ -1,7 +1,5 @@
 //! The product/listing split against a real MariaDB: reconciling multiple
-//! sources onto ONE canonical product by barcode — the thing the old flat
-//! `products` table (with its UNIQUE(barcode)) made impossible. Runs only when
-//! LIFE_TEST_DATABASE_URL is set.
+//! sources onto ONE canonical product by barcode.
 
 mod common;
 

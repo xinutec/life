@@ -1,8 +1,7 @@
-//! Two-user isolation against a real MariaDB (B4): every user's data being
+//! Two-user isolation against a real MariaDB: every user's data being
 //! invisible and untouchable to every other user is a core invariant of the
 //! open-to-any-Nextcloud-user model, so it gets tests, not audits. One
 //! sequential test (parallel tests contend on sync_rev and can deadlock).
-//! Runs only when LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on the SQL reads as a passing one.
 
 mod common;
 

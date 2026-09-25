@@ -1,5 +1,4 @@
-//! Reading a stock row's history — the audit that has had three writers and no
-//! reader since migration 0002 ("cheap now, impossible to backfill").
+//! Reading a stock row's history.
 //!
 //! Against a real MariaDB: the ordering, the location join and the
 //! event-outside-the-enum failure are all SQL and none of them can be checked

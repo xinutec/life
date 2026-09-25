@@ -1,6 +1,5 @@
-//! To-do list against a real MariaDB. Runs only when LIFE_TEST_DATABASE_URL is
-//! set; fails otherwise, because a skipped check on the SQL reads as a passing one. Covers repo CRUD (types + status + soft-delete) and a
-//! sync pull/push round-trip (the offline path).
+//! To-do list against a real MariaDB. Covers repo CRUD (types + status + soft-
+//! delete) and a sync pull/push round-trip (the offline path).
 
 mod common;
 
@@ -150,9 +149,7 @@ async fn todo_crud_and_sync_against_real_db() {
 }
 
 /// PATCH must be a *partial* update: an absent field leaves the stored value
-/// alone, and an explicit `null` clears it. Before this, `UpdateTodo` required
-/// title/type/status on every call, so sending just `{"notes": "..."}` was a 422
-/// — the verb said PATCH but the payload had to be a whole to-do.
+/// alone, and an explicit `null` clears it.
 #[tokio::test]
 async fn patch_leaves_absent_fields_alone_and_clears_on_null() {
     let url = common::test_db_url();

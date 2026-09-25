@@ -1,7 +1,6 @@
 //! Restorable deletion against a real MariaDB: every delete tombstones, the
 //! trash lists it, restore brings it back — and a sync push can NEVER clear a
-//! tombstone (set-only; the trash restore is the one undelete path). Runs only
-//! when LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on the SQL reads as a passing one.
+//! tombstone (set-only; the trash restore is the one undelete path).
 
 mod common;
 
@@ -306,9 +305,8 @@ async fn sync_push_cannot_resurrect_a_tombstone_but_restore_can() {
     );
 }
 
-/// A binned to-do comes back. The one restorable kind the trash tests didn't
-/// cover, and the only deliberate undelete a to-do has — a sync push can never
-/// clear its tombstone, so if this path is broken the row is gone for good.
+/// A binned to-do comes back. The only deliberate undelete a to-do has — a sync
+/// push can never clear its tombstone.
 #[tokio::test]
 async fn todo_delete_lists_in_trash_and_restores() {
     let pool = connect().await;

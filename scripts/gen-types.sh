@@ -8,23 +8,16 @@
 # The second form is what the gate's generated-types row runs, so the cargo
 # invocation below is stated once and both paths use it.
 #
-# All this file holds is the part that is this repository's: where the bindings
-# live and how to make cargo emit them. The rest — generate into a scratch
-# directory and install only on success, refuse a generation that emitted
-# nothing, copy the types and not whatever else landed beside them, compare by
-# content rather than by asking git — is dev-lint#gen-types, shared with the
-# four other repositories that had each grown their own version of it.
-# scripts/check-types.sh is gone with it.
+# The mechanics are dev-lint#gen-types, shared across the fleet; this file holds
+# only where the bindings live and how to make cargo emit them.
 #
 # No `--features ts`: ts-rs is unconditional here. The export tests are named
 # export_bindings_*, so the filter runs generation only and needs no database.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# Pinned to dev-lint's committed HEAD, like every gate row that reaches for a
-# dev-lint tool: a path flake builds the NEIGHBOUR'S WORKING TREE, so a session
-# mid-edit next door fails this row, and the row names this repository. The
-# reasoning is written out once, at `withTestDb` in dev-lint/gate/schema.dhall.
+# Pinned to dev-lint's committed HEAD: a path flake would build its working tree
+# (see `withTestDb` in dev-lint/gate/schema.dhall).
 exec nix run "git+file:../dev-lint?ref=HEAD#gen-types" -- "$@" \
   --out frontend/src/app/generated \
   -- cargo test export_bindings

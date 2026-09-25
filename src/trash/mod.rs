@@ -2,7 +2,7 @@
 //! app only ever tombstone (`deleted_at`); this module lists those tombstones
 //! across all entity kinds and clears them again on restore. Nothing is purged.
 //!
-//! For the synced entities (shopping/to-do) a restore bumps the global `rev`,
+//! For the synced entities a restore bumps the global `rev`,
 //! so the resurrected row propagates to every device through the normal pull.
 //! The sync push path itself can never clear a tombstone (set-only, see
 //! `sync::repo`) — this explicit restore is the one deliberate undelete.
@@ -29,7 +29,7 @@ str_enum! {
 }
 /// One deleted thing, as shown on the trash screen. `ref_` identifies the row
 /// within its kind: the numeric id for REST entities (item/location/recipe),
-/// the ULID for synced ones (shopping/todo) — ids can be absent client-side
+/// the ULID for synced ones — ids can be absent client-side
 /// for never-synced rows, ULIDs never are.
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]

@@ -1,6 +1,6 @@
 //! To-do types. A to-do is a *typed* task with an open/done status and optional
-//! notes. The type is a curated enum that starts at `purchase`/`call` and grows
-//! as new kinds are actually needed — not up front. Typed, directional
+//! notes. The type is a curated enum that grows as new kinds are actually
+//! needed — not up front. Typed, directional
 //! connections to other to-dos and app entities live in the `todo_link` table.
 
 use crate::str_enum;
@@ -9,8 +9,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 str_enum! {
-    /// The kind of to-do. Add a variant here (plus its `Display`/`FromStr` arm) when
-    /// a new kind earns its place — the set is deliberately small to start.
+    /// The kind of to-do. Add a variant when a new kind earns its place.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[serde(rename_all = "snake_case")]
     #[ts(export)]
@@ -24,8 +23,7 @@ str_enum! {
 }
 
 str_enum! {
-    /// Lifecycle status. Open or done for now; richer states (e.g. blocked) can be
-    /// added when the connection semantics call for them.
+    /// Lifecycle status. "Blocked" and "waiting" are derived, not stored.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[serde(rename_all = "snake_case")]
     #[ts(export)]

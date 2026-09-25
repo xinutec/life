@@ -1,6 +1,4 @@
-//! Integration test against a real MariaDB. Runs only when
-//! LIFE_TEST_DATABASE_URL is set (see scripts/dev-db.sh); FAILS otherwise so
-//! the default `cargo test` needs no database.
+//! Integration test against a real MariaDB.
 
 mod common;
 

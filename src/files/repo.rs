@@ -73,12 +73,7 @@ pub async fn read(
     Ok(row)
 }
 
-/// Remove one attachment. Returns whether a row was removed.
-///
-/// Hard, and built in the same change as the upload rather than after it. A
-/// write path with no inverse cannot be exercised against production without
-/// leaving something behind — which is exactly how the purchase route shipped
-/// verified by its refusals alone.
+/// Remove one attachment, hard. Returns whether a row was removed.
 pub async fn remove(pool: &MySqlPool, user_id: &str, item_id: u64, id: u64) -> Result<bool> {
     let res = sqlx::query("DELETE FROM item_files WHERE id = ? AND user_id = ? AND item_id = ?")
         .bind(id)

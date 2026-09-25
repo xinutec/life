@@ -2,10 +2,7 @@
 //!
 //! A pack size arrives as whatever the shop typed: `950g`, `250ML`, `33 cl`,
 //! `35 grammes`, `22x27G`, `EACH`. That string is the right thing to *show* — it
-//! is what is printed on the tub — and the wrong thing to compute with. You
-//! cannot ask how much of a 950g tub is left when all you hold is `"950g"`, so
-//! stock linked to a product has had no quantity to start from and has gone
-//! untracked.
+//! is what is printed on the tub — and the wrong thing to compute with.
 //!
 //! **One canonical unit per dimension, decided here.** Everything mass becomes
 //! grams and everything volume becomes millilitres at this boundary, so nothing
@@ -16,14 +13,9 @@
 //! disagreement worth surfacing rather than papering over. This is about one
 //! string a shop typed, where there is nothing to disagree with.
 //!
-//! **It refuses rather than guesses.** An unrecognised label parses to `None`,
-//! and the raw string goes on being displayed exactly as it is today — nothing
-//! is lost by refusing. A wrong unit in a cupboard is worse than an absent one:
-//! absent shows as "not tracked", wrong shows as a number you would believe. So
-//! `oz` is not in the table, because a grocery `oz` is usually mass and
-//! sometimes fluid and the label does not say which; nor are `gr` and `ltr`,
-//! which are guesses at what an abbreviation meant. Symbols and spelled-out
-//! words only.
+//! **It refuses rather than guesses.** An unrecognised label parses to `None`
+//! and is still displayed raw; a wrong unit would be a number you believe. So no
+//! `oz` (mass or fluid?), `gr` or `ltr`: symbols and spelled-out words only.
 
 use serde::Serialize;
 use ts_rs::TS;

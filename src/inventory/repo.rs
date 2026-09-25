@@ -86,14 +86,9 @@ impl ItemRow {
 /// macro (not a const) so it stays a compile-time literal — sqlx rejects
 /// runtime-built query strings.
 ///
-/// The name is resolved by PROVENANCE, not by precedence. This used to be a
-/// plain `COALESCE(p.name, i.name, '')`, so the catalogue won whenever it had
-/// anything at all — including an Open Food Facts record whose "name" is a
-/// marketing sentence, which replaced a one-word name with a line of shouting
-/// and could not be overruled. Preferring the item's name instead is wrong in
-/// the same way, just less loudly: a hand-typed shorthand would outrank a proper
-/// name with its brand and pack size. So `items.name_source` says which name was
-/// MEANT, and only a 'user' one outranks the catalogue (migration 0042).
+/// The name is resolved by PROVENANCE: only a `name_source = 'user'` name
+/// outranks the catalogue's. Either fixed precedence is wrong for someone — a
+/// marketing-sentence OFF name, or a hand-typed shorthand.
 macro_rules! item_select {
     () => {
         "SELECT i.id AS id, i.product_id AS product_id, \
@@ -425,12 +420,8 @@ pub async fn mark_low_matching(
 pub async fn mark_low(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
     // The location rides along so the history reads the same as every other
     // event, and so "ran out of the one in the fridge" stays answerable.
-    // ⚠ A 1-tuple `query_as`, not `query_scalar`. Both express the same thing —
-    // "the row may be absent, and the column may be NULL" — but as
-    // `Option<Option<u64>>` the two Options are indistinguishable to
-    // DL-SQLX-ROW-TYPES, which peels every leading Option and then reads the
-    // target as a non-nullable `u64` against a NULLable column. The tuple stops
-    // the peeling at the right place, so the check sees what is actually there.
+    // ⚠ A 1-tuple `query_as`, not `query_scalar`: DL-SQLX-ROW-TYPES peels every
+    // leading Option of `Option<Option<u64>>` and would miss the NULLable column.
     let row: Option<(Option<u64>,)> = sqlx::query_as(
         "SELECT location_id FROM items WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
     )

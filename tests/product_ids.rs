@@ -1,10 +1,7 @@
 //! What a product identifier is allowed to be.
 //!
-//! These rules used to be re-implemented at each boundary that read one — the
-//! import route, the shop-sighting report, Asda's hit normaliser, the Open Food
-//! Facts client — so they lived here as tests of the *route's* guard. They now
-//! live in the types themselves ([`Barcode`], [`ExternalId`]), and so do their
-//! tests: every caller inherits whatever this file pins.
+//! The rules live in the types ([`Barcode`], [`ExternalId`]), so every boundary
+//! inherits whatever this file pins.
 //!
 //! The traversal and query-parameter cases below are the ones that matter, since
 //! both types are spliced directly into outbound URLs.
@@ -77,8 +74,7 @@ fn nothing_that_could_reshape_a_url_is_an_external_id() {
 
 #[test]
 fn surrounding_space_is_transport_not_identity() {
-    // Every boundary that built one used to trim first; the type does it now, so
-    // a space picked up in transit doesn't become a different product.
+    // A space picked up in transit doesn't become a different product.
     assert_eq!(
         "  5000112548167 ".parse::<Barcode>().unwrap().as_str(),
         "5000112548167"

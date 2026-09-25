@@ -2,9 +2,8 @@
 //! flags. These describe the physical product, so they attach to the canonical
 //! `products` row (see repo), reconciled by barcode like every other enrichment.
 //!
-//! Open Food Facts is the source. The pure `RawFacts::parse` turns an OFF product
-//! JSON into our domain shapes — no I/O, so it's exercised directly from tests
-//! against captured OFF responses (`off` does the fetch, `repo` the persistence).
+//! `RawFacts::parse` turns an Open Food Facts product JSON into these shapes
+//! (`brandbank` does the same for Asda); `off` fetches, `repo` persists.
 //!
 //! Nutrition is stored WIDE: the UK mandatory panel (the "big 8") is a fixed
 //! small set, one field each; OFF's long tail keeps its structure in `extra`.
@@ -43,11 +42,7 @@ pub struct Nutrition {
 }
 
 str_enum! {
-    /// How an allergen is present. The `product_allergens.presence` column has been
-    /// `ENUM('contains','may_contain')` since 0027 — this is that same closed set in
-    /// the type system, so a fourth spelling can't be invented at a call site, and
-    /// ts-rs hands the frontend the union instead of a bare `string` it would have to
-    /// re-assert.
+    /// How an allergen is present — the `product_allergens.presence` ENUM.
     ///
     /// **Ordered by severity** (`MayContain` < `Contains`), which is what makes
     /// `merge_allergens` a `max` rather than a hand-written comparison: "the more
@@ -160,11 +155,8 @@ const LABEL_FLAGS: &[(&str, &str)] = &[
 impl Nutrition {
     /// A panel with no numbers and no tail is no panel.
     ///
-    /// Both fact parsers ask this, and each used to ask it with its own copy of
-    /// the list (#1449). It decides whether a source is recorded as HAVING a
-    /// panel at all, and `merge_nutrition` picks ONE source's panel whole — so
-    /// two copies drifting would not shrink an answer, it would swap in a
-    /// different source's.
+    /// Shared by both fact parsers: it decides whether a source HAS a panel, and
+    /// `merge_nutrition` picks one source's panel whole.
     pub fn is_empty(&self) -> bool {
         self.extra.is_empty()
             && [
@@ -323,12 +315,8 @@ fn trim_num(v: f64) -> String {
     }
 }
 
-/// A numeric OFF value, whether it arrived as a JSON number or a numeric string
-/// (OFF is inconsistent). `None` for anything non-numeric.
-/// A nutriment value, whether the source sent a number or a numeric string.
-///
-/// Shared by both fact parsers: OFF and Asda's blob both mix the two, and each
-/// used to carry its own identical copy (#1449).
+/// A nutriment value, whether the source sent a number or a numeric string
+/// (OFF and Asda's blob both mix the two). `None` for anything non-numeric.
 pub(crate) fn as_f64(v: &Value) -> Option<f64> {
     match v {
         Value::Number(n) => n.as_f64(),

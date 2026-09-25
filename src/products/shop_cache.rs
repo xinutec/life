@@ -1,12 +1,8 @@
 //! Our memory of the shops' catalogues — every listing a shop query ever showed
 //! us, kept so the next lookup can be answered without asking the shop again.
 //!
-//! WHY: a shop query returns far more than the product that prompted it. One
-//! Asda search hands back ~15 hits, each with its own EAN; we used to read the
-//! one that matched and drop the other 14, then pay for a fresh search the next
-//! time. Those 14 were durable facts about the world (this barcode is this CIN),
-//! bought and thrown away. Here they're kept, so lookups converge on zero
-//! outbound traffic as the cache fills.
+//! A shop query returns far more than the product that prompted it — each hit a
+//! durable barcode → shop id fact — so lookups converge on zero outbound traffic.
 //!
 //! This is NOT the catalogue. `products`/`product_listings` are the things in
 //! your life; these are things a shop happens to sell that we've laid eyes on.
@@ -149,8 +145,7 @@ fn trimmed(v: &Option<String>) -> Option<String> {
 /// Upserts: re-seeing a listing refreshes its description and bumps
 /// `last_seen_at`. A field we've since learned is never overwritten with the
 /// `NULL` of a thinner sighting — a Waitrose search hit (no barcode) must not
-/// erase the barcode an earlier product fetch taught us, which is exactly the
-/// silent-erasure shape that bit `product_dietary_flags` in increment 6.
+/// erase the barcode an earlier product fetch taught us.
 pub async fn remember(pool: &MySqlPool, listings: &[CachedListing]) -> Result<()> {
     if listings.is_empty() {
         return Ok(());

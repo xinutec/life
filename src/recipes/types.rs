@@ -17,15 +17,9 @@ pub struct RecipeIngredient {
     /// pinning to one barcode.
     #[serde(default)]
     pub product_id: Option<ProductId>,
-    /// The linked product's canonical name, joined on read so a client can say
-    /// WHAT a line is linked to. Server-derived: the write path never stores it
-    /// (there is no such column — `product_id` is the only link), and every
-    /// write re-reads, so what a client sends here cannot survive. The line
-    /// keeps its own `name` (what a cook calls it); this is what the shop calls
-    /// the thing it points at. `#[serde(default)]` so a client can PUT back a
-    /// recipe it just read without stripping the field — and NOT
-    /// `skip_deserializing`, which ts-rs cannot parse and warns about on every
-    /// build; ignoring the value costs nothing that attribute would buy.
+    /// The linked product's canonical name, joined on read; never stored, so
+    /// whatever a client sends is ignored. `serde(default)` lets a client PUT
+    /// back a recipe it just read (`skip_deserializing` makes ts-rs warn).
     #[serde(default)]
     pub product_name: Option<String>,
     pub quantity: Option<f64>,

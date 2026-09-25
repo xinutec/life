@@ -15,8 +15,7 @@ pub(crate) fn norm(s: &str) -> String {
 /// link winning. An ingredient is a kind of thing ("cumin") and a product is one
 /// barcode ("Bart Ground Cumin 38g"), so treating a link as authoritative would
 /// make the jar you actually own stop counting the day you buy another brand.
-/// Union means a link can only ever find MORE stock than before, never less,
-/// and an unlinked line behaves exactly as it did before links existed.
+/// Union means a link can only ever find MORE stock, never less.
 pub(crate) fn stock_for<'a>(ingredient: &RecipeIngredient, inventory: &'a [Item]) -> Vec<&'a Item> {
     let want_name = norm(&ingredient.name);
     inventory

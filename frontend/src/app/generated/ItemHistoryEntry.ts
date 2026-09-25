@@ -3,25 +3,16 @@ import type { ItemEvent } from "./ItemEvent";
 
 /**
  * One thing that happened to a stock row — a line of its history.
- *
- * The table has been written on every add, move, remove and use since the
- * schema's first migration ("cheap now, impossible to backfill") and read by
- * nothing. This is the read.
  */
 export type ItemHistoryEntry = { id: number, event: ItemEvent, 
 /**
- * How much, in the item's own unit — and it means two different things.
- * For [`ItemEvent::Used`] it is the amount that WENT; for every other
- * event it is what the row held at the time. That is not an inconsistency
- * to iron out: a use is the one event that is a change rather than a
- * state, and recording it as a delta is what makes a consumption rate
- * computable later. Whoever renders this has to say which it is.
+ * How much, in the item's own unit. ⚠ For [`ItemEvent::Used`] the amount
+ * that WENT; for every other event what the row held. Say which when
+ * rendering.
  */
 quantity: number | null, 
 /**
- * Where the row was when this happened, named rather than numbered — a
- * history that says "moved" without saying where to is not worth reading.
- * `None` for an event with no place recorded, or a place since deleted.
+ * Where the row was, by name. `None` if unrecorded or since deleted.
  */
 location: string | null, 
 /**

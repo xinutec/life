@@ -1,5 +1,5 @@
 //! How much of an expiry date is real, and what survives a save that has no
-//! opinion. Real MariaDB; runs only when LIFE_TEST_DATABASE_URL is set.
+//! opinion. Real MariaDB.
 //!
 //! `items.expiry` is a DATE, so a medicine box printed 06/2028 has to be stored
 //! with a day it does not have. The convention is the month's LAST day, because

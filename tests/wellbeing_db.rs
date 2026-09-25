@@ -1,7 +1,6 @@
-//! Wellbeing check-ins against a real MariaDB. Runs only when
-//! LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on the SQL reads as a passing one. Covers the sync pull/push
-//! round-trip (offline insert → pull → update → stale-conflict → tombstone) plus
-//! the trash restore.
+//! Wellbeing check-ins against a real MariaDB. Covers the sync pull/push round-
+//! trip (offline insert → pull → update → stale-conflict → tombstone) plus the
+//! trash restore.
 
 mod common;
 
@@ -147,9 +146,7 @@ async fn wellbeing_sync_and_restore_against_real_db() {
     );
 }
 
-/// A half-step survives the round-trip intact: 35 tenths in, 35 tenths out. The
-/// whole point of the rescale — if this rounds anywhere on the way through, "4 but
-/// a bit lower at the gym" silently becomes a plain 4 or a plain 3.
+/// A half-step survives the round-trip intact: 35 tenths in, 35 tenths out.
 #[tokio::test]
 async fn half_steps_round_trip_through_the_db() {
     let url = common::test_db_url();

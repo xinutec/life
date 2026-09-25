@@ -26,7 +26,7 @@ use super::types::{
 /// `LAST_INSERT_ID(val + 1)` trick bumps and returns the counter atomically; the
 /// row lock it takes is held until the caller commits, so revisions are handed out
 /// in *commit* order — a pull can never advance past a rev that is assigned but not
-/// yet committed (review S1). Must run on the same connection as the write it
+/// yet committed. Must run on the same connection as the write it
 /// stamps.
 pub async fn next_rev(conn: &mut MySqlConnection) -> sqlx::Result<u64> {
     let res = sqlx::query("UPDATE sync_rev SET val = LAST_INSERT_ID(val + 1) WHERE id = 1")
@@ -579,9 +579,9 @@ pub async fn push_todo_link(
     push::<TodoLink>(pool, user_id, entries).await
 }
 
-/// One-time + boot-time cleanup: tombstone live duplicate edges (same
-/// user/from/kind/target under different ulids — created before the push-time
-/// twin guard existed, or by a rare race). The lowest id survives; each
+/// Boot-time cleanup: tombstone live duplicate edges (same user/from/kind/target
+/// under different ulids) that a race let past the push-time guard. The lowest
+/// id survives, so every device agrees; each
 /// tombstone gets its own rev so it propagates like any other delete.
 /// Idempotent and cheap once clean.
 pub async fn dedupe_todo_links(pool: &MySqlPool) -> Result<u64> {

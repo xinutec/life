@@ -1,5 +1,6 @@
-//! Product reference data: looked up from Open Food Facts on a cache miss,
-//! then stored (incl. image) in our own DB.
+//! The product catalog: canonical products, per-source listings and facts,
+//! prices, and the shop and Open Food Facts clients that feed them. See
+//! docs/design/catalog-and-holdings.md.
 
 pub mod asda;
 pub mod brandbank;

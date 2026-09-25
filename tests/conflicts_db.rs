@@ -1,5 +1,4 @@
-//! The sync-conflict log against a real MariaDB. Runs only when
-//! LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on the SQL reads as a passing one.
+//! The sync-conflict log against a real MariaDB.
 
 mod common;
 

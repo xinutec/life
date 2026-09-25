@@ -1,24 +1,14 @@
 //! The identifiers the product domain is keyed on, as types rather than
 //! `String`s and `u64`s.
 //!
-//! Two bug classes motivate this, and both had already happened here in the
-//! small:
+//! * **One rule, one place.** Each shape is validated once, in `FromStr`, and
+//!   every boundary calls it.
+//! * **Same shape, different meaning.** `ProductId` and `ListingId` are both row
+//!   numbers; as distinct types, passing one for the other cannot compile.
 //!
-//! * **A rule written down more than once drifts.** `external_id` is
-//!   `[A-Za-z0-9_-]{1,64}`, and that sentence used to be re-implemented at
-//!   three separate boundaries (the import route, the shop-sighting report, and
-//!   Asda's hit normaliser), each free to loosen independently. It is now one
-//!   `FromStr`, and the boundaries call it.
-//! * **Same shape, different meaning.** A product id and a listing id are both
-//!   `u64`, so passing one where the other belongs type-checks and then writes a
-//!   price observation against the wrong row. `ProductId` and `ListingId` are
-//!   distinct types precisely so that swap can't compile.
-//!
-//! Validation lives at construction, so a value of these types is *already*
-//! well-formed everywhere downstream: [`Source::listing_url`](super::source::Source::listing_url)
-//! and the Open Food Facts client splice them straight into outbound URLs, and
-//! the reason that is safe is now the parameter type rather than a comment
-//! asking you to trust the caller.
+//! A value of these types is well-formed everywhere downstream, which is why
+//! [`Source::listing_url`](super::source::Source::listing_url) and the Open Food
+//! Facts client may splice them straight into outbound URLs.
 //!
 //! `shopping_items.barcode` is deliberately **not** one of these. It is whatever
 //! the phone scanned, carried on a synced row for the client's own use — a hint,
@@ -56,9 +46,8 @@ impl Barcode {
 impl FromStr for Barcode {
     type Err = String;
 
-    /// Trims first: every boundary that used to build one did so from a trimmed
-    /// string, and a leading space is a transport artefact rather than a
-    /// different barcode.
+    /// Trims first: a leading space is a transport artefact, not a different
+    /// barcode.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.trim();
         if s.is_empty() || s.len() > 14 || !s.bytes().all(|b| b.is_ascii_digit()) {
@@ -133,8 +122,8 @@ validating_deserialize!(Barcode);
 validating_deserialize!(ExternalId);
 
 /// Database mapping for the string ids, delegating to `str` — the columns are
-/// `VARCHAR`, and `#[derive(sqlx::Type)]` would declare something else (see
-/// [`Source`](super::source::Source), where that cost a debugging session).
+/// `VARCHAR`, and `#[derive(sqlx::Type)]` would declare an ENUM (see
+/// [`Source`](super::source::Source)).
 ///
 /// Decoding **parses**, so a stored value outside the shape fails the query
 /// loudly rather than arriving as a value the rest of the code would have to
@@ -197,10 +186,8 @@ string_id_sql!(ExternalId);
 
 /// A surrogate key: a row number, distinct from every other kind of row number.
 ///
-/// There is no validation to do — any `u64` the database hands back is a valid
-/// id — so the whole point is the *name*. `record_price(pool, listing_id, …)`
-/// sits beside a dozen `product_id`-taking functions, and until these were
-/// separate types the compiler was happy either way.
+/// No validation — any `u64` the database hands back is valid — so the whole
+/// point is the *name*.
 macro_rules! row_id {
     ($(#[$m:meta])* $t:ident) => {
         $(#[$m])*

@@ -1,6 +1,5 @@
 //! Cooking a recipe against a real MariaDB: the cupboard really goes down, the
 //! audit really records it, and the lines it couldn't settle really come back.
-//! Runs only when LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on the SQL reads as a passing one.
 
 mod common;
 

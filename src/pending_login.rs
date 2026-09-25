@@ -9,17 +9,14 @@
 //!  → 303 …/login/flow?providedRedirectUri=&clientIdentifier=…
 //! ```
 //!
-//! After the sign-in it returns to the registered callback with `state=`, **empty**.
-//! A server that looks the pending login up by `state` therefore cannot complete a
-//! login from a cookie-less browser at all — found 2026-07-28 in the sibling
-//! fleetwatch service, whose Android WebView lost its NC cookie and could never sign
-//! in again. Every app in this family shares the flow, so every one shares the fix.
+//! After the sign-in it returns to the registered callback with `state=`, **empty**,
+//! so a server that looks the pending login up by `state` cannot complete a login
+//! from a cookie-less browser at all.
 //!
 //! So the pending login travels in a cookie of our own. That binds it to the browser
-//! that started the login, which is the property `state` was there to prove; `state`
-//! is still sent, and still checked whenever NC gives it back. Being self-contained
-//! and signed, it also survives the pod restarting mid-login, which the in-memory map
-//! it replaces did not.
+//! that started the login, which is what `state` proves; `state` is still sent, and
+//! checked whenever NC gives it back. Being signed, it also survives a pod restart
+//! mid-login.
 //!
 //! Residual risk, accepted deliberately: when NC returns an empty `state` the cookie
 //! is the only binding, so a login-CSRF would become possible for someone who can both
@@ -34,7 +31,7 @@ use crate::session::{sign_value, verify_value};
 /// Cookie holding the login in progress. Short-lived; cleared at the callback.
 pub const COOKIE_NAME: &str = "oauth_pending";
 
-/// How long a started login may take to come back. Matches the old state-map TTL.
+/// How long a started login may take to come back.
 pub fn ttl() -> Duration {
     Duration::seconds(600)
 }

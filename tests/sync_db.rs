@@ -1,5 +1,4 @@
-//! Offline-first sync (shopping) against a real MariaDB. Runs only when
-//! LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on the SQL reads as a passing one.
+//! Offline-first sync (shopping) against a real MariaDB.
 
 mod common;
 
@@ -40,7 +39,7 @@ async fn shopping_sync_pull_push_conflict_tombstone() {
         .await
         .unwrap();
 
-    // A legacy create is rev-aware → it shows up in a full pull (since 0).
+    // A REST create is rev-aware → it shows up in a full pull (since 0).
     let milk = shop::create(
         &pool,
         user,
@@ -123,7 +122,7 @@ async fn shopping_sync_pull_push_conflict_tombstone() {
     assert_eq!(m2.name, "Milk 2%");
     assert!(m2.rev > m.rev); // a new revision was assigned
 
-    // A legacy soft-delete surfaces as a tombstone in pull, and hides from list.
+    // A REST soft-delete surfaces as a tombstone in pull, and hides from list.
     assert!(shop::delete(&pool, user, milk.id).await.unwrap());
     let final_pull = sync::pull_shopping(&pool, user, 0, 100).await.unwrap();
     let tomb = final_pull
@@ -141,11 +140,9 @@ async fn shopping_sync_pull_push_conflict_tombstone() {
     );
 }
 
-/// The boot-time backfills — `sync::backfill`, run on **every** start, and until
-/// now the only sync path no test walked. Both halves are "fix rows that predate
-/// a rule", so both are tested the only way that means anything: create the
-/// pre-rule shape by raw SQL, run the real entry point, and check the rows the
-/// clients would then pull.
+/// The boot-time backfills — `sync::backfill`, run on **every** start. Both fix
+/// rows that predate a rule, so each test creates that shape by raw SQL, runs
+/// the real entry point, and checks what clients would then pull.
 #[tokio::test]
 async fn boot_backfill_gives_pre_sync_rows_an_identity() {
     let url = common::test_db_url();
@@ -198,8 +195,8 @@ async fn boot_backfill_gives_pre_sync_rows_an_identity() {
     assert_eq!(same.rev, before, "a clean second pass is a no-op");
 }
 
-/// The other half of the boot backfill: duplicate live edges (made before the
-/// push-time twin guard, or by a race) are tombstoned down to one. Deliberately
+/// The other half of the boot backfill: duplicate live edges (a race past the
+/// push-time twin guard) are tombstoned down to one. Deliberately
 /// asserts WHICH survives — "the lowest id" is the rule that makes the cleanup
 /// deterministic across devices.
 #[tokio::test]

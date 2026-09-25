@@ -48,12 +48,9 @@ async fn a_worker_that_polled_is_alive() {
 
 #[tokio::test]
 async fn taking_a_preload_keeps_the_worker_alive_while_it_is_silent() {
-    // THE REGRESSION (2026-07-25). The worker is single-threaded: while it
-    // preloads it does not poll, and the first check-in of a UTC day makes that
-    // silence ~130s — a cold model load plus rebuilding the day's prefix cache.
-    // Judged on polling alone the pod called it dead and the picker reported
-    // that nothing was coming, while the worker was preparing for that exact
-    // request. Handing out the preload is what we know instead.
+    // The single-threaded worker does not poll while it preloads (~130s cold).
+    // Judged on polling alone it would read as dead while preparing for this
+    // very request; handing out the preload is the evidence instead.
     let app = state();
     app.request_warm("system prompt for today".into());
     assert_eq!(app.take_warm().as_deref(), Some("system prompt for today"));

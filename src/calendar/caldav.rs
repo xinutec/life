@@ -11,14 +11,10 @@
 //!
 //! ## Why there is a PROPFIND before the PUT
 //!
-//! The calendar *home* is a known path — `/remote.php/dav/calendars/<user>/` —
-//! but the collection inside it is not. `personal` is what Nextcloud creates,
-//! and it is also the first thing people rename, delete, or bury among five
-//! others. Worse, a **subscription** lives in that same home and looks like a
-//! calendar until you write to it: the bins feed this app reads is exactly the
-//! kind of thing that is subscribed there, and a shop trip `PUT` into a
-//! read-only mirror of the council's calendar is the failure this asks the
-//! server about rather than assumes away.
+//! The calendar *home* is a known path, but which collection in it takes events
+//! is not: `personal` may be renamed or deleted, and a read-only
+//! **subscription** (the bins feed, say) lives there too and looks like a
+//! calendar until you write to it.
 
 use anyhow::{Context, Result, anyhow};
 use quick_xml::events::Event as XmlEvent;
@@ -177,10 +173,8 @@ fn propfind() -> Method {
 /// some carry a space, and a `/` in one has to become `%2F` instead of opening
 /// a new path segment.
 ///
-/// ⚠ Any path already on `base` is REPLACED, which is exactly what the
-/// `join("/remote.php/…")` this grew out of did. Whether a Nextcloud installed
-/// under a sub-path should have these appended instead is a real question and a
-/// different change — not one to make while tidying an encoder.
+/// ⚠ Any path already on `base` is REPLACED, so a Nextcloud installed under a
+/// sub-path is not supported.
 pub fn calendar_home(base: &str, login: &str) -> Result<url::Url> {
     let mut url = url::Url::parse(base).context("parsing the Nextcloud base URL")?;
     url.set_path("");

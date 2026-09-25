@@ -132,19 +132,10 @@ pub async fn for_item(pool: &MySqlPool, user_id: &str, item_id: u64) -> Result<V
 /// Delete one purchase. Returns whether a row belonging to this user, on this
 /// item, was removed.
 ///
-/// HARD, where items and locations soft-delete. That convention exists for two
-/// reasons and a purchase has neither: the synced tables keep `deleted_at` so a
-/// tombstone can reach an offline client, and items keep one so the trash can
-/// put them back. Purchases are not synced and there is no trash surface for
-/// them, so a soft-deleted purchase would be an invisible row with no way back —
-/// strictly worse than either choice. What is being deleted is a purchase that
-/// did not happen; a real one you removed by mistake is retyped in the same
-/// dialog that removed it.
+/// HARD, where items soft-delete: tombstones exist for sync and the trash, and
+/// purchases have neither.
 ///
-/// Scoped on `item_id` as well as `user_id`. The id alone would be enough for
-/// ownership, but the route reaches this through an item, and a purchase id that
-/// belongs to a DIFFERENT item of yours is a client bug that should 404 rather
-/// than silently delete something off another row.
+/// Scoped on `item_id` too, so a purchase id from a different item 404s.
 pub async fn remove(pool: &MySqlPool, user_id: &str, item_id: u64, id: u64) -> Result<bool> {
     let res = sqlx::query("DELETE FROM purchases WHERE id = ? AND user_id = ? AND item_id = ?")
         .bind(id)
@@ -175,13 +166,8 @@ fn per_unit(amount_minor: i64, quantity: Option<f64>, unit: Option<&str>) -> Opt
         crate::products::packsize::PackUnit::Millilitre => (1000.0, "L"),
         crate::products::packsize::PackUnit::Count => (1.0, "each"),
     };
-    // Same guard-then-cast shape as `products::asda`'s price parsing, and the
-    // same reasoning: bound the value to a range that says something about the
-    // DOMAIN, then let the cast be safe by construction rather than by hope.
-    //
-    // £1,000,000 in pence, for a rate as well as an amount. Not a technical
-    // limit — i64 holds far more — but the point past which a per-kg price is
-    // evidence the pack was misread rather than a very expensive spice.
+    // Bound to a domain range so the cast is safe, as in `products::asda`.
+    // £1,000,000 in pence: past it, the pack was misread.
     const MAX_PENCE: f64 = 100_000_000.0;
     let amount = i32::try_from(amount_minor).ok()?;
     let rate = (f64::from(amount) * scale / pack.value).round();
@@ -227,9 +213,7 @@ pub async fn history(
     Ok(rows.into_iter().map(with_derived).collect())
 }
 
-/// Fill in everything DERIVED from the stored columns. Shared by both readers so
-/// they cannot disagree about what a purchase looks like — the fault that made
-/// this a function rather than two copies.
+/// Fill in everything DERIVED from the stored columns, for both readers.
 fn with_derived(mut p: Purchase) -> Purchase {
     if let Some((amount, measure)) = per_unit(p.amount_minor, p.quantity, p.unit.as_deref()) {
         p.unit_amount_minor = Some(amount);

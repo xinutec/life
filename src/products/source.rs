@@ -4,15 +4,9 @@
 //! `products.source`, `product_listings.source`, `shop_listings.source`,
 //! `price_observations.source`, the facts tables' `source`, and the
 //! `{name,image}_source` provenance columns all name a value from this set and
-//! nothing else. It is an enum rather than a `String` for the reason
-//! [[super::nutrition::Presence]] is: a closed set in the type system can't have
-//! a fifth spelling invented at a call site, `match` tells us every place that
-//! must change when a shop is added, and ts-rs hands the frontend the union
-//! `"asda" | "off" | "user" | "waitrose"` instead of a bare `string` it would
-//! have to re-assert.
-//!
-//! Adding a shop is: one variant, the arms the compiler then demands, and the
-//! frontend's display label. Nothing else needs finding.
+//! nothing else. As an enum, no spelling can be invented at a call site, and
+//! adding a shop is one variant, the arms the compiler then demands, and the
+//! frontend's display label.
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -48,9 +42,7 @@ impl Source {
     ///
     /// This is the predicate behind both "which shops carry it" and "what may be
     /// imported through `POST /api/products/import`": Open Food Facts and
-    /// hand-entry each have their own path in and are not places. The two
-    /// questions coincide today and share this one answer rather than two lists
-    /// that could drift apart.
+    /// hand-entry each have their own path in and are not places.
     pub fn is_shop(self) -> bool {
         match self {
             Source::Asda | Source::Waitrose => true,
@@ -82,9 +74,8 @@ impl Source {
     }
 
     /// The public product-page URL for a listing, derived from its identity
-    /// alone — no slug needed (probed 2026-07-16: Asda's PDP is slugless and the
-    /// old groceries.asda.com host just 301s to it; Waitrose redirects any slug
-    /// to the canonical one, keyed by the trailing lineNumber).
+    /// alone: Asda's page is slugless, and Waitrose redirects any slug to the
+    /// canonical one, keyed by the trailing lineNumber.
     ///
     /// Splicing is safe by construction: an [`ExternalId`] is
     /// `[A-Za-z0-9_-]{1,64}` and can carry no path segment or query parameter.

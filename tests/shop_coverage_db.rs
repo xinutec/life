@@ -1,5 +1,5 @@
 //! The two coverage queries against a real MariaDB — the only check on their
-//! SQL. Runs only when LIFE_TEST_DATABASE_URL is set.
+//! SQL.
 
 mod common;
 

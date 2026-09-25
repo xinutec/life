@@ -1,6 +1,5 @@
-//! HTTP surface for the offline-first sync protocol (RxDB pull/push). One
-//! pull/push pair per collection (shopping, to-do); they share the generic
-//! envelope and the same shape.
+//! HTTP surface for the offline-first sync protocol (RxDB pull/push): one
+//! pull/push pair per collection, sharing the generic envelope.
 
 use axum::Json;
 use axum::extract::{Query, State};

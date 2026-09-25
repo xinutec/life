@@ -1,10 +1,5 @@
 //! Recording a purchase after the fact, and what a warranty is measured from.
-//! Real MariaDB; runs only when LIFE_TEST_DATABASE_URL is set.
-//!
-//! Until 2026-09-03 the only writer of `purchases` was the buy-list flow, so
-//! anything not bought through the app could never carry a price or a date —
-//! which is most of a house. A warranty needs a start, and this is where it
-//! comes from.
+//! Real MariaDB.
 
 mod common;
 
@@ -247,11 +242,6 @@ async fn an_old_purchase_does_not_disturb_the_day_it_names() {
 }
 
 /// Unmaking a purchase, and the two ways a delete can reach too far.
-///
-/// This is what makes the WRITE path testable at all: without an inverse,
-/// exercising the success path against production leaves a fabricated number in
-/// the money history forever, so the route shipped verified by its refusals
-/// only. See the task on purchase correction.
 #[tokio::test]
 async fn a_purchase_is_deletable_but_only_its_owners_and_only_on_its_own_item() {
     let user = "test-user-purchase-delete";

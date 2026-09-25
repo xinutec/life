@@ -2,16 +2,8 @@
 //! flour", kept pure so the rule is tested without a database.
 //!
 //! **Units are compared, never converted.** `200 g` out of a row measured in
-//! `g` is subtraction; `200 g` out of a row measured in `jar` is not 199 of
-//! anything, and guessing how many grams are in a jar would put a number in the
-//! cupboard that nobody ever measured. So a disagreement takes nothing and says
-//! so. The same goes for `g` versus `kg`: a conversion table is a real feature
-//! with real edge cases (does `oz` mean weight or fluid?), and inventing half of
-//! it here would be worse than not having it.
-//!
-//! What this leaves is the case that actually matters day to day — the recipe
-//! and the cupboard already agree on the unit, because both were typed by the
-//! same person about the same kind of thing.
+//! `jar` takes nothing and says so, rather than inventing grams per jar. `g`
+//! versus `kg` too: conversion is its own feature (is `oz` mass or fluid?).
 
 use super::types::Item;
 

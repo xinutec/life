@@ -75,7 +75,7 @@ pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<TrashEntry>> {
             TrashKind::Wellbeing,
             // A check-in has no title; synthesise a label from its score. Stored in
             // tenths, so undo the scale here — TRIM(TRAILING…) leaves "4" a 4 while
-            // a half-step still reads "3.5", which is the reading he actually gave.
+            // a half-step still reads "3.5".
             "SELECT ulid AS ref_, CONCAT('Check-in (', \
                  TRIM(TRAILING '.0' FROM FORMAT(score_tenths / 10, 1)), '/5)') AS name, \
              deleted_at \

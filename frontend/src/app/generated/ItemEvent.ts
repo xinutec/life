@@ -3,10 +3,6 @@
 /**
  * What happened to a stock row, as recorded in `item_history`.
  *
- * A closed set in the type system rather than four spellings of a `VARCHAR(16)`
- * scattered through the repo — the same reason `products::Source` is one. The
- * history table is about to start earning its keep (consumption is what makes
- * "how much is left" and "what am I running out of" answerable), so the set it
- * is keyed on should be something the compiler knows.
+ * A closed set, for the reason `products::Source` is one.
  */
 export type ItemEvent = "added" | "moved" | "removed" | "restored" | "used" | "low";

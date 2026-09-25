@@ -3,13 +3,8 @@
 /**
  * How much of an `expiry` date was actually printed on the thing.
  *
- * A medicine box is printed MM/YYYY, and `items.expiry` is a DATE, so a day
- * has to be invented to store one at all. The convention is the month's LAST
- * day — a box marked 06/2028 is good THROUGH June, and the 1st would expire it
- * twenty-nine days early — but the convention alone is not enough, because a
- * reader cannot tell an invented 30th from a printed one. Rendering "30 Jun
- * 2028" states a day that appears nowhere on the box; counting down "in 2d"
- * through the end of the month claims something changes overnight that does
- * not. So the precision travels with the date (migration 0045).
+ * A medicine box is printed MM/YYYY and `items.expiry` is a DATE, so the
+ * month's LAST day is stored (good THROUGH June). The precision travels with
+ * it so nothing renders or counts down to a day that was never printed.
  */
 export type ExpiryPrecision = "day" | "month";

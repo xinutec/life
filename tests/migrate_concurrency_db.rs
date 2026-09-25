@@ -1,16 +1,12 @@
-//! Migrations must be safe to run concurrently. Runs only when
-//! LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on the SQL reads as a passing one.
+//! Migrations must be safe to run concurrently.
 
 mod common;
 
 use life::db;
 
-/// Two processes booting at once — or, in practice, several test binaries that each
-/// call `migrate()` against the same database — used to race: sqlx applies migrations
-/// without a cross-connection lock on MySQL, so both would insert the same
-/// `_sqlx_migrations` row and one would die with `1062 Duplicate entry '1' for key
-/// 'PRIMARY'`. That made the whole suite flaky (a different DB test failed on each
-/// run) and would bite for real the moment the backend ran with more than one replica.
+/// Two processes booting at once — several test binaries, or two replicas — must
+/// not race: sqlx takes no cross-connection lock on MySQL, so without
+/// `db::migrate`'s lock one dies on a duplicate `_sqlx_migrations` row.
 #[tokio::test]
 async fn concurrent_migrations_do_not_race() {
     let url = common::test_db_url();

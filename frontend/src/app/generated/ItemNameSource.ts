@@ -3,12 +3,7 @@
 /**
  * Whose name an item carries.
  *
- * The server cannot work this out, and trying to is how it goes wrong. It sees
- * a name and a linked product; it cannot see whether a person TOUCHED the name
- * field. Inferring "differs from the product, so it was authored" mislabels
- * every hurried word typed at a cupboard door as an intention, and inferring it
- * only on update assumes every client prefills the displayed name — which the
- * web form happens to do and a sync client, a script or the Android app need
- * not. So the client that owns the form says so explicitly.
+ * Stated by the client that owns the form: the server cannot see whether a
+ * person touched the name field, and "differs from the product" is not it.
  */
 export type ItemNameSource = "user" | "product";

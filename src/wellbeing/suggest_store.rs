@@ -304,12 +304,8 @@ pub async fn remember_vocabulary(
 
 /// The most recently active user's remembered vocabulary, if any.
 ///
-/// ONE row, deliberately: the warm slot in `AppState` holds a single system
-/// prompt, so a rollover can only preload for one user anyway. That matches the
-/// single-user deployment this runs in (same standing assumption as the in-memory
-/// OAuth map, see `state`), and picking the most recent keeps it honest rather
-/// than arbitrary. A second user would want a warm slot per user, not a different
-/// query here.
+/// ONE row: the warm slot in `AppState` holds a single prompt, which fits this
+/// single-user deployment. A second user would want a slot per user.
 pub async fn latest_vocabulary(
     pool: &MySqlPool,
 ) -> sqlx::Result<Option<(String, Vec<crate::wellbeing::suggest::EmotionCandidate>)>> {

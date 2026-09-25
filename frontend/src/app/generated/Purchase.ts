@@ -6,10 +6,8 @@ import type { ProductId } from "./ProductId";
  */
 export type Purchase = { id: number, product_id: ProductId | null, 
 /**
- * The cupboard item this bought. The one key that ALWAYS exists, because a
- * purchase is only recorded by buying something and buying is what creates
- * the item — a hand-typed buy-list row has no barcode and no product, and
- * was unreachable without this (migration 0044).
+ * The cupboard item this bought — the one key that always exists, since a
+ * hand-typed buy-list row has no barcode and no product.
  */
 item_id: number | null, barcode: string | null, 
 /**

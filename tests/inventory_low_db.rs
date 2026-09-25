@@ -1,6 +1,4 @@
-//! "I am running out of this" against a real MariaDB. Runs only when
-//! LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on
-//! the SQL reads as a passing one.
+//! "I am running out of this" against a real MariaDB.
 //!
 //! `low` exists because `used` never gets written — nobody logs pouring milk.
 //! These assert the judgement is recorded, changes nothing else, and may repeat.

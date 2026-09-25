@@ -1,9 +1,10 @@
-//! 8f — reconciling the product picture. Unlike the scalar fields, the canonical
-//! image is bytes we hold while a listing offers a URL, so the divergence is by
-//! *provenance* (which source our picture came from), not by value. The rule is
-//! pure (no DB); the settle/provenance round-trip runs against a real MariaDB
-//! only when LIFE_TEST_DATABASE_URL is set. Adopting a picture re-fetches through
-//! the SSRF gate and is exercised at the route layer, not here.
+//! Reconciling the product picture. Unlike the scalar fields, the
+//! canonical image is bytes we hold while a listing offers a URL, so the
+//! divergence is by *provenance* (which source our picture came from), not by
+//! value. The rule is pure (no DB); the settle/provenance round-trip runs
+//! against a real MariaDB. Adopting a
+//! picture re-fetches through the SSRF gate and is exercised at the route
+//! layer, not here.
 
 mod common;
 

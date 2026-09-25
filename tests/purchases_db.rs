@@ -51,9 +51,8 @@ fn paid(shop: &str, amount_minor: i64) -> NewPurchase {
 #[tokio::test]
 async fn a_purchase_survives_being_relinked_to_a_different_product() {
     // The reason a purchase carries barcode AND product id AND name. An item can
-    // be linked to the WRONG product with every barcode agreeing (found on the
-    // live data 2026-08-30, #1281), so relinking is a normal correction — and it
-    // must not orphan what was spent.
+    // be linked to the WRONG product with every barcode agreeing, so relinking is
+    // a normal correction — and it must not orphan what was spent.
     let pool = db::connect(&common::test_db_url()).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
     let user = "test-user-purchases";
@@ -308,8 +307,7 @@ async fn the_rate_is_quoted_per_kg_and_refused_when_the_pack_cannot_be_read() {
 
 #[tokio::test]
 async fn a_hand_typed_row_is_reachable_by_its_item_and_by_nothing_else() {
-    // The gap this column exists to close, found by running the buy flow against
-    // production: a hand-typed buy-list row has no barcode and no catalogue
+    // A hand-typed buy-list row has no barcode and no catalogue
     // product, so `history` — which matches on those two — can never find it.
     // Every buy knows its item, so that is the key that always works.
     let pool = db::connect(&common::test_db_url()).await.expect("connect");

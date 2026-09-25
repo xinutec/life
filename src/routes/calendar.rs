@@ -86,7 +86,7 @@ pub struct PlannedTrip {
 /// POST /api/calendar/shop-trip → write the `VEVENT`, report where it went.
 ///
 /// Nothing is recorded on this side. The event is the record, Nextcloud holds
-/// it, and every calendar client the household already has shows it (§5).
+/// it, and every calendar client already shows it.
 pub async fn plan_shop_trip(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,

@@ -1,6 +1,5 @@
 //! "I used some of this" against a real MariaDB — the decrement, the audit row
-//! it leaves, and the cases that must leave the cupboard alone. Runs only when
-//! LIFE_TEST_DATABASE_URL is set; fails otherwise, because a skipped check on the SQL reads as a passing one.
+//! it leaves, and the cases that must leave the cupboard alone.
 
 mod common;
 

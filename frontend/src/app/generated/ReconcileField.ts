@@ -3,12 +3,7 @@
 /**
  * A field of a product that sources can disagree about.
  *
- * Closed, because every one of them has to be handled by name somewhere: the
- * route splits the picture out (its bytes come through the SSRF gate), the repo
- * splits facts out (they record a trusted source rather than copying a value),
- * and each scalar needs a reader for its current and offered values. As a
- * `String` those four dispatch sites agreed only by convention and a new field
- * could silently fall through all of them; as an enum, [`Self::reconciler`] is
- * exhaustive and the compiler names every site that must learn about it.
+ * Closed, so [`Self::reconciler`] is exhaustive and a new field fails to
+ * compile until every dispatch site handles it.
  */
 export type ReconcileField = "name" | "brand" | "quantity_label" | "picture" | "nutrition" | "ingredients";

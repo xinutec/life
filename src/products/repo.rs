@@ -1,4 +1,4 @@
-//! Persistence for the product cache.
+//! Persistence for the product catalog.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -60,9 +60,8 @@ impl From<MetaRow> for Product {
 ///
 /// A macro rather than a `const`, because sqlx 0.8 accepts only `&'static str`
 /// SQL — its injection guard — and a macro expands to a literal that `concat!`
-/// can extend with each getter's own WHERE. The same device as
-/// `inventory::repo`'s `item_select!`, for the same reason. This was three
-/// hand-synced copies until 2026-09-05.
+/// can extend with each getter's own WHERE, as `inventory::repo`'s
+/// `item_select!` does.
 ///
 /// ⚠ `get_by_source_external` does NOT use this, and cannot: it joins
 /// `product_listings`, which carries its own `id`, `source`, `external_id`,
@@ -373,8 +372,7 @@ struct ReconciledField {
 }
 
 /// The fields with a single canonical value that a source can disagree about.
-/// (Picture and the facts — dietary/allergens/nutrition — reconcile through
-/// their own mechanisms; see the reconciliation plan.)
+/// (Picture and the facts reconcile through their own mechanisms, below.)
 const RECONCILED_FIELDS: &[ReconciledField] = &[
     ReconciledField {
         field: ReconcileField::Name,
@@ -698,12 +696,6 @@ async fn set_canonical_field(
     // Each reconcilable scalar carries a provenance column (`*_source`): the
     // adopted source, or `user` for our own correction. `user` there is what a
     // later source refresh checks before touching the value.
-    //
-    // The statement is a `&'static str` from RECONCILED_FIELDS above — three
-    // literals in one table, never concatenated and never derived from a
-    // request. Holding them there rather than matching here is what removes the
-    // runtime "field is not settable" arm: a `ReconciledField` only exists for a
-    // field that has one.
     //
     // dev-lint: allow-sqlx static literal chosen from RECONCILED_FIELDS, above
     sqlx::query(spec.adopt_sql)
@@ -1261,7 +1253,7 @@ pub fn picked_facts() -> impl Iterator<Item = ReconcileField> {
 /// Combine every source's facts into the one answer to display, honouring any
 /// recorded source pick (0035). Nutrition and ingredients take one source's value
 /// whole — the pick if set and present, else by precedence; allergens union and
-/// dietary tri-state exactly as before (safety — a pick never applies). Pure.
+/// dietary tri-state (safety — a pick never applies). Pure.
 pub fn merge_facts(by_source: &[SourceFacts], prefs: &FactSourceMap) -> ProductFacts {
     let panels: Vec<(Source, Nutrition)> = by_source
         .iter()
@@ -1364,9 +1356,9 @@ fn fact_display(field: ReconcileField, facts: &ProductFacts) -> Option<String> {
 }
 
 /// Find the canonical product for `barcode`, creating a bare one if absent. On a
-/// hit the existing canonical fields are left untouched (picking the cleanest
-/// name across sources is a later increment); on create they're seeded from the
-/// calling source. Returns the canonical id.
+/// hit the existing canonical fields are left untouched (see
+/// `refresh_canonical_name`); on create they're seeded from the calling source.
+/// Returns the canonical id.
 async fn find_or_create_by_barcode(
     pool: &MySqlPool,
     barcode: &Barcode,
@@ -1548,14 +1540,8 @@ pub async fn set_image(
 /// Cache a product from an Open Food Facts lookup: insert it, or FILL THE GAPS
 /// on a row that already exists. Never an overwrite.
 ///
-/// This used to restate name/brand/pack/image unconditionally, which quietly
-/// contradicted the policy every other write here follows (`refresh_canonical_name`,
-/// `upsert_external`, `sync_listing`): fill-if-empty, and a disagreement becomes a
-/// divergence to approve rather than a silent replacement. It was reachable only
-/// on the OFF cache-MISS path, so nothing hit it in practice — but it was a trap
-/// primed for the first refresh path anyone added, and it would have taken a
-/// hand-typed name with it while leaving `name_source = 'user'` behind, so the row
-/// would claim a provenance it no longer had.
+/// The policy of every write here: fill-if-empty, and a disagreement becomes a
+/// divergence to approve.
 pub async fn upsert(
     pool: &MySqlPool,
     barcode: &Barcode,

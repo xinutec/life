@@ -87,9 +87,6 @@ pub async fn poll_once(
 }
 
 /// `Basic base64(loginName:appPassword)` for CalDAV requests.
-// Used by the CalDAV client (next stage); kept here next to the app-password
-// flow that produces the credentials.
-#[allow(dead_code, reason = "used by the CalDAV client, the next stage")]
 pub fn basic_auth_header(login_name: &str, app_password: &str) -> String {
     let encoded =
         base64::engine::general_purpose::STANDARD.encode(format!("{login_name}:{app_password}"));

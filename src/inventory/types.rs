@@ -24,13 +24,8 @@ str_enum! {
 str_enum! {
     /// Whose name an item carries.
     ///
-    /// The server cannot work this out, and trying to is how it goes wrong. It sees
-    /// a name and a linked product; it cannot see whether a person TOUCHED the name
-    /// field. Inferring "differs from the product, so it was authored" mislabels
-    /// every hurried word typed at a cupboard door as an intention, and inferring it
-    /// only on update assumes every client prefills the displayed name — which the
-    /// web form happens to do and a sync client, a script or the Android app need
-    /// not. So the client that owns the form says so explicitly.
+    /// Stated by the client that owns the form: the server cannot see whether a
+    /// person touched the name field, and "differs from the product" is not it.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[serde(rename_all = "snake_case")]
     #[ts(export)]
@@ -47,14 +42,9 @@ str_enum! {
 str_enum! {
     /// How much of an `expiry` date was actually printed on the thing.
     ///
-    /// A medicine box is printed MM/YYYY, and `items.expiry` is a DATE, so a day
-    /// has to be invented to store one at all. The convention is the month's LAST
-    /// day — a box marked 06/2028 is good THROUGH June, and the 1st would expire it
-    /// twenty-nine days early — but the convention alone is not enough, because a
-    /// reader cannot tell an invented 30th from a printed one. Rendering "30 Jun
-    /// 2028" states a day that appears nowhere on the box; counting down "in 2d"
-    /// through the end of the month claims something changes overnight that does
-    /// not. So the precision travels with the date (migration 0045).
+    /// A medicine box is printed MM/YYYY and `items.expiry` is a DATE, so the
+    /// month's LAST day is stored (good THROUGH June). The precision travels with
+    /// it so nothing renders or counts down to a day that was never printed.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[serde(rename_all = "snake_case")]
     #[ts(export)]
@@ -69,23 +59,12 @@ str_enum! {
 str_enum! {
     /// What kind of thing an item is.
     ///
-    /// "Generic from day one — food is just the first skin" was the intent, but the
-    /// list was food's skin and nothing else's: a house is full of pans, glasses and
-    /// clothes, and every one of them landed in `Other`. Measured 2026-08-31, and the
-    /// tell is that `Other` had come to hold BOTH — four genuinely non-food things
-    /// AND two foods (an avocado, a protein drink) that somebody filed there because
-    /// nothing fitted. A bucket that means "not food" and "nobody said" at the same
-    /// time cannot group, filter or answer anything.
+    /// Split by where a thing lives and what you ask of it, not by material:
+    /// `Cookware` and `Tableware` are different cupboards and questions. `Other`
+    /// is offered last, or it becomes the bucket for everything.
     ///
-    /// Split by WHERE A THING LIVES AND WHAT YOU ASK OF IT, not by material:
-    /// `Cookware` and `Tableware` are different cupboards and different questions
-    /// ("which pan", "how many glasses"), while a steel pan and a steel fork have
-    /// nothing to say to each other.
-    ///
-    /// ⚠ Still a closed set, so adding a kind needs a deploy. That is a known limit
-    /// rather than a decision that this is enough — the column is VARCHAR and the
-    /// client's sync schema already stores a free string, so nothing below this
-    /// layer constrains it. See the follow-up task on user-defined categories.
+    /// ⚠ A closed set, so a new kind needs a deploy; the column and the sync
+    /// schema are free strings (see docs/TODO.md).
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[serde(rename_all = "snake_case")]
     #[ts(export)]
@@ -97,7 +76,7 @@ str_enum! {
         /// Glasses, plates, cutlery — what you eat and drink FROM.
         Tableware => "tableware",
         Clothing => "clothing",
-        /// Anything with a plug and a warranty; the category #131 hangs off.
+        /// Anything with a plug and a warranty.
         Appliance => "appliance",
         /// Detergent, sponges, refills — bought repeatedly, never eaten.
         Cleaning => "cleaning",
@@ -151,11 +130,7 @@ pub struct Item {
 str_enum! {
     /// What happened to a stock row, as recorded in `item_history`.
     ///
-    /// A closed set in the type system rather than four spellings of a `VARCHAR(16)`
-    /// scattered through the repo — the same reason `products::Source` is one. The
-    /// history table is about to start earning its keep (consumption is what makes
-    /// "how much is left" and "what am I running out of" answerable), so the set it
-    /// is keyed on should be something the compiler knows.
+    /// A closed set, for the reason `products::Source` is one.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[serde(rename_all = "lowercase")]
     #[ts(export)]
@@ -193,26 +168,17 @@ pub struct ItemHistory {
 }
 
 /// One thing that happened to a stock row — a line of its history.
-///
-/// The table has been written on every add, move, remove and use since the
-/// schema's first migration ("cheap now, impossible to backfill") and read by
-/// nothing. This is the read.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct ItemHistoryEntry {
     #[ts(type = "number")]
     pub id: u64,
     pub event: ItemEvent,
-    /// How much, in the item's own unit — and it means two different things.
-    /// For [`ItemEvent::Used`] it is the amount that WENT; for every other
-    /// event it is what the row held at the time. That is not an inconsistency
-    /// to iron out: a use is the one event that is a change rather than a
-    /// state, and recording it as a delta is what makes a consumption rate
-    /// computable later. Whoever renders this has to say which it is.
+    /// How much, in the item's own unit. ⚠ For [`ItemEvent::Used`] the amount
+    /// that WENT; for every other event what the row held. Say which when
+    /// rendering.
     pub quantity: Option<f64>,
-    /// Where the row was when this happened, named rather than numbered — a
-    /// history that says "moved" without saying where to is not worth reading.
-    /// `None` for an event with no place recorded, or a place since deleted.
+    /// Where the row was, by name. `None` if unrecorded or since deleted.
     pub location: Option<String>,
     /// When, Unix milliseconds (UTC).
     #[ts(type = "number")]
@@ -286,10 +252,8 @@ pub struct NewItem {
     /// statement": a new item defaults to [`ExpiryPrecision::Day`], and an
     /// update leaves whatever the item already had.
     ///
-    /// The same rule as `name_source`, for the same reason. A caller that is not
-    /// the item form — sync, a script, the Android app — sends nothing here, and
-    /// defaulting it to `Day` on update would silently re-print an invented 30th
-    /// as a real one on the single row where that matters most.
+    /// The same rule as `name_source`: callers other than the item form send
+    /// nothing, and must not turn an invented month-end into a printed day.
     #[serde(default)]
     pub expiry_precision: Option<ExpiryPrecision>,
     pub location_id: Option<u64>,
@@ -303,9 +267,7 @@ pub struct NewItem {
     /// a new item defaults to [`ItemNameSource::Product`], and an update leaves
     /// whatever the item already had.
     ///
-    /// Absent is the common case and it is not a shrug — it is what every caller
-    /// that is not the item form sends, and it deliberately cannot disturb a
-    /// choice the person already made.
+    /// Absent is what every caller but the item form sends.
     #[serde(default)]
     pub name_source: Option<ItemNameSource>,
 }

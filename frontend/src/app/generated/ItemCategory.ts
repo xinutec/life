@@ -3,22 +3,11 @@
 /**
  * What kind of thing an item is.
  *
- * "Generic from day one — food is just the first skin" was the intent, but the
- * list was food's skin and nothing else's: a house is full of pans, glasses and
- * clothes, and every one of them landed in `Other`. Measured 2026-08-31, and the
- * tell is that `Other` had come to hold BOTH — four genuinely non-food things
- * AND two foods (an avocado, a protein drink) that somebody filed there because
- * nothing fitted. A bucket that means "not food" and "nobody said" at the same
- * time cannot group, filter or answer anything.
+ * Split by where a thing lives and what you ask of it, not by material:
+ * `Cookware` and `Tableware` are different cupboards and questions. `Other`
+ * is offered last, or it becomes the bucket for everything.
  *
- * Split by WHERE A THING LIVES AND WHAT YOU ASK OF IT, not by material:
- * `Cookware` and `Tableware` are different cupboards and different questions
- * ("which pan", "how many glasses"), while a steel pan and a steel fork have
- * nothing to say to each other.
- *
- * ⚠ Still a closed set, so adding a kind needs a deploy. That is a known limit
- * rather than a decision that this is enough — the column is VARCHAR and the
- * client's sync schema already stores a free string, so nothing below this
- * layer constrains it. See the follow-up task on user-defined categories.
+ * ⚠ A closed set, so a new kind needs a deploy; the column and the sync
+ * schema are free strings (see docs/TODO.md).
  */
 export type ItemCategory = "food" | "medication" | "cookware" | "tableware" | "clothing" | "appliance" | "cleaning" | "tool" | "document" | "other";

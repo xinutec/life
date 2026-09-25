@@ -2,8 +2,8 @@
 //!
 //! `files::types::sniff_mime` and `products::off::sniff_image_mime` answer the
 //! same question — what are these bytes — for two callers with different
-//! allowlists. They were written separately and drifted (#1448). These tests
-//! pin the part that must be identical, and state the part that must differ.
+//! allowlists. These tests pin the part that must be identical, and state the
+//! part that must differ.
 
 use life::files::types::sniff_mime;
 use life::products::off::sniff_image_mime;

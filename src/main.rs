@@ -49,19 +49,10 @@ async fn main() -> Result<()> {
     let bind_addr = cfg.bind_addr.clone();
     let state = AppState::new(pool, cfg, http);
 
-    // Rebuild the day's emotion prompt just after the UTC rollover.
-    //
-    // The few-shot is cut off at the end of yesterday, so the system prompt — and
-    // the model's KV-cache prefix keyed on it — changes at midnight. Someone has
-    // to pay the ~50s of prefill that rebuilds it, and until now it was whoever
-    // wrote the day's first check-in, on top of the ~60s cold model load, while
-    // they waited. Doing it on a timer means nobody is waiting: the preload is
-    // queued into the same warm slot a keystroke would use, and the worker picks
-    // it up on its next poll.
-    //
-    // Best-effort throughout. No stored vocabulary (a fresh database, or a user
-    // who has not opened the picker since) simply skips the night — the keystroke
-    // warm-up still covers the load, exactly as it did before.
+    // Rebuild the day's emotion prompt just after the UTC rollover. The few-shot
+    // ends at yesterday, so the prompt and its KV-cache prefix change at midnight;
+    // prefilling it on a timer means no check-in waits for it. Best-effort: with
+    // no stored vocabulary it skips the night and the keystroke warm-up covers it.
     let warm_state = state.clone();
     tokio::spawn(async move {
         loop {
@@ -85,17 +76,10 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-/// Resolves when the platform asks us to stop, so `serve` can finish the
-/// requests already in flight instead of dropping them.
+/// Resolves on SIGTERM or ctrl-c, so `serve` finishes the requests in flight.
 ///
-/// Without this the process had no SIGTERM handler at all, so the signal took
-/// its default action and killed it outright: every `kubectl rollout restart`
-/// cut whatever was mid-request, and the pod exited 143 — which Kubernetes
-/// reports as `Error`, the kind of routine red that teaches you to ignore red.
-///
-/// A failure to install a handler is logged and that arm simply never fires,
-/// rather than panicking: losing the *ability* to shut down cleanly is not a
-/// reason to refuse to run.
+/// A handler that fails to install is logged and never fires, rather than
+/// panicking: losing clean shutdown is no reason to refuse to run.
 async fn shutdown_signal() {
     use tokio::signal::unix::{SignalKind, signal};
 

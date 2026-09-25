@@ -1,7 +1,7 @@
 //! Reconciliation: surfacing where a product's sources disagree with its
 //! canonical row, and settling those disagreements by adopting or keeping a
 //! value. The `divergences` rule is pure (no DB); the reconcile round-trip runs
-//! against a real MariaDB only when LIFE_TEST_DATABASE_URL is set.
+//! against a real MariaDB.
 
 mod common;
 
@@ -357,8 +357,8 @@ async fn our_own_brand_and_pack_win_over_sources_and_survive_a_refresh() {
         .await
         .unwrap();
 
-    // Asda seeds the canonical row with its own casing — "250ML", the very thing
-    // that started this: no other source disagrees, so only our layer can fix it.
+    // Asda seeds the canonical row with its own casing — "250ML": no other source
+    // disagrees, so only our layer can fix it.
     let p = repo::upsert_external(
         &pool,
         Source::Asda,

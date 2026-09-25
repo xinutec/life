@@ -1,5 +1,4 @@
-//! Attaching receipts and manuals to a thing you own. Real MariaDB; runs only
-//! when LIFE_TEST_DATABASE_URL is set.
+//! Attaching receipts and manuals to a thing you own. Real MariaDB.
 //!
 //! The catalogue stores one image per PRODUCT, keyed on a barcode. That shape
 //! could not hold any of this: products are shared reference data and a receipt

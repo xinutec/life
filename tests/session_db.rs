@@ -1,11 +1,7 @@
 //! Session lifetime against a real MariaDB: the expiry must slide forward as the
 //! session is used, and a rejection must say why.
 //!
-//! The regression this pins: the expiry used to be written once at login and
-//! never touched, so a session died exactly 7 days after login however much the
-//! app was used in between (2026-07-13: signed out on the phone after a week of
-//! daily use). Runs only when LIFE_TEST_DATABASE_URL is set (see
-//! scripts/dev-db.sh); fails otherwise, because a skipped check on the SQL reads as a passing one.
+//! Without the slide, a session dies 7 days after login however much it is used.
 
 mod common;
 
@@ -86,9 +82,8 @@ async fn session_lifetime_against_real_db() {
         "no needless write"
     );
 
-    // THE REGRESSION. Six days in, with one day left on the clock: using the app
-    // must push the expiry back out to a full week from now. Before the fix this
-    // stayed put, and the session died on day 7 regardless of use.
+    // Six days in, with one day left on the clock: using the app must push the
+    // expiry back out to a full week from now.
     let nearly_up = Utc::now().naive_utc() + Duration::days(1);
     set_expiry(&pool, &signed, nearly_up).await;
     assert!(matches!(

@@ -1,4 +1,5 @@
-//! Product lookup: cache-first, Open Food Facts on a miss; plus image serving.
+//! Product catalog HTTP surface: lookup, search, import, shop finds,
+//! reconciliation, facts and images.
 
 use axum::Json;
 use axum::body::{Body, Bytes};
@@ -28,10 +29,9 @@ pub struct SearchParams {
 /// GET /api/products: this hits the shop, so the picker offers it as its own
 /// explicit tier. A blank query returns `[]` with no outbound call.
 ///
-/// Every hit is remembered on the way past (products::shop_cache), not just the
-/// one the caller ends up using: each carries its own EAN, so a search we've
-/// already paid for teaches us ~15 barcode → CIN mappings. Dropping them meant
-/// re-querying Asda for a product this very search had already described.
+/// Every hit is remembered (products::shop_cache), not just the one the caller
+/// uses: each carries its own EAN, so one search teaches many barcode → CIN
+/// mappings.
 pub async fn search_asda(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
@@ -211,9 +211,7 @@ pub struct ImportProduct {
     pub image_url: Option<String>,
     /// Optional price the source quoted; appended to the listing's price history.
     pub price: Option<PriceInput>,
-    // NB: no `category` — `products.category` is the short ItemCategory enum
-    // (food/medication/…), not a shop taxonomy. Mapping a shop's categories is a
-    // separate increment.
+    // No `category`: `products.category` is our ItemCategory, not a shop taxonomy.
 }
 
 /// POST /api/products/import → upsert a catalog row from an external source,
@@ -589,16 +587,11 @@ pub async fn find_at_shop(
 /// POST /api/products/shop/{source}/listings → remember listings a client's
 /// WebView saw at a shop the server can't reach.
 ///
-/// The mirror image of `remember_hits`: for Asda the server sees the search
-/// result and files it on the way past, and for a bot-walled shop the phone is
-/// the only thing that ever sees it. Without this, a Waitrose hunt would cost
-/// eight page loads and teach us nothing — the next hunt for the same product,
-/// or for any other product those pages described, would pay all over again.
+/// The mirror image of `remember_hits`, for a bot-walled shop only the phone
+/// can see, so a hunt's page loads are paid once.
 ///
-/// Reporting is the point, so this stays cheap and forgiving in shape (identity
-/// plus whatever else was on the page) while refusing anything that would poison
-/// the barcode index. Returns how many rows were stored, so a client that thinks
-/// it taught us something can tell when it didn't.
+/// Forgiving in shape, but refuses anything that would poison the barcode
+/// index. Returns how many rows were stored.
 pub async fn remember_seen(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,

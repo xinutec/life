@@ -1,5 +1,5 @@
 //! Offline-first sync: a global, commit-ordered revision counter shared by all
-//! syncable tables, plus per-collection pull/push (shopping first). See
+//! syncable tables, plus per-collection pull/push. See
 //! `docs/design/sync.md`.
 
 pub mod repo;

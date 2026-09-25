@@ -1,5 +1,4 @@
-//! Recipes against a real MariaDB. Runs only when LIFE_TEST_DATABASE_URL is
-//! set (see scripts/dev-db.sh); fails otherwise, because a skipped check on the SQL reads as a passing one.
+//! Recipes against a real MariaDB.
 
 mod common;
 
@@ -300,8 +299,8 @@ async fn a_linked_ingredient_matches_stock_by_product_not_by_name() {
     assert_eq!(orphaned.ingredients[0].product_id, None);
 }
 
-/// The recipes LIST — `GET /api/recipes`, the screen's first fetch, and until
-/// now the one recipe path no test walked. Its ingredient query is a three-table
+/// The recipes LIST — `GET /api/recipes`, the screen's first fetch. Its
+/// ingredient query is a three-table
 /// join, so what it pins is mostly about the joins: an unlinked line must
 /// survive the LEFT JOIN to products (an inner one would silently drop it), and
 /// the ingredients must land on the right recipe.

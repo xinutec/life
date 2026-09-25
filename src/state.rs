@@ -19,16 +19,10 @@ const WORKER_ALIVE: Duration = Duration::from_secs(90);
 /// How long a worker may go quiet AFTER taking a preload before we stop
 /// believing in it.
 ///
-/// The worker is single-threaded by design (one generation at a time), so while
-/// it preloads it does not poll — and a preload is the one piece of work that
-/// can outlast [`WORKER_ALIVE`]. Measured worst case ~130 s: the first check-in
-/// of a UTC day pays a cold model load (~60 s) *and* rebuilds that day's prefix
-/// cache from scratch (~50 s of prefill), because the few-shot is day-stable.
-///
-/// Without this the picker got the story exactly backwards on the first
-/// check-in of each day (2026-07-25): the warm-up meant to make suggestions feel
-/// instant was itself what made the app report that no worker was listening,
-/// while that worker was busy preparing for the very request being made.
+/// The worker is single-threaded, so while it preloads it does not poll, and a
+/// preload — cold model load plus the day's prefill, ~130 s worst case — can
+/// outlast [`WORKER_ALIVE`]. Without this grace the picker would report no
+/// worker while it is busy warming up for this very request.
 const PRELOAD_GRACE: Duration = Duration::from_secs(180);
 
 #[derive(Clone)]
@@ -49,8 +43,8 @@ pub struct AppState {
     /// A pending "warm the model" request: the day's system prompt, set when a
     /// check-in note starts being written. The worker preloads it — loading the
     /// weights and building the day's prefix cache — so the real suggestion a
-    /// moment later is warm instead of paying the ~60s cold load then. In-memory
-    /// and best-effort: a missed or stale warm just means the old, cold timing.
+    /// moment later is warm. In-memory and best-effort: a missed warm is just a
+    /// cold start.
     warm_system: Arc<Mutex<Option<String>>>,
     /// When a worker last TOOK a preload directive — the start of the window in
     /// which it is working but deliberately silent. Handing out work is better
@@ -61,12 +55,8 @@ pub struct AppState {
     warm_taken: Arc<Mutex<Option<Instant>>>,
     /// The council's bin calendar as last fetched, and when.
     ///
-    /// In-memory, and the feed's own text rather than the parsed days: it is a
-    /// copy of somebody else's data with a published daily TTL, so a restart
-    /// re-fetching it costs one request, and a second copy in our database
-    /// would be a second place for it to be wrong. Keeping the text means the
-    /// day it is read on is decided per request — the cache is about not
-    /// pestering the council, not about freezing what "upcoming" means.
+    /// In-memory, and the feed's text rather than parsed days, so "upcoming" is
+    /// decided per request; the cache only spares the council.
     bins: Arc<Mutex<Option<(Instant, String)>>>,
 }
 

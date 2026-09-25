@@ -17,8 +17,6 @@ pub enum AppError {
     #[error("{0}")]
     BadRequest(String),
 
-    // Constructed by the CalDAV layer once it reads nc_credentials; the
-    // response mapping is wired up already.
     #[error("nextcloud not linked")]
     NcNotLinked,
 

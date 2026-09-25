@@ -1,18 +1,10 @@
 //! When the bins go out, read off the council's own calendar.
 //!
-//! Brent publishes the collection schedule for a property as a public iCal
-//! subscription — no auth, no key, `X-PUBLISHED-TTL:P1D`. It is the same feed a
-//! calendar client would subscribe to, so reading it is the intended use and
-//! not scraping.
+//! The council publishes a property's collection schedule as a public iCal
+//! subscription, the same feed a calendar client would subscribe to. Its URL
+//! identifies one address, so it is configuration ([`crate::config`]).
 //!
-//! **The URL is configuration, never a constant here.** It carries a property
-//! id that identifies one address, and this repository is not the place for
-//! that. Unset means the feature is simply absent — see [`crate::config`].
-//!
-//! Parsing is [`icalendar`]'s rather than a hand-rolled line reader: iCal folds
-//! long lines at 75 octets and escapes `,` `;` and newlines inside text, and a
-//! reader that ignores either works right up until a council renames a
-//! collection to something with a comma in it.
+//! Parsed with [`icalendar`], not by line: iCal folds lines and escapes `,` `;`.
 
 use anyhow::{Context, Result};
 use chrono::NaiveDate;
@@ -68,13 +60,9 @@ fn day_of(event: &Event) -> Option<BinDay> {
     if kind.is_empty() {
         return None;
     }
-    // Every event in this feed is all-day (`VALUE=DATE`), which is the first
-    // arm. The others are defensive: if the council ever starts stating a time,
-    // the DAY is still the part anyone acts on, so take it as written rather
-    // than dropping the collection. `Utc` is read as its UTC date, which in
-    // British Summer Time can differ from the London date for something just
-    // before midnight — the wrong answer to a question nobody is yet asking,
-    // and worth revisiting only if the feed ever stops being all-day.
+    // The feed is all-day (`VALUE=DATE`), the first arm. The others keep the
+    // day if a time ever appears; `Utc` takes its UTC date, which can be a day
+    // off from London's just before midnight in summer.
     let date = match event.get_start()? {
         DatePerhapsTime::Date(d) => d,
         DatePerhapsTime::DateTime(CalendarDateTime::Floating(dt)) => dt.date(),

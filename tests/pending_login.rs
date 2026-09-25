@@ -1,7 +1,6 @@
-//! The login-in-progress cookie. The case that matters is the one that broke
-//! fleetwatch's Android wrapper: Nextcloud's Login Flow returns an EMPTY `state`,
-//! and a login must still complete — while everything that is not a login we
-//! started must not.
+//! The login-in-progress cookie. The case that matters: Nextcloud's Login Flow
+//! can return an EMPTY `state`, and a login must still complete — while
+//! everything that is not a login we started must not.
 
 use chrono::{Duration, Utc};
 use life::pending_login::{accept, issue, ttl};
@@ -25,7 +24,7 @@ fn a_login_completes_when_nextcloud_echoes_the_state() {
 #[test]
 fn a_login_completes_when_the_login_flow_swallowed_the_state() {
     // NC redirects to `/auth/callback?state=&code=…` when the browser had no NC
-    // session. This is the bug: it used to be unrecoverable.
+    // session; the cookie alone must complete the login.
     let now = now();
     let (_nonce, cookie) = issue(SECRET, Some("/".into()), now);
     assert!(accept(SECRET, Some(&cookie), Some(""), now).is_some());

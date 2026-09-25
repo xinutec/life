@@ -1,14 +1,9 @@
 //! Both fact parsers must agree on what counts as "no panel".
 //!
 //! `nutrition::RawFacts::parse` reads Open Food Facts; `brandbank::parse` reads
-//! Asda's product-page blob. Both end at the same `ProductFacts`, and both once
-//! carried their own copy of the emptiness rule (#1449). The rule decides
-//! whether a source is recorded as HAVING a panel at all — and `merge_nutrition`
-//! picks ONE source's panel whole, so a panel that silently stops existing is
-//! not a smaller answer, it is a different source's answer.
-//!
-//! These tests fail if the two ever diverge again, which moving the code alone
-//! would not have caught.
+//! Asda's product-page blob. The rule decides whether a source HAS a panel, and
+//! `merge_nutrition` picks one source's panel whole — so a disagreement swaps in
+//! a different source's answer.
 
 use life::products::brandbank;
 use life::products::nutrition::{Nutrition, RawFacts};

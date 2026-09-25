@@ -1,6 +1,4 @@
-//! `client_events` against a real MariaDB. Runs only when LIFE_TEST_DATABASE_URL
-//! is set; fails otherwise, because a skipped check on the SQL reads as a passing
-//! one.
+//! `client_events` against a real MariaDB.
 //!
 //! This suite matters more than most: `/api/telemetry` swallows a write failure
 //! on purpose (the client neither reads the response nor retries), so a broken

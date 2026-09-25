@@ -53,7 +53,7 @@ async fn generic_image_guard_enforces_per_source_allowlist() {
 
 #[tokio::test]
 async fn asda_attach_pulls_its_image_only_from_scene7() {
-    // The product-page attach (routes::products::sync_listing) now fetches the
+    // The product-page attach (routes::products::sync_listing) fetches the
     // product picture from Asda through this exact allowlist. Tie the test to the
     // CONFIGURED list, not a hand-copied one, so the guard can't silently drift
     // from what the attach path actually passes.
