@@ -9,7 +9,7 @@ import android.content.Intent
 import androidx.core.app.NotificationCompat
 
 /**
- * Fires when a scheduled reminder's alarm goes off (see [MainActivity.ReminderBridge])
+ * Fires when a scheduled reminder's alarm goes off (see [MainActivity.scheduleReminder])
  * and posts the notification. It's a manifest-declared receiver, not one registered in
  * code, so it still runs when the app process is gone — which is the whole point: the
  * reminder must reach you at 9am whether or not the app is open.
