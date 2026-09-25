@@ -112,7 +112,7 @@ export class ScannerDialog implements OnDestroy {
     const constraints: TorchConstraints = { advanced: [{ torch: next }] };
     // Same non-standard extension on the way in: the DOM lib has no `torch`
     // constraint to widen to, so this one stays a declared claim.
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- non-standard torch constraint, see above
     track.applyConstraints(constraints as MediaTrackConstraints).then(
       () => {
         this.torchOn.set(next);

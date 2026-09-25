@@ -338,7 +338,7 @@ class MainActivity : WebShellActivity() {
     // it answers comes from the WebView's onPermissionRequest, which is not a
     // launcher call, so there is no contract to register against.
     @Deprecated("Deprecated in Java")
-    @Suppress("DEPRECATION")
+    @Suppress("DEPRECATION") // answered from onPermissionRequest, not a launcher (above)
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<String>,
@@ -444,7 +444,7 @@ class MainActivity : WebShellActivity() {
      * extractor to use. Results return through the per-view AndroidShop bridge
      * because WebView.evaluateJavascript does NOT await promises. One at a time.
      */
-    @SuppressLint("SetJavaScriptEnabled")
+    @SuppressLint("SetJavaScriptEnabled") // the WebView runs the app's own bundle
     private fun shopRun(url: String, extractorJs: String, requestId: String) {
         // No origin gate here any more: the only caller is the web-message
         // listener, which refuses anything that isn't the app's own main frame
@@ -613,7 +613,7 @@ class MainActivity : WebShellActivity() {
      * "Done" button and the back key close it; the web app is notified via
      * window.__shopConnected(requestId).
      */
-    @SuppressLint("SetJavaScriptEnabled")
+    @SuppressLint("SetJavaScriptEnabled") // the WebView runs the app's own bundle
     private fun showShopConnect(loginUrl: String, requestId: String) {
         if (connectOverlay != null) return // already open
         if (!isShopUrl(loginUrl)) {

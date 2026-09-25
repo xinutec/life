@@ -92,7 +92,7 @@ export abstract class SyncedStore<T extends SyncDoc> {
       // _attachments). Narrowing it back to T is a claim about RxDB's own
       // representation, not about anything on the wire, and it is stated here
       // once for every store rather than at each query.
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- RxDB's own representation, see above
       map((docs) => docs.map((d) => d.toJSON() as T)),
       shareReplay({ bufferSize: 1, refCount: false }),
     );
@@ -104,7 +104,7 @@ export abstract class SyncedStore<T extends SyncDoc> {
     const doc = await this.find(key);
     // Content keys are a subset of `keyof T`, so the widening cast is sound; it
     // just bridges the generic `T` to RxDB's own patch type.
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- content keys are a subset of keyof T (above)
     await doc?.incrementalPatch(fields as Partial<T>);
   }
 

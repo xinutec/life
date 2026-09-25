@@ -133,7 +133,7 @@ export function startHttpReplication<T>(opts: {
         // stall throws nothing, so `clearError` had nothing to clear and the
         // indicator went on claiming "All changes synced." for a day (#1567).
         opts.syncStatus.reportSuccess(opts.label);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- _deleted is what the pull rows carry; the type adds RxDB's flag to T
         return { documents: documents as (T & { _deleted: boolean })[], checkpoint: { rev } };
       },
     },
@@ -155,7 +155,7 @@ export function startHttpReplication<T>(opts: {
         // as the pull rows, checked for being a list at all.
         const conflicts: unknown = await res.json();
         if (!Array.isArray(conflicts)) throw new Error('push returned a malformed response');
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- checked to be an array on the line above
         return conflicts as (T & { _deleted: boolean })[];
       },
     },
