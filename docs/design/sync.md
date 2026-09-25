@@ -70,8 +70,8 @@ Each of these was a bug or a near-miss. Breaking one is silent.
 - **Auth expiry is not a clean 401.** An expired NC session yields a 302 to login
   HTML that `fetch` follows to a 200. Worse, the Angular service worker answers a
   failed fetch with a bodiless synthetic **504**, so "not JSON" alone cannot mean
-  "logged out" — that heuristic once signed the user out on every offline launch
-  (see `../TODO.md`, 2026-07-16). On real auth loss, replication stands down
+  "logged out" — that heuristic once signed the user out on every offline launch.
+  On real auth loss, replication stands down
   rather than retrying forever.
 - **RxDB schema versions are as load-bearing as `migrations/`.** A version bump
   without a `migrationStrategy` fails to open the local DB and can drop unsynced

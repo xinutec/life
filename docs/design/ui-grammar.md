@@ -35,7 +35,7 @@ rule exists to prevent.
 - Muted text is `color: var(--mat-sys-on-surface-variant)`, **not** `opacity`.
   Opacity dims children too and diverges in dark mode.
 - `.count-badge` is the badge. A screen adds placement on top of it and nothing
-  else — hand-rolled count pills have been consolidated once already.
+  else.
 - `keydown.space` must activate anything with `role="button"` — Space is an ARIA
   requirement, not a nicety.
 - Fonts and icons are **self-hosted**; a CDN font is a blank icon on an offline
@@ -43,14 +43,13 @@ rule exists to prevent.
 
 ## Verification
 
-`frontend/e2e/ui-pages.spec.ts` asserts no text overlap and no horizontal
-overflow across the screens at phone width, and `ui-golden.spec.ts` carries a
-dark-scheme golden. Layout is judged from the render, not from reading the
+`frontend/e2e/ui-pages.spec.ts` runs the ui-harness layout oracles over every
+screen at phone width, and `ui-golden.spec.ts` carries a dark-scheme golden. Layout is judged from the render, not from reading the
 template. Keep the overflow oracle's `allow` list narrow — every entry is an
 element it stops measuring.
 
 ## Non-goals
 
-Notifications and reminders (NC Calendar owns them), recurrence, a charting
+Scheduling (NC Calendar owns it), recurrence, a charting
 library (hand-written SVG until charts multiply), a theme toggle (follow the OS),
 multi-user anything.

@@ -6,8 +6,7 @@ It avoids browser chrome while showing the UI exactly as designed (the system
 WebView is Chromium, so it renders like Chrome).
 
 The site is **behind a login** (Nextcloud identity — a self-hosted IdP that works in
-a WebView). The WebView keeps the session cookie, so it's a **one-time sign-in**; the
-app needs only `INTERNET`.
+a WebView). The WebView keeps the session cookie, so it's a **one-time sign-in**.
 
 ## What it does
 
@@ -17,8 +16,11 @@ app needs only `INTERNET`.
   SPA history.
 - Insets the WebView from the system bars by padding a wrapper, and paints the
   strips behind the bars with the page's own surface colour (read on load, so it
-  tracks the Material light/dark theme). The WebView no longer underlaps the bars,
-  so the page's own `env(safe-area-inset-*)` collapse to 0 and add nothing on top.
+  tracks the Material light/dark theme). The page's `env(safe-area-inset-*)`
+  are therefore 0.
+- Gives the page what a browser cannot: clipboard image reads, the camera,
+  exact-time reminder notifications (`ReminderReceiver`), and a hidden WebView
+  the shop providers run in.
 
 Runs on any Android 8+ (minSdk 26) device.
 
@@ -45,15 +47,13 @@ only distribution path.
 
 ## Debugging the WebView
 
-`MainActivity` calls `WebView.setWebContentsDebuggingEnabled(true)`, so the live
-page is inspectable over adb with the full Chrome DevTools protocol — console,
-network, DOM. **Use this.** The alternative is inferring what the page did from
-server logs and screenshots, which is how a Nextcloud login error once took an
-hour to identify instead of a minute (2026-07-13).
+WebView debugging is enabled, so the live page is inspectable over adb with the
+full Chrome DevTools protocol — console, network, DOM. Use it rather than
+inferring what the page did from server logs and screenshots.
 
 ```sh
 nix develop ..#android
-adb connect 10.100.0.12:5555                       # VPN IP; LAN is 192.168.1.133
+adb connect 10.100.0.12:5555                       # VPN IP
 PID=$(adb -s 10.100.0.12:5555 shell pidof org.xinutec.life)
 adb -s 10.100.0.12:5555 forward tcp:9333 localabstract:webview_devtools_remote_$PID
 curl -s http://127.0.0.1:9333/json/list            # pages + their webSocketDebuggerUrl
@@ -70,8 +70,9 @@ android/
 ├── app/
 │   ├── build.gradle.kts                          # android app module, no Compose/AppCompat
 │   └── src/main/
-│       ├── AndroidManifest.xml                   # INTERNET; single launcher activity
-│       ├── kotlin/org/xinutec/life/MainActivity.kt    # the WebView
+│       ├── AndroidManifest.xml                   # permissions; single launcher activity
+│       ├── kotlin/org/xinutec/life/MainActivity.kt    # the WebView and its bridges
+│       ├── kotlin/org/xinutec/life/ReminderReceiver.kt # posts reminder notifications
 │       └── res/                                  # launcher icon (indigo dashboard), theme, strings
 ├── build.gradle.kts · settings.gradle.kts · gradle/   # project scaffolding
 ├── deploy.sh                                     # build + install to the Pixel 9 (by model)

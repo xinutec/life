@@ -7,7 +7,7 @@ Design docs — [`overview.md`](docs/design/overview.md) (architecture and
 boundaries), [`sync.md`](docs/design/sync.md) (local-first sync and its traps),
 [`catalog-and-holdings.md`](docs/design/catalog-and-holdings.md) (products vs
 items, shops, reconciliation), [`ui-grammar.md`](docs/design/ui-grammar.md).
-[`docs/TODO.md`](docs/TODO.md) tracks what's built and what's next.
+[`docs/TODO.md`](docs/TODO.md) is what's next.
 
 ## Deploy
 
@@ -36,10 +36,9 @@ committed and pushed. Then confirm the served bundle carries the new sha.
 A native-feeling phone wrapper — a full-screen WebView onto this site, no browser
 chrome. Build & install steps: [`android/README.md`](android/README.md).
 
-It also carries the *hidden* WebView the shop providers run in, which is why shop
-work has historically needed the phone. It no longer does for the part that
-changes: `scripts/shop-desktop.mjs` runs the same provider ops against a debug
-Chrome on this machine.
+It also carries the *hidden* WebView the shop providers run in.
+`scripts/shop-desktop.mjs` runs the same provider ops against a debug Chrome on
+this machine, so shop work does not need the phone.
 
 ```sh
 node --experimental-strip-types scripts/shop-desktop.mjs waitrose search "black peppercorns"
@@ -49,6 +48,11 @@ node --experimental-strip-types scripts/shop-desktop.mjs waitrose product 785492
 A `product` op needs a hand-made login to the shop in that Chrome profile: signed
 out, Waitrose mints no Bearer at all, and the extractor says so. The session is
 short-lived — expect to sign in again between sittings.
+
+⚠ **Check the login on `waitrose.com/`, not on a search page.** The search page
+the extractor runs on is identical signed in and signed out: both show "Sign in",
+neither shows "Sign out". So the extractor names the likely cause rather than
+claiming to know it.
 
 ### Working against the running app
 
@@ -97,12 +101,6 @@ Numbering is by index in `scenes/house.json`, so the number read off the picture
 identifies the box in the file. Use `--iso` when boxes stack: seen from above, a
 wall unit lands on the base unit under it and their numbers collide.
 
-⚠ **Check the login on `waitrose.com/`, not on a search page.** The search page
-the extractor runs on is identical signed in and signed out: both show "Sign in",
-neither shows "Sign out". Probing it answers "signed out" for a signed-IN
-session, which is why the extractor names the likely cause rather than claiming
-to know it.
-
 ## Develop
 
 ```sh
@@ -125,10 +123,8 @@ scripts/setup-hooks.sh   # activate, once per clone (sets core.hooksPath)
 git commit --no-verify   # bypass for a genuine WIP commit
 ```
 
-**A bare `cargo test` is not the test suite.** Most test files `return` early
-unless `LIFE_TEST_DATABASE_URL` is set, so they report green with none of the SQL
-exercised — and the queries are runtime strings, so *running* them is the only
-check on them. The gate supplies a throwaway server; by hand:
+The DB tests fail unless `LIFE_TEST_DATABASE_URL` is set. The gate supplies a
+throwaway server; by hand:
 
 ```sh
 LIFE_TEST_DATABASE_URL=mysql://life:life@127.0.0.1:3307/life cargo test
@@ -151,7 +147,6 @@ Serve the built bundle from the backend by pointing `STATIC_DIR` at it:
 STATIC_DIR=frontend/dist/life-web/browser cargo run
 ```
 
-
 ### Required environment
 
 | Var               | Meaning                                              |
@@ -164,18 +159,7 @@ STATIC_DIR=frontend/dist/life-web/browser cargo run
 | `NC_REDIRECT_URI` | must match the OAuth2 client's redirect URI          |
 | `BIND_ADDR`       | optional, default `0.0.0.0:8080`                     |
 
-See `.env.example`. The two NC client values come from **Settings → Security →
+See `.env.example`; the optional variables are documented in `src/config.rs`.
+The two NC client values come from **Settings → Security →
 OAuth 2.0** in Nextcloud admin; the redirect URI must be
 `<app-origin>/auth/callback`.
-
-## Routes (current)
-
-- `GET  /login` → redirect to NC for sign-in (identity only)
-- `GET  /auth/callback` → completes login, sets session cookie
-- `POST /logout`
-- `GET  /api/me` → `{ userId, displayName, nextcloud }`
-- `POST /api/nextcloud/connect/init` → start CalDAV app-password link
-- `GET  /api/nextcloud/connect/status` → `active | needs_reauth | not_linked`
-- `GET  /healthz`
-
-Migrations in `migrations/` run automatically at boot.

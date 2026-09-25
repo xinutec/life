@@ -34,8 +34,7 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
 - **rooms / walls** — each room is a closed outline walked turtle-style from
   `start` at `heading` degrees: each wall is `[turn_deg, length_m]` — add
   `turn_deg` to the heading, then step `length_m`. The last wall should return to
-  `start`. (The first room was hand-measured; later rooms are traced live in the
-  dev preview.)
+  `start`.
 - **openings** — a doorway/window cut into one wall: `wall` is the index into
   that room's `walls`; `offset` is metres from the wall's start to the near edge;
   `width`×`height` size the hole; `sill` lifts the bottom off the floor (0 = a
@@ -71,8 +70,7 @@ live local preview:
   between (say) kitchen and dining is an opening in the kitchen's wall *and* in
   the dining room's wall — they're separate outlines drawn ~15 cm apart. Cut
   only one side and you look through the near hole onto the still-solid far wall,
-  so the opening reads as opaque/floor-to-ceiling. (This is why doors already
-  work: they're listed in each room's `openings`.)
+  so the opening reads as opaque/floor-to-ceiling.
 - **Left/right is mirror-prone.** The default camera frames the house from one
   side, so a wall viewed from behind swaps left↔right. Measure and place by
   distance from a landmark (a corner, the hob, a doorway), not "on the left".

@@ -52,7 +52,7 @@ Indices that matter: `products.barcode` UNIQUE (lookup + dedup); `items
   distinguishes OFF vs a photo you took (for products OFF has no image for).
 - **`source` is a closed type, not a string.** Every `source` column names a
   value from `products::source::Source` (`asda | off | user | waitrose`) and
-  nothing else, for the reason `nutrition::Presence` is a type: a fifth spelling
+  nothing else, for the reason `nutrition::Presence` is a type: another spelling
   can't be invented at a call site, `match` names every place that must change
   when a shop is added, and ts-rs gives the frontend the same union instead of a
   bare `string`. The reads *parse*, so a value in the database outside the set

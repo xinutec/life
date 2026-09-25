@@ -1,17 +1,7 @@
 ---
 name: build
 
-# life (Rust backend + Angular frontend) — gate on clippy + cargo test, then
-# build and push the single image xinutec/life:latest to Docker Hub. The k8s
-# manifests live in the home monorepo (xinutec/pippijn code/kubes/life/k8s); the
-# image tag is the only contract between this repo and the deploy.
-#
-# There is NO image automation (no Flux/Argo image controller). The Deployment
-# pins :latest — a fixed string — so a new push changes nothing on the cluster by
-# itself. After this workflow goes green, roll it out by hand; the restart pulls
-# the fresh image (:latest ⇒ imagePullPolicy: Always):
-#   ssh root@isis.xinutec.org "kubectl -n life rollout restart deploy/life-app \
-#     && kubectl -n life rollout status deploy/life-app --timeout=180s"
+# Pushes xinutec/life:latest. Nothing rolls it out automatically: see README.md.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -30,9 +20,6 @@ jobs:
     permissions:
       contents: read
     container: rust:1-bookworm
-    # A throwaway MariaDB so the per-entity DB round-trip tests actually run
-    # (they migrate + exercise the real sync SQL; they skip when the env var is
-    # unset, which is the local no-DB case).
     services:
       mariadb:
         image: mariadb:11.8
@@ -46,9 +33,6 @@ jobs:
       LIFE_TEST_DATABASE_URL: mysql://root:root@mariadb:3306/life_test
     steps:
       - uses: actions/checkout@v6
-      # Cache ~/.cargo (registry + git) and target/, keyed on Cargo.lock — without
-      # this the container re-downloads and re-compiles the whole dep tree every
-      # push (clippy + test), the bulk of this job's time.
       - uses: Swatinem/rust-cache@v2
       - run: rustup component add clippy
       - run: cargo clippy --all-targets -- -D warnings
@@ -70,17 +54,12 @@ jobs:
         with:
           context: .
           push: true
-          # The sha tag is not for deploying — the Deployment still pins
-          # `:latest`. It is so an image is IDENTIFIABLE after the fact: with one
-          # mutable tag, the only way to tell which commit a pod serves is to
-          # grep a string out of the bundle it happens to be serving.
+          # The sha tag identifies an image; the Deployment pins `:latest`.
           tags: |
             xinutec/life:latest
             xinutec/life:${{ github.sha }}
-          # Commit stamp for the build-version the app surfaces (Dockerfile ARG).
           build-args: |
             GIT_SHA=${{ github.sha }}
           cache-from: type=registry,ref=xinutec/life:cache
-          # mode=max also persists the builder-stage layers (pnpm install, cargo deps),
-          # not just the final image — so those expensive layers survive across runs.
+          # mode=max also caches the builder stages.
           cache-to: type=registry,ref=xinutec/life:cache,mode=max

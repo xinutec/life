@@ -16,15 +16,14 @@ Read alongside:
 - [`catalog-and-holdings.md`](catalog-and-holdings.md) — products vs items,
   shop listings, per-source facts and reconciliation.
 - [`ui-grammar.md`](ui-grammar.md) — the interaction rules every screen follows.
-- [`../TODO.md`](../TODO.md) — what's built, what's next, and the open decisions.
+- [`../TODO.md`](../TODO.md) — what's next, and the open decisions.
 
 ---
 
 ## 1. Shape
 
 Rust + axum, Angular (Material 3), MariaDB via `sqlx`, three.js for the house;
-isis k3s, namespace `life`; the DB dump rides in the Mac mini's existing restic
-set. Each choice is "same as `home` / `health` / `recall`" — one set of fleet ops
+isis k3s, namespace `life`; the DB is dumped nightly into odin's restic backup. Each choice is "same as `home` / `health` / `recall`" — one set of fleet ops
 beats a locally optimal stack.
 
 Nextcloud is **not** the database. It is touched at two boundaries only:
@@ -37,8 +36,7 @@ identity and calendar.
 
 ## 2. Nextcloud integration — why there are two flows
 
-life runs two deliberately separate NC flows, for the reasons `health` learned
-the hard way (`kubes/health/src/nextcloud/*`).
+life runs two deliberately separate NC flows, as `health` does.
 
 **2a. Identity — OAuth2 authorization-code, identity-only.** Exchange the code,
 call `/ocs/v2.php/cloud/user` once for `{id, displayname}`, then **discard the

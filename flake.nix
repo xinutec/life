@@ -2,9 +2,7 @@
 # Pure-Rust TLS (rustls) so there's no openssl/pkg-config native dep.
 #
 # The Android wrapper (android/) has its own shell — `nix develop .#android` —
-# carrying the SDK, JDK and adb. It lives here, next to the app it builds: having
-# to borrow another repo's shell to debug life's own APK is how you end up
-# concluding "adb isn't installed" and abandoning a live lead.
+# carrying the SDK, JDK and adb.
 {
   description = "life — personal home OS backend";
 
@@ -43,12 +41,7 @@
             export ANDROID_HOME="${home}"
             export ANDROID_SDK_ROOT="${home}"
             export JAVA_HOME="${pkgs.jdk17.home}"
-            # >&2: this banner is diagnostics, not data. On stdout it prefixes
-            # the output of every command run through the shell, so
-            # `nix develop .#android -c <anything --json>` hands back something
-            # no parser accepts. observe's shell did exactly that and a `pnpm
-            # audit --json` sweep read the parse failure as "0 advisories",
-            # reporting a repo clean while it carried a high.
+            # stderr: on stdout it would prefix `nix develop -c <cmd>` output.
             echo "life android devshell — adb + sdk: $ANDROID_HOME" >&2
           '';
         };
