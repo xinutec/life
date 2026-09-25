@@ -7,7 +7,7 @@ use chrono::NaiveDateTime;
 use sqlx::types::Json;
 use sqlx::{MySqlConnection, MySqlPool};
 
-use super::coverage::{AttachedListing, Sighting};
+use super::coverage::{AttachedListing, ListingPrice, RowPrice, Sighting};
 use super::ids::{Barcode, ExternalId, ListingId, ProductId};
 use super::nutrition::{
     Allergen, Claim, DietaryFlag, Nutrition, Presence, ProductFacts, fact_rank, merge_allergens,
@@ -324,6 +324,44 @@ pub async fn shops_holding(pool: &MySqlPool, ids: &[ProductId]) -> Result<Vec<At
     Ok(rows
         .into_iter()
         .map(|(product_id, source)| AttachedListing { product_id, source })
+        .collect())
+}
+
+/// Each shop's latest price for each of these products — the priced half of
+/// [[super::coverage]]. Per (product, shop): the newest observation of each
+/// listing, then the cheapest listing, as [`latest_prices`] does for one product.
+pub async fn latest_prices_for(pool: &MySqlPool, ids: &[ProductId]) -> Result<Vec<ListingPrice>> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut qb = sqlx::QueryBuilder::new(
+        "SELECT l.product_id, l.source, po.amount_minor, po.currency \
+         FROM price_observations po \
+         JOIN product_listings l ON l.id = po.listing_id \
+         WHERE po.id = (SELECT MAX(p2.id) FROM price_observations p2 WHERE p2.listing_id = po.listing_id) \
+         AND l.product_id IN (",
+    );
+    let mut sep = qb.separated(", ");
+    for id in ids {
+        sep.push_bind(id);
+    }
+    qb.push(") ORDER BY po.amount_minor, l.id");
+    let rows: Vec<(ProductId, Source, i64, String)> = qb.build_query_as().fetch_all(pool).await?;
+    // Cheapest-first, so the first row per (product, shop) is that shop's price.
+    let mut seen = std::collections::HashSet::new();
+    Ok(rows
+        .into_iter()
+        .filter(|(product_id, source, ..)| seen.insert((*product_id, *source)))
+        .map(
+            |(product_id, source, amount_minor, currency)| ListingPrice {
+                product_id,
+                price: RowPrice {
+                    source,
+                    amount_minor,
+                    currency,
+                },
+            },
+        )
         .collect())
 }
 

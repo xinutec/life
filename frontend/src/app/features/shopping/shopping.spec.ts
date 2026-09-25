@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Feedback } from '../../shared/feedback';
 import { LifeApi } from '../../life-api';
-import { CoverageQuery } from '../../models';
+import { CoverageQuery, RowPrice, Source } from '../../models';
 import { ShoppingDoc, ShoppingStore } from '../../sync/shopping-store';
 import { Shopping } from './shopping';
 
@@ -29,7 +29,7 @@ const doc = (over: Partial<ShoppingDoc>): ShoppingDoc => ({
 function setup(
   items: ShoppingDoc[],
   failIds: number[] = [],
-  coverage: { key: string; sources: string[] }[] = [],
+  coverage: { key: string; sources: string[]; prices?: RowPrice[] }[] = [],
 ) {
   const store = {
     items$: of(items),
@@ -47,7 +47,11 @@ function setup(
     restoreTrash: vi.fn(() => of(void 0)),
     lookupProduct: vi.fn((barcode: string) => of({ id: 900, barcode })),
     shopCoverage: vi.fn((rows: CoverageQuery[]) =>
-      of(coverage.filter((c) => rows.some((r) => r.key === c.key))),
+      of(
+        coverage
+          .filter((c) => rows.some((r) => r.key === c.key))
+          .map((c) => ({ prices: [], ...c })),
+      ),
     ),
   };
   const feedback = { notify: vi.fn(), error: vi.fn(), undo: vi.fn() };
@@ -218,6 +222,28 @@ describe('Shopping shop coverage', () => {
     // rather than counted as a shop's failure.
     expect(trip.of).toBe(2);
     expect(trip.unknown).toBe(1);
+  });
+
+  it('estimates each shop over the rows it has priced, and says how many', () => {
+    const gbp = (source: Source, pence: number): RowPrice => ({ source, amount_minor: pence, currency: 'GBP' });
+    const { c } = setup(
+      [
+        linked({ ulid: 'a', quantity: 3, unit: 'tins' }), // three packs
+        linked({ ulid: 'b', quantity: 500, unit: 'g' }), // one pack's worth
+        linked({ ulid: 'c' }), // no price anywhere
+      ],
+      [],
+      [
+        { key: 'a', sources: ['asda', 'waitrose'], prices: [gbp('asda', 100), gbp('waitrose', 120)] },
+        { key: 'b', sources: ['asda'], prices: [gbp('asda', 250)] },
+        { key: 'c', sources: ['asda'] },
+      ],
+    );
+    TestBed.tick();
+    expect(c.estimates()).toEqual([
+      { label: 'Asda', total: '£5.50', priced: 2, of: 3 },
+      { label: 'Waitrose', total: '£3.60', priced: 1, of: 3 },
+    ]);
   });
 
   it('a ticked-off row leaves the trip it is no longer part of', () => {

@@ -138,12 +138,13 @@ pub async fn buy(
     Ok(Json(item))
 }
 
-/// POST /api/shopping/coverage → where each of these rows is known to be sold.
+/// POST /api/shopping/coverage → where each of these rows is known to be sold,
+/// and each shop's latest shelf price for it.
 ///
 /// Reads memory only: the shops that hold a listing for the row's product, plus
 /// the shops a past query showed carrying its barcode. No outbound traffic, so a
-/// whole list costs two queries and the shops nothing — which is the point, since
-/// this runs every time the Buy list loads.
+/// whole list costs three queries and the shops nothing — which is the point,
+/// since this runs every time the Buy list loads.
 ///
 /// It answers "where is this SOLD", never "is it in stock": the freshest thing
 /// here is a sighting from whenever someone last looked. An empty `sources` means
@@ -161,5 +162,7 @@ pub async fn coverage(
     }
     let attached = product_repo::shops_holding(&app.pool, &coverage::product_ids(&queries)).await?;
     let seen = product_repo::shops_seen_carrying(&app.pool, &coverage::barcodes(&queries)).await?;
-    Ok(Json(coverage::combine(&queries, &attached, &seen)))
+    let prices =
+        product_repo::latest_prices_for(&app.pool, &coverage::product_ids(&queries)).await?;
+    Ok(Json(coverage::combine(&queries, &attached, &seen, &prices)))
 }

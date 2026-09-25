@@ -616,6 +616,29 @@ test('buy — list + bought bar: lays out cleanly @ phone width', async ({ page 
   await expectNoClippedText(page, testInfo);
 });
 
+test('buy — the sold-at and estimate lines fit @ phone width', async ({ page }, testInfo) => {
+  await mockApi(page);
+  const linked = SHOPPING.map((r) => ({ ...r, product_id: r.id, done: false }));
+  await page.route('**/api/sync/shopping*', syncRoute(linked));
+  await page.route('**/api/shopping/coverage', (r) =>
+    r.fulfill({
+      json: linked.map((row) => ({
+        key: row.ulid,
+        sources: ['asda', 'waitrose'],
+        prices: [
+          { source: 'asda', amount_minor: 1234, currency: 'GBP' },
+          { source: 'waitrose', amount_minor: 1567, currency: 'GBP' },
+        ],
+      })),
+    }),
+  );
+  await page.goto('/shopping');
+  await page.getByText('Estimate:').waitFor();
+  await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoClippedText(page, testInfo);
+});
+
 test('plan-a-trip sheet — shop, time and list lay out cleanly @ phone width', async ({
   page,
 }, testInfo) => {

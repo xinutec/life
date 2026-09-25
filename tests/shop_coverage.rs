@@ -2,7 +2,8 @@
 //! POST /api/shopping/coverage. No DB: these pin the rule, not the queries.
 
 use life::products::coverage::{
-    AttachedListing, CoverageQuery, Sighting, barcodes, combine, product_ids,
+    AttachedListing, CoverageQuery, ListingPrice, RowPrice, Sighting, barcodes, combine,
+    product_ids,
 };
 use life::products::ids::{Barcode, ProductId};
 use life::products::source::Source;
@@ -36,7 +37,7 @@ fn row(key: &str, barcode: Option<&str>, product_id: Option<u64>) -> CoverageQue
 #[test]
 fn a_held_listing_says_the_shop_sells_it() {
     let q = [row("a", None, Some(42))];
-    let got = combine(&q, &[held(42, Source::Asda)], &[]);
+    let got = combine(&q, &[held(42, Source::Asda)], &[], &[]);
     assert_eq!(got[0].key, "a");
     assert_eq!(got[0].sources, [Source::Asda]);
 }
@@ -46,7 +47,7 @@ fn a_sighting_counts_too_even_with_no_listing_of_our_own() {
     // The whole point of remembering shop queries: a barcode we've seen at a
     // shop answers the trip question without anything being attached.
     let q = [row("a", Some("5000169146767"), None)];
-    let got = combine(&q, &[], &[seen("5000169146767", Source::Waitrose)]);
+    let got = combine(&q, &[], &[seen("5000169146767", Source::Waitrose)], &[]);
     assert_eq!(got[0].sources, [Source::Waitrose]);
 }
 
@@ -57,6 +58,7 @@ fn a_shop_that_both_holds_and_has_been_seen_is_one_answer() {
         &q,
         &[held(42, Source::Asda)],
         &[seen("5000169146767", Source::Asda)],
+        &[],
     );
     assert_eq!(got[0].sources, [Source::Asda]);
 }
@@ -68,6 +70,7 @@ fn shops_come_back_sorted_so_the_display_does_not_shuffle() {
         &q,
         &[held(42, Source::Waitrose)],
         &[seen("5000169146767", Source::Asda)],
+        &[],
     );
     assert_eq!(got[0].sources, [Source::Asda, Source::Waitrose]);
 }
@@ -77,7 +80,7 @@ fn a_row_we_know_nothing_about_gets_an_empty_list_not_a_missing_row() {
     // "We don't know" and "nowhere sells it" are different claims; the row has
     // to come back either way so the client can say which.
     let q = [row("hand-typed", None, None)];
-    let got = combine(&q, &[held(42, Source::Asda)], &[]);
+    let got = combine(&q, &[held(42, Source::Asda)], &[], &[]);
     assert_eq!(got.len(), 1);
     assert!(got[0].sources.is_empty());
 }
@@ -93,6 +96,7 @@ fn every_row_is_answered_in_the_order_it_was_asked() {
         &q,
         &[held(42, Source::Asda)],
         &[seen("5000169146767", Source::Waitrose)],
+        &[],
     );
     assert_eq!(
         got.iter().map(|r| r.key.as_str()).collect::<Vec<_>>(),
@@ -107,6 +111,7 @@ fn one_products_shops_never_leak_onto_another_row() {
     let got = combine(
         &q,
         &[held(42, Source::Asda), held(43, Source::Waitrose)],
+        &[],
         &[],
     );
     assert_eq!(got[0].sources, [Source::Asda]);
@@ -137,4 +142,38 @@ fn nothing_to_ask_about_means_no_query_at_all() {
     let q = [row("a", None, None)];
     assert!(product_ids(&q).is_empty());
     assert!(barcodes(&q).is_empty());
+}
+
+fn priced(product_id: u64, source: Source, pence: i64) -> ListingPrice {
+    ListingPrice {
+        product_id: ProductId(product_id),
+        price: RowPrice {
+            source,
+            amount_minor: pence,
+            currency: "GBP".into(),
+        },
+    }
+}
+
+#[test]
+fn a_linked_row_carries_each_shops_price_sorted_by_shop() {
+    let q = [
+        row("a", None, Some(42)),
+        row("b", Some("5000169146767"), None),
+    ];
+    let got = combine(
+        &q,
+        &[held(42, Source::Asda), held(42, Source::Waitrose)],
+        &[seen("5000169146767", Source::Asda)],
+        &[
+            priced(42, Source::Waitrose, 180),
+            priced(42, Source::Asda, 150),
+            priced(7, Source::Asda, 99),
+        ],
+    );
+    let shops: Vec<Source> = got[0].prices.iter().map(|p| p.source).collect();
+    assert_eq!(shops, [Source::Asda, Source::Waitrose]);
+    assert_eq!(got[0].prices[0].amount_minor, 150);
+    // A sighting is sold-at knowledge only: no product, so no price.
+    assert!(got[1].prices.is_empty());
 }

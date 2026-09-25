@@ -48,6 +48,29 @@ pub struct RowCoverage {
     /// The shops, sorted (see [`Source`]'s alphabetical ordering) so the display
     /// order is stable across reloads rather than following row order in the DB.
     pub sources: Vec<Source>,
+    /// Each shop's latest shelf price for the row's product, sorted by shop.
+    /// Only a linked product can carry one: a sighting has no price.
+    pub prices: Vec<RowPrice>,
+}
+
+/// One shop's latest shelf price for a Buy row — what the shop charges, never
+/// what anybody paid.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct RowPrice {
+    pub source: Source,
+    /// Minor units (pence for GBP).
+    #[ts(type = "number")]
+    pub amount_minor: i64,
+    pub currency: String,
+}
+
+/// A shop's latest price for a catalogue product: its cheapest listing's newest
+/// observation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListingPrice {
+    pub product_id: ProductId,
+    pub price: RowPrice,
 }
 
 /// The most rows one request may ask about. A Buy list is a shopping trip, not a
@@ -83,7 +106,15 @@ pub fn combine(
     queries: &[CoverageQuery],
     attached: &[AttachedListing],
     seen: &[Sighting],
+    prices: &[ListingPrice],
 ) -> Vec<RowCoverage> {
+    let mut priced: HashMap<ProductId, Vec<RowPrice>> = HashMap::new();
+    for p in prices {
+        priced
+            .entry(p.product_id)
+            .or_default()
+            .push(p.price.clone());
+    }
     let mut by_product: HashMap<ProductId, Vec<Source>> = HashMap::new();
     for l in attached {
         by_product.entry(l.product_id).or_default().push(l.source);
@@ -108,9 +139,15 @@ pub fn combine(
             {
                 sources.extend(found);
             }
+            let mut prices = q
+                .product_id
+                .and_then(|id| priced.get(&id).cloned())
+                .unwrap_or_default();
+            prices.sort_by_key(|p| p.source);
             RowCoverage {
                 key: q.key.clone(),
                 sources: sources.into_iter().collect(),
+                prices,
             }
         })
         .collect()

@@ -21,6 +21,17 @@
   <p class="coverage-summary fine">Can’t check which shops sell these right now.</p>
 }
 
+<!-- Shelf prices, not what was paid, and only over the rows each shop has
+     priced: the count keeps two totals from reading as comparable. -->
+@if (estimates().length) {
+  <p class="coverage-summary">
+    Estimate:
+    @for (e of estimates(); track e.label) {
+      <span class="shop-count">{{ e.label }} {{ e.total }} ({{ e.priced }} of {{ e.of }})</span>
+    }
+  </p>
+}
+
 <!-- Directly under the coverage line, because that line is what decides which
      shop: you read "Asda 6/8" and then schedule Asda. The trip goes to the
      Nextcloud calendar and is not kept here. -->

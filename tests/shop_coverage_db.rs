@@ -1,10 +1,10 @@
-//! The two coverage queries against a real MariaDB — the only check on their
-//! SQL.
+//! The coverage queries against a real MariaDB — the only check on their SQL.
 
 mod common;
 
 use life::db;
 use life::products::ids::{Barcode, ExternalId, ProductId};
+use life::products::prices::PriceInput;
 use life::products::repo;
 use life::products::shop_cache::{self, CachedListing};
 use life::products::source::Source;
@@ -97,6 +97,58 @@ async fn asking_about_nothing_queries_nothing() {
     assert!(repo::shops_holding(&pool, &[]).await.unwrap().is_empty());
     assert!(
         repo::shops_seen_carrying(&pool, &[])
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
+fn price(pence: i64) -> PriceInput {
+    PriceInput {
+        amount_minor: pence,
+        currency: "GBP".into(),
+        unit_amount_minor: None,
+        unit_measure: None,
+        region: None,
+    }
+}
+
+#[tokio::test]
+async fn a_shops_price_is_its_cheapest_listings_newest_observation() {
+    let (pool, id) = fixture().await;
+    // A second Asda listing for the same product (a relisted CIN), so the shop
+    // has two prices and must answer with one.
+    repo::upsert_external(
+        &pool,
+        Source::Asda,
+        &ext("cov-asda-2"),
+        Some(&barcode()),
+        &repo::ListingFields::default(),
+    )
+    .await
+    .expect("second listing");
+    let first = repo::listing_id(&pool, Source::Asda, &ext("cov-asda-1"))
+        .await
+        .unwrap()
+        .unwrap();
+    let second = repo::listing_id(&pool, Source::Asda, &ext("cov-asda-2"))
+        .await
+        .unwrap()
+        .unwrap();
+    // The first listing was dearer and has since dropped: its NEWEST price counts.
+    repo::record_price(&pool, first, &price(300)).await.unwrap();
+    repo::record_price(&pool, first, &price(250)).await.unwrap();
+    repo::record_price(&pool, second, &price(280))
+        .await
+        .unwrap();
+
+    let prices = repo::latest_prices_for(&pool, &[id]).await.unwrap();
+    assert_eq!(prices.len(), 1, "one price per shop: {prices:?}");
+    assert_eq!(prices[0].product_id, id);
+    assert_eq!(prices[0].price.source, Source::Asda);
+    assert_eq!(prices[0].price.amount_minor, 250);
+    assert!(
+        repo::latest_prices_for(&pool, &[])
             .await
             .unwrap()
             .is_empty()

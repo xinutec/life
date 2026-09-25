@@ -17,9 +17,10 @@ how it got there is in `git log`. `#N` is a task in the `task` CLI.
   interval between `low` rows is the rhythm.
 - **Meds: refill-soon** (#130) — needs how much is left and how fast it goes;
   same `low` signal as #128. Do not derive it from the printed expiry.
-- **Purchases: derived views** — per-unit price ranking, cheapest shop, and
-  estimated Buy-list totals (#1284). Prices come from our own observations; Open
-  Food Facts prices are at most a hint.
+- **Purchases: derived views** — per-unit price ranking, and a like-for-like
+  cheapest shop for a whole list (the Buy screen's per-shop estimates cover
+  different rows, so they do not compare). Prices come from our own
+  observations; Open Food Facts prices are at most a hint.
 - **Unit conversion when consuming** — `src/inventory/consume.rs` matches units
   by string, so `1kg` of stock does not serve a `500g` line. `packsize.rs`
   already parses labels to g/ml/count.

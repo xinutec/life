@@ -13,7 +13,8 @@ import { Feedback } from "../../shared/feedback";
 import { isNotFound } from "../../shared/api-error";
 import { ListState } from "../../shared/list-state";
 import { LifeApi } from "../../life-api";
-import { CoverageQuery, Source } from "../../models";
+import { CoverageQuery, RowPrice, Source } from "../../models";
+import { fromMinorUnits } from "../../shared/money";
 import { sourceLabel } from "../../shared/sources";
 import { ProductThumb } from "../../product-thumb";
 import { ShoppingDoc, ShoppingStore } from "../../sync/shopping-store";
@@ -66,6 +67,7 @@ export class Shopping {
   // wrong answer would send you to the wrong shop.
 
   private readonly coverage = signal<Map<string, Source[]>>(new Map());
+  private readonly prices = signal<Map<string, RowPrice[]>>(new Map());
   /** Whether the answer is missing because we couldn't ask, rather than because
    *  nothing is known. Shown, so an offline blank doesn't read as "nowhere". */
   private readonly coverageUnavailable = signal(false);
@@ -77,12 +79,14 @@ export class Shopping {
       const rows = this.askable();
       if (!rows.length) {
         this.coverage.set(new Map());
+        this.prices.set(new Map());
         return;
       }
       this.api.shopCoverage(rows).subscribe({
         next: (answers) => {
           this.coverageUnavailable.set(false);
           this.coverage.set(new Map(answers.map((a) => [a.key, a.sources])));
+          this.prices.set(new Map(answers.map((a) => [a.key, a.prices])));
         },
         // Enrichment, not the list itself: a failure leaves the Buy list working
         // and says the coverage line is unknown rather than empty.
@@ -132,6 +136,32 @@ export class Shopping {
       of: asked.length,
       unknown: wanted.length - asked.length,
     };
+  });
+
+  /** "Asda £12.40 · 4 of 6 priced", per shop — each shop's latest shelf prices
+   *  over the rows it has priced. Not a "cheapest shop": two totals over
+   *  different rows do not compare, and the counts say so. GBP only. */
+  readonly estimates = computed<{ label: string; total: string; priced: number; of: number }[]>(() => {
+    const wanted = this.items().filter((it) => !it.done);
+    const byRow = this.prices();
+    const totals = new Map<Source, { minor: number; priced: number }>();
+    for (const it of wanted) {
+      for (const p of byRow.get(it.ulid) ?? []) {
+        if (p.currency !== "GBP") continue;
+        const t = totals.get(p.source) ?? { minor: 0, priced: 0 };
+        t.minor += p.amount_minor * packsOf(it);
+        t.priced += 1;
+        totals.set(p.source, t);
+      }
+    }
+    return [...totals.entries()]
+      .map(([source, t]) => ({
+        label: sourceLabel(source),
+        total: `£${fromMinorUnits(t.minor)}`,
+        priced: t.priced,
+        of: wanted.length,
+      }))
+      .sort((a, b) => b.priced - a.priced || a.label.localeCompare(b.label));
   });
 
   /** True when the coverage line is blank because we couldn't ask. */
@@ -265,4 +295,16 @@ export class Shopping {
     if (it.quantity == null) return "";
     return it.unit ? `${it.quantity} ${it.unit}` : `${it.quantity}`;
   }
+}
+
+/** Units that measure an amount rather than count packs. */
+const MEASURES = /^(m?g|kg|grams?|kilos?|ml|cl|l|litres?|liters?|oz|lbs?)$/i;
+
+/** How many packs a row asks for. A count ("3", "2 tubs") multiplies the pack
+ *  price; a measured amount ("500 g") is one pack's worth, since the price is
+ *  per pack and the amount is not the pack's. */
+function packsOf(it: ShoppingDoc): number {
+  const q = it.quantity;
+  const counted = !MEASURES.test(it.unit?.trim() ?? '');
+  return counted && q != null && Number.isInteger(q) && q > 0 ? q : 1;
 }

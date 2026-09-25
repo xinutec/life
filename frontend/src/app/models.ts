@@ -31,6 +31,7 @@ export type { ShopFind } from './generated/ShopFind';
 export type { CoverageQuery } from './generated/CoverageQuery';
 export type { Remembered } from './generated/Remembered';
 export type { RowCoverage } from './generated/RowCoverage';
+export type { RowPrice } from './generated/RowPrice';
 export type { CookedLine } from './generated/CookedLine';
 export type { Take } from './generated/Take';
 export type { Untouched } from './generated/Untouched';
