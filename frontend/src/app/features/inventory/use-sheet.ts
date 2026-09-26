@@ -91,10 +91,14 @@ export class UseSheet {
     this.api.useItem(this.item.id, quantity, this.item.unit).subscribe({
       next: (updated) => {
         const left = updated.quantity ?? 0;
+        // More than was recorded empties the row; say by how much it was short.
+        const short = round(quantity - this.have);
         this.feedback.notify(
           left > 0
             ? `Used ${this.how(quantity)} — ${this.how(round(left))} left.`
-            : `Used the last of the ${this.item.name.toLowerCase()}.`,
+            : this.have > 0 && short > 0
+              ? `Used all ${this.how(this.have)} — ${this.how(short)} more than was recorded.`
+              : `Used the last of the ${this.item.name.toLowerCase()}.`,
         );
         this.ref.dismiss(true);
       },

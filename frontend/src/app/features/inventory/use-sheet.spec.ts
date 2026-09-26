@@ -98,6 +98,18 @@ describe('UseSheet', () => {
     expect(feedback.notify).toHaveBeenCalledWith('Used the last of the plain flour.');
   });
 
+  it('says so when more was used than was recorded', () => {
+    // The server empties the row rather than going negative. Saying only "the
+    // last of" would hide that the recorded amount was 700 g short.
+    const { c, feedback } = setup(
+      { quantity: 300 },
+      vi.fn(() => of(item({ quantity: 0 }))),
+    );
+    c.amount.set(1000);
+    c.save();
+    expect(feedback.notify).toHaveBeenCalledWith('Used all 300 g — 700 g more than was recorded.');
+  });
+
   it('refuses to submit an amount that is not one', () => {
     const { c, api } = setup();
     expect(c.valid()).toBe(false); // nothing typed yet
