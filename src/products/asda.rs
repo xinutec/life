@@ -1,21 +1,14 @@
-//! Asda groceries product search, via their public Algolia index.
+//! Asda product search via its public Algolia index. The key is search-only and
+//! shipped to every browser, so the server can query it with no login or bot
+//! wall; that is why Asda works in the web app and Waitrose (a WebView provider
+//! in the frontend's `shops/`) does not.
 //!
-//! Unlike the Waitrose provider (a hidden WebView on the shop site, Android
-//! only — see the frontend `shops/`), Asda's storefront search is a plain,
-//! CORS-open Algolia REST call keyed by a *search-only* API key. That key is a
-//! public client credential: Asda ships it to every browser that loads
-//! groceries. So we can query it server-side, from anywhere, with no login and
-//! no bot-wall — which is why this lives in the backend and works in the web
-//! app as well as the phone.
+//! `IMAGE_ID` is the primary EAN: both the scene7 image key and a real barcode.
+//! It is not searchable, so this is name search only.
 //!
-//! The response's `IMAGE_ID` is the product's primary EAN barcode, which is
-//! both the scene7 image key and a genuine barcode we can hand back to the
-//! caller. There is no reverse (barcode → product) lookup here: `IMAGE_ID`
-//! isn't a searchable Algolia attribute, so this is name search only.
-//!
-//! REFRESH: if searches start 4xx-ing, Asda has rotated the search key. Grab the
-//! fresh one from the `x-algolia-api-key` request header on groceries search
-//! (any browser devtools/Network) and update `SEARCH_KEY` below.
+//! If searches start failing with 4xx, the key has rotated: copy the
+//! `x-algolia-api-key` request header from a search in browser devtools into
+//! `SEARCH_KEY`.
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -266,21 +259,11 @@ fn normalize(raw: RawHit, raw_value: serde_json::Value) -> Option<AsdaHit> {
     })
 }
 
-/// The one hit that IS this product, or `None`.
+/// The hit whose barcode is this product's, or `None`.
 ///
-/// Identity is the barcode, never the name: Asda has no barcode→product lookup
-/// (`IMAGE_ID` isn't a searchable attribute), so we can only reach it by NAME
-/// search — and a name search for "Asda ES Balsamic Modena" ranks a *raspberry*
-/// glaze above the product itself. Every hit carries its EAN, so we ignore the
-/// shop's relevance order entirely and take the one whose barcode matches. A hit
-/// that merely reads alike is a DIFFERENT product and must never be attached —
-/// the same precision-over-recall rule the visit matcher follows.
-///
-/// `None` therefore means "every hit was checked and none carried this EAN",
-/// which is a real answer. It is never "we stopped looking early": nothing here
-/// caps or samples the hits.
-///
-/// Pure, so the rule is tested without a network.
+/// Asda can only be searched by name, and its ranking is no identity (a search
+/// for "Asda ES Balsamic Modena" ranks a raspberry glaze first), so relevance is
+/// ignored and only a barcode match counts. `None` means every hit was checked.
 pub fn match_barcode(hits: Vec<AsdaHit>, barcode: &Barcode) -> Option<AsdaHit> {
     hits.into_iter()
         .find(|h| h.barcode.as_ref() == Some(barcode))

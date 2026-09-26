@@ -1,21 +1,12 @@
-//! Reading a shop's pack label as an amount you can do arithmetic with.
+//! A shop's pack label (`950g`, `33 cl`, `22x27G`, `EACH`) as an amount to
+//! compute with; the raw string is still what is shown.
 //!
-//! A pack size arrives as whatever the shop typed: `950g`, `250ML`, `33 cl`,
-//! `35 grammes`, `22x27G`, `EACH`. That string is the right thing to *show* — it
-//! is what is printed on the tub — and the wrong thing to compute with.
+//! Mass becomes grams and volume millilitres here, so parsed packs compare
+//! directly. [`crate::inventory::consume`] deliberately does not convert: there
+//! `kg` against `g` is two people's amounts disagreeing, here it is one label.
 //!
-//! **One canonical unit per dimension, decided here.** Everything mass becomes
-//! grams and everything volume becomes millilitres at this boundary, so nothing
-//! downstream needs a conversion table: two parsed packs of the same dimension
-//! subtract from each other directly. That is deliberately the opposite of
-//! [[crate::inventory::consume]], which compares units and never converts them —
-//! that rule is about two amounts a *person* typed, where `kg` against `g` is a
-//! disagreement worth surfacing rather than papering over. This is about one
-//! string a shop typed, where there is nothing to disagree with.
-//!
-//! **It refuses rather than guesses.** An unrecognised label parses to `None`
-//! and is still displayed raw; a wrong unit would be a number you believe. So no
-//! `oz` (mass or fluid?), `gr` or `ltr`: symbols and spelled-out words only.
+//! Unrecognised labels parse to `None` rather than a guess, so no `oz` (mass or
+//! fluid?), `gr` or `ltr`.
 
 use serde::Serialize;
 use ts_rs::TS;

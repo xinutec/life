@@ -2,26 +2,14 @@ import { test, expect, type Page } from '@playwright/test';
 import { swipeUp } from '@xinutec/ui-harness';
 
 /**
- * Golden-image check — the pixel-diff safety net the layout assertions in
- * ui-pages.spec.ts can't be: it catches things that are laid out fine but
- * *look* wrong (a colour drifting, spacing changing, an icon swapped). One
- * committed baseline lives under e2e/__screenshots__/; regenerate it after an
- * intended visual change with:
+ * Pixel-diff check for what layout assertions can't catch: colour, spacing, an
+ * icon swapped. Baseline in e2e/__screenshots__/; after an intended change run
+ * `pnpm run ui-golden:update` and inspect the diff before committing.
  *
- *     pnpm run ui-golden:update
- *
- * and eyeball the diff in the commit before you keep it.
- *
- * The subject is the to-do edit sheet — what you see when you tap a to-do.
- * Two rules keep the baseline from drifting day to day:
- *   1. we screenshot the SHEET element, not the page — the list behind it has
- *      relative due-dates ("overdue", "in 2 days") that change with today; the
- *      sheet's own content does not, and
- *   2. the seed to-do carries an ABSOLUTE due date and no start-gate, so
- *      nothing in the sheet is computed relative to now.
- *
- * SW blocked by the harness (layout, not offline) and fonts awaited (a golden
- * taken mid-FOUT would diff against itself).
+ * The subject is the to-do edit sheet. It stays stable across days because the
+ * shot is of the SHEET (the list behind has relative due dates) and the seed
+ * to-do has an absolute due date and no start gate. Fonts are awaited, since a
+ * shot taken mid-FOUT diffs against itself.
  */
 
 const ME = { userId: 'test', displayName: 'Test User', avatarUrl: '', nextcloud: 'active' };

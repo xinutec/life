@@ -19,15 +19,9 @@
   // The canvas is styled from styles.scss — see the note there.
 }
 
-// The shared loading/error/empty triad, floated over the canvas (which is
-// absolutely positioned and would otherwise paint above in-flow content).
-//
-// ⚠ The theme's tokens are wrong here: <app-list-state> paints
-// `--mat-sys-on-surface-variant`, chosen for the app surface, onto the three.js
-// scene — 1.97:1 at 14px. Redefined for this subtree rather than reached into
-// with `::ng-deep`, because a custom property crosses the component boundary.
-// A constant, not a token: the scene is #101418 in BOTH schemes, so even
-// `inverse-on-surface` is right in one and inverted in the other.
+// The list-state line, floated over the absolutely positioned canvas. Its
+// theme colour is 1.97:1 on the scene, which is #101418 in both schemes, so a
+// constant is set on this subtree (custom properties cross the boundary).
 .status {
   position: absolute;
   inset: 0 0 auto 0;

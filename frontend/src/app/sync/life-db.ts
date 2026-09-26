@@ -11,15 +11,9 @@ import {
 import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
 
-/** The single shared RxDB database. Every offline collection (shopping, todo,
- *  todo_link, …) is added to THIS one database.
- *
- *  Why a shared service and not `createRxDatabase` per store: calling
- *  `createRxDatabase({ name: 'lifedb' })` more than once throws in production
- *  (`ignoreDuplicate` is dev-only). That bites the moment one screen pulls in
- *  several stores at once — e.g. the to-do graph needs the todo, todo_link and
- *  shopping stores together. One database, collections added on demand, calls
- *  serialised so two collections can't race `addCollections`. */
+/** The one shared RxDB database; stores add their collections on demand.
+ *  Creating `lifedb` twice throws in production, and one screen may use
+ *  several stores, so `addCollections` calls are serialised here. */
 @Injectable({ providedIn: 'root' })
 export class LifeDb {
   private dbPromise?: Promise<RxDatabase>;

@@ -7,15 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Telemetry } from './telemetry';
 
 /**
- * The activity trace's wiring, at a real consumer.
- *
- * The label rules and the flattener live in `@xinutec/ui-harness/telemetry`
- * and are tested there, once for the fleet — they are pure functions and need
- * no framework. What can only be checked from inside an app is the rest: that
- * the service actually reaches the router and the document it was given, that
- * the queue flushes on its timer, and that a send failure stays silent.
- *
- * life is the reference consumer, so this is the one place it is checked.
+ * The activity trace's wiring, checked here in its reference consumer (the
+ * pure rules are tested in `@xinutec/ui-harness/telemetry`): it reaches the
+ * router and document, flushes on its timer, and fails silently.
  */
 describe('Telemetry (wiring)', () => {
   let events: Subject<unknown>;

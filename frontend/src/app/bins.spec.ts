@@ -4,17 +4,9 @@ import { BinDay } from './models';
 import { nextCollections, shortKind } from './bins';
 
 /**
- * ⚠ **The zone is pinned, not inherited.** Every date case below is arithmetic
- * between a bare `YYYY-MM-DD` and a reader's clock, and the two disagree only in
- * the hours where the local calendar day and the UTC one are different days. A
- * test that reads the runner's zone passes on a machine in London and asserts
- * nothing on a machine in UTC — which is how a real off-by-a-day survived here.
- *
- * `stubEnv` rather than assigning `process.env.TZ`: `process` is untyped in this
- * project, and the two linters want opposite spellings of the index access —
- * TS4111 demands brackets, `dot-notation` demands dots. Setting it after the
- * module's `Date`s are built is safe, because those are absolute instants; only
- * the local-field reads inside the functions under test depend on the zone.
+ * ⚠ The zone is pinned: date-only strings and the local clock disagree only in
+ * the hours when the local and UTC days differ, so a UTC runner would assert
+ * nothing. `stubEnv` because `process.env.TZ` trips opposing lint rules.
  */
 beforeAll(() => vi.stubEnv('TZ', 'Europe/London'));
 afterAll(() => vi.unstubAllEnvs());

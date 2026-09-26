@@ -1,29 +1,18 @@
 #!/usr/bin/env node
-// Run a ShopProvider op against a real logged-in Chrome on this machine, instead
-// of the Android app's hidden WebView.
+// Run a ShopProvider op in the local logged-in debug Chrome instead of the
+// Android app's WebView, so extractor changes can be developed without the phone.
 //
-// The providers in frontend/src/app/shops are already free of Android: each op
-// returns { url, js } and nothing more. The wrapper's only jobs are to load that
-// url with the user's cookies, install a document-start shim that captures the
-// Bearer the page mints, and hand the extractor an `AndroidShop.result` to
-// report through. A debug Chrome does all three, so the same provider code runs
-// here — which is what makes shop work developable without the phone.
-//
-// What this does NOT cover: the Kotlin bridge, the full-size-WebView workaround
-// for Cloudflare, and the phone's WireGuard DNS. Those still need the device.
-// They also change rarely; the extractor JS is the part that churns, which is
-// exactly the part this exercises.
+// A provider op is just { url, js }. Chrome supplies what the wrapper does: the
+// user's cookies, a document-start shim capturing the page's Bearer, and an
+// `AndroidShop.result` to report through. Not covered: the Kotlin bridge, the
+// full-size-WebView Cloudflare workaround and the phone's DNS.
 //
 //   node --experimental-strip-types scripts/shop-desktop.mjs waitrose search "black peppercorns"
 //   node --experimental-strip-types scripts/shop-desktop.mjs waitrose product 785492
 //
-// Waitrose only: Asda's search is answered server-side, so it has no provider
-// here to drive.
-//
-// Requires the ChromeDebug profile running (xinutec-infra/mac-mini/chrome-debug.sh
-// start) and, for anything past a search, a hand-made login to the shop in it:
-// signed out, Waitrose mints no Bearer at all and every product op returns
-// "no token".
+// Waitrose only (Asda's search runs server-side). Needs ChromeDebug running
+// (xinutec-infra/mac-mini/chrome-debug.sh start); product ops also need a manual
+// Waitrose login in it, since signed out it mints no Bearer ("no token").
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

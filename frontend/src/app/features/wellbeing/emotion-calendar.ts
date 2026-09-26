@@ -1,13 +1,7 @@
-/** The emotion history as a calendar: one box per day, coloured by the families
- *  that day's check-ins named.
- *
- *  The FILL is how the day went, as a proportion — a solid box is one family
- *  all day, stripes a day that moved. The BAR under the number is the score
- *  range, because a proportion hides a bad stretch in a mostly-fine day; a flat
- *  day has no bar.
- *
- *  Months read oldest-first and the view scrolls to the end once, like a chat
- *  (see emotion-calendar-model.ts). */
+/** The emotion history as a calendar, one box per day. The fill shows the
+ *  day's families in proportion (stripes: a day that moved); the bar under the
+ *  number is the score range, which a proportion would hide. Oldest month
+ *  first, scrolled to the end once (emotion-calendar-model.ts). */
 import {
   ChangeDetectionStrategy,
   Component,

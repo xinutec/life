@@ -1,18 +1,12 @@
 #!/usr/bin/env bash
-# Generate the frontend TS interfaces from the Rust types via ts-rs, so the
-# backend↔frontend wire shapes are consistent by construction, not transcribed.
+# Generate the frontend's wire types from the Rust types via ts-rs.
 #
 #   nix develop --command scripts/gen-types.sh            # regenerate + install
-#   nix develop --command scripts/gen-types.sh --check    # report drift, write nothing
+#   nix develop --command scripts/gen-types.sh --check    # report drift (the gate)
 #
-# The second form is what the gate's generated-types row runs, so the cargo
-# invocation below is stated once and both paths use it.
-#
-# The mechanics are dev-lint#gen-types, shared across the fleet; this file holds
-# only where the bindings live and how to make cargo emit them.
-#
-# No `--features ts`: ts-rs is unconditional here. The export tests are named
-# export_bindings_*, so the filter runs generation only and needs no database.
+# The mechanics are dev-lint#gen-types; this holds only the paths and the cargo
+# call. The export tests are named export_bindings_*, so the filter needs no
+# database.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

@@ -229,16 +229,11 @@ async fn patch_leaves_absent_fields_alone_and_clears_on_null() {
     );
 }
 
-/// Merging server-side means PATCH writes back fields the caller never mentioned,
-/// so it must read the row *inside* the transaction it writes in, with the row
-/// locked. Reading on the pool first (a snapshot outside the transaction) makes a
-/// concurrent write to an untouched field silently disappear: the merge restores
-/// the value it read a moment earlier, and `next_rev()` stamps it as a legitimate
-/// newer revision, so RxDB sees no conflict.
-///
-/// Deterministic, not timing-luck: a second transaction holds the row with
-/// `SELECT … FOR UPDATE`. A plain (non-locking) read sails past that lock and gets
-/// the stale row; a locking read blocks until the writer commits and sees the truth.
+/// PATCH merges server-side, writing back fields the caller never sent, so it must
+/// read the row inside its transaction with the row locked; a snapshot read
+/// outside it restores the old value over a concurrent write, and `next_rev()`
+/// hides the conflict from RxDB. A second transaction holds `FOR UPDATE`, so a
+/// non-locking read deterministically gets the stale row.
 #[tokio::test]
 async fn patch_does_not_revert_a_concurrent_write_to_an_untouched_field() {
     let url = common::test_db_url();

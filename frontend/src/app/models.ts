@@ -88,15 +88,8 @@ export const ITEM_CATEGORIES = keysOf({
   other: true,
 } satisfies Record<ItemCategoryT, true>);
 
-/** What each category is CALLED, as opposed to what it is keyed by.
- *
- *  The pickers rendered the slug itself, which was survivable while the list was
- *  five short words and is not now: "tableware" beside "cookware" in lower case
- *  is two near-identical strings a person has to read letter by letter.
- *
- *  Typed as a total Record, so adding a variant is a compile error here — a
- *  category that reaches the UI unnamed would render as its slug and look like
- *  a bug in the data. */
+/** Display name per category; a total Record, so a new category must be named
+ *  rather than showing its slug. */
 export const ITEM_CATEGORY_LABEL: Record<ItemCategoryT, string> = {
   food: 'Food',
   cookware: 'Cookware (pans, trays)',

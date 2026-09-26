@@ -1,15 +1,10 @@
-//! "I cooked this" — working out what a recipe takes out of the cupboard.
+//! "I cooked this": what a recipe takes out of the cupboard. Pure; the repo
+//! writes. It spreads [`crate::inventory::consume`]'s one-row rule across the
+//! rows an ingredient can come from.
 //!
-//! Pure: this decides, the repo writes. Everything here is the rule
-//! [[crate::inventory::consume]] applies to one row, spread across the several
-//! rows an ingredient might be satisfied from.
-//!
-//! **A line that can't be settled is reported, never skipped.** Most ingredients
-//! won't be decrementable — "salt" with no quantity, a jar measured in jars
-//! against a recipe measured in grams — and that is fine. What isn't fine is a
-//! cook button that silently does a third of what it looks like it does: you'd
-//! trust the numbers afterwards, and they'd be wrong in a direction you couldn't
-//! see. So every line comes back with what happened to it.
+//! **Every line is reported, never skipped.** Many can't be settled ("salt",
+//! jars against grams), and a cook button that silently did a third of the job
+//! would leave numbers you trust and shouldn't.
 
 use std::collections::HashMap;
 
@@ -77,18 +72,12 @@ pub struct CookedLine {
     pub outcome: LineOutcome,
 }
 
-/// Which rows can serve an ingredient, in the order to drain them.
+/// Which rows can serve an ingredient, in draining order: soonest expiry first
+/// (no expiry last), then the smallest amount, as you would cook, leaving fewer
+/// part-used rows.
 ///
-/// **Soonest expiry first, then the smallest amount.** Both halves are how you
-/// would actually cook: use the thing that's about to go off, and finish the
-/// nearly-empty packet before opening a full one. It also leaves fewer
-/// part-used rows behind, and every one of those is a row you'd later have to
-/// think about. Rows with no expiry sort after rows with one — a date is a
-/// reason to hurry and its absence isn't.
-///
-/// `remaining` is what each row holds *so far in this plan*, which is not
-/// necessarily what the database says: two ingredient lines can name the same
-/// thing, and the second must see what the first already took.
+/// `remaining` is what each row holds so far in this plan, so a second line
+/// naming the same thing sees what the first took.
 fn drain_order<'a>(
     matches: &[&'a Item],
     unit: Option<&str>,

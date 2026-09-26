@@ -1,19 +1,12 @@
-//! "Which shops can I get this at?", answered from memory alone.
+//! "Which shops sell this?", from memory alone: a whole list costs two queries
+//! and no outbound traffic.
 //!
-//! Two kinds of knowledge, deliberately merged rather than ranked:
+//! Merges two kinds of knowledge: an **attached listing** (`product_listings`,
+//! the shop's own line for the product) and a **sighting** (`shop_listings`, see
+//! [`super::shop_cache`]: a past query showed this barcode there).
 //!
-//! - an **attached listing** (`product_listings`) — this shop's own line for the
-//!   catalogue product, the strongest thing we can hold;
-//! - a **sighting** (`shop_listings`, see [[super::shop_cache]]) — a shop query
-//!   we once ran showed this barcode at that shop.
-//!
-//! Neither is a stock check and this module must never be described as one. A
-//! shop carrying a product last month says nothing about the shelf tonight; what
-//! it does say is where the thing is *sold*, which is the question a Buy list
-//! actually asks — "can I do this trip in one shop?".
-//!
-//! Nothing here goes out to a shop. It reads what earlier lookups already paid
-//! for, so a whole list costs two queries and no outbound traffic.
+//! Neither is a stock check. It says where a thing is sold, which answers "can
+//! I do this trip in one shop?", not what is on the shelf tonight.
 
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};

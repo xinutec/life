@@ -22,16 +22,10 @@ export interface FilesDialogData {
 const MAX_BYTES = 10 * 1024 * 1024;
 
 /**
- * Receipts and manuals for one item.
- *
- * The catalogue stores an image per PRODUCT, keyed on a barcode, which could not
- * hold any of this: products are shared reference data and a receipt is
- * personal, and an appliance entered by hand has neither a barcode nor a
- * product. So files hang off the item.
- *
- * A dialog over the item sheet, like History and the purchase form, because
- * `MatBottomSheet` holds one sheet at a time and a second would dismiss the
- * edit form under it.
+ * Receipts and manuals for one item. On the item, not the product: products
+ * are shared reference data, a receipt is personal, and a hand-entered
+ * appliance has no product. A dialog because a second bottom sheet would
+ * dismiss the item sheet.
  */
 @Component({
   selector: 'app-files-dialog',
@@ -124,16 +118,10 @@ export class FilesDialog {
 }
 
 /**
- * A filename split so the END of it always survives.
- *
- * A plain CSS ellipsis cuts the tail, and the tail is where the meaning is: a
- * phone names a scan `IMG_20240315_143022_receipt_dishwasher.pdf` by itself, so
- * trimming the right leaves a column of identical `IMG_2024…` rows with nothing
- * to tell the receipt from the manual.
- *
- * ⚠ Two spans, not a character count: glyph widths vary and the row changes
- * with the viewport. The head shrinks under CSS and the tail is `flex: 0 0
- * auto`, correct at every width by construction.
+ * A filename split so its END survives truncation: phones name scans
+ * `IMG_20240315_143022_receipt.pdf`, and a tail ellipsis leaves identical
+ * `IMG_2024…` rows. Two spans rather than a character count, so it is right at
+ * every width: the head shrinks under CSS, the tail is `flex: 0 0 auto`.
  */
 function split(name: string): { head: string; tail: string; full: string } {
   const keep = Math.min(12, name.length);

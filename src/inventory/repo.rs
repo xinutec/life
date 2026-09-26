@@ -445,16 +445,10 @@ pub async fn mark_low(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> 
     Ok(true)
 }
 
-/// Take an amount out of a stock row: "I used 200g of flour."
-///
-/// The read and the write happen in one transaction, with the row locked, so
-/// two phones cooking at once can't both read 950 and both write 750. The
-/// decision itself is [`consume::take`] — pure, and the only place the rule
-/// lives.
-///
-/// `Ok(None)` = no such (live) item for this user. The [`Taken`] outcome is
-/// handed back rather than turned into an error here: the route is what knows
-/// how to say "that's measured in jars" to a person.
+/// Take an amount out of a stock row ("I used 200g of flour"), reading and
+/// writing in one transaction with the row locked, so two phones can't both
+/// take from 950. The rule is [`consume::take`]. `Ok(None)` = no live item; the
+/// [`Taken`] outcome goes back to the route, which knows how to phrase it.
 pub async fn use_item(
     pool: &MySqlPool,
     user_id: &str,

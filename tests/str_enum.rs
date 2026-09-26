@@ -1,18 +1,8 @@
-//! Every string-backed enum survives the round trip it is stored under.
+//! Every string-backed enum round-trips (`parse(to_string(v)) == v`), and no two
+//! variants share a string, which would silently relabel stored rows.
 //!
-//! ⚠ **This is a regression guard, not the guarantee.** The guarantee is that
-//! `str_enum!` generates `Display`, `FromStr` and `ALL` from ONE table, so they
-//! cannot disagree — a hand-written `ALL` would make this test as forgettable as
-//! the arm it is checking (see the macro's own docs). What this catches is
-//! someone hand-rolling one of these pairs again, or the macro itself going
-//! wrong.
-//!
-//! Two properties, and the second is the one a reader might not expect:
-//!
-//! 1. `parse(to_string(v)) == v` for every variant.
-//! 2. No two variants share a string. They would both write happily and one
-//!    would read back as the other — a silent relabelling of stored rows, which
-//!    is worse than a parse failure because nothing ever reports it.
+//! `str_enum!` already derives both directions from one table; this guards
+//! against hand-rolled pairs and the macro going wrong.
 
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};

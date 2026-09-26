@@ -1,12 +1,7 @@
-//! Where a piece of product data came from — the closed set the whole product
-//! domain turns on.
-//!
-//! `products.source`, `product_listings.source`, `shop_listings.source`,
-//! `price_observations.source`, the facts tables' `source`, and the
-//! `{name,image}_source` provenance columns all name a value from this set and
-//! nothing else. As an enum, no spelling can be invented at a call site, and
-//! adding a shop is one variant, the arms the compiler then demands, and the
-//! frontend's display label.
+//! Where product data came from. Every `source` column (products, listings,
+//! shop listings, prices, facts) and the `{name,image}_source` provenance
+//! columns hold a value from this enum; adding a shop is a variant, the arms
+//! the compiler demands, and the frontend's label.
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -112,14 +107,9 @@ impl Source {
 }
 // --- Database mapping ---
 //
-// Written out rather than `#[derive(sqlx::Type)]`: the derive declares the type
-// as a SQL `ENUM`, and every `source` column here is a `VARCHAR`, so decoding a
-// real row fails at runtime with a type mismatch. These delegate to `str`, which
-// is what the columns actually hold.
-//
-// Decoding parses, so a value in the database that isn't a `Source` fails the
-// query loudly instead of arriving as something the rest of the code would have
-// to second-guess.
+// Hand-written: `#[derive(sqlx::Type)]` declares a SQL `ENUM`, and the `source`
+// columns are `VARCHAR`, which fails at runtime on real rows. Decoding parses,
+// so a stored value that isn't a `Source` fails the query loudly.
 
 impl sqlx::Type<sqlx::MySql> for Source {
     fn type_info() -> <sqlx::MySql as sqlx::Database>::TypeInfo {

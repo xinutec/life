@@ -9,13 +9,9 @@ import android.content.Intent
 import androidx.core.app.NotificationCompat
 
 /**
- * Fires when a scheduled reminder's alarm goes off (see [MainActivity.scheduleReminder])
- * and posts the notification. It's a manifest-declared receiver, not one registered in
- * code, so it still runs when the app process is gone — which is the whole point: the
- * reminder must reach you at 9am whether or not the app is open.
- *
- * The web app owns the "when" and the copy; this class only turns one alarm into one
- * notification, and routes a tap back into the app at the reminder's deep-link URL.
+ * Posts a reminder when its alarm fires ([MainActivity.scheduleReminder]).
+ * Manifest-declared, so it runs with the app closed. A tap opens the
+ * reminder's URL; the web app owns timing and text.
  */
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {

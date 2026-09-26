@@ -36,22 +36,14 @@ export interface EmotionPickerData {
  *  to leave running: the request is a cache lookup until the answer lands. */
 const POLL_MS = 2000;
 
-/** Browse and search the feelings wheel to add/remove emotions on a check-in.
+/** Browse and search the feelings wheel to add or remove a check-in's emotions.
  *
- *  Browse is a mosaic, not a grid of controls: each family is a region of its own
- *  colour, and every word in it is plain text — colour carries the family, weight
- *  the ring. Chrome appears only on the words you actually chose. The whole
- *  vocabulary is on one surface, because the point of holding ~130 words is to
- *  offer you one you would not have thought to search for; hiding them behind
- *  drill-downs or a recents list would quietly return you to the same dozen.
+ *  Browse shows the whole vocabulary as a mosaic of plain words (colour for the
+ *  family, weight for the ring), so you meet words you wouldn't search for;
+ *  only chosen words get chrome. An ⓘ opens one gloss in place.
  *
- *  Meaning is per-word and opens in place: a small ⓘ beside a word drops its
- *  gloss directly underneath it. One at a time, no overlay, no gesture.
- *
- *  Works throughout in qualified `Core/Name` tokens (so a word that appears under
- *  two cores stays two distinct choices, and a group stays distinct from its
- *  leaves); the incoming selection is normalised to tokens on open. Closes with
- *  the new set of tokens (Done), or `undefined` if dismissed. */
+ *  Works in `Core/Name` tokens throughout, normalising the incoming selection
+ *  on open. Closes with the new tokens (Done) or `undefined` if dismissed. */
 @Component({
   selector: 'app-emotion-picker',
   templateUrl: './emotion-picker.html',
@@ -81,15 +73,9 @@ export class EmotionPicker {
   readonly count = computed(() => this.selected().size);
   readonly selectedList = computed(() => [...this.selected()]);
 
-  // Feelings read from the note by a small local model, shown at the head of the
-  // mosaic. Pure enhancement: with no model running, none of this appears and the
-  // picker is exactly the wheel it was.
-  //
-  // Suggestions are remembered per check-in, so a note you have opened before is
-  // answered from the cache and they are simply *there*. Change the note and the
-  // previous set stays on screen — labelled as belonging to the older wording —
-  // rather than blanking out while the new one is worked out: they are usually
-  // still close, and an empty space would be a worse answer than a slightly old one.
+  // Suggestions from the local model, first in the mosaic; absent with no model.
+  // Cached per check-in; after an edit the old set stays, marked stale, until
+  // the new one arrives.
   readonly suggestions = signal<readonly EmotionNode[]>([]);
   /** The shown suggestions were read from an earlier wording of the note. */
   readonly stale = signal(false);

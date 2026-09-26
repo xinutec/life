@@ -1,12 +1,6 @@
-/** Aggregating check-ins into calendar days.
- *
- *  A day, not a check-in, is the unit: most single check-ins touch one family,
- *  so the mixing only becomes visible across a day's readings.
- *
- *  ⚠ Two channels, because one cannot say it. The bands answer "how did the day
- *  go" as a PROPORTION, which hides a significant minority — a mostly-fine day
- *  can still have ended badly. So `spread` answers "did it hold still", from the
- *  score range: a steadily fine day and a day that averaged fine differ. */
+/** Aggregating check-ins into calendar days, where mixing becomes visible.
+ *  Bands are proportions and hide a bad minority, so `spread` (the score
+ *  range) separately shows whether the day held still. */
 import { emotionNode } from '../../shared/emotion-wheel';
 import { WellbeingDoc } from '../../sync/wellbeing-store';
 
@@ -79,15 +73,9 @@ function tagsOf(e: WellbeingDoc): readonly string[] {
   return e.emotions ?? [];
 }
 
-/** How much of a day each family got, as fractions summing to 1.
- *
- *  **Every word the day recorded, counted once, pooled across the whole day.**
- *  Three happy words and one sad one is 3/4 happy, however many check-ins they
- *  arrived in. Weighting each check-in equally instead turns a one-word bad
- *  morning and a three-word good evening into half and half.
- *
- *  The cost, chosen knowingly: a check-in with six words outweighs three with
- *  one. */
+/** Each family's share of a day (summing to 1), counting every word once
+ *  across all the day's check-ins, so a one-word bad morning isn't half the
+ *  day. A six-word check-in outweighs three one-word ones. */
 export function bandsFor(entries: readonly WellbeingDoc[]): readonly CalendarBand[] {
   const weight = new Map<string, number>();
   // Carried from the node that named the family rather than derived from it.
@@ -150,21 +138,13 @@ function dayFrom(key: string, entries: readonly WellbeingDoc[]): CalendarDay {
   };
 }
 
-/** Group check-ins into calendar months, **oldest month first**.
+/** Group check-ins into calendar months, oldest first (like a chat; the view
+ *  scrolls to today on load).
  *
- *  Chronological, like a chat: time runs one way at every scale, and the view
- *  scrolls to the end on load (emotion-calendar.ts) to open on today.
- *  Newest-first months would run time backwards at one scale and forwards at
- *  the other.
- *
- *  Every day BETWEEN the first reading and the end gets a cell, including empty
- *  ones: a gap is a fact about the log.
- *
- *  ⚠ Days OUTSIDE that range are padding (`null`), not empty days — before you
- *  started, or not lived yet. The end is the LATER of the last reading and
- *  `today`: today gets a square before its first check-in, the future never.
- *
- *  `today` is a parameter so a test can state which day it means. */
+ *  Every day from the first reading to the end gets a cell, empty or not: a gap
+ *  is a fact. Days outside that range are `null` padding. The end is the later
+ *  of the last reading and `today`, so today has a square before its first
+ *  check-in. */
 export function buildCalendar(
   docs: readonly WellbeingDoc[],
   tz?: string,
@@ -224,18 +204,9 @@ export interface TokenTally {
   readonly days: number;
 }
 
-/** Every emotion across a set of selected days, commonest first.
- *  The handoff to whatever renders a selection, and the panel that lists it.
- *
- *  Counted by DAY, not by check-in: three check-ins tagged Calm on one day are
- *  one calm day.
- *
- *  ⚠ The ORDER is load-bearing: the panel bounds its height and scrolls, so on
- *  a wide selection something is always out of sight, and commonest-first makes
- *  that the tail.
- *
- *  Ties break on the token so the list is stable across renders rather than
- *  reshuffling as days are added. */
+/** Every emotion across the selected days, counted per day (not per
+ *  check-in), commonest first so the panel's scrolled-off part is the tail.
+ *  Ties break on the token, for a stable order. */
 export function tallyAcross(days: readonly CalendarDay[]): readonly TokenTally[] {
   const counts = new Map<string, number>();
   // `CalendarDay.tokens` is already distinct per day, so a straight count of

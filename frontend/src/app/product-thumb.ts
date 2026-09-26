@@ -63,19 +63,15 @@ function readClipboardImage(): Promise<string | null> {
 /** Client ceiling, mirrors the backend's 5 MiB cap. */
 const MAX_BYTES = 5 * 1024 * 1024;
 
-/** A product thumbnail that doubles as a one-tap image picker (see
- *  [[ImagePickerDirective]]). Drop it into any list row:
+/** A product thumbnail that is also a one-tap image picker
+ *  ([[ImagePickerDirective]]), owning the whole pick → upload → reload flow:
  *
  *      <app-product-thumb matListItemAvatar [barcode]="it.barcode"
  *                         [hasImage]="it.has_image" />
  *
- *  It renders the cached image, or an `add_a_photo` placeholder when the barcoded
- *  product has none, and owns the whole replace flow (pick → upload → reload) so
- *  the host list doesn't have to. Inside the Android app it also offers "Paste
- *  copied image" (from the system clipboard, e.g. an image copied in Chrome).
- *  A barcodeless item linked to a shop product (`[productId]`) shows that
- *  product's image read-only — there's no barcode to attach a replacement to.
- *  An item with neither a barcode nor a linked product gets a plain, inert icon. */
+ *  With no image it shows an `add_a_photo` placeholder; in the Android app it
+ *  also offers "Paste copied image". A barcodeless item with a `[productId]`
+ *  shows that product's image read-only; with neither, an inert icon. */
 @Component({
   selector: 'app-product-thumb',
   templateUrl: './product-thumb.html',

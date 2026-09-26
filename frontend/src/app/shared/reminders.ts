@@ -1,13 +1,8 @@
 import { Injectable } from '@angular/core';
 
 /**
- * The native port injected by the Android wrapper (absent in a browser).
- *
- * An origin-scoped message port (`WebViewCompat.addWebMessageListener`), so it
- * is never injected into a frame that isn't this app — it can schedule a
- * notification saying anything and deep-linking anywhere.
- *
- * Everything here is fire-and-forget, so nothing needs a reply.
+ * The Android wrapper's origin-scoped reminder port (absent in a browser);
+ * it can post any notification with any deep link. Fire-and-forget.
  */
 interface ReminderBridge {
   postMessage(message: string): void;

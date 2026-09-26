@@ -181,16 +181,12 @@ pub async fn list_files(
     ))
 }
 
-/// POST /api/items/{id}/files → attach raw bytes. `X-File-Name` names it and
-/// `X-Purchase-Id` optionally ties it to the purchase it is evidence of.
+/// POST /api/items/{id}/files → attach a raw body (not multipart). `X-File-Name`
+/// names it; `X-Purchase-Id` optionally ties it to a purchase. The size limit is
+/// re-checked here so it survives re-wiring of the route's `DefaultBodyLimit`.
 ///
-/// Raw body, not multipart, as the product-image route. Bounded by a per-route
-/// `DefaultBodyLimit` and re-checked here, so the limit survives re-wiring.
-///
-/// ⚠ The STORED mime is sniffed from the bytes, never the declared
-/// `Content-Type`. These files are served back on our own origin, so bytes
-/// riding in under an innocent-looking header would be stored XSS — the same
-/// reason the image allowlist refuses SVG.
+/// ⚠ The stored mime is sniffed, never the declared `Content-Type`: files are
+/// served from our origin, so trusting the header would allow stored XSS.
 pub async fn add_file(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,

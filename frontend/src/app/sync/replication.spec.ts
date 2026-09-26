@@ -194,20 +194,11 @@ describe('startHttpReplication — the pull keeps going', () => {
   });
 });
 
-/** The rxdb semantics `SyncedStore.reSync` depends on.
- *
- *  `reSync()` emits `'RESYNC'` into a plain Subject that only the INTERNAL
- *  replication subscribes to, and that object does not exist until `start()`.
- *  So in a non-leader tab, whose replication never started, a `reSync()` is
- *  silently dropped — and a row restored from the Trash never comes back.
- *
- *  `start()` covers both cases — `_start` re-syncs when `wasStarted` and begins
- *  the replication otherwise — which is why the store calls that instead. This
- *  test pins the library behaviour the choice rests on, so an rxdb upgrade that
- *  changes it fails here rather than in the Trash page.
- *
- *  `autoStart: false` stands in for "waiting for leadership": in both cases the
- *  replication object exists and has never run. */
+/** Pins the rxdb behaviour `SyncedStore.reSync` relies on: `reSync()` on a
+ *  replication that never started (a non-leader tab) is dropped, so a row
+ *  restored from the Trash would not come back; `start()` re-syncs or starts as
+ *  needed, so the store calls that. `autoStart: false` stands in for "waiting
+ *  for leadership". */
 describe('rxdb: reSync on a replication that never started', () => {
   async function parked() {
     // ast-grep-ignore: life-single-rxdb

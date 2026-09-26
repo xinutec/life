@@ -51,17 +51,11 @@ const SHOPPING = [
     unit: 'tins', barcode: null, done: true, rev: 2, _deleted: false },
 ];
 
-/** The two places on the wellbeing screen whose geometry is deliberately wider
- *  than the phone, and which therefore have to be exempted from the page-overflow
- *  oracle — narrowly, by element, so the check stays strict on everything else in
- *  the chart (axis words sliding off the left edge is exactly what it caught once).
- *
- *  `.pan` is the scroll rail: a horizontal scroller is wider than its viewport by
- *  definition, and it holds no content. `path.line` is the trend line, which runs
- *  through readings either side of the window so the curve enters and leaves the
- *  viewport correctly; it is clipped to the plot, so none of that is visible — but
- *  a bounding box measures geometry, not paint. The dots are NOT exempt: they only
- *  ever come from inside the window, so one escaping would be a real fault. */
+/** Wellbeing chart elements wider than the phone by design, exempted from the
+ *  overflow check by element so the rest of the chart stays checked: the `.pan`
+ *  scroll rail, and the trend line, which extends past the window but is
+ *  clipped (a bounding box measures geometry, not paint). Dots are not exempt:
+ *  they only come from inside the window. */
 const CHART_SCROLLERS = ['.pan', 'path.line'];
 
 const now = new Date();
@@ -856,14 +850,9 @@ test('item history dialog — the timeline lays out cleanly @ phone width', asyn
 });
 
 /**
- * The expiry label's URGENCY COLOUR, measured rather than inspected.
- *
- * On Today's "Expiring soon" card the label is a list row's trailing meta, and
- * Material's more specific rule for that slot can override the urgency colour
- * while the class list still reads right.
- *
- * So this asserts the COMPUTED colour, on both screens, against the theme's own
- * error token rather than a hex — a re-themed app should move both together.
+ * The expiry label's urgency colour, as computed: in Today's list-row meta
+ * slot a more specific Material rule can override it while the class still
+ * reads right. Compared against the theme's error token, not a hex.
  */
 test('an expired item reads as expired — on Today and on All items', async ({ page }) => {
   await mockApi(page);

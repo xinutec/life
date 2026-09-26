@@ -38,24 +38,13 @@ export function penceFromLabel(label: string): number | null {
   return pence ? Number(pence[1]) : null;
 }
 
-/** What a shop's own quote becomes on our side: integer minor units, never a
- *  float (see products::prices). `null` when the shop quoted nothing — and also
- *  when it quoted something whose unit we can't confirm.
+/** A shop's quote as integer minor units, or `null` if it quoted nothing or its
+ *  unit can't be confirmed.
  *
- *  **Why the confirmation.** `amount` is a bare number: nothing in the payload
- *  says whether it means pounds or pence, and reading it wrong stores money off
- *  by 100×. That error is a quiet one — £2.50 filed as £250 still looks like a
- *  price, and only surfaces later as "which shop is cheaper" answering wrongly.
- *  So the shop's own formatted price is the second opinion. If the two disagree,
- *  or there is no label to check against, nothing is recorded: a missing price
- *  is visibly missing, a wrong one isn't.
- *
- *  This beats confirming the unit by hand once, because it keeps holding if the
- *  shop ever changes it.
- *
- *  Shared rather than repeated: the picker imports shop products and so does the
- *  product page's shop lookup, and a price recorded by one path but not the
- *  other would make "which shop is cheaper" depend on which screen you used. */
+ *  `amount` doesn't say pounds or pence, and a 100× error still looks like a
+ *  price, so the shop's formatted price must agree before anything is stored:
+ *  a missing price shows, a wrong one doesn't. Both the picker and the product
+ *  page's shop lookup record through this, so they can't disagree. */
 export function shopPrice(product: ShopProduct): PriceInput | null {
   const p = product.display_price;
   if (!p || !(p.amount > 0)) return null;
@@ -137,13 +126,9 @@ export interface ShopProvider {
 }
 
 /**
- * The native port injected by the Android wrapper (absent in a browser).
- *
- * An origin-scoped message port (`WebViewCompat.addWebMessageListener`), so it
- * is never injected into a frame that isn't this app — it takes a URL *and
- * JavaScript to run against it*. Results arrive through `window.__shopResolve`
- * / `__shopConnected`, because a hidden WebView's answer comes back long after
- * the message that asked for it.
+ * The Android wrapper's origin-scoped port (absent in a browser); it runs
+ * caller-supplied JavaScript against a URL. Answers arrive later through
+ * `window.__shopResolve` / `__shopConnected`.
  */
 interface Bridge {
   postMessage(message: string): void;

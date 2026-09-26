@@ -15,18 +15,12 @@ export type { UpdateOutcome };
 const RECOVERY_KEY = 'life.sw-recovery-attempted';
 
 /**
-/**
- * Self-update — the Angular wiring over `@xinutec/ui-harness/sw-updates`, which
- * holds the policy: no mid-session reload that could eat a half-typed form; a
- * re-check on becoming visible, because ngsw only re-checks at a navigation;
- * one automatic recovery per tab.
+ * Self-update: the Angular wiring over `@xinutec/ui-harness/sw-updates`, which
+ * holds the policy (no reload mid-session, re-check on becoming visible, one
+ * automatic recovery per tab). The policy is not an `@Injectable` because
+ * ui-harness compiles with plain `tsc`.
  *
- * ⚠ **The policy is deliberately not an `@Injectable`.** ui-harness compiles with
- * plain `tsc`, so a decorated service would ship without the metadata `ngtsc`
- * generates and fail to inject in an AOT build.
- *
- * What stays here is what a fake cannot reach: that `SwUpdate.versionUpdates` really
- * feeds it, filtered to VERSION_READY, and that a reload really happens.
+ * Here: feeding `SwUpdate.versionUpdates` (VERSION_READY) in, and the reload.
  */
 @Injectable({ providedIn: 'root' })
 export class SwUpdates {

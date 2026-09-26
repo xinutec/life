@@ -403,16 +403,9 @@ button.danger {
   font: var(--mat-sys-body-medium);
 }
 
-// The per-screen "add" FAB, parked bottom-right above the bottom tab bar so the
-// primary capture action is thumb-reachable (it opens the screen's add
-// bottom sheet).
-//
-// It lives inside a full-width fixed BAR rather than being a right-anchored
-// fixed button directly. Android WebView (wide-viewport + viewport-fit=cover)
-// mis-positions a `position: fixed` element anchored only by `right`/`bottom`
-// (it collapses to the top-left) — but honours one anchored to BOTH horizontal
-// edges, exactly like .topbar/.nav. So the bar spans left:0/right:0 (WebView
-// positions it correctly) and flex pushes the button to the right edge.
+// The per-screen "add" FAB, bottom-right above the tab bar. Android WebView
+// misplaces a fixed element anchored only by `right`/`bottom`, so it sits in a
+// full-width fixed bar (like .topbar/.nav) and flex pushes it right.
 .fab-anchor {
   position: fixed;
   inset: auto 0 0 0;

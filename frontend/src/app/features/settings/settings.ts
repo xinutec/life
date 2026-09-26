@@ -118,18 +118,10 @@ export class Settings {
     this.wellbeingReminder.getConfig().rules,
   );
 
-  /** Ask where to approve the grant, and send the user there.
-   *
-   *  Nothing is watched from here. The backend polls Nextcloud itself and
-   *  stores the password when granted; this side finds out by asking again
-   *  when the page comes back (see the constructor), which is the only moment
-   *  it is reliably running.
-   *
-   *  `noopener` costs the ability to close that page for you — `window.open`
-   *  returns null with it, so there is no handle — and that is the trade taken
-   *  deliberately: a page that can reach back into this one through
-   *  `window.opener` is worse than one you close yourself. Nextcloud's own
-   *  "you can close this window" is it saying the same thing. */
+  /** Send the user to approve the Nextcloud grant. The backend polls for the
+   *  password; this page re-checks when it becomes visible again (see the
+   *  constructor). `noopener` means we can't close that page for them, which
+   *  beats giving it `window.opener`. */
   protected connectNextcloud(): void {
     if (this.ncBusy()) return;
     this.ncBusy.set(true);

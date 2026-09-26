@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
-# Build the life web-viewer APK and install it to the Pixel 9 over Wi-Fi. Run from
-# android/ inside this repo's Android dev shell (SDK + adb):
+# Build the APK and install it on the Pixel 9 over Wi-Fi, from android/:
 #
 #   nix develop ..#android --command ./deploy.sh [<ip[:port]>]
 #
-# This is a single-purpose handheld app on ONE phone (the Pixel 9). DHCP drifts the
-# IP, so we key on the device *model*, never the IP: connect, verify it really is a
-# Pixel 9, then install by serial. A bare `adb install` could hit the wrong device
-# (a Pixel 5 is often also adb-connected) — so we never use it.
+# Installs by serial after checking the model, never a bare `adb install`:
+# the IP drifts and other phones are often connected.
 set -euo pipefail
 cd "$(dirname "$0")"
 

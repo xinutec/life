@@ -17,16 +17,9 @@ use crate::nextcloud::credentials::{self, Usable};
 use crate::session::AuthUser;
 use crate::state::AppState;
 
-/// GET /api/bins → upcoming collections, soonest first.
-///
-/// An empty list when no feed is configured, rather than a 404: "your council
-/// does not publish one" and "nothing is collected in the next three months"
-/// are both simply nothing to show, and a client that had to tell them apart
-/// would be doing it to render the same empty space.
-///
-/// A fetch that FAILS is an error, though. Answering an unreachable council
-/// with an empty list would say the bins are not going out, which is the one
-/// wrong thing this can say.
+/// GET /api/bins → upcoming collections, soonest first. No feed configured is an
+/// empty list, not a 404: nothing to show either way. A failed fetch is an
+/// error, since an empty list would say the bins aren't going out.
 pub async fn bins(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,

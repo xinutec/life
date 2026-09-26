@@ -1,15 +1,9 @@
-//! The channel the emotion-suggestion worker talks to.
+//! The endpoints the emotion-suggestion worker on the Mac polls; the fleet
+//! cannot dial the Mac (one-way WireGuard). [`next`] long-polls, so a note is
+//! picked up as soon as it is written.
 //!
-//! The model lives on the Mac, a one-way WireGuard peer: it may connect into the
-//! fleet, never the reverse, so a compromised server cannot reach it. So the
-//! worker calls in, asks for work, and posts the answer back.
-//!
-//! [`next`] long-polls, so a note is picked up the moment it is written without
-//! the worker hammering the endpoint.
-//!
-//! Authentication is a bearer token, not a session: the worker is a daemon, not a
-//! browser, and it acts for no user — the jobs it is handed carry a prompt and
-//! nothing that identifies whose check-in it belongs to.
+//! Auth is a bearer token, not a session: the worker is a daemon acting for no
+//! user, and its jobs carry a prompt but nothing identifying whose check-in.
 
 use std::time::{Duration, Instant};
 

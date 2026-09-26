@@ -154,15 +154,9 @@ async fn a_typed_name_outranks_the_catalogue_but_a_left_alone_one_follows_it() {
 
 #[tokio::test]
 async fn an_override_survives_a_save_that_says_nothing_and_is_cleared_by_one_that_does() {
-    // The two halves of "absent means no statement".
-    //
-    // Every caller that is not the item form — sync, a script, the Android app —
-    // sends no name_source at all. If absent were read as 'product', any of them
-    // re-saving an item would silently strip a name its owner chose to keep, and
-    // the loss would look like the catalogue simply winning. So absent preserves.
-    //
-    // Which then makes clearing an override its own explicit act, rather than
-    // something that falls out of retyping the catalogue's name.
+    // Absent `name_source` means no statement: sync, scripts and the Android app
+    // never send it, and reading it as 'product' would strip a chosen name on
+    // any re-save. Clearing an override is therefore its own explicit act.
     let pool = db::connect(&common::test_db_url()).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
     let user = "test-user-item-names-unoverride";

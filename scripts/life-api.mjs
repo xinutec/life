@@ -1,23 +1,16 @@
 #!/usr/bin/env node
-// One authenticated request against a RUNNING Life, borrowing the browser's
-// session instead of handling anybody's credentials.
-//
-// seed-demo.sh logs in through `dev-login`, which production does not have; the
-// live session belongs to a person who signed in by hand, so the browser that
-// holds it makes the call.
+// One authenticated request against a running Life, made by the signed-in
+// ChromeDebug tab (production has no `dev-login`, and we never handle
+// credentials). Needs a Life tab open (xinutec-infra/mac-mini/chrome-debug.sh
+// start).
 //
 //   ./scripts/life-api.mjs GET  /api/items
-//   ./scripts/life-api.mjs POST /api/locations '{"kind":"room","name":"Bedroom"}'
 //   ./scripts/life-api.mjs PATCH /api/items/16 '{"name":"...","category":"food"}'
 //
-// Composes with jq, which is how multi-step work is done — no bespoke seeding
-// script per task, and no personal data in this public repo:
+// Chain steps with jq rather than writing per-task seed scripts:
 //
 //   room=$(./scripts/life-api.mjs POST /api/locations '{"kind":"room","name":"X"}' | jq .id)
 //   ./scripts/life-api.mjs POST /api/items "{\"name\":\"Y\",\"location_id\":$room}"
-//
-// Requires ChromeDebug running with a Life tab open and signed in
-// (xinutec-infra/mac-mini/chrome-debug.sh start).
 import { execFileSync } from 'node:child_process';
 
 const CDP = process.env.CDP_PY

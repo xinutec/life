@@ -71,16 +71,12 @@ pub struct BuyRequest {
     pub purchase: Option<NewPurchase>,
 }
 
-/// POST /api/shopping/{id}/buy → turn a bought item into an inventory item
-/// (unplaced) and remove it from the list. Returns the item. The row's own
-/// `category` and `product_id` carry onto the item — the row knows what it is;
-/// nothing is guessed here.
+/// POST /api/shopping/{id}/buy → turn a bought row into an unplaced inventory
+/// item, carrying its `category` and `product_id`, and remove it from the list.
 ///
-/// Ordering makes a double-tap idempotent: the soft-delete (guarded by
-/// `rows_affected`) is the claim — only the request that actually tombstones the
-/// row creates the inventory item; a concurrent duplicate 404s instead of
-/// minting a second item. A crash between the two writes loses nothing
-/// permanent (the shopping row is tombstoned, not gone).
+/// The `rows_affected`-guarded soft-delete is the claim, so a double tap 404s
+/// instead of minting two items; a crash between the writes leaves only a
+/// tombstone.
 pub async fn buy(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -138,17 +134,12 @@ pub async fn buy(
     Ok(Json(item))
 }
 
-/// POST /api/shopping/coverage → where each of these rows is known to be sold,
-/// and each shop's latest shelf price for it.
+/// POST /api/shopping/coverage → where each row is known to be sold, and each
+/// shop's latest shelf price for it. Memory only (attached listings plus
+/// sightings of the barcode), so the Buy list can call it on every load.
 ///
-/// Reads memory only: the shops that hold a listing for the row's product, plus
-/// the shops a past query showed carrying its barcode. No outbound traffic, so a
-/// whole list costs three queries and the shops nothing — which is the point,
-/// since this runs every time the Buy list loads.
-///
-/// It answers "where is this SOLD", never "is it in stock": the freshest thing
-/// here is a sighting from whenever someone last looked. An empty `sources` means
-/// we know nothing about that row, not that nowhere sells it.
+/// "Sold", never "in stock"; an empty `sources` means we know nothing, not that
+/// nowhere sells it.
 pub async fn coverage(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,

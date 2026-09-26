@@ -1,27 +1,15 @@
-/** A three-tier emotional vocabulary — a handful of core emotions, each with a ring of
- *  secondary feelings, each with fine-grained tertiary leaves.
+/** A three-tier emotion vocabulary: core emotions, each with secondary groups,
+ *  each with tertiary leaves, all with a plain-English gloss. Static data; a
+ *  check-in stores emotions and their path to the core is derived here.
  *
- *  Static data, no backend: a check-in records a set of emotions and their path back up
- *  to the core is derived here for display and colour. Every node carries a
- *  plain-English gloss, so the picker can explain each feeling.
+ *  Based on the Geoffrey Roberts Feelings Wheel, extended where it has no word
+ *  for a real feeling, so a group may hold more than two leaves. A secondary
+ *  group is a valid answer on its own: "Frustrated" is often the whole truth.
  *
- *  It began as the Geoffrey Roberts "Feelings Wheel" (strictly two leaves per group) and
- *  is extended where that wheel leaves a real feeling with no word at all, so groups may
- *  hold more than two.
- *
- *  Both rings are selectable: a secondary group is a legitimate answer on its own, not a
- *  heading over the "real" words. "Frustrated" is often the whole truth, and forcing a
- *  commitment to Infuriated or Annoyed would record the feeling as more precise than it
- *  was.
- *
- *  ⚠ Identity is the *qualified* token `Core/Name` (see [[emotionToken]]), not the bare
- *  word: a few leaves ("Embarrassed", "Inferior", "Overwhelmed") sit under two cores,
- *  and the same name in different groups is NOT the same emotion — their glosses differ.
- *  Within one core a name is unique across both rings, so a token names exactly one
- *  node, and `/` is safe because no name contains one.
- *
- *  ⚠ Every stored emotion is a token (migration 0039 rewrote the last bare names), so
- *  adding to the wheel cannot re-point anything already recorded. */
+ *  ⚠ Identity is the token `Core/Name` ([[emotionToken]]), not the word: some
+ *  leaves ("Embarrassed", "Overwhelmed") sit under two cores with different
+ *  glosses. A name is unique within its core and contains no `/`. Every stored
+ *  emotion is a token, so adding to the wheel cannot re-point a record. */
 
 /** One outer-ring (tertiary) leaf: the word plus a brief gloss. */
 export interface EmotionLeafDef {
@@ -291,16 +279,10 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             desc: 'Further along than you were, and not there yet.',
           },
           {
-            // Twin of `Surprised/Eager`, which is where Roberts put the whole
-            // Excited group — a group whose own gloss ("eager, energised
-            // anticipation") has nothing to do with being caught off guard, so
-            // looking forward to something could only be recorded as surprise.
-            // Not Hopeful, which expects a good outcome; you can be eager for a
-            // thing whose outcome you already know. What this word carries that
-            // Hopeful does not is the ARRIVAL — wanting it here, not wanting it
-            // to go well. Deliberately not glossed with "impatient": that is
-            // `Bad/Impatient`, a chafing at the wait, and borrowing its name
-            // here would point you at two places at once.
+            // Twin of `Surprised/Eager`, where Roberts filed the Excited group,
+            // so anticipation needn't be recorded as surprise. Not Hopeful: this
+            // is wanting it here, not wanting it to go well. Not glossed
+            // "impatient", which is `Bad/Impatient`.
             name: 'Eager',
             desc: "Keen for something that's on its way, and wanting it here now.",
           },

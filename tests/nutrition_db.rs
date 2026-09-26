@@ -455,15 +455,10 @@ async fn real_brandbank_facts_parse_store_and_read_back() {
     );
 }
 
-/// A replace that fails partway must leave the source's PREVIOUS set intact.
-///
-/// This is the property that makes allergens safe to merge: `facts_for` unions
-/// every source, so a half-applied replace doesn't read as "we're unsure about
-/// nuts" — it reads as a product with no nut allergen at all.
-///
-/// The failure is forced by a value the column cannot hold (`allergen` is
-/// VARCHAR(48)), so it's the database that rejects the write, at the same place
-/// a connection reset or a pod eviction would land.
+/// A replace that fails partway keeps the source's previous set: `facts_for`
+/// unions sources, so a half-applied replace would read as "no nut allergen".
+/// A value too long for `allergen` VARCHAR(48) makes the database itself fail
+/// the write mid-way.
 #[tokio::test]
 async fn a_failed_allergen_replace_keeps_the_previous_set() {
     let url = common::test_db_url();

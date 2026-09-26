@@ -1,14 +1,8 @@
-//! Client activity trace: the navigations and taps the browser sees but the API
-//! doesn't, POSTed in batches and folded into the SAME log stream as the
-//! per-request trace. Read together they are one timeline —
-//! `client-event kind=nav path=/product/56`, `client-event kind=tap
-//! label="Find at Asda"`, then the `GET …/find/asda 200` the tap caused — so a
-//! session reconstructs without any per-screen instrumentation. The client
-//! captures it all from two central points (Router events + one global click
-//! listener); see frontend `telemetry.ts`.
-//!
-//! Events are BOTH logged and stored (`client_events`): the log interleaves one
-//! session with the request trace; the table outlives the pod's log buffer.
+//! Client activity trace: navigations and taps, POSTed in batches, logged into
+//! the same stream as the request trace (so `kind=tap label="Find at Asda"`
+//! sits before the `GET …/find/asda` it caused) and stored in `client_events`,
+//! which outlives the pod's log. The client captures them centrally; see the
+//! frontend's `telemetry.ts`.
 
 use axum::Json;
 use axum::extract::State;
@@ -47,20 +41,11 @@ const MAX_KIND: usize = 16;
 /// Long enough for any route this app has, matching the column.
 const MAX_PATH: usize = 512;
 
-/// Format characters that are invisible, or that reorder what is displayed.
-///
-/// `char::is_control` covers categories Cc and nothing else, and Rust's std has
-/// no Unicode category table — so these are named explicitly. Two reasons they
-/// matter here, and the second is the sharper one:
-///
-/// - **Zero-width characters** (U+200B, U+FEFF, the word joiners) are invisible,
-///   so a label made of them reads as empty while occupying the whole cap.
-/// - **Bidi overrides** (U+202A–202E, U+2066–2069) reorder the *rendering* of
-///   the text around them. A log line containing one can be made to display
-///   something other than what it says — the Trojan Source trick, pointed at the
-///   record rather than at source code.
-///
-/// A deny-list rather than all of category Cf, to avoid a Unicode tables crate.
+/// Format characters that are invisible or reorder display: zero-width
+/// characters (U+200B, U+FEFF, the joiners) make a label that reads as empty,
+/// and bidi overrides (U+202A–202E, U+2066–2069) make a log line display
+/// something other than it says (Trojan Source). `char::is_control` covers only
+/// Cc, and a named list avoids a Unicode tables crate.
 fn is_deceptive_format(c: char) -> bool {
     matches!(c,
         '\u{00ad}'

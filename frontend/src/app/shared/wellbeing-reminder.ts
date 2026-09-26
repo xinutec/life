@@ -46,13 +46,9 @@ export function createRule(time = '09:00', quietHours = 3): WellbeingReminderRul
 }
 
 /**
- * When a rule should next fire (epoch ms), or null if it can't (malformed time).
- * Fires at the next occurrence of the rule's local time that is both in the future
- * and at least `quietHours` after the last check-in. Because the only way to check
- * in is in the app — which re-arms — the last-check-in instant can't change between
- * arming and firing, so evaluating the quiet window at arm time gives the same
- * answer it would at fire time: no server round-trip, and a check-in simply pushes
- * the rule to the next day.
+ * When a rule next fires (epoch ms), or null for a malformed time: the next
+ * occurrence of its local time at least `quietHours` after the last check-in.
+ * Checking in re-arms, so deciding at arm time matches fire time.
  */
 export function nextFireForRule(
   rule: WellbeingReminderRule,

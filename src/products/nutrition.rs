@@ -1,12 +1,7 @@
-//! Product facts: the nutrition panel, ingredients text, allergens, and dietary
-//! flags. These describe the physical product, so they attach to the canonical
-//! `products` row (see repo), reconciled by barcode like every other enrichment.
-//!
-//! `RawFacts::parse` turns an Open Food Facts product JSON into these shapes
-//! (`brandbank` does the same for Asda); `off` fetches, `repo` persists.
-//!
-//! Nutrition is stored WIDE: the UK mandatory panel (the "big 8") is a fixed
-//! small set, one field each; OFF's long tail keeps its structure in `extra`.
+//! Product facts (nutrition, ingredients, allergens, dietary flags), attached
+//! to the canonical `products` row. `RawFacts::parse` reads Open Food Facts JSON
+//! (`brandbank` reads Asda's); `off` fetches, `repo` persists. The UK "big 8"
+//! panel is stored one field each; OFF's long tail goes in `extra`.
 
 use std::collections::BTreeMap;
 
@@ -175,24 +170,13 @@ impl Nutrition {
     }
 }
 
-/// Reconcile every source's claims about each dietary flag into one answer.
+/// Reconcile each source's claims about each dietary flag into one tri-state:
+/// agreement wins; a firm claim beats a soft one (a retailer's own "vegan" tag
+/// settles OFF's "maybe"); **'yes' against 'no' is 'maybe'**, because telling
+/// someone a thing is vegan when a source says otherwise is the harmful error.
 ///
-/// Sources overlap: Open Food Facts derives flags from a crowd-entered
-/// ingredient list, while a retailer tags the product it actually sells (see
-/// products::asda). Both are stored, per source (migration 0028), and this
-/// decides what the product page shows — in the tri-state the flags already
-/// speak:
-/// - sources agree → that value;
-/// - a firm claim beats a soft guess ('yes' over 'maybe') — a retailer tagging
-///   its own product Vegan settles OFF's "maybe-vegan" analysis;
-/// - **'yes' against 'no' → 'maybe'.** They genuinely disagree, so say so rather
-///   than pick a winner. Over-claiming is the harmful direction: telling someone
-///   avoiding animal products that a thing is vegan when a source says otherwise
-///   is a real-world error, where "we're not sure" merely sends them to the
-///   label.
-///
-/// Input may hold repeated flags (one per source, in any order); the result has
-/// one entry per flag, sorted. Pure — the unit under test.
+/// Claims come in any order, several per flag; the result has one per flag,
+/// sorted.
 pub fn merge_dietary(claims: Vec<DietaryFlag>) -> Vec<DietaryFlag> {
     let mut by_flag: BTreeMap<String, Vec<Claim>> = BTreeMap::new();
     for c in claims {
@@ -214,16 +198,9 @@ pub fn merge_dietary(claims: Vec<DietaryFlag>) -> Vec<DietaryFlag> {
         .collect()
 }
 
-/// Merge several sources' nutrition panels into the one to show.
-///
-/// Panels aren't blendable — averaging two sources' "fat per 100g" would invent a
-/// number neither reported (false precision). So we pick ONE panel whole, by
-/// source precedence (see products::source — retailers' manufacturer-grade data
-/// over the crowd's), and show it verbatim. Where sources genuinely differ, the
-/// reconciliation UI surfaces it; this is only the default display pick.
-///
-/// Input is `(source, panel)` pairs in any order; a source not in the precedence
-/// list sorts last. Pure — the unit under test.
+/// Pick one source's nutrition panel whole, by `products::source` precedence
+/// (unlisted sources last); blending would invent numbers no source reported.
+/// Disagreements are the reconciliation UI's job.
 pub fn merge_nutrition(panels: Vec<(Source, Nutrition)>) -> Option<Nutrition> {
     panels
         .into_iter()
@@ -242,16 +219,8 @@ pub fn merge_ingredients(texts: Vec<(Source, String)>) -> Option<String> {
         .map(|(_, t)| t)
 }
 
-/// Merge several sources' allergen claims into one set.
-///
-/// Allergens are safety-critical, so this is a UNION, never a pick: an allergen
-/// one source declares is kept even if another source is silent about it
-/// (absence is not a "free from" — the same reason the dietary merge never reads
-/// a missing flag as "no"). Where two sources name the same allergen with
-/// different presence, the more severe wins: `contains` beats `may_contain`.
-///
-/// Input is `(source, allergen)` pairs; the result has one entry per allergen,
-/// sorted. Pure — the unit under test.
+/// Merge sources' allergen claims as a UNION: silence is not "free from".
+/// `contains` beats `may_contain`. One entry per allergen, sorted.
 pub fn merge_allergens(claims: Vec<(Source, Allergen)>) -> Vec<Allergen> {
     let mut by_name: BTreeMap<String, Presence> = BTreeMap::new();
     for (_, a) in &claims {

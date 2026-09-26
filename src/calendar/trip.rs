@@ -1,13 +1,7 @@
-//! The shop trip, as a calendar event.
-//!
-//! Scheduling is delegated to Nextcloud Calendar rather than kept in a life
-//! table (docs/design/overview.md §5), so a planned trip has to leave here as a
-//! `VEVENT` and nothing else. Everything a phone shows at 09:30 on a Saturday —
-//! the shop, where it is, what to get, the nudge beforehand — has to be *in the
-//! event*, because by then life is not the app in front of you.
-//!
-//! Building the text is kept apart from sending it ([`super::caldav`]) so the
-//! part with all the judgement in it can be tested without a Nextcloud.
+//! The shop trip as a `VEVENT`. Life keeps no trip table
+//! (docs/design/overview.md §5), so everything needed in the shop (where, what
+//! to get, the reminder) must be in the event. Built apart from sending
+//! ([`super::caldav`]) so it tests without Nextcloud.
 
 use anyhow::{Result, bail};
 use chrono::{DateTime, Duration, Utc};

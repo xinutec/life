@@ -5,18 +5,11 @@ const MINOR_PER_MAJOR = 100;
 const DECIMALS = 2;
 
 /**
- * Read a typed price ("3.30", "£3.30", "3") into integer minor units.
+ * Read a typed price ("3.30", "£3.30", "3") into integer minor units, or
+ * `null` if it isn't one: a wrong price looks real, a missing one shows.
  *
- * **Never via `parseFloat`.** `3.30 * 100` is `330.00000000000006` in binary
- * floating point, and `Math.round` hides that for most inputs while quietly
- * failing for some — which is the worst kind of money bug, because the total is
- * off by a penny for reasons nobody can reproduce. So the two sides of the
- * decimal point are read as integers and combined with integer arithmetic; no
- * float is constructed at any point.
- *
- * Returns `null` for anything that is not a price, rather than a best guess. A
- * misread price is worse than an absent one: absent is visibly missing, whereas
- * a wrong number sits in the spending history looking exactly like a real one.
+ * Never via `parseFloat` (`3.30 * 100` is `330.00000000000006`): both sides of
+ * the point are read as integers.
  */
 export function toMinorUnits(text: string): number | null {
   const trimmed = text.trim().replace(/^[£$€]/, '').trim();

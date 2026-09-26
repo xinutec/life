@@ -1,23 +1,15 @@
-//! One declaration for an enum that is stored and sent as a short string.
+//! One declaration for an enum stored and sent as a short string.
 //!
-//! **Why this exists is an asymmetry, not a line count.** A hand-written pair of
-//! impls has two halves with different safety, and the unsafe half is silent:
-//!
-//! ```text
-//! impl Display   match on Self  -> exhaustive -> a new variant BREAKS THE BUILD
-//! impl FromStr   match on &str  -> `other => Err(..)` -> a new variant COMPILES
-//! ```
-//!
-//! So a variant added without its `FromStr` arm is written happily and then fails
-//! every read. A round-trip test over a hand-written `ALL` has the same hole;
-//! generating both directions from one table closes it.
+//! Hand-written, `Display` matches on `Self` and breaks the build on a new
+//! variant, but `FromStr` ends in `other => Err(..)` and compiles, so the new
+//! variant is written fine and then fails every read. Generating both from one
+//! table closes that hole.
 
 /// Declare a string-backed enum, its `ALL`, and both directions of its mapping.
+/// Attributes and doc comments pass through; the enum must be `Copy`.
 ///
-/// The name after the `:` appears in parse failures — `unknown location kind
-/// "attic"` — which reach the user as a sync push's 400 body.
-///
-/// Attributes and doc comments pass through.
+/// The name after the `:` appears in parse errors (`unknown location kind
+/// "attic"`), which reach the user as a sync push's 400 body.
 ///
 /// ```ignore
 /// str_enum! {
@@ -31,9 +23,6 @@
 ///     }
 /// }
 /// ```
-///
-/// `as_str` takes `self` by value, so the enum must be `Copy` — every one of
-/// these is. A type that isn't gets a compile error rather than a surprise.
 #[macro_export]
 macro_rules! str_enum {
     (

@@ -1,10 +1,6 @@
-//! Nextcloud Login Flow v2 → app password.
-//!
-//! Identity OAuth2 can't reach the DAV endpoints, so for calendar (CalDAV)
-//! life obtains a long-lived **app password** the same way DAVx⁵ and the NC
-//! mobile apps do: open the `login` URL, the user grants access, then poll
-//! until NC returns `{ server, loginName, appPassword }`. The app password
-//! has no expiry and is used as HTTP Basic Auth — no refresh dance.
+//! Nextcloud Login Flow v2 → a non-expiring app password for CalDAV, which the
+//! identity OAuth2 token can't reach. The user grants access at the `login` URL
+//! and we poll until NC returns `{ server, loginName, appPassword }`.
 //!
 //! https://docs.nextcloud.com/server/latest/developer_manual/client_apis/LoginFlow/
 

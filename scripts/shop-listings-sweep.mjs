@@ -1,26 +1,16 @@
 #!/usr/bin/env node
-// Find the shop listing for catalogue products that have none, so "where can I
-// buy this" and "cheapest shop" have something to compare.
+// Find Asda listings for catalogue products that have none.
 //
-// ⚠ NAME to discover, BARCODE to confirm. Asda's search does not match EANs,
-// so discovery goes by name — and bulk-linking on a fuzzy name would file the
-// wrong product at scale. A hit is accepted ONLY when its barcode equals the
-// product's; everything else is reported and skipped.
+// ⚠ Discovery is by name (Asda's search ignores EANs), but a hit is linked ONLY
+// when its barcode equals the product's; the rest are reported and skipped. Many
+// stay unlinked (own-brand barcodes differ from the OFF EAN; Asda lacks some
+// items), which beats a wrong link that looks right.
 //
-// The misses are mostly honest: a shop's own barcode for an own-brand line is
-// not the manufacturer EAN that Open Food Facts holds, and some things (a
-// Spanish olive oil, Dutch chocolate sprinkles) Asda simply does not stock. A
-// product that stays unlinked is the correct outcome for one this cannot
-// identify — the alternative is a wrong link that looks exactly like a right
-// one.
-//
-//   ./scripts/shop-listings-sweep.mjs            # dry run: says what it WOULD link
-//   ./scripts/shop-listings-sweep.mjs --commit   # actually records them
+//   ./scripts/shop-listings-sweep.mjs            # dry run
+//   ./scripts/shop-listings-sweep.mjs --commit   # record the links
 //   ./scripts/shop-listings-sweep.mjs --commit --limit 10 --delay 30
 //
-// Paced on purpose and capped per run: this is somebody else's storefront, and a
-// burst of searches is a scraper. The default spreads a full sweep over
-// several runs; --limit exists so it can be run little and often.
+// Paced and capped per run: it is someone else's storefront.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';

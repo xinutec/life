@@ -37,13 +37,8 @@ export function expiryInfo(
 }
 
 /**
- * The month-precision reading. Whole months apart, never days: the only fact is
- * which month the box named, and the reader's own month is the only thing to
- * compare it against.
- *
- * `soon` is the current month rather than a three-day window, because that is
- * the smallest span the data can distinguish. A box expiring next month has at
- * least four more weeks in it and does not deserve a warning colour.
+ * Month-precision expiry: compared in whole months, and `soon` means this
+ * month, the smallest span the data distinguishes.
  */
 function monthInfo(date: Date, now: Date): ExpiryInfo {
   const months =

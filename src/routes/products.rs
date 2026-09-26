@@ -511,21 +511,14 @@ fn cached_as_hit(c: shop_cache::CachedListing) -> asda::AsdaHit {
 /// GET /api/products/id/{id}/find/{source} → does this shop carry this product's
 /// barcode?
 ///
-/// Memory first, shop second. A hit in `shop_listings` answers with no outbound
-/// traffic at all; only a miss asks the shop, and that query's whole result is
-/// remembered on the way back, so the cache fills as a side effect of use and
-/// lookups tend toward zero queries.
+/// `shop_listings` answers first, with no outbound traffic; on a miss the shop
+/// is asked and its whole result remembered. Identity is the barcode, never the
+/// name ([`asda::match_barcode`]), so `None` with `searched` means no hit carried
+/// this EAN.
 ///
-/// Identity is always the barcode, never the name (see [`asda::match_barcode`]).
-/// So a `None` with `searched` means every hit was checked and none carried this
-/// EAN — a real, if unwelcome, answer.
-///
-/// Every registered shop can be asked, because memory is shop-agnostic and the
-/// question "what do we already know" is answerable for all of them. What differs
-/// is what happens on a miss: Asda's storefront search is a public API the server
-/// can call, while Waitrose sits behind a bot-wall only the app's hidden WebView
-/// passes. For the latter the answer is `searched: false` — "we don't know" — and
-/// the phone goes looking, reporting what it saw to `remember_seen`.
+/// Every shop can be asked, but only Asda can be searched from the server;
+/// Waitrose's bot wall needs the app's WebView. For it a miss is
+/// `searched: false`, and the phone searches and reports to `remember_seen`.
 pub async fn find_at_shop(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
@@ -631,20 +624,13 @@ pub struct SyncListing {
     pub external_id: ExternalId,
 }
 
-/// POST /api/products/id/{id}/listings → pull this product's listing at a shop
-/// and store what it says: the price (a new observation), the shop's lifestyle
-/// tags, its pack size, and its clean name.
+/// POST /api/products/id/{id}/listings → fetch this product's listing at a shop
+/// and store its price (a new observation), lifestyle tags, pack size and name.
 ///
-/// One operation for both "attach this shop" and "refresh it" — they differ only
-/// in whether the listing already exists, and doing them by one idempotent path
-/// means a refresh can never capture less than an attach did. Fetching shop-side
-/// here (rather than accepting facts from the client) keeps the client from
-/// asserting product facts, and lets the barcode guard below be enforced by the
-/// server rather than trusted from the caller.
-///
-/// Asda only: its storefront search is a public API we can call from anywhere.
-/// Waitrose needs the Android app's WebView to pass its bot-wall, so it has no
-/// server-side fetch to offer here.
+/// Attach and refresh are one idempotent path, so a refresh never captures less
+/// than an attach. The server fetches rather than accepting client facts, so the
+/// barcode guard below is enforced, not trusted. Asda only: Waitrose has no
+/// server-side fetch.
 pub async fn sync_listing(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
@@ -737,15 +723,11 @@ pub struct SubmitFacts {
     pub blob: String,
 }
 
-/// POST /api/products/id/{id}/facts → store facts a shop's product PAGE carries
-/// but its API doesn't: Asda's Brandbank nutrition, ingredients, allergens and
-/// dietary claims. The page sits behind Cloudflare, so a server fetch can't reach
-/// it (unlike `sync_listing`'s Algolia call); the client's hidden WebView fetches
-/// the raw blob and posts it here, and the SERVER parses it — the client asserts
-/// the raw page content, never the interpreted facts. Gated on the page's own EAN
-/// matching this product, the same identity discipline `sync_listing` enforces by
-/// barcode, so a mistaken or malicious caller can't staple another product's facts
-/// on. Returns the refreshed detail.
+/// POST /api/products/id/{id}/facts → store facts only a shop's product page
+/// carries (Asda's Brandbank blob). The page is behind Cloudflare, so the app's
+/// WebView posts the raw blob and the server parses it; the client never
+/// asserts interpreted facts. Refused unless the page's EAN is this product's.
+/// Returns the refreshed detail.
 pub async fn submit_facts(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,

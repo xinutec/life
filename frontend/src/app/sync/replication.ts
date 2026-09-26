@@ -8,18 +8,11 @@ import { PULL_INTERVAL_MS } from './cadence';
 import { isRecord, numberField } from '../shared/narrow';
 import { SyncSource, SyncStatus } from './sync-status';
 
-/** Auth guard for sync fetches. An expired session shows up two ways: our API
- *  returns 401/403 JSON, or a stale cookie 302-redirects to a login page that
- *  fetch follows to a 200 non-JSON body. Either way, surface "login required",
- *  tell the caller the session is gone, and throw so the cycle aborts without
- *  corrupting the queue. Must run BEFORE the generic !res.ok check so this
- *  friendly message wins over "pull failed: 401".
- *
- *  What counts as auth loss is decided by `classifyFetchResponse` — the shared
- *  boundary, NOT re-derived here — so the service worker's offline 504 is never
- *  a sign-out. An offline/server failure returns normally so the caller's
- *  generic !res.ok throw retries it quietly. Exported so the branching is
- *  unit-testable. */
+/** Auth guard for sync fetches, run before the generic `!res.ok` check. If
+ *  `classifyFetchResponse` calls it auth loss (a 401/403, or a stale cookie's
+ *  redirect to a non-JSON login page), report "login required", call `onAuthLost` and throw to
+ *  abort the cycle; offline or server failures (including the service
+ *  worker's 504) return, and the caller's generic throw retries them. */
 export function guardAuth(
   res: Response,
   syncError: WritableSignal<string | null>,
@@ -74,22 +67,13 @@ export function startHttpReplication<T>(opts: {
   // replication object to cancel.
   let authLost = false;
 
-  // ⚠ **`live: true` DOES NOT MEAN "keeps pulling".** RxDB subscribes to an
-  // ongoing pull only under `if (this.pull && this.pull.stream$ && this.live)`
-  // — with no stream it performs the first pull and then nothing, bar a local
-  // write or an explicit `reSync()`, so an open tab silently freezes.
+  // ⚠ `live: true` does not keep pulling: without `pull.stream$` RxDB pulls once
+  // and an open tab freezes. `reSync()` feeds the plugin's own
+  // `masterChangeStream$`, so a 'RESYNC' stream is the intended mechanism.
   //
-  // `reSync()` emits into `remoteEvents$`, which IS the internal
-  // `masterChangeStream$`, so a stream of 'RESYNC' is the mechanism the plugin
-  // intends rather than a timer bolted alongside it.
-  //
-  // ⚠ **`waitForLeadership` stays at its default of true.** With
-  // `multiInstance: true` that gates `start()` on winning the election, which
-  // is why a second tab pulls nothing at all — but leadership is also what
-  // stops N tabs pushing the same local changes at one endpoint. Curing a pull
-  // problem by turning it off would buy a push problem, paid for in the
-  // conflict handler. The leader polls and the shared IndexedDB carries the
-  // result to every tab.
+  // ⚠ Keep `waitForLeadership` true. Only the elected tab replicates (so a
+  // second tab pulls nothing itself), which stops N tabs pushing the same
+  // changes; the shared IndexedDB carries the leader's pulls to every tab.
   const heartbeat$: Observable<'RESYNC'> = merge(
     interval(opts.pollMs ?? PULL_INTERVAL_MS),
     // Coming back from offline should not wait out the rest of the interval.

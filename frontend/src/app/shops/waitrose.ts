@@ -55,15 +55,9 @@ function productJs(lineNumber: string): string {
     for (var i = 0; i < 40 && !window.__authToken; i++) await new Promise(function (r) { setTimeout(r, 250); });
     var tok = window.__authToken;
     if (!tok) {
-      // Names the likely cause, because the bare symptom reads as a broken
-      // extractor and sends the reader to the wrong place: a signed-out visitor
-      // is served a page that mints no Bearer at ALL (measured off the wire —
-      // zero requests carrying Authorization, on desktop and mobile UA alike).
-      //
-      // It does NOT claim which: the search page this runs on is identical
-      // signed in and signed out — both show "Sign in" and neither shows "Sign
-      // out", which lives on the home page only. A DOM probe here answers
-      // "signed out" for a signed-IN session, so there is nothing to test.
+      // Signed out, Waitrose mints no Bearer at all, which otherwise looks like a
+      // broken extractor. Only "usually": this search page looks the same
+      // signed in or out, so it can't be checked from here.
       AndroidShop.result(JSON.stringify({ ok: false,
         error: "the page minted no Authorization header — usually this browser is signed out of waitrose.com; log in by hand and retry" }));
       return;

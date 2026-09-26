@@ -47,20 +47,12 @@ const SHAPE: Record<ItemEvent, { icon: string; verb: string }> = {
   low: { icon: 'add_shopping_cart', verb: 'Running low' },
 };
 
-/** Everything that has happened to one stock row.
+/** Everything that has happened to one stock row. A dialog, not a bottom
+ *  sheet: it opens from the item sheet, and a second bottom sheet would dismiss
+ *  that one with its unsaved edits.
  *
- *  A dialog rather than a bottom sheet on purpose: it opens from the item
- *  sheet, and `MatBottomSheet` holds one sheet at a time — a second would
- *  dismiss the edit form under it and take any unsaved typing with it. The
- *  product picker opens from the same place for the same reason.
- *
- *  The AUDIT is read-only and stays that way: `item_history` is append-only,
- *  and an item's own numbers are edited in the sheet that opened this.
- *
- *  A purchase is not part of that audit. It rides in the same dialog because it
- *  is a fact about the item, but it is a separate list from a separate table,
- *  and it is money — a mistyped price has to be removable rather than merely
- *  regrettable. So purchases, and only purchases, can be deleted here. */
+ *  The audit (`item_history`, append-only) is read-only. Purchases ride along
+ *  as a separate list and can be deleted, so a mistyped price is removable. */
 @Component({
   selector: 'app-history-dialog',
   templateUrl: './history-dialog.html',

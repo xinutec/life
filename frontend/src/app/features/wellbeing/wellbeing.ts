@@ -48,18 +48,11 @@ const AXIS_X = CHART.padLeft - 6;
  *  fourteen names that nearly touch read as a smear rather than as labels. */
 const MIN_DAY_LABEL_W = 30;
 
-/** How many readings beyond each edge of the window feed the trend line.
- *
- *  Not zero: with none the line stops at the last visible dot, and the data looks
- *  like it ends where the screen does. Not one either — monotonePath builds the
- *  tangent at a point from the secants on *both* sides of it, so the curve's shape
- *  near the edge would keep changing as points scrolled in and out, and the line
- *  would visibly wobble under the finger. Two makes every drawn segment identical
- *  to what the whole history draws there, which trend-chart.spec.ts asserts.
- *
- *  Strictly, the monotonicity clamp is a left-to-right pass, so a cascade of
- *  clamps could in principle still reach in from further out. If wobble ever does
- *  show, widen this — don't go hunting for a bug in the curve. */
+/** Readings beyond each window edge that feed the trend line. With none the
+ *  line stops at the last visible dot; with one, monotonePath's tangents (built
+ *  from both sides of a point) change as points scroll in, and the edge wobbles.
+ *  Two draws what the whole history draws (trend-chart.spec.ts). If wobble ever
+ *  shows, widen this. */
 const HALO = 2;
 
 const r1 = (n: number): number => Math.round(n * 10) / 10;
@@ -67,15 +60,9 @@ const r1 = (n: number): number => Math.round(n * 10) / 10;
 /** The selectable trend windows, in days. */
 export type TrendWindow = 1 | 7 | 14;
 
-/** One metric's history: instants and readings, newest first, holding only the
- *  entries that actually recorded it.
- *
- *  Precomputed per data change so a scroll frame costs a binary search and a
- *  slice — never a walk of the whole history, and never a Date parse per entry
- *  per frame. Split per metric rather than shared, because the halo has to be two
- *  *readings* either side: most check-ins record no energy, so an index halo taken
- *  over all entries could contain no energy reading at all and the energy line
- *  would still stop at the window edge. */
+/** One metric's readings and instants, newest first, precomputed so a scroll
+ *  frame is a binary search and a slice. Per metric because the halo counts
+ *  that metric's readings; most check-ins record no energy. */
 interface Series {
   times: number[];
   tenths: number[];
@@ -154,20 +141,10 @@ export class Wellbeing {
       this.items();
       this.now.set(Date.now());
     });
-    // Seat the scroller where the model says the window is. After render, because
-    // the rail's width only exists once --pan-factor has been applied, and a
-    // scrollLeft written against the old width lands in the wrong place.
-    //
-    // Runs when the rail is RESIZED (a zoom change, or new data widening the
-    // range) or the pin flips — not on every pan, which is the user's to drive.
-    // Resizing is the case that bites: the window's end is a timestamp and
-    // survives a zoom change, so the charts still look right, while scrollLeft
-    // silently still refers to the old rail. Left alone, the next touch reads that
-    // stale position against the new width and teleports the window.
-    // A resize has happened and the scroller has not been put right yet. Set
-    // where the width changes, cleared by the re-seat below; `onPan` ignores
-    // scrolls while it holds, because a scroll arriving in that gap is
-    // describing the OLD rail and nobody chose the position it reports.
+    // Seat the scroller where the model says the window is, after render (the
+    // rail's width follows --pan-factor). Only on a resize or a pin flip, not on
+    // pans: after a zoom the window's end survives but scrollLeft refers to the
+    // old rail, and the next touch would teleport the window.
     effect(() => {
       this.panFactor();
       untracked(() => this.reseating.set(true));
@@ -240,15 +217,10 @@ export class Wellbeing {
   /** True between a rail resize and the re-seat that answers it. */
   private readonly reseating = signal(false);
 
-  /** The position last read from the rail or written to it; NaN matches nothing,
-   *  so the first scroll is never taken for an echo.
-   *
-   *  The rail holds whole pixels and one is ~50 MINUTES at a 14-day window on a
-   *  phone, so re-deriving the window's end from a position we ourselves wrote
-   *  loses up to half a pixel of time — and the caption names both edges as
-   *  loses up to half a pixel of time, which near local midnight reads as the
-   *  window jumping a day. Provenance, not a tolerance: ignoring small changes
-   *  would swallow the smallest real pan and still drift once several were made. */
+  /** The rail position last read or written (NaN at first), to recognise our
+   *  own writes' echoes. A pixel is ~50 minutes, so re-deriving the window from
+   *  a position we wrote could move it a day near midnight; a tolerance would
+   *  swallow small real pans instead. */
   private lastLeft = Number.NaN;
 
   /** Map the scroller's position onto the window's right edge.

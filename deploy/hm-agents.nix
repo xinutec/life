@@ -1,34 +1,21 @@
-# hm-agents.nix — home-manager module: life's emotion-suggestion worker (Mac mini).
+# home-manager module: life's emotion-suggestion worker on the Mac mini.
 #
-# Apply after editing (it is a PINNED flake input — the lock must be bumped):
-#   1. commit this change in ~/Code/life
-#   2. cd ~/.config/home-manager
-#   3. nix flake update life && home-manager switch --flake .#pippijn
+# Apply: commit here, then in ~/.config/home-manager
+#   nix flake update life && home-manager switch --flake .#pippijn
 #
-# WHY the worker lives on the Mac and dials out: the model is Apple-Silicon MLX,
-# and the fleet may not open connections toward this machine (one-way WireGuard
-# peer — a compromised server must not reach the archive). So life queues the
-# work and this polls for it. See tools/emotion_worker.py.
+# The model is Apple-Silicon MLX and the fleet cannot dial this Mac (one-way
+# WireGuard), so the worker polls life for jobs; see tools/emotion_worker.py.
+# Generation goes through recall's llm-host (127.0.0.1:8092), so the Mac holds
+# one copy of the model, not two.
 #
-# The model is NOT loaded here. recall's llm-host daemon holds the one copy on
-# this Mac (127.0.0.1:8092) and this worker asks it to generate — otherwise the
-# machine would hold two 4.3 GB models while also transcribing.
+# The agent runs a store path (nix/emotion-worker.nix; the worker is
+# stdlib-only), so only committed, pinned code can become the daemon. Logs go
+# to ~/Library/Logs/life: launchd opens stdio before any code runs, and a log
+# path inside a moved repo fails silently. The token stays out of the
+# world-readable store; the wrapper reads EMOTION_WORKER_TOKEN from
+# ~/.config/life/worker.env at runtime.
 #
-# The agent runs a STORE PATH (nix/emotion-worker.nix), not a script in the
-# working tree: what launchd runs is then whatever was committed and pinned in
-# the flake lock, and an uncommitted edit in ~/Code/life cannot become the
-# running daemon. Possible because the worker imports only the standard library.
-#
-# Logs go to ~/Library/Logs/life: launchd opens the stdio paths before any code
-# runs, so a log path inside a repo that moves takes the agent down silently.
-#
-# The token is NOT in the nix store (it would be world-readable there): the
-# wrapper reads ~/.config/life/worker.env at runtime, holding
-# EMOTION_WORKER_TOKEN=… matching the server's.
-#
-# home-manager writes each plist read-only into ~/Library/LaunchAgents with no
-# native comment, so a provenance `Comment` key points back here. Do NOT
-# hand-edit the generated plists.
+# The generated plists are read-only; their `Comment` key points back here.
 { pkgs, ... }:
 
 let

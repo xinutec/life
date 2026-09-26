@@ -1,27 +1,21 @@
 //! The pending half of a Nextcloud login, carried in a signed cookie.
 //!
-//! **Why not the `state` parameter alone.** When the browser holds no Nextcloud
-//! session, NC's `oauth2/authorize` does not redirect back to us — it bounces to its
-//! own Login Flow, and drops every query parameter on the way:
+//! **Why not `state` alone.** From a browser with no NC session, `oauth2/authorize`
+//! detours through NC's Login Flow, which drops the query, and the callback then
+//! arrives with an empty `state=`:
 //!
 //! ```text
 //! GET …/oauth2/authorize?client_id=…&redirect_uri=…&state=f360a3be…
 //!  → 303 …/login/flow?providedRedirectUri=&clientIdentifier=…
 //! ```
 //!
-//! After the sign-in it returns to the registered callback with `state=`, **empty**,
-//! so a server that looks the pending login up by `state` cannot complete a login
-//! from a cookie-less browser at all.
+//! The cookie binds the login to the browser that started it, which is what
+//! `state` proves; `state` is still checked whenever NC returns it. Being signed,
+//! the cookie also survives a pod restart mid-login.
 //!
-//! So the pending login travels in a cookie of our own. That binds it to the browser
-//! that started the login, which is what `state` proves; `state` is still sent, and
-//! checked whenever NC gives it back. Being signed, it also survives a pod restart
-//! mid-login.
-//!
-//! Residual risk, accepted deliberately: when NC returns an empty `state` the cookie
-//! is the only binding, so a login-CSRF would become possible for someone who can both
-//! reach this (VPN-only) host and land a callback in the victim's browser inside the
-//! 10-minute window. The alternative is a login that cannot be performed at all.
+//! Accepted risk: with an empty `state` the cookie is the only binding, so login
+//! CSRF needs someone on the VPN who lands a callback in the victim's browser
+//! within the 10-minute window. The alternative is no login at all.
 
 use chrono::{DateTime, Duration, Utc};
 use rand::Rng;

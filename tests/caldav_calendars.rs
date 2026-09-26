@@ -1,15 +1,8 @@
-//! Picking the calendar a shop trip goes in, from what the server says.
+//! Picking the calendar a shop trip goes in, from Nextcloud-shaped `PROPFIND`
+//! answers (namespace prefixes, `<propstat>` blocks, 404s for missing props).
 //!
-//! The fixtures are shaped like Nextcloud's own `PROPFIND` answers — namespace
-//! prefixes, `<propstat>` blocks, 404s for props a collection doesn't have —
-//! because every one of those is something a reader written against a tidier
-//! imagined XML would get wrong.
-//!
-//! The case that matters most: this app *reads a subscribed bin calendar*. If
-//! the household subscribes to that feed in Nextcloud, it appears in the same
-//! list as the real calendars and answers "yes, I am a calendar". Writing a
-//! shop trip into it would be writing to a read-only mirror of the council's
-//! data.
+//! The key case: a subscribed bin calendar lists like a real one, and a trip
+//! must never be written into that read-only mirror.
 
 use life::calendar::caldav::writable_from;
 

@@ -56,16 +56,11 @@ impl From<MetaRow> for Product {
     }
 }
 
-/// The metadata columns every getter selects (no image bytes).
+/// The metadata columns every getter selects (no image bytes). A macro so
+/// `concat!` can append each WHERE, since sqlx takes only `&'static str`.
 ///
-/// A macro rather than a `const`, because sqlx 0.8 accepts only `&'static str`
-/// SQL — its injection guard — and a macro expands to a literal that `concat!`
-/// can extend with each getter's own WHERE, as `inventory::repo`'s
-/// `item_select!` does.
-///
-/// ⚠ `get_by_source_external` does NOT use this, and cannot: it joins
-/// `product_listings`, which carries its own `id`, `source`, `external_id`,
-/// `brand` and `quantity_label`, so every column there must be alias-qualified.
+/// ⚠ `get_by_source_external` can't use it: its join with `product_listings`
+/// shares column names, so every column there is alias-qualified.
 macro_rules! product_select {
     () => {
         "SELECT id, barcode, external_id, name, brand, quantity_label, source, \
@@ -218,17 +213,10 @@ pub async fn upsert_listing(
     Ok(())
 }
 
-/// Fill the canonical display name from the product's listings, but only when it
-/// has none yet: the highest-preference source (see source::name_rank) with a
-/// non-blank raw name seeds it. Ties within a source go to its oldest listing
-/// (listings_for order).
-///
-/// Fill-if-empty, never silent-overwrite: once a product has a name, a later
-/// source with a different (or "better") title does NOT flip it — that
-/// disagreement is surfaced as a divergence to approve, not applied behind your
-/// back. A blank canonical name (whitespace only, or genuinely empty) counts as
-/// unset. Callers still run this LAST on a listing-touching path so a
-/// freshly-created product gets seeded from the best source present.
+/// Seed an empty (or blank) canonical name from the listings: the best source
+/// by `source::name_rank` with a non-blank name, oldest listing on a tie. Never
+/// overwrites; a later disagreeing title surfaces as a divergence to approve.
+/// Run it last on a listing-touching path, so a new product gets the best name.
 pub async fn refresh_canonical_name(pool: &MySqlPool, product_id: ProductId) -> Result<()> {
     let current: Option<(Option<String>,)> =
         sqlx::query_as("SELECT name FROM products WHERE id = ?")
@@ -957,16 +945,11 @@ async fn set_ingredients_in(
     Ok(())
 }
 
-/// Replace THIS SOURCE's allergen set, leaving other sources' rows alone (0033).
-/// The incoming set is authoritative for this source (an empty set clears its
-/// allergens); `facts_for` unions every source on read.
+/// Replace this source's allergen set (empty clears it), leaving other sources'
+/// rows alone; `facts_for` unions them on read.
 ///
-/// Atomic, and that is the whole point: the delete and the re-inserts are one
-/// transaction, so a failure part-way through cannot leave a source declaring
-/// FEWER allergens than it does. Since `facts_for` unions the sources, a half-
-/// applied replace reads as a product that simply doesn't contain the allergen —
-/// silence is not a "free from", and this is the one table where getting that
-/// wrong is a health question rather than a data-quality one.
+/// One transaction: a half-applied replace would read as the product not
+/// containing an allergen, a health error rather than a data-quality one.
 pub async fn replace_allergens(
     pool: &MySqlPool,
     product_id: ProductId,

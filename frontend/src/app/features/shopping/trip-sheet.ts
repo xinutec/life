@@ -27,16 +27,10 @@ function nextHour(from: Date): Date {
   return d;
 }
 
-/** Plan a shop trip: which shop, when, and what to bring home.
- *
- *  The event goes to Nextcloud Calendar and nowhere else — life keeps no trip
- *  of its own (docs/design/overview.md §5), so this sheet is a one-way door and
- *  the confirmation names the calendar it landed in.
- *
- *  The Buy list rides along in the description. It is sent from the SCREEN
- *  rather than read on the server because the list is local-first: the phone's
- *  copy can be ahead of the sync, and the event is read in a shop, where being
- *  a sync behind is the whole failure. */
+/** Plan a shop trip. The event goes only to Nextcloud Calendar
+ *  (docs/design/overview.md §5); the confirmation names the calendar. The Buy
+ *  list goes in the description from the screen, not the server, because the
+ *  phone's local-first copy may be ahead of the sync. */
 @Component({
   selector: 'app-trip-sheet',
   templateUrl: './trip-sheet.html',

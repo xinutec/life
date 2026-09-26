@@ -52,17 +52,13 @@ export interface SyncedCollectionConfig<T> {
   migrationStrategies?: MigrationStrategies;
 }
 
-/** The shared spine of every local-first synced store: one on-device RxDB
- *  collection as the source of truth, background HTTP replication, and the
- *  reactive/offline read + optimistic write grammar. A concrete store supplies
- *  its {@link SyncedCollectionConfig} via {@link config} and exposes a typed
- *  reactive list through {@link liveQuery}; the patch / remove / revive / undo
- *  mechanics are inherited so they can't drift between collections.
+/** Base of every local-first synced store: an RxDB collection as the source of
+ *  truth, background HTTP replication, and the shared patch / remove / revive /
+ *  undo mechanics. A subclass supplies {@link config} and reads through
+ *  {@link liveQuery}.
  *
- *  The `collection` promise is initialised on a microtask (`Promise.resolve()
- *  .then(...)`) so `config()` is read AFTER every subclass field initialiser has
- *  run — a config that references injected subclass state (e.g. the
- *  ConflictReporter) is fully wired by the time it's evaluated. */
+ *  `collection` is created on a microtask so `config()` runs after subclass
+ *  field initialisers, and may use injected subclass state. */
 @Injectable()
 export abstract class SyncedStore<T extends SyncDoc> {
   /** null = ok; a string = a sync problem to surface (e.g. login required). */

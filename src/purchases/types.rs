@@ -63,16 +63,9 @@ pub struct Purchase {
     pub currency: String,
     pub quantity: Option<f64>,
     pub unit: Option<String>,
-    /// DERIVED, never stored: what this works out to per kg / per litre / per
-    /// item, in minor units. Computed on read from `amount_minor` and the pack,
-    /// so it cannot drift from them the way a second stored column would.
-    ///
-    /// `None` when the pack is unknown or its unit is one `packsize::parse`
-    /// refuses — an unreadable unit means the rate is unknown, and inventing a
-    /// dimension for it would be worse than saying nothing.
-    ///
-    /// Rounded to the nearest minor unit. It is a RATE for comparing packs, not
-    /// an amount anybody paid; the exact figure is `amount_minor`.
+    /// Derived on read, never stored: minor units per kg / litre / item, rounded.
+    /// A rate for comparing packs, not an amount paid. `None` when the pack or
+    /// its unit is unknown to `packsize::parse`.
     #[sqlx(default)]
     #[ts(type = "number | null")]
     pub unit_amount_minor: Option<i64>,

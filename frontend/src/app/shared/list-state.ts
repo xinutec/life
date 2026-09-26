@@ -3,20 +3,15 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 
-/** The loading / error / empty triad every list screen shows before its data.
- *  One place for the spinner, the retry-on-error line and the empty-state line,
- *  so the list screens stop each re-inventing (and mis-styling) them.
- *
- *  It renders ONLY the status line — the list itself stays in the host template
- *  and is naturally empty while data is loading or absent. Place it above the
- *  list:
+/** The loading / error / empty status line above a list; the list itself stays
+ *  in the host template.
  *
  *    <app-list-state [loading]="!loaded()" [empty]="items().length === 0"
  *                    emptyText="No items yet." emptyIcon="inventory_2" />
  *    <mat-list> … </mat-list>
  *
- *  HTTP-backed screens that can fail to load pass [error] and handle (retry);
- *  RxDB-backed screens (which can't fail to load) omit both. */
+ *  HTTP-backed screens pass [error] and handle (retry); RxDB-backed ones, which
+ *  cannot fail to load, omit both. */
 @Component({
   selector: 'app-list-state',
   templateUrl: './list-state.html',

@@ -1,14 +1,10 @@
 #!/usr/bin/env nix-shell
 #!nix-shell -i bash -p mariadb
-# Local dev MariaDB for life. Data lives in .dev/ (gitignored). Idempotent:
-# initialises the datadir on first run, then serves in the foreground on
-# 127.0.0.1:3307. Creates the `life` database + a `life`/`life` dev account via
-# an init file each boot.
+# Local dev MariaDB on 127.0.0.1:3307, data in .dev/ (delete to reset), with a
+# `life`/`life` account on database `life`. Runs in the foreground.
 #
 #   ./scripts/dev-db.sh
 #   DATABASE_URL=mysql://life:life@127.0.0.1:3307/life
-#
-# Ctrl-C to stop. Delete .dev/ to reset.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

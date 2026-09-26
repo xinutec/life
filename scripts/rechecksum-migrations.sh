@@ -1,24 +1,15 @@
 #!/usr/bin/env bash
 # Emit the SQL that re-blesses migrations whose COMMENTS changed.
 #
-# `sqlx::migrate!()` stores a SHA-384 of each migration file and compares it on
-# every boot, so editing an already-applied migration — even one comment
-# character — makes the app refuse to start against a database that ran it.
-# That is the right default: it is what stops someone editing the SQL of a
-# migration that has already shaped a real database.
+# sqlx stores a SHA-384 of each applied migration and refuses to boot when the
+# file differs, which also freezes the reasoning in migration headers. This
+# re-blesses a migration only when its SQL is unchanged, and refuses otherwise.
 #
-# But it also freezes the prose, and migration headers in this repo carry the
-# reasoning for the schema. This script is the supported way to edit that prose:
-# it re-blesses a migration ONLY when the SQL is untouched, and refuses
-# otherwise, so the guard sqlx provides is narrowed rather than bypassed.
-#
-# Usage:
 #   scripts/rechecksum-migrations.sh [ref]      # ref defaults to HEAD
 #
-# It writes UPDATE statements to stdout and explanation to stderr. Apply them to
-# EVERY database that already ran the migration — production and each dev
-# database — in the same breath as deploying the matching image. A database and
-# a binary that disagree will not boot.
+# UPDATEs go to stdout, explanation to stderr. Apply them to every database
+# that ran the migration (prod and dev) together with deploying the image: a
+# database and a binary that disagree will not boot.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 

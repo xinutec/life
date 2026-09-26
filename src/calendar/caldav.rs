@@ -1,20 +1,11 @@
-//! CalDAV — the one way life writes into Nextcloud.
+//! CalDAV: the one way life writes into Nextcloud, as an ordinary calendar
+//! client rather than touching NC's database (docs/design/overview.md §2b).
+//! It authenticates with the Login Flow v2 app password; the identity OAuth2
+//! token cannot reach these endpoints.
 //!
-//! "life never writes to NC's database" is read as *no schema surgery*: CalDAV
-//! is the supported client protocol, the same one DAVx⁵ and every phone speak,
-//! so a `PUT` here is a normal calendar client doing a normal thing
-//! (docs/design/overview.md §2b).
-//!
-//! Authentication is HTTP Basic with the app password from Login Flow v2. The
-//! identity OAuth2 token cannot reach these endpoints at all, which is why
-//! there are two Nextcloud credentials in this app rather than one.
-//!
-//! ## Why there is a PROPFIND before the PUT
-//!
-//! The calendar *home* is a known path, but which collection in it takes events
-//! is not: `personal` may be renamed or deleted, and a read-only
-//! **subscription** (the bins feed, say) lives there too and looks like a
-//! calendar until you write to it.
+//! A PROPFIND precedes each PUT because the writable collection isn't fixed:
+//! `personal` may be renamed or deleted, and read-only subscriptions (the bins
+//! feed) live in the same home and look writable until written to.
 
 use anyhow::{Context, Result, anyhow};
 use quick_xml::events::Event as XmlEvent;
@@ -165,15 +156,8 @@ fn propfind() -> Method {
 
 /// The calendar home for one account: `<base>/remote.php/dav/calendars/<login>/`.
 ///
-/// A free function, and public, for the reason [`writable_from`] is one: it is
-/// the part with a rule in it, so it should be checkable without a Nextcloud.
-///
-/// The login is pushed as a SEGMENT rather than formatted into a string, so
-/// `url` percent-encodes it. That matters: an email-style login carries an `@`,
-/// some carry a space, and a `/` in one has to become `%2F` instead of opening
-/// a new path segment.
-///
-/// ⚠ Any path already on `base` is REPLACED, so a Nextcloud installed under a
+/// The login is pushed as a path segment so it is percent-encoded (`@`, spaces,
+/// and `/` as `%2F`). ⚠ Any path on `base` is replaced, so a Nextcloud under a
 /// sub-path is not supported.
 pub fn calendar_home(base: &str, login: &str) -> Result<url::Url> {
     let mut url = url::Url::parse(base).context("parsing the Nextcloud base URL")?;
@@ -393,16 +377,9 @@ fn mark(
     }
 }
 
-/// Which calendar a trip goes in when the account has several.
-///
-/// `personal` first — the collection Nextcloud makes for every account, and the
-/// one a person with one calendar means without being asked. Otherwise the
-/// first by name, which is arbitrary but *stable*: the same account picks the
-/// same calendar every time, so the answer we report is worth reading once.
-///
-/// Choosing rather than asking is a deliberate v1: the reply names the calendar
-/// it used, which turns a wrong guess into something you can see and say so
-/// about, rather than a setting you have to find before the feature works.
+/// Which calendar a trip goes in: `personal` (every NC account has one), else
+/// the first by name, arbitrary but stable. The reply names the calendar used,
+/// so a wrong pick is visible.
 fn choose(mut found: Vec<CalendarRef>) -> Option<CalendarRef> {
     found.sort_by_key(|c| c.name.to_lowercase());
     let personal = found.iter().position(|c| slug_of(&c.href) == "personal");

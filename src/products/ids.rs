@@ -1,24 +1,14 @@
-//! The identifiers the product domain is keyed on, as types rather than
-//! `String`s and `u64`s.
+//! The product domain's identifiers as types: each shape is validated once, in
+//! `FromStr`, and `ProductId` cannot be passed as a `ListingId`. A value is
+//! well-formed downstream, so [`Source::listing_url`](super::source::Source::listing_url)
+//! and the Open Food Facts client may splice it into outbound URLs.
 //!
-//! * **One rule, one place.** Each shape is validated once, in `FromStr`, and
-//!   every boundary calls it.
-//! * **Same shape, different meaning.** `ProductId` and `ListingId` are both row
-//!   numbers; as distinct types, passing one for the other cannot compile.
+//! `shopping_items.barcode` is deliberately not a [`Barcode`]: it is whatever the
+//! phone scanned, a hint on a synced row, and failing validation would strand an
+//! offline edit. Catalog identity is `shopping_items.product_id`.
 //!
-//! A value of these types is well-formed everywhere downstream, which is why
-//! [`Source::listing_url`](super::source::Source::listing_url) and the Open Food
-//! Facts client may splice them straight into outbound URLs.
-//!
-//! `shopping_items.barcode` is deliberately **not** one of these. It is whatever
-//! the phone scanned, carried on a synced row for the client's own use — a hint,
-//! not a catalog key — and a sync push that fails validation would strand an
-//! offline edit. Catalog identity goes through `shopping_items.product_id`.
-//!
-//! On the frontend each of these becomes a named alias (`type Barcode = string`)
-//! rather than a bare `string`/`number`. TypeScript aliases are structural, so
-//! that is documentation and not a guarantee — the guarantee is here, on the side
-//! that constructs them.
+//! The frontend aliases (`type Barcode = string`) are documentation only; the
+//! guarantee is here, where values are constructed.
 
 use std::fmt;
 use std::str::FromStr;

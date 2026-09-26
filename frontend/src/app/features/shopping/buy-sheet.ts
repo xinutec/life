@@ -29,14 +29,9 @@ export interface BuyPrices {
 const LAST_SHOP_KEY = 'life.lastShop';
 
 /**
- * Ask where the shopping happened and what each thing cost, on the way to
- * putting it in the cupboard.
- *
- * Everything here is optional, deliberately. Marking things bought is the
- * gesture that empties the list, and it happens standing in a kitchen with bags
- * to unpack — a step that demands a price for each row before it will let the
- * list empty would be dismissed once and then routed around forever. So "Add
- * without prices" is a first-class button and not a cancel.
+ * Where the shopping happened and what each thing cost, on the way to the
+ * cupboard. All optional, and "Add without prices" is a first-class button:
+ * a step that demanded prices while unpacking would be routed around.
  */
 @Component({
   selector: 'app-buy-sheet',

@@ -16,22 +16,13 @@ use crate::wellbeing::suggest::{
 };
 use crate::wellbeing::suggest_store;
 
-/// What the picker should show for this note, and whether a better answer is on
-/// its way.
+/// Suggestions for this note, from what is already known; generation happens
+/// out of band on the Mac (`suggest_store`), so this never waits on a model.
+/// Returns the set for exactly this wording, else the set for an earlier wording
+/// marked `stale` (notes drift, and close beats blank), else nothing.
 ///
-/// The reply is assembled from what is already known, never by waiting on a
-/// model: generation happens on the Mac, out of band (see `suggest_store`). So
-/// there are three honest answers, and this returns whichever applies:
-///
-/// - suggestions computed from exactly this wording — show them;
-/// - suggestions computed from an earlier wording — show them marked `stale`,
-///   because a note usually only drifts, and something close beats a blank space
-///   while the new set is worked out;
-/// - nothing yet — show nothing.
-///
-/// `pending` is set only when a worker has actually been seen recently. A picker
-/// that claimed to be thinking with no model behind it would be lying, which is
-/// worse than offering no suggestions at all.
+/// `pending` is set only if a worker was seen recently, so the picker never
+/// claims to be thinking with no model behind it.
 pub async fn suggest_emotions(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,

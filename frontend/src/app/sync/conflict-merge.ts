@@ -82,22 +82,17 @@ function logMergeTrace(t: MergeTrace): void {
   });
 }
 
-/** Build a field-level 3-way-merge conflict handler for a synced collection.
+/** A field-level 3-way-merge conflict handler for a synced collection. A
+ *  conflict is one row changed on two devices; diff each side against the base
+ *  this device last synced:
  *
- *  A conflict means the same row changed on two devices while one was offline.
- *  A conflict means the same row changed on two devices while one was offline.
- *  Diff against the assumed base (the state this device last synced):
+ *  - only I changed it → mine; only they did → theirs;
+ *  - both did → mine (the push is the latest intent), and the losing value goes
+ *    to `onConflicts` for the conflict log.
  *
- *  - a field only I changed → mine;
- *  - a field only they changed → theirs;
- *  - a field we BOTH changed → mine (the user pushing is the latest intent),
- *    and the losing value is handed to `onConflicts` for the conflict log —
- *    decided, but never silently discarded.
- *
- *  Deletes: a server tombstone stands (the server is set-only — a push can't
- *  clear it; the trash restore is the one undelete), and a local delete stands
- *  over remote edits. Identity/server fields (ulid, id, rev) always come from
- *  the real master. */
+ *  A server tombstone stands (a push can't clear it; trash restore is the one
+ *  undelete), and a local delete beats remote edits. `ulid`, `id` and `rev`
+ *  always come from the master. */
 export function makeConflictHandler<
   T extends { rev: number },
   C = Omit<T, 'ulid' | 'id' | 'rev'>,

@@ -1,17 +1,10 @@
-//! Our memory of the shops' catalogues — every listing a shop query ever showed
-//! us, kept so the next lookup can be answered without asking the shop again.
+//! Every listing a shop query has shown us, so later lookups need not ask the
+//! shop again. Each query yields many barcode → shop id facts, so lookups
+//! converge on zero outbound traffic.
 //!
-//! A shop query returns far more than the product that prompted it — each hit a
-//! durable barcode → shop id fact — so lookups converge on zero outbound traffic.
-//!
-//! This is NOT the catalogue. `products`/`product_listings` are the things in
-//! your life; these are things a shop happens to sell that we've laid eyes on.
-//! A row graduates into a real `product_listings` row only when it's matched to
-//! a product and attached (see routes::products::sync_listing).
-//!
-//! Nothing here refreshes itself. A cached row is served until you press
-//! refresh — shop data going quietly stale beats a price you didn't ask for
-//! being silently wrong.
+//! Not the catalogue: a row becomes a `product_listings` row only when attached
+//! to a product (`routes::products::sync_listing`). Rows are served until the
+//! user refreshes; stale shop data beats an unrequested fetch.
 
 use anyhow::Result;
 use serde::Deserialize;
@@ -56,17 +49,10 @@ impl CachedListing {
     }
 }
 
-/// One listing a client's WebView saw, as it reports it.
-///
-/// Exists because a bot-walled shop (Waitrose) can only be queried by the phone:
-/// the server can't see what the phone saw, so the phone hands it back and the
-/// memory fills exactly as it does for the shops the server can query itself.
-/// Everything but the shop's own id is optional — a search hit knows a name and
-/// a lineNumber, and only a product fetch learns the barcode.
-///
-/// Its fields are plain strings, deliberately: this is what the phone *said*,
-/// not yet something we believe. `validate_seen` is where it becomes typed, and
-/// the pair of structs is that boundary made visible.
+/// One listing a client's WebView saw, as reported. Bot-walled shops (Waitrose)
+/// can only be queried by the phone, which hands back what it saw. Only the
+/// shop's id is required: a search hit lacks the barcode a product fetch learns.
+/// Plain strings, because it is untrusted until [`validate_seen`] types it.
 #[derive(Debug, Clone, PartialEq, Deserialize, TS)]
 #[ts(export)]
 pub struct SeenListing {
@@ -89,15 +75,10 @@ pub const MAX_SEEN: usize = 50;
 
 /// Turn a client's report into cache rows, or say why it can't be trusted.
 ///
-/// Rejects (whole batch) what would poison the identity index: an unknown shop,
-/// a malformed shop id, or a barcode that isn't a barcode — the `(source,
-/// barcode)` lookup is the one thing this table exists to answer, so a wrong
-/// row there is worse than no row.
-///
-/// Drops (row keeps its identity) an `image_url` from a host the source isn't
-/// allowed to serve pictures from: the picture is a nicety, the identity is the
-/// point, and losing a hunt over a CDN rename would be the wrong trade. Dropping
-/// is logged by the caller rather than done silently.
+/// The whole batch is rejected for an unknown shop, a malformed shop id or a bad
+/// barcode, since `(source, barcode)` identity is what this table is for. An
+/// `image_url` from a host the source may not serve pictures from is dropped
+/// (the caller logs it) and the row kept.
 pub fn validate_seen(source_id: &str, seen: &[SeenListing]) -> Result<Vec<CachedListing>, String> {
     // The untrusted boundary: `source_id` is a path segment a client chose, so
     // this is where a string becomes a `Source` and stops being one.

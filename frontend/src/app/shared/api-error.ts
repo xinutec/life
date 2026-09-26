@@ -30,18 +30,11 @@ export function classifyApiError(e: unknown): ApiFailure {
   return { kind: 'offline' };
 }
 
-/** Classify a raw `fetch()` Response into the SAME taxonomy as classifyApiError —
- *  one vocabulary for both HTTP worlds, so the fetch side can never invent its
- *  own (divergent) idea of what a failure means. `ok` means "carry on and parse
- *  the body". Auth loss is only ever a *positive* signal: a straight 401/403, a
- *  followed redirect (stale cookie → login page), or a 2xx body that isn't JSON
- *  (the login page itself, served as a 200).
- *
- *  A non-ok non-JSON response is NOT an auth signal. The service worker answers
- *  every fetch it can't reach the network for with a bodiless synthetic 504 —
- *  that's "offline" — and a downed backend serves the ingress's HTML error page.
- *  Conflating those with "logged out" would throw offline users onto the
- *  sign-in screen and erase their cached identity. */
+/** Classify a raw `fetch()` Response in classifyApiError's taxonomy; `ok`
+ *  means parse the body. Auth loss needs a positive signal: 401/403, a followed
+ *  redirect, or a 2xx non-JSON body (the login page). A non-ok non-JSON
+ *  response is not one: the service worker's offline 504 and the ingress's
+ *  error page must not sign offline users out. */
 export function classifyFetchResponse(res: Response): { kind: 'ok' } | ApiFailure {
   if (res.status === 401 || res.status === 403) return { kind: 'unauthenticated' };
   const json = (res.headers.get('content-type') ?? '').includes('application/json');

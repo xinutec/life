@@ -37,21 +37,12 @@ pub struct ItemFile {
 /// the wrong thing here.
 pub const MAX_FILE_BYTES: usize = 10 * 1024 * 1024;
 
-/// What may be attached, by SNIFFED bytes.
-///
-/// ⚠ Deliberately no `image/svg+xml`, for the reason the product-image
-/// allowlist gives: SVG can carry script, these are served back on our own
-/// origin, and an SVG upload would be stored XSS for anyone opening the file
-/// URL. The same argument applies to anything else with an executable
-/// interpretation, which is why this is an allowlist and not a denylist.
-///
-/// PDF is here and is the reason this list exists separately from the image
-/// one — a manual is a PDF, and that is the whole point of per-item files.
+/// What may be attached, by sniffed bytes. An allowlist, because files are served
+/// from our origin and anything executable (SVG) would be stored XSS; it takes
+/// PDF and HEIC, for receipts and iPhone photos.
 pub fn sniff_mime(bytes: &[u8]) -> Option<&'static str> {
-    // Attachments take everything the sniffer can name: PDF because a receipt
-    // often is one, HEIC because that is what an iPhone photographs one as.
-    // Written out rather than `.map(Media::mime)` so a new variant has to be
-    // decided here instead of joining silently.
+    // Exhaustive rather than `.map(Media::mime)`, so a new variant must be
+    // decided here.
     let media = media::sniff(bytes)?;
     match media {
         Media::Jpeg

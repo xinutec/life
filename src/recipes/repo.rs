@@ -214,18 +214,12 @@ pub async fn update_recipe(
     get_recipe(pool, user_id, id).await
 }
 
-/// Cook it: take every ingredient's amount out of the cupboard, and say what
-/// happened to each line.
-///
+/// Cook it: take every ingredient out of the cupboard and report each line.
 /// `Ok(None)` = no such recipe for this user.
 ///
-/// The plan is computed from a plain read and then applied as **deltas**
-/// (`GREATEST(quantity - ?, 0)`) inside one transaction, rather than as the
-/// absolute amounts it worked out. Two reasons: a delta can't be wrong by more
-/// than it takes if something changed under us in the millisecond between, and
-/// the floor means no arithmetic here can leave a negative amount of flour in a
-/// cupboard. The returned report is the plan — what it *intended* — which is
-/// what the cook needs to read.
+/// The plan comes from a plain read and is applied in one transaction as
+/// floored deltas (`GREATEST(quantity - ?, 0)`), so a concurrent change can't
+/// make it take more than planned or go negative. The report is the plan.
 pub async fn cook_recipe(
     pool: &MySqlPool,
     user_id: &str,

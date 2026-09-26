@@ -1,12 +1,7 @@
-# Packages the emotion-suggestion worker so launchd runs a fixed store path
-# instead of a script inside the working tree. Referenced by
-# deploy/hm-agents.nix and exposed as `packages.<system>.emotion-worker`.
-#
-# The worker asks recall's llm-host to generate, so it imports only the
-# standard library: the runtime is just a python3.
-#
-# The token deliberately does NOT come from the store (which is world-readable):
-# the wrapper reads ~/.config/life/worker.env at runtime.
+# The emotion-suggestion worker as a store path for launchd (see
+# deploy/hm-agents.nix); `packages.<system>.emotion-worker`. It is stdlib-only,
+# so the runtime is plain python3. The token is read at runtime from
+# ~/.config/life/worker.env, never the world-readable store.
 { python3, writeShellApplication }:
 
 writeShellApplication {

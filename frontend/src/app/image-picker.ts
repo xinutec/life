@@ -7,18 +7,10 @@ function firstImage(files: Iterable<File> | undefined): File | undefined {
   return Array.from(files ?? []).find((f) => f.type.startsWith('image/'));
 }
 
-/** Turns its host element into a one-tap image picker.
- *
- *  - **Click / Enter / Space** opens the native file dialog with
- *    `accept="image/*"` — on a phone that's Camera / Photo Library / Files in a
- *    single tap, which is the mobile stand-in for "paste an image".
- *  - **Paste** (Cmd/Ctrl+V while the host is focused) takes an image off the
- *    clipboard.
- *  - **Drag-and-drop** an image file onto the host.
- *
- *  Emits the chosen `Blob` via `imagePicked`; non-images and oversized files are
- *  rejected up front through `pickError`. The host gets button semantics so it's
- *  keyboard-reachable and screen-reader announced. */
+/** Turns its host into a one-tap image picker with button semantics: click,
+ *  Enter or Space opens the file dialog (camera, photos or files on a phone);
+ *  paste and drag-and-drop also work. Emits a `Blob` via `imagePicked`;
+ *  non-images and oversized files go to `pickError`. */
 @Directive({
   selector: '[appImagePicker]',
   exportAs: 'imagePicker',

@@ -1,19 +1,14 @@
 #!/usr/bin/env node
-// Local preview for iterating on scenes/house.json — the 3D house model.
+// Local preview for editing scenes/house.json: serves the dev frontend build,
+// fakes /api/me, re-reads the scene on every /api/house request and answers the
+// rest of /api with []. No DB, backend or auth; edit and reload.
 //
-// Serves the dev (no-SW) frontend build, fakes /api/me (so the app shows
-// logged-in) and serves /api/house by reading scenes/house.json FRESH every
-// request — so editing the scene + reloading shows the change instantly. No DB,
-// no backend, no auth. Everything else under /api returns [] (the House tab
-// ignores it).
+//   1. (cd frontend && pnpm run build)              # dev config, no SW
+//   2. node scripts/house-preview.mjs [port]        # default 4280
+//   3. open http://<this-machine>:<port>/house      # reachable from the phone
 //
-//   1. Build the dev frontend once:  (cd frontend && pnpm run build)  # dev config, no SW
-//   2. node scripts/house-preview.mjs [port]                          # default 4280
-//   3. Open http://<this-machine>:<port>/house                        # LAN-reachable → phone
-//
-// Red-estimate convention while measuring collaboratively: give a *guessed*
-// furniture box "color": "#ff5252" (bright red) and swap it to the real colour
-// once measured. `?red=14,5` on /house tints those WALLS (global index) red too.
+// Give a guessed furniture box "color": "#ff5252" until it is measured.
+// `?red=14,5` on /house tints those walls (global index) red too.
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';

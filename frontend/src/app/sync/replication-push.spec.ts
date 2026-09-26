@@ -11,17 +11,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { makeConflictHandler } from './conflict-merge';
 
-/** Every local field edit must be pushed.
- *
- *  RxDB's replication upstream asks the conflict handler
- *  `isEqual(assumedMaster, current, 'upstream-check-if-equal')` whether a local
- *  doc still needs pushing — `false` queues the push. Revs are server-minted, so
- *  a local edit changes neither `rev` nor `_deleted`; a handler comparing only
- *  those drops every field edit silently, while inserts and deletes still sync.
- *
- *  A wrong *contract* is invisible to unit tests of the handler, so this drives
- *  the REAL replication protocol and asserts an `incrementalPatch` of a content
- *  field reaches the push handler. */
+/** Every local field edit must be pushed. RxDB asks the conflict handler's
+ *  `isEqual(assumedMaster, current, 'upstream-check-if-equal')` whether to push,
+ *  and a local edit changes neither `rev` nor `_deleted`, so a handler comparing
+ *  only those silently drops field edits. Only the real protocol shows that, so
+ *  this drives it. */
 
 interface Doc {
   ulid: string;

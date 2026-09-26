@@ -116,15 +116,8 @@ export class ItemSheet {
     this.form.update((f) => ({ ...f, ...p }));
   }
 
-  /**
-   * A category picked while the expiry box is still empty also picks how that
-   * box asks the question.
-   *
-   * Medicine is printed MM/YYYY and nothing else, so a date picker makes
-   * somebody choose a day that is not on the packet; everything else in a
-   * cupboard carries a full date. Only while the field is UNTOUCHED — a date
-   * already typed is an answer, and re-categorising must not quietly widen it.
-   */
+  /** While expiry is empty, the category picks its precision: month for
+   *  medication (packs print MM/YYYY), day otherwise. */
   chooseCategory(category: ItemCategory): void {
     if (this.form().expiry != null) {
       this.patch({ category });
@@ -153,18 +146,10 @@ export class ItemSheet {
     });
   }
 
-  /**
-   * Whether the person typed this name themselves.
-   *
-   * The server cannot tell. It sees a name and a linked product and nothing
-   * about how the name got there, so it has to be told: an item whose name is
-   * the person's outranks the catalogue and stops following it, and one that is
-   * not keeps taking corrections forever. Only this form knows which happened,
-   * because only this form sees the keystroke.
-   *
-   * Starts false even when editing: the box is prefilled with the name the item
-   * already DISPLAYS, so opening the sheet and saving must change nothing.
-   */
+  /** Whether the person typed this name. Only the form sees the keystroke,
+   *  and the server needs it: their own name outranks the catalogue's and stops
+   *  following it. False even when editing, since the prefilled name is the one
+   *  already displayed and saving unchanged must change nothing. */
   private readonly nameIsMine = signal(false);
 
   /** The name box changed because somebody typed in it. */

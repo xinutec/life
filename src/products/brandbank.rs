@@ -1,14 +1,8 @@
-//! Parse Asda's Brandbank product-content JSON into our domain facts.
-//!
-//! Asda's product page embeds a `c_BRANDBANK_JSON` blob (Brandbank is the UK
-//! grocery industry's standard product-content feed): the full nutrition panel,
-//! ingredients, allergen advice and a raft of dietary/free-from booleans — none
-//! of which the storefront SEARCH API carries (see products::asda). The hidden
-//! WebView returns that blob verbatim (the page is behind Cloudflare, so a plain
-//! server fetch can't reach it); this module turns it into `ProductFacts`, stored
-//! per source and merged with Open Food Facts on read (see repo::facts_for).
-//!
-//! Pure — no I/O — so it's exercised directly against a captured real blob.
+//! Parse the Brandbank JSON (the UK grocery product-content feed) that Asda's
+//! product page embeds as `c_BRANDBANK_JSON`: nutrition, ingredients, allergens
+//! and dietary flags that search lacks. The WebView returns the blob verbatim;
+//! this makes `ProductFacts`, merged with Open Food Facts on read
+//! (`repo::facts_for`). Pure, tested against a captured blob.
 
 use std::collections::BTreeMap;
 

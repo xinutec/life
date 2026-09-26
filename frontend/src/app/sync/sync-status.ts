@@ -92,15 +92,9 @@ export class SyncStatus {
     return this.staleMinutes() === null ? 'synced' : 'stale';
   });
 
-  /** The glyph each state shows, spelled out per state.
-   *
-   *  ⚠ **Exhaustive over `SyncHealth`**: a `Record` keyed on the union will not
-   *  compile until a new state names its own icon, rather than inheriting one.
-   *
-   *  `history` for stale: not "something failed" but "this may be old". The
-   *  error state keeps the alarming glyph and the only red. `synced` never
-   *  draws — the indicator shows only when not synced — and is here to keep the
-   *  map total. */
+  /** Each state's glyph, as a total `Record` so a new state must name one.
+   *  Stale is `history` ("may be old"); only error is red and alarming.
+   *  `synced` never draws but keeps the map total. */
   readonly icon = computed<string>(
     () =>
       ({

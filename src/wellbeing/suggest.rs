@@ -1,26 +1,15 @@
-//! Emotion suggestions: given a check-in note, ask a local model which feelings
-//! from the app's own vocabulary best fit what was written, and return them ranked
-//! so the picker can offer them first.
+//! Emotion suggestions: a local model ranks which feelings from the app's
+//! vocabulary fit a check-in note, so the picker can offer them first.
 //!
-//! The model runs on the Mac and nothing leaves your hardware — but the Mac is a
-//! one-way WireGuard peer, so the fleet may not dial it. Generation therefore
-//! happens through a queue the Mac *polls*: this module builds a self-contained
-//! prompt, [`store`](super::suggest_store) parks it as a job, and the worker posts
-//! the model's answer back. The pod only ever accepts connections.
+//! The model runs on the Mac, which the fleet cannot dial, so this module builds a
+//! self-contained prompt, [`store`](super::suggest_store) queues it, and the Mac's
+//! worker polls for it and posts the answer back.
 //!
-//! The prompt is fed two things: the vocabulary (the candidate list, sent by the
-//! picker so there's no second copy to drift) and a **few-shot of your own past
-//! taggings**, which teaches it your personal calibration — that you reach for
-//! *Low* not *Grief*, *Flat* for a neutral day, and so on. In an offline eval on
-//! held-out check-ins, that personalisation roughly doubled agreement with what
-//! you actually picked.
-//!
-//! Every token the model returns is validated against the candidate set in
-//! [`filter_suggestions`]; anything not in the list is dropped, so a hallucinated
-//! feeling can never reach the picker. The whole thing is best-effort: with no
-//! worker running, the picker simply shows the plain wheel.
-//!
-//! Prompt-building and parsing are pure, so they are unit-tested without a model.
+//! The prompt carries the picker's candidate list and a few-shot of the user's
+//! own past taggings, which teaches their calibration (*Low* rather than *Grief*);
+//! on held-out check-ins that roughly doubled agreement. [`filter_suggestions`]
+//! drops any token not in the candidate list. With no worker running the picker
+//! just shows the wheel.
 
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use serde::{Deserialize, Serialize};

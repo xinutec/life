@@ -32,15 +32,9 @@ use tracing::Level;
 
 use crate::state::AppState;
 
-/// How long a static response may be reused without asking again.
-///
-/// ⚠ **`index.html` MUST REVALIDATE.** With no `Cache-Control` a client caches
-/// heuristically from `Last-Modified` and may run an old build for hours, which
-/// looks like a deploy that did not happen. `no-cache` means "ask first", so the
-/// ETag still makes the usual case a 304.
-///
-/// Everything else Angular emits has a content hash in its name, so it is
-/// `immutable`.
+/// Cache policy for static files. ⚠ `index.html` is `no-cache` (revalidate via
+/// ETag): without a header clients cache it heuristically and run an old build
+/// for hours. Everything else Angular emits is content-hashed, so `immutable`.
 fn cache_control_for(res: &Response<ServeFileSystemResponseBody>) -> Option<HeaderValue> {
     let is_html = res
         .headers()

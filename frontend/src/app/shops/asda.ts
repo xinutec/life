@@ -1,19 +1,11 @@
 import type { FactsProvider } from '../shop';
 
-// Asda facts provider — the WebView half of the Asda integration.
-//
-// Asda's SEARCH runs server-side (a public Algolia call; see products::asda), so
-// name/brand/price/pack and the identity all arrive without a browser. What the
-// search API does NOT carry is the back-of-pack facts — nutrition, ingredients,
-// allergens, the full dietary/free-from set. Those live only on the product PAGE,
-// behind Cloudflare, so a plain server fetch is 403'd. Only a real browser passes
-// Cloudflare's JS challenge — hence this hidden-WebView provider.
-//
-// Per the split (backend parses, frontend only fetches): the extractor does the
-// minimum that must happen in a browser — waits out Cloudflare, reads the page's
-// embedded state, and returns the raw Brandbank blob + the page's EAN untouched.
-// All interpretation is server-side (products::brandbank). Kept as a string here
-// (in the web app) so Asda page changes are a hot deploy, not an APK rebuild.
+// Asda facts provider. Search runs server-side (products::asda), but nutrition,
+// ingredients, allergens and dietary tags are only on the product page, behind
+// a Cloudflare JS challenge only a real browser passes; hence this WebView
+// provider. It returns the page's raw Brandbank blob and EAN, and the server
+// interprets them (products::brandbank). Living in the web app, a fix to it is
+// a deploy rather than an APK rebuild.
 const FACTS_JS = `
 (async () => {
   // Asda's storefront is a Mobify/SFCC PWA: its server-rendered state, including

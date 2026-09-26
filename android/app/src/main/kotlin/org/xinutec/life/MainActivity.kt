@@ -44,13 +44,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * life — the personal home-OS app, an Angular SPA served at [LIFE_URL], shown in
- * the fleet's shared [WebShellActivity]. It's behind a login (Nextcloud identity);
- * the WebView keeps the session cookie, so it's a one-time sign-in.
- *
- * What the shell does not do, and this file does: three JavaScript bridges (the
- * clipboard, shop enrichment, reminders), the file chooser and camera grant, and
- * the recovery from Nextcloud refusing a login with a stale cookie.
+ * life's Angular SPA at [LIFE_URL] in the fleet's [WebShellActivity]; the
+ * WebView keeps the Nextcloud session cookie. Adds the clipboard, shop and
+ * reminder bridges, the file chooser and camera grant, and recovery from a
+ * stale-cookie login refusal.
  */
 class MainActivity : WebShellActivity() {
     override val shell =
@@ -92,18 +89,13 @@ class MainActivity : WebShellActivity() {
     private var banner: TextView? = null
 
     /**
-     * The three native capabilities the web app drives, exposed to the life app's
-     * own pages and to nothing else in the WebView.
+     * The native capabilities the web app drives, exposed only to [ALLOWED_ORIGINS].
      *
-     * `addWebMessageListener` is origin-scoped: each object is injected only into frames
-     * matching [ALLOWED_ORIGINS], and each listener also checks `sourceOrigin` and
-     * `isMainFrame`. `addJavascriptInterface` reaches every frame, iframes included, and
-     * behind these sit the clipboard, arbitrary notifications, and a shop bridge taking
-     * a URL **and JavaScript to run against it**.
-     *
-     * ⚠ Without [WebViewFeature.WEB_MESSAGE_LISTENER] the bridges are absent and the web
-     * app feature-detects its way to browser behaviour. Never fall back to
-     * `addJavascriptInterface`.
+     * `addWebMessageListener` injects per origin, and each listener also checks
+     * `sourceOrigin` and `isMainFrame`; `addJavascriptInterface` would reach every
+     * frame, and the shop bridge runs caller-supplied JavaScript. Without
+     * [WebViewFeature.WEB_MESSAGE_LISTENER] the bridges are absent and the web app
+     * falls back to browser behaviour; never fall back to `addJavascriptInterface`.
      */
     override fun onWebViewCreated(web: WebView) {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return
@@ -195,20 +187,12 @@ class MainActivity : WebShellActivity() {
     override fun createWebChromeClient() = LifeWebChromeClient()
 
     inner class LifeWebViewClient : ShellWebViewClient() {
-        // Recover from Nextcloud refusing the login with 403 "State token does not
-        // match".
-        //
-        // NC writes the login's state token into the session named by whatever
-        // session cookie you arrive with. This WebView keeps NC's cookies for
-        // months, while NC sweeps its sessions — so by the time we sign in again
-        // the cookie names a session the server has forgotten, the token dies with
-        // it, and the grant step refuses. A cookie-LESS browser skips the whole
-        // path (NC's same-site middleware only engages when cookies exist), which
-        // is why a fresh install works and a long-lived one does not. Reproduced in
-        // desktop Chrome too, so this is NC's behaviour, not a WebView quirk.
-        //
-        // Dropping NC's cookies and starting over is exactly the state that works.
-        // Once per launch, so a genuinely broken login can't loop.
+        // Recover from Nextcloud's 403 "State token does not match". NC stores the
+        // login's state token in the session named by the incoming cookie; this
+        // WebView keeps NC cookies for months after NC has swept the session, so
+        // the token is lost. Without cookies NC skips that path (desktop Chrome
+        // behaves the same), so drop NC's cookies and start over, once per launch
+        // so a broken login can't loop.
         override fun onReceivedHttpError(
             view: WebView,
             request: WebResourceRequest,
@@ -423,13 +407,11 @@ class MainActivity : WebShellActivity() {
     }
 
     /**
-     * Load a shop page in a throwaway offscreen WebView and run the web-app-
-     * supplied [extractorJs] once it finishes. Why a WebView, not an HTTP client:
-     * shop sites sit behind bot managers (Akamai etc.) that reject non-browser
-     * TLS/HTTP2 fingerprints — only a real browser engine passes. A generic capture
-     * patch grabs any Bearer token the page attaches (window.__authToken) for the
-     * extractor to use. Results return through the per-view AndroidShop bridge
-     * because WebView.evaluateJavascript does NOT await promises. One at a time.
+     * Load a shop page in a throwaway offscreen WebView and run the web app's
+     * [extractorJs] when it finishes; bot managers reject non-browser clients. A
+     * capture patch exposes any Bearer the page attaches (window.__authToken).
+     * Results come back through the per-view AndroidShop bridge, because
+     * evaluateJavascript doesn't await promises. One at a time.
      */
     @SuppressLint("SetJavaScriptEnabled") // the WebView runs the app's own bundle
     private fun shopRun(url: String, extractorJs: String, requestId: String) {
@@ -696,14 +678,9 @@ class MainActivity : WebShellActivity() {
     }
 
     /**
-     * Fire notification [title]/[text] at [whenMs] (epoch ms); tapping it opens the
-     * app at [url] (a path or an app URL).
-     *
-     * Generic over [id] — a stable string key the web app owns (e.g.
-     * "wellbeing-daily"); scheduling the same id again overwrites its pending
-     * alarm, so the web app re-arms idempotently on each open. Alarms survive the
-     * app being closed but not a reboot — the web app re-arms after one. Nothing
-     * wellbeing-specific lives here.
+     * Fire notification [title]/[text] at [whenMs] (epoch ms); tapping it opens
+     * [url]. Re-scheduling the same [id] replaces its alarm, so the web app
+     * re-arms idempotently on each open, which also covers reboots.
      */
     private fun scheduleReminder(
         id: String,

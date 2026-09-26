@@ -1,11 +1,7 @@
 #!/usr/bin/env node
-// A top-down plan of the house, with every furniture box NUMBERED — so a person
-// can say "3 is the tall cupboard" instead of reading coordinates.
-//
-// Numbers, because scenes/house.json's furniture carries geometry only and no
-// labels.
-//
-// Reuses `perimeter` from the app rather than re-deriving the turtle walk.
+// A top-down SVG plan of the house with each furniture box numbered, so a person
+// can say "3 is the tall cupboard" (house.json furniture has no labels). Uses
+// the app's `perimeter`.
 //
 //   ./scripts/house-plan.mjs > /tmp/plan.svg
 //   ./scripts/house-plan.mjs --room kitchen > /tmp/kitchen.svg

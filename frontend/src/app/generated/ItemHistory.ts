@@ -3,16 +3,9 @@ import type { ItemHistoryEntry } from "./ItemHistoryEntry";
 import type { Purchase } from "./Purchase";
 
 /**
- * Everything the history dialog shows for one stock row.
- *
- * The purchases ride ALONGSIDE the events rather than among them. A purchase is
- * a fact about the item, not one of the things that happened to it, and
- * `ItemEvent` is read back out of the database under a rule that an unknown
- * value fails loudly — synthesising a `bought` event that nothing ever stores
- * would put a value in that union which the table can never contain.
- *
- * This is also the ONLY way to reach a purchase made against a hand-typed
- * buy-list row: it has no barcode and no catalogue product, so the product page
- * cannot show it (migration 0044).
+ * Everything the history dialog shows for one stock row. Purchases sit beside
+ * the events, not among them: an `ItemEvent` read back must be a stored value,
+ * and nothing stores a `bought` event. It is the only view of a purchase made
+ * from a hand-typed buy-list row, which has no product page.
  */
 export type ItemHistory = { entries: Array<ItemHistoryEntry>, purchases: Array<Purchase>, };

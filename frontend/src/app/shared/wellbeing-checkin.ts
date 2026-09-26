@@ -39,16 +39,11 @@ export function facesOf(tenths: number): number[] {
   return isHalfStep(tenths) ? [Math.floor(points), Math.ceil(points)] : [points];
 }
 
-/** Tapping `face` when `now` is the current reading, on a strip where one face
- *  means a whole and two adjacent faces mean the half between them:
- *
- *  - nothing set, or a face two or more away → that face, plainly.
- *  - the face NEXT to a whole → the half-step between the two (both light up).
- *  - either face OF a half-step → collapse to that whole (the other goes dark).
- *
- *  Null when the tap is a no-op (the lone face that's already on): the callers
- *  differ on what that means — the mood is required so it stays put, the optional
- *  energy clears — so this refuses to guess. */
+/** Tapping `face` with reading `now`, where one face is a whole and two
+ *  adjacent faces the half between: from nothing or a distant face → that face;
+ *  next to a whole → the half-step; either face of a half-step → that whole.
+ *  Null for a no-op (the lone lit face), which callers treat differently: mood
+ *  stays put, optional energy clears. */
 export function nextReading(now: number | null | undefined, face: number): number | null {
   // From a half-step, ANY tap resolves to that whole face — whether it's one of
   // the two lit ones (collapse to it) or a distant one (just go there).
@@ -122,15 +117,9 @@ export function energyMeta(tenths: number): LevelMeta {
   return levelMeta(tenths, ENERGY_LEVELS, 'wb-score');
 }
 
-/** How long after a tap its neighbour still counts as "the same check-in".
- *
- *  A minute, not the six seconds the Undo snackbar lives for. Tying it to the
- *  snackbar made the window visible, which is tidy but is a fact about the UI, not
- *  about how long "4… no, a bit below that" takes to think. The only thing a long
- *  window can get wrong is swallowing a genuine SECOND check-in on an adjacent
- *  face — which needs the mood to move by exactly one face, and to be recorded
- *  twice, inside a minute. The amend announces itself when it fires and is one Undo
- *  away; a hedge lost to a stopwatch is just gone. */
+/** How long after a tap an adjacent tap amends it ("4… no, a bit below").
+ *  Longer windows only risk merging a genuine second check-in one face away,
+ *  which announces itself and is one Undo away. */
 const AMEND_WINDOW_MS = 60_000;
 
 /** The one-tap mood check-in: five face buttons that log an entry at "now".

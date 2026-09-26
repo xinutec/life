@@ -86,15 +86,9 @@ const MAX_WARRANTY_MONTHS: i32 = 600;
 
 /// When the purchase happened: the stated day, or now.
 ///
-/// A stated day is stored at MIDDAY UTC, not midnight. The column is a DATETIME
-/// and the day is the only part anybody knows, so the time is invented either
-/// way — but midnight is the one invented time a zone offset can walk across,
-/// and a receipt dated the 15th reading back as the 14th is the kind of wrong
-/// that looks like data corruption. Midday survives every real offset.
-///
-/// A future purchase is refused rather than stored. It is a typo or a client
-/// bug, and a warranty counted from a date that has not happened would report
-/// cover nobody has.
+/// A day is stored at midday UTC: midnight is the one time a zone offset can
+/// move to the neighbouring day. A future day is refused as a typo; a warranty
+/// counted from it would report cover nobody has.
 fn bought_at_from(on: Option<chrono::NaiveDate>) -> Result<DateTime<Utc>> {
     let Some(day) = on else {
         return Ok(Utc::now());
@@ -146,16 +140,8 @@ pub async fn remove(pool: &MySqlPool, user_id: &str, item_id: u64, id: u64) -> R
     Ok(res.rows_affected() > 0)
 }
 
-/// What a purchase works out to per kg / litre / item.
-///
-/// Reuses `packsize::parse` rather than reading "g" and "kg" again here: the
-/// unit table is deliberately non-exhaustive and refuses what it does not know,
-/// and a second copy of it would answer differently the first time one of them
-/// learned a spelling.
-///
-/// Quoted per kg and per litre, not per gram, because that is the scale the
-/// shop prices beside it already use ("£8.00/KG"), and a rate nobody can
-/// compare is not worth showing.
+/// What a purchase works out to per kg / litre / item, the scale shops print
+/// ("£8.00/KG"). Uses `packsize::parse` so there is one unit table.
 fn per_unit(amount_minor: i64, quantity: Option<f64>, unit: Option<&str>) -> Option<(i64, String)> {
     let (q, u) = (quantity?, unit?);
     let pack = crate::products::packsize::parse(&format!("{q}{u}"))?;

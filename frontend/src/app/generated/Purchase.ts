@@ -16,16 +16,9 @@ item_id: number | null, barcode: string | null,
  */
 name: string, shop: string, amount_minor: number, currency: string, quantity: number | null, unit: string | null, 
 /**
- * DERIVED, never stored: what this works out to per kg / per litre / per
- * item, in minor units. Computed on read from `amount_minor` and the pack,
- * so it cannot drift from them the way a second stored column would.
- *
- * `None` when the pack is unknown or its unit is one `packsize::parse`
- * refuses — an unreadable unit means the rate is unknown, and inventing a
- * dimension for it would be worse than saying nothing.
- *
- * Rounded to the nearest minor unit. It is a RATE for comparing packs, not
- * an amount anybody paid; the exact figure is `amount_minor`.
+ * Derived on read, never stored: minor units per kg / litre / item, rounded.
+ * A rate for comparing packs, not an amount paid. `None` when the pack or
+ * its unit is unknown to `packsize::parse`.
  */
 unit_amount_minor: number | null, 
 /**

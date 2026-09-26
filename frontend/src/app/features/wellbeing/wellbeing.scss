@@ -16,15 +16,10 @@
   width: fit-content;
 }
 
-// The charts scroll left/right through history without the SVGs ever growing:
-// this is a transparent scroller laid over them whose rail is --pan-factor chart-
-// widths long, and whose scrollLeft the host reads back as a time. The charts
-// then redraw in place, so the DOM stays the size of one window however far back
-// the history goes.
-//
-// Native scrolling rather than pointer handlers, deliberately: momentum, the
-// desktop scrollbar, shift+wheel and arrow keys all come for free — and a
-// vertical drag still scrolls the page, which a touch-action override would break.
+// A transparent native scroller over the charts, --pan-factor charts wide;
+// its scrollLeft is read as a time and the charts redraw in place, so the DOM
+// stays one window wide. Native, for momentum, scrollbars, keys, and vertical
+// drags that still scroll the page.
 .pan-area {
   position: relative;
 }

@@ -767,22 +767,8 @@ export class ProductPage {
     return [p?.brand, p?.quantity_label].filter((s) => !!s).join(' · ');
   });
 
-  /** Shops, cheapest first, then any shop with no price yet that still has a
-   *  page to link to. The 'off' listing is attribution, not a shop (below).
-   *
-   *  A price names the exact listing it came from, so the link goes to the item
-   *  actually quoted — a shop with two listings for one product is already
-   *  collapsed to its cheapest by the backend. */
-  /**
-   * What this person has paid, newest first — deliberately NOT merged into
-   * `buyRows`.
-   *
-   * A shelf price is what a shop charges today; a purchase is what one person
-   * paid on one day. Putting them in one list would make each read as the other:
-   * a two-year-old receipt would look like a current quote, and today's quote
-   * would look like proof you can get it at that price. They answer different
-   * questions, so they get different lists.
-   */
+  /** What this person has paid, newest first; deliberately a separate list
+   *  from `buyRows`, so an old receipt never reads as a current quote. */
   readonly paidRows = computed(() =>
     (this.detail()?.purchases ?? []).map((p) => ({
       id: p.id,
@@ -799,13 +785,14 @@ export class ProductPage {
       ]
         .filter((x) => x)
         .join(' · '),
-      // The same phrasing as the shop prices right below — `ago` exists so the
-      // two money lists do not spell the same question two ways ("2 days ago"
-      // against "8/20/2026" is a difference a reader has to stop and dismiss).
       when: ago(new Date(p.bought_at).getTime()),
     })),
   );
 
+  /** Shops, cheapest first, then unpriced shops that still have a page to link.
+   *  A price links to the listing it came from; the backend has already
+   *  collapsed a shop's listings to its cheapest. 'off' is attribution, not a
+   *  shop. */
   readonly buyRows = computed<BuyRow[]>(() => {
     const d = this.detail();
     if (!d) return [];
