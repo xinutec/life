@@ -91,7 +91,7 @@
         mat-icon-button
         [matMenuTriggerFor]="rowMenu"
         [matMenuTriggerData]="{ it }"
-        aria-label="More actions"
+        [attr.aria-label]="'More actions for ' + it.name"
       >
         <mat-icon>more_vert</mat-icon>
       </button>

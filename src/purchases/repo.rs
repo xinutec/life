@@ -114,7 +114,8 @@ pub async fn for_item(pool: &MySqlPool, user_id: &str, item_id: u64) -> Result<V
     let rows = sqlx::query_as::<_, Purchase>(
         "SELECT id, item_id, product_id, barcode, name, shop, amount_minor, currency, \
          quantity, unit, bought_at, warranty_months FROM purchases \
-         WHERE user_id = ? AND item_id = ? ORDER BY bought_at DESC, id DESC",
+         WHERE user_id = ? AND item_id = ? AND deleted_at IS NULL \
+         ORDER BY bought_at DESC, id DESC",
     )
     .bind(user_id)
     .bind(item_id)
@@ -123,20 +124,32 @@ pub async fn for_item(pool: &MySqlPool, user_id: &str, item_id: u64) -> Result<V
     Ok(rows.into_iter().map(with_derived).collect())
 }
 
-/// Delete one purchase. Returns whether a row belonging to this user, on this
-/// item, was removed.
-///
-/// HARD, where items soft-delete: tombstones exist for sync and the trash, and
-/// purchases have neither.
-///
-/// Scoped on `item_id` too, so a purchase id from a different item 404s.
+/// Move one purchase to the trash; see migration 0048 for why it is soft.
+/// Returns whether a live row of this user's, on this item, was removed. Scoped
+/// on `item_id` too, so a purchase id from a different item 404s.
 pub async fn remove(pool: &MySqlPool, user_id: &str, item_id: u64, id: u64) -> Result<bool> {
-    let res = sqlx::query("DELETE FROM purchases WHERE id = ? AND user_id = ? AND item_id = ?")
-        .bind(id)
-        .bind(user_id)
-        .bind(item_id)
-        .execute(pool)
-        .await?;
+    let res = sqlx::query(
+        "UPDATE purchases SET deleted_at = NOW() \
+         WHERE id = ? AND user_id = ? AND item_id = ? AND deleted_at IS NULL",
+    )
+    .bind(id)
+    .bind(user_id)
+    .bind(item_id)
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected() > 0)
+}
+
+/// Bring a removed purchase back from the trash.
+pub async fn restore(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
+    let res = sqlx::query(
+        "UPDATE purchases SET deleted_at = NULL \
+         WHERE id = ? AND user_id = ? AND deleted_at IS NOT NULL",
+    )
+    .bind(id)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
     Ok(res.rows_affected() > 0)
 }
 
@@ -185,7 +198,7 @@ pub async fn history(
     let rows = sqlx::query_as::<_, Purchase>(
         "SELECT id, item_id, product_id, barcode, name, shop, amount_minor, currency, \
          quantity, unit, bought_at, warranty_months FROM purchases \
-         WHERE user_id = ? \
+         WHERE user_id = ? AND deleted_at IS NULL \
            AND ((? IS NOT NULL AND product_id = ?) OR (? IS NOT NULL AND barcode = ?)) \
          ORDER BY bought_at DESC, id DESC",
     )

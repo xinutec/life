@@ -25,6 +25,7 @@ str_enum! {
         Shopping => "shopping",
         Todo => "todo",
         Wellbeing => "wellbeing",
+        Purchase => "purchase",
     }
 }
 /// One deleted thing, as shown on the trash screen. `ref_` identifies the row

@@ -146,7 +146,15 @@ export class HistoryDialog {
    *  places drifts from the server the first time one of them is wrong. */
   removePurchase(id: number): void {
     this.api.deletePurchase(this.item.id, id).subscribe({
-      next: () => this.load(),
+      next: () => {
+        this.load();
+        this.feedback.undo('Purchase removed', () => {
+          this.api.restoreTrash('purchase', String(id)).subscribe({
+            next: () => this.load(),
+            error: (e: unknown) => this.feedback.error(`Could not undo${onlineHint(e)}`),
+          });
+        });
+      },
       error: (e: unknown) => this.feedback.error(`Could not remove it${onlineHint(e)}`),
     });
   }

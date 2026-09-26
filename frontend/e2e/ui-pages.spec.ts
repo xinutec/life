@@ -1081,6 +1081,10 @@ test('inventory — the row menu opens and carries all three actions @ phone wid
 }, testInfo) => {
   await mockApi(page);
   await page.goto('/inventory');
+  // Each place's delete names its place: a bare "Delete" per row cannot be told
+  // apart by a screen reader, or by a script.
+  await expect(page.getByRole('button', { name: 'Delete Kitchen', exact: true })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Delete', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'More actions for Milk (semi-skimmed)' }).click();
   const menu = page.getByRole('menu');
   await menu.waitFor();

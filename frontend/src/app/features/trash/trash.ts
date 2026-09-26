@@ -22,6 +22,7 @@ const KIND_META: Record<TrashKind, { icon: string; label: string }> = {
   shopping: { icon: 'shopping_cart', label: 'Buy' },
   todo: { icon: 'checklist', label: 'To-do' },
   wellbeing: { icon: 'mood', label: 'Wellbeing' },
+  purchase: { icon: 'receipt_long', label: 'Purchase' },
 };
 
 /** Recently deleted — everything ever deleted, restorable with one tap.

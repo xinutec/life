@@ -163,9 +163,10 @@ async fn a_receipt_knows_its_purchase_and_a_manual_does_not() {
         "a manual belongs to the thing, not to a purchase"
     );
 
-    // ⚠ Deleting a mistyped purchase must NOT take the scanned receipt with it —
-    // ON DELETE SET NULL, not CASCADE. The receipt is the harder thing to
-    // replace of the two.
+    // ⚠ Removing a mistyped purchase must NOT take the scanned receipt with it:
+    // the receipt is the harder thing to replace of the two. Removal is soft
+    // (migration 0048), so the receipt stays tied to it and comes back with an
+    // Undo.
     assert!(
         purchases_repo::remove(&pool, user, item.id, purchase_id)
             .await
@@ -181,8 +182,8 @@ async fn a_receipt_knows_its_purchase_and_a_manual_does_not() {
             .find(|f| f.id == receipt)
             .expect("receipt")
             .purchase_id,
-        None,
-        "it is simply no longer tied to one"
+        Some(purchase_id),
+        "still tied to the purchase in the trash"
     );
 }
 

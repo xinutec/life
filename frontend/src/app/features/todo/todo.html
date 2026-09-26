@@ -86,7 +86,12 @@
       @if (it.notes) {
         <span matListItemLine class="note" [class.done]="it.status === 'done'">{{ it.notes }}</span>
       }
-      <button matListItemMeta mat-icon-button (click)="remove(it)" aria-label="Delete">
+      <button
+        matListItemMeta
+        mat-icon-button
+        (click)="remove(it)"
+        [attr.aria-label]="'Delete ' + it.title"
+      >
         <mat-icon>delete</mat-icon>
       </button>
     </mat-list-item>
@@ -120,7 +125,12 @@
               typeIcon(it.type)
             }}</mat-icon>
           </span>
-          <button matListItemMeta mat-icon-button (click)="remove(it)" aria-label="Delete">
+          <button
+            matListItemMeta
+            mat-icon-button
+            (click)="remove(it)"
+            [attr.aria-label]="'Delete ' + it.title"
+          >
             <mat-icon>delete</mat-icon>
           </button>
         </mat-list-item>

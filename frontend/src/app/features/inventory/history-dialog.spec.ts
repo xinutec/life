@@ -40,19 +40,27 @@ function setup(
       : of({ entries: opts.entries ?? [], purchases: opts.purchases ?? [] }),
   );
   const deletePurchase = vi.fn(opts.deletePurchase ?? (() => of(undefined)));
-  const feedback = { notify: vi.fn(), error: vi.fn() };
+  const restoreTrash = vi.fn(() => of(undefined));
+  const feedback = { notify: vi.fn(), error: vi.fn(), undo: vi.fn() };
   TestBed.configureTestingModule({
     imports: [HistoryDialog],
     providers: [
       { provide: MatDialogRef, useValue: { close: vi.fn() } },
       { provide: MAT_DIALOG_DATA, useValue: { item } satisfies HistoryDialogData },
-      { provide: LifeApi, useValue: { itemHistory, deletePurchase } },
+      { provide: LifeApi, useValue: { itemHistory, deletePurchase, restoreTrash } },
       { provide: Feedback, useValue: feedback },
     ],
   });
   const fixture = TestBed.createComponent(HistoryDialog);
   fixture.detectChanges();
-  return { fixture, cmp: fixture.componentInstance, itemHistory, deletePurchase, feedback };
+  return {
+    fixture,
+    cmp: fixture.componentInstance,
+    itemHistory,
+    deletePurchase,
+    restoreTrash,
+    feedback,
+  };
 }
 
 /** A purchase as the server sends it. Named so the two tests below read as
@@ -176,6 +184,21 @@ describe('HistoryDialog purchase removal', () => {
     cmp.removePurchase(42);
     expect(deletePurchase).toHaveBeenCalledWith(7, 42);
     expect(itemHistory.mock.calls.length).toBe(readsBefore + 1);
+  });
+
+  it('offers Undo, which restores the purchase from the trash and re-reads', () => {
+    // One tap removes it, so a mis-tap must be recoverable, as for items.
+    const { cmp, itemHistory, restoreTrash, feedback } = setup({
+      entries: [],
+      purchases: [purchase({ id: 42 })],
+    });
+    cmp.removePurchase(42);
+    expect(feedback.undo).toHaveBeenCalledTimes(1);
+    const [, onUndo] = feedback.undo.mock.calls[0] as [string, () => void];
+    const reads = itemHistory.mock.calls.length;
+    onUndo();
+    expect(restoreTrash).toHaveBeenCalledWith('purchase', '42');
+    expect(itemHistory.mock.calls.length).toBe(reads + 1);
   });
 
   it('says so and keeps the row when the removal fails', () => {

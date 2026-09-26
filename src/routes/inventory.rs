@@ -145,10 +145,8 @@ pub async fn record_purchase(
         .ok_or_else(|| AppError::Other(anyhow::anyhow!("purchase {new_id} vanished after insert")))
 }
 
-/// DELETE /api/items/{id}/purchases/{purchase_id} → unmake a purchase.
-///
-/// A mistyped price must be removable, or the spending history is not true. It
-/// also lets the write path be exercised against production and cleaned up.
+/// DELETE /api/items/{id}/purchases/{purchase_id} → move a purchase to the trash.
+/// A mistyped price must be removable, or the spending history is not true.
 pub async fn delete_purchase(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,

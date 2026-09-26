@@ -419,3 +419,92 @@ async fn a_purchase_is_only_its_owners() {
             .expect("clean up");
     }
 }
+
+#[tokio::test]
+async fn a_removed_purchase_is_in_the_trash_with_its_receipt_and_comes_back() {
+    // One tap removes a purchase, so it must be undoable. A hard delete would
+    // also unlink its receipt (`item_files.purchase_id` is ON DELETE SET NULL),
+    // which re-creating the purchase could not repair.
+    let pool = db::connect(&common::test_db_url()).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+    let user = "test-user-purchases-trash";
+    sqlx::query("DELETE FROM purchases WHERE user_id = ?")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .expect("clean");
+
+    let id = item_row(&pool, user, "Kettle").await;
+    let item = BoughtItem {
+        id,
+        product_id: None,
+        barcode: None,
+        name: "Kettle",
+        quantity: None,
+        unit: None,
+    };
+    let purchase = repo::record(&pool, user, &item, &paid("Argos", 2999))
+        .await
+        .expect("record");
+    let receipt = life::files::repo::add(
+        &pool,
+        user,
+        id,
+        Some(purchase),
+        "receipt.pdf",
+        "application/pdf",
+        b"%PDF",
+    )
+    .await
+    .expect("attach receipt");
+
+    assert!(
+        repo::remove(&pool, user, id, purchase)
+            .await
+            .expect("remove")
+    );
+    assert!(
+        repo::for_item(&pool, user, id)
+            .await
+            .expect("for_item")
+            .is_empty()
+    );
+    let trash = life::trash::repo::list(&pool, user).await.expect("trash");
+    assert!(
+        trash
+            .iter()
+            .any(|e| e.kind == life::trash::TrashKind::Purchase && e.ref_ == purchase.to_string()),
+        "a removed purchase is listed in the trash"
+    );
+
+    assert!(
+        life::trash::repo::restore(
+            &pool,
+            user,
+            life::trash::TrashKind::Purchase,
+            &purchase.to_string()
+        )
+        .await
+        .expect("restore")
+    );
+    let back = repo::for_item(&pool, user, id).await.expect("for_item");
+    assert_eq!(back.len(), 1);
+    assert_eq!(back[0].amount_minor, 2999);
+    let (linked,): (Option<u64>,) =
+        sqlx::query_as("SELECT purchase_id FROM item_files WHERE id = ?")
+            .bind(receipt)
+            .fetch_one(&pool)
+            .await
+            .expect("receipt");
+    assert_eq!(
+        linked,
+        Some(purchase),
+        "the receipt is still the purchase's"
+    );
+
+    sqlx::query("DELETE FROM purchases WHERE user_id = ?")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .expect("clean up");
+}
