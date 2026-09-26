@@ -68,6 +68,9 @@ pub enum LineOutcome {
 #[ts(export)]
 pub struct CookedLine {
     pub ingredient: String,
+    /// The line's unit, which every take shares (units are never converted);
+    /// `None` for a countable line.
+    pub unit: Option<String>,
     #[serde(flatten)]
     pub outcome: LineOutcome,
 }
@@ -172,6 +175,12 @@ pub fn plan(recipe: &Recipe, inventory: &[Item]) -> Vec<CookedLine> {
         .iter()
         .map(|ing| CookedLine {
             ingredient: ing.name.clone(),
+            unit: ing
+                .unit
+                .as_deref()
+                .map(str::trim)
+                .filter(|u| !u.is_empty())
+                .map(str::to_string),
             outcome: plan_line(ing, inventory, &mut remaining),
         })
         .collect()

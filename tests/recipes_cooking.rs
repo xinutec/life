@@ -283,3 +283,18 @@ fn a_recipe_with_nothing_in_the_cupboard_writes_nothing() {
     );
     assert_eq!(settled(&lines), []);
 }
+
+#[test]
+fn the_report_carries_the_lines_unit() {
+    // "200 from Plain flour" leaves "200 what?" open; every take is in the
+    // line's unit (units are never converted), so the line states it once.
+    let lines = plan(
+        &recipe(vec![
+            ing("flour", Some(200.0), Some("g")),
+            ing("eggs", Some(2.0), None),
+        ]),
+        &[item(1, "Plain flour", Some(950.0), Some("g"))],
+    );
+    assert_eq!(lines[0].unit.as_deref(), Some("g"));
+    assert_eq!(lines[1].unit, None, "a countable line has no unit");
+}

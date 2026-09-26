@@ -5,6 +5,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 
+import { amount } from '../../shared/amount';
 import { onlineHint } from '../../shared/api-error';
 import { Feedback } from '../../shared/feedback';
 import { ListState } from '../../shared/list-state';
@@ -169,11 +170,11 @@ export class Recipes {
   cookedLabel(line: CookedLine): string {
     switch (line.kind) {
       case 'took':
-        return line.from.map((t) => `${t.amount} from ${t.name}`).join(', ');
+        return line.from.map((t) => `${amount(t.amount, line.unit)} from ${t.name}`).join(', ');
       case 'short':
         return line.from.length
-          ? `used what there was, ${line.short} short`
-          : `nothing there, ${line.short} short`;
+          ? `used what there was, ${amount(line.short, line.unit)} short`
+          : `nothing there, ${amount(line.short, line.unit)} short`;
       case 'untouched':
         switch (line.why) {
           case 'no_stock':

@@ -109,10 +109,11 @@ describe('Cooked it', () => {
     const report: CookedLine[] = [
       {
         ingredient: 'flour',
+        unit: 'g',
         kind: 'took',
         from: [{ item_id: 1, name: 'Plain flour', amount: 200, left: 750 }],
       },
-      { ingredient: 'salt', kind: 'untouched', why: 'no_amount' },
+      { ingredient: 'salt', unit: null, kind: 'untouched', why: 'no_amount' },
     ];
     const { c, api, feedback } = setup([], [], report);
     c.cookIt(recipe);
@@ -125,7 +126,7 @@ describe('Cooked it', () => {
   it('says so plainly when nothing could come off', () => {
     // The dishonest version of this button is the one that stays quiet here.
     const report: CookedLine[] = [
-      { ingredient: 'cumin', kind: 'untouched', why: 'no_comparable_stock' },
+      { ingredient: 'cumin', unit: null, kind: 'untouched', why: 'no_comparable_stock' },
     ];
     const { c, feedback } = setup([], [], report);
     c.cookIt(recipe);
@@ -139,29 +140,31 @@ describe('Cooked it', () => {
     expect(
       c.cookedLabel({
         ingredient: 'flour',
+        unit: 'g',
         kind: 'took',
         from: [
           { item_id: 1, name: 'Plain flour', amount: 200, left: 750 },
           { item_id: 2, name: 'Strong flour', amount: 50, left: 0 },
         ],
       }),
-    ).toBe('200 from Plain flour, 50 from Strong flour');
+    ).toBe('200 g from Plain flour, 50 g from Strong flour');
     expect(
       c.cookedLabel({
         ingredient: 'flour',
+        unit: 'g',
         kind: 'short',
         from: [{ item_id: 1, name: 'Plain flour', amount: 150, left: 0 }],
         short: 50,
       }),
-    ).toBe('used what there was, 50 short');
-    expect(c.cookedLabel({ ingredient: 'x', kind: 'untouched', why: 'no_stock' })).toBe(
+    ).toBe('used what there was, 50 g short');
+    expect(c.cookedLabel({ ingredient: 'x', unit: null, kind: 'untouched', why: 'no_stock' })).toBe(
       "you don't have any",
     );
-    expect(c.cookedLabel({ ingredient: 'x', kind: 'untouched', why: 'no_amount' })).toBe(
-      'the recipe gives no amount',
-    );
-    expect(c.cookedLabel({ ingredient: 'x', kind: 'untouched', why: 'no_comparable_stock' })).toBe(
-      'the cupboard measures it differently',
-    );
+    expect(
+      c.cookedLabel({ ingredient: 'x', unit: null, kind: 'untouched', why: 'no_amount' }),
+    ).toBe('the recipe gives no amount');
+    expect(
+      c.cookedLabel({ ingredient: 'x', unit: null, kind: 'untouched', why: 'no_comparable_stock' }),
+    ).toBe('the cupboard measures it differently');
   });
 });
