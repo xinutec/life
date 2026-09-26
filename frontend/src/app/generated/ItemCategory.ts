@@ -7,7 +7,7 @@
  * `Cookware` and `Tableware` are different cupboards and questions. `Other`
  * is offered last, or it becomes the bucket for everything.
  *
- * ⚠ A closed set, so a new kind needs a deploy; the column and the sync
- * schema are free strings (see docs/TODO.md).
+ * A closed set by decision: categories are part of the program, and a new
+ * one is added here (the column and the sync schema are free strings).
  */
 export type ItemCategory = "food" | "medication" | "cookware" | "tableware" | "clothing" | "appliance" | "cleaning" | "tool" | "document" | "other";

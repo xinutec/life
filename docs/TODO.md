@@ -25,8 +25,6 @@ how it got there is in `git log`. `#N` is a task in the `task` CLI.
   by string, so `1kg` of stock does not serve a `500g` line. `packsize.rs`
   already parses labels to g/ml/count.
 - **Expiry view** — is a fuller view wanted beyond Today's "Expiring soon" card?
-- **User-defined categories** — the category set is a closed enum, so a new kind
-  needs a deploy. Not started until a kind is wanted that does not exist.
 - **Product extras** — paste-URL → `og:image`; manual "refresh from OFF"; a
   `@zxing/browser` scanner fallback (`BarcodeDetector` is Chromium-only);
   contributing missing products to OFF (needs Pippijn's OFF account).
