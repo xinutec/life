@@ -1,8 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import {
-  MAT_BOTTOM_SHEET_DATA,
-  MatBottomSheetRef,
-} from '@angular/material/bottom-sheet';
+import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
 import { of } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
@@ -31,11 +28,20 @@ const doc = (over: Partial<ShoppingDoc>): ShoppingDoc => ({
  * async dialog-close → HTTP callback, and only signals make the view update.
  */
 describe('ShoppingItemSheet', () => {
-  function setup(opts: { scanned?: string | null; data?: { ulid: string } | null; items?: ShoppingDoc[] } = {}) {
+  function setup(
+    opts: { scanned?: string | null; data?: { ulid: string } | null; items?: ShoppingDoc[] } = {},
+  ) {
     const dialog = { open: vi.fn(() => ({ afterClosed: () => of(opts.scanned ?? null) })) };
     const api = {
       lookupProduct: vi.fn(() =>
-        of({ id: 42, barcode: opts.scanned, name: 'Nomadic', brand: 'Lassi', quantity_label: null, has_image: false }),
+        of({
+          id: 42,
+          barcode: opts.scanned,
+          name: 'Nomadic',
+          brand: 'Lassi',
+          quantity_label: null,
+          has_image: false,
+        }),
       ),
       productImageUrl: (b: string) => `/api/products/${b}/image`,
       markLowByIdentity: vi.fn(() => of(undefined)),

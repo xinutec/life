@@ -38,12 +38,7 @@
   <div class="pair">
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>Due</mat-label>
-      <input
-        matInput
-        type="date"
-        [ngModel]="due()"
-        (ngModelChange)="due.set($event || null)"
-      />
+      <input matInput type="date" [ngModel]="due()" (ngModelChange)="due.set($event || null)" />
     </mat-form-field>
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>Notes (optional)</mat-label>

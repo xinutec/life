@@ -59,7 +59,11 @@ export class LifeDb {
       const existing = db.collections[name] as RxCollection<T> | undefined;
       if (existing) return existing;
       const added = await db.addCollections({
-        [name]: { schema, conflictHandler, ...(migrationStrategies ? { migrationStrategies } : {}) },
+        [name]: {
+          schema,
+          conflictHandler,
+          ...(migrationStrategies ? { migrationStrategies } : {}),
+        },
       });
       return added[name] as RxCollection<T>;
     });

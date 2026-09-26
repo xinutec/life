@@ -102,7 +102,10 @@ const input = (over: Partial<BuyInput>): BuyInput => ({
 /** The Recipe→Buy bridge's rule: add what isn't there, say what already was. */
 describe('planAdditions', () => {
   it('adds everything to an empty list', () => {
-    const { fresh, already } = planAdditions([], [input({ name: 'Cumin' }), input({ name: 'Rice' })]);
+    const { fresh, already } = planAdditions(
+      [],
+      [input({ name: 'Cumin' }), input({ name: 'Rice' })],
+    );
     expect(fresh.map((f) => f.name)).toEqual(['Cumin', 'Rice']);
     expect(already).toEqual([]);
   });

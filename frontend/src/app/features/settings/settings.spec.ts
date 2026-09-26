@@ -40,9 +40,7 @@ async function mount(opts: MountOpts = {}) {
   };
   const api = {
     nextcloudStatus: vi.fn(() =>
-      status === 'fail'
-        ? throwError(() => new HttpErrorResponse({ status: 0 }))
-        : of({ status }),
+      status === 'fail' ? throwError(() => new HttpErrorResponse({ status: 0 })) : of({ status }),
     ),
     nextcloudConnect:
       opts.ncConnect ?? vi.fn(() => of({ login_url: 'https://nc.example/login/v2/flow/abc' })),
@@ -96,9 +94,9 @@ describe('Settings', () => {
 
   it('adds a reminder rule and saves it', async () => {
     const { fixture, setConfig } = await mount();
-    const add = Array.from(
-      (fixture.nativeElement as HTMLElement).querySelectorAll('button'),
-    ).find((b) => b.textContent?.includes('Add reminder'))!;
+    const add = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('button')).find(
+      (b) => b.textContent?.includes('Add reminder'),
+    )!;
     add.click();
     await fixture.whenStable();
     expect(setConfig).toHaveBeenCalledWith({

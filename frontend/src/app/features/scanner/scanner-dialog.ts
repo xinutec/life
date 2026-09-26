@@ -1,4 +1,12 @@
-import { Component, ElementRef, OnDestroy, afterNextRender, inject, signal, viewChild } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  OnDestroy,
+  afterNextRender,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialogRef } from '@angular/material/dialog';
@@ -77,7 +85,9 @@ export class ScannerDialog implements OnDestroy {
     if (!video) return;
     try {
       this.detector = new BarcodeDetector({ formats: FORMATS });
-      this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+      });
       video.srcObject = this.stream;
       await video.play();
       this.log('camera opened', `${video.videoWidth}x${video.videoHeight}`);

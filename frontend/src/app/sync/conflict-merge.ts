@@ -49,7 +49,11 @@ export type FieldEq = 'value' | 'array';
  *  `FieldEq` gains a deep comparer — it can never silently fall back to identity
  *  (the very trap that made array identity a bug). */
 type EqFor<V> =
-  NonNullable<V> extends readonly unknown[] ? 'array' : NonNullable<V> extends object ? never : 'value';
+  NonNullable<V> extends readonly unknown[]
+    ? 'array'
+    : NonNullable<V> extends object
+      ? never
+      : 'value';
 
 /** An exhaustive, type-directed 3-way-merge spec: every content field of `C`,
  *  each tagged with a strategy valid for its type. `-?` makes every key required,
@@ -134,7 +138,14 @@ export function makeConflictHandler<
       }
       if (!assumed) {
         // No base to diff against → the local doc wins wholesale.
-        trace({ ulid: id, mine: [], theirs: [], collided: [], deleted: !!mine._deleted, noBase: true });
+        trace({
+          ulid: id,
+          mine: [],
+          theirs: [],
+          collided: [],
+          deleted: !!mine._deleted,
+          noBase: true,
+        });
         return Promise.resolve(mine);
       }
       const merged = { ...real };

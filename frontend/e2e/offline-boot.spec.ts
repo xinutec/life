@@ -35,8 +35,7 @@ test('a signed-in app opened offline stays signed in', async ({ page, context })
       // A missing app group means the manifest is not what this test assumes.
       // `Infinity` makes the wait time out and say so; `0` would satisfy
       // `length >= want` immediately and pass without ever caching anything.
-      const want =
-        manifest.assetGroups?.find((g) => g.name === 'app')?.urls.length ?? Infinity;
+      const want = manifest.assetGroups?.find((g) => g.name === 'app')?.urls.length ?? Infinity;
       for (const key of await caches.keys()) {
         if (key.includes('assets:app:cache')) {
           return (await (await caches.open(key)).keys()).length >= want;
@@ -59,7 +58,10 @@ test('a signed-in app opened offline stays signed in', async ({ page, context })
   // provably happened (ngsw answers it with the synthetic 504), give the signal
   // graph a beat to settle, then require the shell — not the sign-in card.
   await page.waitForFunction(
-    () => (window as unknown as { __fetched: string[] }).__fetched.some((u) => u.includes('/api/sync/')),
+    () =>
+      (window as unknown as { __fetched: string[] }).__fetched.some((u) =>
+        u.includes('/api/sync/'),
+      ),
     null,
     { timeout: 20_000 },
   );

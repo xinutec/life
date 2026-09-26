@@ -15,8 +15,14 @@ const TODAY = new Date('2026-07-02T10:30:00Z');
 
 describe('expiryInfo', () => {
   it('flags expired items with how long ago', () => {
-    expect(expiryInfo('2026-06-29', 'day', TODAY)).toEqual({ label: 'expired 3d ago', cls: 'expired' });
-    expect(expiryInfo('2026-07-01', 'day', TODAY)).toEqual({ label: 'expired 1d ago', cls: 'expired' });
+    expect(expiryInfo('2026-06-29', 'day', TODAY)).toEqual({
+      label: 'expired 3d ago',
+      cls: 'expired',
+    });
+    expect(expiryInfo('2026-07-01', 'day', TODAY)).toEqual({
+      label: 'expired 1d ago',
+      cls: 'expired',
+    });
   });
 
   it('flags today and the next few days as urgent', () => {
@@ -96,7 +102,7 @@ describe('expiryInfo at month precision', () => {
     });
   });
 
-  it('reads the month in the reader\'s zone, not Greenwich\'s', () => {
+  it("reads the month in the reader's zone, not Greenwich's", () => {
     // 00:30 on 15 Aug London is still 14 Aug UTC: on the 1st that is a month
     // boundary, so the local month is what the comparison uses.
     expect(expiryInfo('2026-08-31', 'month', AFTER_MIDNIGHT)).toEqual({

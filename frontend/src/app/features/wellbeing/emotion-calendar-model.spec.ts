@@ -219,7 +219,11 @@ describe('buildCalendar', () => {
   it('keeps today on the grid before the day has its first check-in', () => {
     // Today is neither "before you started" nor "not happened yet", so it gets a
     // square before its first check-in.
-    const [sep] = buildCalendar([doc('2026-09-10T09:00:00Z', ['Happy/Calm'])], LONDON, '2026-09-12');
+    const [sep] = buildCalendar(
+      [doc('2026-09-10T09:00:00Z', ['Happy/Calm'])],
+      LONDON,
+      '2026-09-12',
+    );
     const present = sep.cells.filter((c): c is CalendarDay => c !== null);
     expect(present.map((c) => c.dayOfMonth)).toEqual([10, 11, 12]);
     expect(present[2]).toMatchObject({ dayOfMonth: 12, checkins: 0 });
@@ -229,14 +233,22 @@ describe('buildCalendar', () => {
     // The other half, and why this is a `max` and not "extend to the end of the
     // month": drawing the 13th to the 30th would claim eighteen days you have
     // not lived.
-    const [sep] = buildCalendar([doc('2026-09-10T09:00:00Z', ['Happy/Calm'])], LONDON, '2026-09-12');
+    const [sep] = buildCalendar(
+      [doc('2026-09-10T09:00:00Z', ['Happy/Calm'])],
+      LONDON,
+      '2026-09-12',
+    );
     expect(sep.cells.filter((c) => c !== null)).toHaveLength(3);
   });
 
   it('opens the current month when the log stopped in an earlier one', () => {
     // A month with no readings at all still has to exist once today is in it,
     // or the calendar's last page is a month you have already left.
-    const months = buildCalendar([doc('2026-08-31T09:00:00Z', ['Happy/Calm'])], LONDON, '2026-09-02');
+    const months = buildCalendar(
+      [doc('2026-08-31T09:00:00Z', ['Happy/Calm'])],
+      LONDON,
+      '2026-09-02',
+    );
     expect(months.map((m) => m.key)).toEqual(['2026-08', '2026-09']);
     const sep = months[1].cells.filter((c): c is CalendarDay => c !== null);
     expect(sep.map((c) => c.dayOfMonth)).toEqual([1, 2]);
@@ -246,7 +258,11 @@ describe('buildCalendar', () => {
   it('keeps a reading dated after today rather than trimming it away', () => {
     // `last` is the LATER of the two, not `today`. A device with a fast clock,
     // or a document synced from one, must not vanish from the grid.
-    const [sep] = buildCalendar([doc('2026-09-14T09:00:00Z', ['Happy/Calm'])], LONDON, '2026-09-12');
+    const [sep] = buildCalendar(
+      [doc('2026-09-14T09:00:00Z', ['Happy/Calm'])],
+      LONDON,
+      '2026-09-12',
+    );
     expect(sep.cells.filter((c) => c !== null)).toHaveLength(1);
   });
 
@@ -275,7 +291,13 @@ describe('buildCalendar', () => {
     delete bare.scoreTenths;
     const [sep] = buildCalendar([bare as WellbeingDoc], LONDON, '2026-09-01');
     const d = sep.cells.find((c) => c !== null)!;
-    expect(d).toMatchObject({ checkins: 1, scored: 0, scoreLow: null, scoreHigh: null, spread: null });
+    expect(d).toMatchObject({
+      checkins: 1,
+      scored: 0,
+      scoreLow: null,
+      scoreHigh: null,
+      spread: null,
+    });
     expect(d.bands).toHaveLength(1);
   });
 

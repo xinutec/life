@@ -221,4 +221,3 @@ describe('shopPrice', () => {
     ).toBe(893);
   });
 });
-

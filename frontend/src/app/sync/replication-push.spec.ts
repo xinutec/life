@@ -85,7 +85,13 @@ async function setup(opts?: { pull?: PullHandler; push?: PushHandler }) {
 describe('replication upstream — local writes actually push', () => {
   it('an insert is pushed', async () => {
     const { db, collection, replication, pushed } = await setup();
-    await collection.insert({ ulid: 'u1', recordedAt: '2026-07-03T12:00:00.000Z', score: 4, note: null, rev: 0 });
+    await collection.insert({
+      ulid: 'u1',
+      recordedAt: '2026-07-03T12:00:00.000Z',
+      score: 4,
+      note: null,
+      rev: 0,
+    });
     await replication.awaitInSync();
     expect(pushed.map((d) => d.ulid)).toEqual(['u1']);
     await db.close();
@@ -93,7 +99,13 @@ describe('replication upstream — local writes actually push', () => {
 
   it('a field edit on a synced doc is pushed — THE push-loss regression', async () => {
     const { db, collection, replication, pushed } = await setup();
-    await collection.insert({ ulid: 'u1', recordedAt: '2026-07-03T12:00:00.000Z', score: 4, note: null, rev: 0 });
+    await collection.insert({
+      ulid: 'u1',
+      recordedAt: '2026-07-03T12:00:00.000Z',
+      score: 4,
+      note: null,
+      rev: 0,
+    });
     await replication.awaitInSync();
 
     // The bug: this patch changes content but not `rev` (server-minted), and a
@@ -109,7 +121,13 @@ describe('replication upstream — local writes actually push', () => {
 
   it('a delete is pushed', async () => {
     const { db, collection, replication, pushed } = await setup();
-    await collection.insert({ ulid: 'u1', recordedAt: '2026-07-03T12:00:00.000Z', score: 4, note: null, rev: 0 });
+    await collection.insert({
+      ulid: 'u1',
+      recordedAt: '2026-07-03T12:00:00.000Z',
+      score: 4,
+      note: null,
+      rev: 0,
+    });
     await replication.awaitInSync();
     const doc = await collection.findOne('u1').exec();
     await doc!.remove();
@@ -136,7 +154,13 @@ describe('replication upstream — local writes actually push', () => {
     const { db, collection, replication, pushed } = await setup();
     const ids = ['u1', 'u2', 'u3'];
     await collection.bulkInsert(
-      ids.map((ulid) => ({ ulid, recordedAt: '2026-07-03T00:00:00.000Z', score: 1, note: null, rev: 0 })),
+      ids.map((ulid) => ({
+        ulid,
+        recordedAt: '2026-07-03T00:00:00.000Z',
+        score: 1,
+        note: null,
+        rev: 0,
+      })),
     );
     await replication.awaitInSync();
     pushed.length = 0; // ignore the insert pushes; watch only the edits

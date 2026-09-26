@@ -25,9 +25,7 @@ const doc = (over: Partial<ShoppingDoc>): ShoppingDoc => ({
 });
 
 describe('TripSheet', () => {
-  function setup(
-    opts: { items?: ShoppingDoc[]; shop?: string; fails?: unknown } = {},
-  ) {
+  function setup(opts: { items?: ShoppingDoc[]; shop?: string; fails?: unknown } = {}) {
     const planShopTrip = vi.fn(() =>
       opts.fails !== undefined
         ? throwError(() => opts.fails)
@@ -135,9 +133,7 @@ describe('TripSheet', () => {
       fails: new HttpErrorResponse({ status: 0 }),
     });
     fixture.componentInstance.save();
-    expect(feedback.error).toHaveBeenCalledWith(
-      expect.stringContaining('needs a connection'),
-    );
+    expect(feedback.error).toHaveBeenCalledWith(expect.stringContaining('needs a connection'));
     expect(ref.dismiss).not.toHaveBeenCalled();
   });
 

@@ -133,7 +133,6 @@ const AMEND_WINDOW_MS = 60_000;
   styleUrl: './wellbeing-checkin.scss',
   imports: [MatButtonModule, MatIconModule],
 })
-
 export class WellbeingCheckin {
   private store = inject(WellbeingStore);
   private feedback = inject(Feedback);

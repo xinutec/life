@@ -113,7 +113,10 @@ describe('Todo', () => {
   });
 
   it('filters the visible list by type', () => {
-    const { fixture } = setup([doc({ ulid: 'a', type: 'purchase' }), doc({ ulid: 'b', type: 'call' })]);
+    const { fixture } = setup([
+      doc({ ulid: 'a', type: 'purchase' }),
+      doc({ ulid: 'b', type: 'call' }),
+    ]);
     fixture.detectChanges();
     const c = fixture.componentInstance;
     expect(c.visible().length).toBe(2);

@@ -79,7 +79,12 @@
         />
       </mat-form-field>
       <div class="detail-edit-actions">
-        <button mat-icon-button (click)="saveDetails()" [disabled]="reconciling()" aria-label="Save details">
+        <button
+          mat-icon-button
+          (click)="saveDetails()"
+          [disabled]="reconciling()"
+          aria-label="Save details"
+        >
           <mat-icon>check</mat-icon>
         </button>
         <button mat-icon-button (click)="cancelEditDetails()" aria-label="Cancel">
@@ -131,8 +136,8 @@
     <section class="reconcile">
       <h3>Shops disagree on some details</h3>
       <p class="fine">
-        Pick which to trust. Nothing changes until you apply — anything left on
-        “keep” stays as it is.
+        Pick which to trust. Nothing changes until you apply — anything left on “keep” stays as it
+        is.
       </p>
       @for (f of reconFields(); track f.field) {
         <div class="recon-field">
@@ -172,7 +177,7 @@
               (change)="setChoice(f.field, $event.value)"
             >
               <mat-radio-button value="keep">
-                Keep@if (f.current) { : {{ f.current }} } @else { (none) }
+                Keep{{ f.current ? ': ' + f.current : ' (none)' }}
               </mat-radio-button>
               @for (c of f.candidates; track c.source) {
                 <mat-radio-button [value]="c.source">
@@ -196,7 +201,7 @@
           <span class="price-block">
             <span class="price">{{ r.price }}</span>
             <span class="fine">
-              {{ r.pack }}@if (r.pack && r.when) {&nbsp;·&nbsp;}{{ r.when }}
+              {{ dotted(r.pack, r.when) }}
             </span>
           </span>
         </div>
@@ -214,7 +219,7 @@
             @if (r.price) {
               <span class="price">{{ r.price }}</span>
               <span class="fine">
-                {{ r.perUnit }}@if (r.perUnit && r.observed) {&nbsp;·&nbsp;}{{ r.observed }}
+                {{ dotted(r.perUnit, r.observed) }}
               </span>
             } @else {
               <span class="fine">no price yet</span>
@@ -301,10 +306,9 @@
             <!-- What was actually checked, not a claim about the catalogue: a
                  shop's own search showed us these and none carried the barcode. -->
             <span class="fine">
-              No {{ shop.label }} product carries this barcode
-              @if (shop.checked) {
-                (checked {{ shop.checked }})
-              }.
+              No {{ shop.label }} product carries this barcode{{
+                shop.checked ? ' (checked ' + shop.checked + ')' : ''
+              }}.
             </span>
           }
           @case ('unknown') {
@@ -353,7 +357,9 @@
   }
 
   @if (nutrientRows().length) {
-    <h3>Nutrition <span class="basis">per {{ basis() }}</span></h3>
+    <h3>
+      Nutrition <span class="basis">per {{ basis() }}</span>
+    </h3>
     <table class="nutrition">
       <tbody>
         @for (row of nutrientRows(); track row.label) {
@@ -390,9 +396,8 @@
     <section class="provenance">
       <h3>Sources differ</h3>
       <p class="fine">
-        What each source says. The safe reading is shown above — an allergen any
-        source flags is kept, and a disputed diet claim reads “maybe”. Check the
-        pack if it matters.
+        What each source says. The safe reading is shown above — an allergen any source flags is
+        kept, and a disputed diet claim reads “maybe”. Check the pack if it matters.
       </p>
       @for (c of factProvenance(); track c.label) {
         <div class="prov-row">

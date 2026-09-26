@@ -137,7 +137,10 @@ export class Todo {
   fromLabel(it: TodoDoc): string {
     if (!it.notBefore) return '';
     const d = new Date(it.notBefore + 'T00:00:00');
-    return 'from ' + d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+    return (
+      'from ' +
+      d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
+    );
   }
 
   setPriority(it: TodoDoc, priority: TodoPriority | null): void {

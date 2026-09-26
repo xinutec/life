@@ -2,10 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import {
-  MAT_BOTTOM_SHEET_DATA,
-  MatBottomSheetRef,
-} from '@angular/material/bottom-sheet';
+import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -194,9 +191,7 @@ export class ShoppingItemSheet {
 
   /** Whether "View product" has somewhere to go: a linked product, or a barcode
    *  it can resolve to one. */
-  readonly canViewProduct = computed(
-    () => this.productId() != null || !!this.barcode().trim(),
-  );
+  readonly canViewProduct = computed(() => this.productId() != null || !!this.barcode().trim());
 
   /** Leave the sheet for the linked product's page — the scan → payoff-screen
    *  path. A barcode without an established link is looked up first. */

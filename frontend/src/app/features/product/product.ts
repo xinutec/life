@@ -130,7 +130,6 @@ function blankLookup(source: Source): ShopLookupRow {
   };
 }
 
-
 /** A listing's identity — what joins a price to the listing that quoted it, and
  *  what keys a row. `(source, external_id)` is the listing's unique key. */
 function listingKey(l: { source: Source; external_id: string }): string {
@@ -264,7 +263,10 @@ export class ProductPage {
 
   private patchLookup(source: Source, patch: Partial<ShopLookupRow>): void {
     const state = this.lookupState();
-    this.lookupState.set({ ...state, [source]: { ...(state[source] ?? blankLookup(source)), ...patch } });
+    this.lookupState.set({
+      ...state,
+      [source]: { ...(state[source] ?? blankLookup(source)), ...patch },
+    });
   }
 
   /** Ask whether a shop carries this barcode.
@@ -782,6 +784,11 @@ export class ProductPage {
       when: ago(new Date(p.bought_at).getTime()),
     })),
   );
+
+  /** Present parts joined by a non-breaking " · ". */
+  protected dotted(...parts: (string | null | undefined)[]): string {
+    return parts.filter(Boolean).join('\u00a0·\u00a0');
+  }
 
   /** Shops, cheapest first, then unpriced shops that still have a page to link.
    *  A price links to the listing it came from; the backend has already

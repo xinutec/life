@@ -36,7 +36,10 @@
       </button>
       <h2>Emotions</h2>
       <button mat-button class="done" (click)="done()">
-        Done @if (count()) { ({{ count() }}) }
+        Done
+        @if (count()) {
+          ({{ count() }})
+        }
       </button>
     </header>
 

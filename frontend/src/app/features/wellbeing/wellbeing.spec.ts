@@ -98,7 +98,8 @@ describe('Wellbeing history', () => {
   });
 
   it('rules off each local midnight in the window', () => {
-    const c = setup([entry({ recordedAt: hoursAgo(2), scoreTenths: 40 })]).fixture.componentInstance;
+    const c = setup([entry({ recordedAt: hoursAgo(2), scoreTenths: 40 })]).fixture
+      .componentInstance;
     // A rolling 14-day window crosses 14 midnights whatever hour the suite runs at.
     c.window.set(14);
     const xs = c.chart().midnights;
@@ -113,7 +114,8 @@ describe('Wellbeing history', () => {
   });
 
   it('names each day that is wide enough to hold the word', () => {
-    const c = setup([entry({ recordedAt: hoursAgo(2), scoreTenths: 40 })]).fixture.componentInstance;
+    const c = setup([entry({ recordedAt: hoursAgo(2), scoreTenths: 40 })]).fixture
+      .componentInstance;
     // 14 days: each is ~20 units wide, too narrow for a name — rules only.
     c.window.set(14);
     expect(c.chart().midnights.length).toBe(14);

@@ -174,7 +174,12 @@ export class TodoGraph {
 
   resolve(kind: TargetKind, ref: string): LinkTarget {
     return (
-      this.byKey().get(kind + ':' + ref) ?? { kind, ref, label: '(deleted)', icon: TARGET_ICON[kind] }
+      this.byKey().get(kind + ':' + ref) ?? {
+        kind,
+        ref,
+        label: '(deleted)',
+        icon: TARGET_ICON[kind],
+      }
     );
   }
 
@@ -192,7 +197,11 @@ export class TodoGraph {
   outgoing(todoUlid: string): ResolvedLink[] {
     return this.links()
       .filter((l) => l.from === todoUlid)
-      .map((l) => ({ ulid: l.ulid, linkKind: l.kind, target: this.resolve(l.targetKind, l.targetRef) }));
+      .map((l) => ({
+        ulid: l.ulid,
+        linkKind: l.kind,
+        target: this.resolve(l.targetKind, l.targetRef),
+      }));
   }
 
   /** Incoming edges — other to-dos pointing at this one — resolved to the source. */

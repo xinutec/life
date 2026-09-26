@@ -181,7 +181,7 @@ export class Recipes {
           case 'no_amount':
             return 'the recipe gives no amount';
           case 'no_comparable_stock':
-            return "the cupboard measures it differently";
+            return 'the cupboard measures it differently';
         }
     }
   }

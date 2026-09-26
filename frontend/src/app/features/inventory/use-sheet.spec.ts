@@ -64,7 +64,7 @@ describe('UseSheet', () => {
     expect(c.shares()).toEqual([]);
   });
 
-  it('sends the amount in the ITEM\'s unit, never a converted one', () => {
+  it("sends the amount in the ITEM's unit, never a converted one", () => {
     // The server refuses a mismatch rather than converting, so the sheet must
     // not invent a unit — it sends the row's own.
     const { c, api, ref } = setup();
@@ -75,7 +75,10 @@ describe('UseSheet', () => {
   });
 
   it('says how much is left', () => {
-    const { c, feedback } = setup({}, vi.fn(() => of(item({ quantity: 750 }))));
+    const { c, feedback } = setup(
+      {},
+      vi.fn(() => of(item({ quantity: 750 }))),
+    );
     c.pick(200);
     c.save();
     // Spaced, because an item's unit is free text: "200 g" is the same as
@@ -86,7 +89,10 @@ describe('UseSheet', () => {
   it('says it differently when there is none left', () => {
     // "0g left" is technically true and reads like a bug; naming the thing you
     // ran out of is what makes it worth putting back on the Buy list.
-    const { c, feedback } = setup({}, vi.fn(() => of(item({ quantity: 0 }))));
+    const { c, feedback } = setup(
+      {},
+      vi.fn(() => of(item({ quantity: 0 }))),
+    );
     c.pick(950);
     c.save();
     expect(feedback.notify).toHaveBeenCalledWith('Used the last of the plain flour.');

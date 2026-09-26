@@ -89,13 +89,13 @@
             <mat-icon
               class="has-energy"
               [attr.aria-label]="'energy: ' + energyMeta(e.energyTenths).label"
-            >{{ energyMeta(e.energyTenths).icon }}</mat-icon>
+              >{{ energyMeta(e.energyTenths).icon }}</mat-icon
+            >
           }
           @if (e.emotions.length) {
-            <mat-icon
-              class="has-emotions"
-              [attr.aria-label]="e.emotions.length + ' emotions'"
-            >label</mat-icon>
+            <mat-icon class="has-emotions" [attr.aria-label]="e.emotions.length + ' emotions'"
+              >label</mat-icon
+            >
           }
           @if (e.note) {
             <mat-icon class="has-note" aria-label="has a note">sticky_note_2</mat-icon>

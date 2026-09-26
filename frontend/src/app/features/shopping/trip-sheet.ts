@@ -81,27 +81,33 @@ export class TripSheet {
     if (!shop || startsAt === null) return;
     this.saving.set(true);
     this.needsLinking.set(false);
-    this.api.planShopTrip(shop, startsAt, this.items().map((i) => i.name)).subscribe({
-      next: (planned) => {
-        this.saving.set(false);
-        this.feedback.notify(`“${planned.summary}” added to ${planned.calendar}.`);
-        this.ref.dismiss();
-      },
-      error: (e: unknown) => {
-        this.saving.set(false);
-        const failure = classifyApiError(e);
-        // 409 is the backend saying the Nextcloud link is missing or lapsed.
-        if (failure.kind === 'server' && failure.status === 409) {
-          this.needsLinking.set(true);
-          return;
-        }
-        this.feedback.error(
-          failure.kind === 'offline'
-            ? 'Planning a trip needs a connection — the calendar is Nextcloud’s.'
-            : 'Couldn’t add it to your calendar.',
-        );
-      },
-    });
+    this.api
+      .planShopTrip(
+        shop,
+        startsAt,
+        this.items().map((i) => i.name),
+      )
+      .subscribe({
+        next: (planned) => {
+          this.saving.set(false);
+          this.feedback.notify(`“${planned.summary}” added to ${planned.calendar}.`);
+          this.ref.dismiss();
+        },
+        error: (e: unknown) => {
+          this.saving.set(false);
+          const failure = classifyApiError(e);
+          // 409 is the backend saying the Nextcloud link is missing or lapsed.
+          if (failure.kind === 'server' && failure.status === 409) {
+            this.needsLinking.set(true);
+            return;
+          }
+          this.feedback.error(
+            failure.kind === 'offline'
+              ? 'Planning a trip needs a connection — the calendar is Nextcloud’s.'
+              : 'Couldn’t add it to your calendar.',
+          );
+        },
+      });
   }
 
   openSettings(): void {

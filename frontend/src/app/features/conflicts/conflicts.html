@@ -19,7 +19,9 @@
   @for (e of entries(); track e.id) {
     <mat-card appearance="outlined" class="conflict">
       <mat-card-content>
-        <div class="what">{{ e.label }} <span class="field">· {{ e.field }}</span></div>
+        <div class="what">
+          {{ e.label }} <span class="field">· {{ e.field }}</span>
+        </div>
         <div class="values">
           <!-- dev-lint: allow-unstyled-class temporary adoption waiver -- decide: style, rename, or delete -->
           <div class="val kept">

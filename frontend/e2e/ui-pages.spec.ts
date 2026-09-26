@@ -30,25 +30,83 @@ const ME = { userId: 'test', displayName: 'Test User', avatarUrl: '', nextcloud:
 
 /** Busy to-do set: overdue+high (two pills + note), due-soon, ready, waiting. */
 const TODOS = [
-  { ulid: '01TODOOVERDUE0000000000001', id: 1, title: 'Call the GP about the referral letter',
-    type: 'call', status: 'open', priority: 'high', notes: 'ask for the clinic line — they only pick up mornings',
-    notBefore: null, due: iso(-3), rev: 1, _deleted: false },
-  { ulid: '01TODODUESOON0000000000002', id: 2, title: 'Renew the travel insurance policy',
-    type: 'admin', status: 'open', priority: 'medium', notes: null,
-    notBefore: null, due: iso(2), rev: 2, _deleted: false },
-  { ulid: '01TODOPLAIN000000000000003', id: 3, title: 'Descale the coffee machine',
-    type: 'task', status: 'open', priority: null, notes: 'vinegar under the sink',
-    notBefore: null, due: null, rev: 3, _deleted: false },
-  { ulid: '01TODOWAITING0000000000004', id: 4, title: 'Book the summer service',
-    type: 'appointment', status: 'open', priority: 'low', notes: null,
-    notBefore: iso(10), due: null, rev: 4, _deleted: false },
+  {
+    ulid: '01TODOOVERDUE0000000000001',
+    id: 1,
+    title: 'Call the GP about the referral letter',
+    type: 'call',
+    status: 'open',
+    priority: 'high',
+    notes: 'ask for the clinic line — they only pick up mornings',
+    notBefore: null,
+    due: iso(-3),
+    rev: 1,
+    _deleted: false,
+  },
+  {
+    ulid: '01TODODUESOON0000000000002',
+    id: 2,
+    title: 'Renew the travel insurance policy',
+    type: 'admin',
+    status: 'open',
+    priority: 'medium',
+    notes: null,
+    notBefore: null,
+    due: iso(2),
+    rev: 2,
+    _deleted: false,
+  },
+  {
+    ulid: '01TODOPLAIN000000000000003',
+    id: 3,
+    title: 'Descale the coffee machine',
+    type: 'task',
+    status: 'open',
+    priority: null,
+    notes: 'vinegar under the sink',
+    notBefore: null,
+    due: null,
+    rev: 3,
+    _deleted: false,
+  },
+  {
+    ulid: '01TODOWAITING0000000000004',
+    id: 4,
+    title: 'Book the summer service',
+    type: 'appointment',
+    status: 'open',
+    priority: 'low',
+    notes: null,
+    notBefore: iso(10),
+    due: null,
+    rev: 4,
+    _deleted: false,
+  },
 ];
 
 const SHOPPING = [
-  { ulid: '01SHOPA0000000000000000001', id: 1, name: 'Greek yoghurt (the big tubs)',
-    quantity: 2, unit: 'tubs', barcode: null, done: false, rev: 1, _deleted: false },
-  { ulid: '01SHOPB0000000000000000002', id: 2, name: 'Kidney beans', quantity: 3,
-    unit: 'tins', barcode: null, done: true, rev: 2, _deleted: false },
+  {
+    ulid: '01SHOPA0000000000000000001',
+    id: 1,
+    name: 'Greek yoghurt (the big tubs)',
+    quantity: 2,
+    unit: 'tubs',
+    barcode: null,
+    done: false,
+    rev: 1,
+    _deleted: false,
+  },
+  {
+    ulid: '01SHOPB0000000000000000002',
+    id: 2,
+    name: 'Kidney beans',
+    quantity: 3,
+    unit: 'tins',
+    barcode: null,
+    done: true,
+    rev: 2,
+    _deleted: false,
+  },
 ];
 
 /** Wellbeing chart elements wider than the phone by design, exempted from the
@@ -70,22 +128,85 @@ const at = (daysAgo: number, h: number): string => {
 // the suite runs earlier in the day and drop out of the window.
 const hoursAgo = (n: number): string => new Date(now.getTime() - n * 3_600_000).toISOString();
 const WELLBEING = [
-  { ulid: '01WELLA0000000000000000001', id: 1, recordedAt: hoursAgo(5), scoreTenths: 20, energyTenths: 20,
-    emotions: ['Anxious', 'Withdrawn'], note: 'rough morning', rev: 1, _deleted: false },
-  { ulid: '01WELLB0000000000000000002', id: 2, recordedAt: hoursAgo(1), scoreTenths: 40, energyTenths: null,
-    emotions: [], note: null, rev: 2, _deleted: false },
-  { ulid: '01WELLC0000000000000000003', id: 3, recordedAt: at(1, 20), scoreTenths: 35, energyTenths: null,
-    emotions: [], note: null, rev: 3, _deleted: false },
+  {
+    ulid: '01WELLA0000000000000000001',
+    id: 1,
+    recordedAt: hoursAgo(5),
+    scoreTenths: 20,
+    energyTenths: 20,
+    emotions: ['Anxious', 'Withdrawn'],
+    note: 'rough morning',
+    rev: 1,
+    _deleted: false,
+  },
+  {
+    ulid: '01WELLB0000000000000000002',
+    id: 2,
+    recordedAt: hoursAgo(1),
+    scoreTenths: 40,
+    energyTenths: null,
+    emotions: [],
+    note: null,
+    rev: 2,
+    _deleted: false,
+  },
+  {
+    ulid: '01WELLC0000000000000000003',
+    id: 3,
+    recordedAt: at(1, 20),
+    scoreTenths: 35,
+    energyTenths: null,
+    emotions: [],
+    note: null,
+    rev: 3,
+    _deleted: false,
+  },
   // Older than the widest window, so the charts have somewhere to pan back TO.
   // Without these the rail is exactly one screen long and the pan test is vacuous.
-  { ulid: '01WELLD0000000000000000004', id: 4, recordedAt: hoursAgo(12 * 24), scoreTenths: 30, energyTenths: 30,
-    emotions: [], note: null, rev: 4, _deleted: false },
-  { ulid: '01WELLE0000000000000000005', id: 5, recordedAt: hoursAgo(18 * 24), scoreTenths: 50, energyTenths: 40,
-    emotions: [], note: null, rev: 5, _deleted: false },
-  { ulid: '01WELLF0000000000000000006', id: 6, recordedAt: hoursAgo(24 * 24), scoreTenths: 10, energyTenths: 10,
-    emotions: [], note: null, rev: 6, _deleted: false },
-  { ulid: '01WELLG0000000000000000007', id: 7, recordedAt: hoursAgo(30 * 24), scoreTenths: 40, energyTenths: 20,
-    emotions: [], note: null, rev: 7, _deleted: false },
+  {
+    ulid: '01WELLD0000000000000000004',
+    id: 4,
+    recordedAt: hoursAgo(12 * 24),
+    scoreTenths: 30,
+    energyTenths: 30,
+    emotions: [],
+    note: null,
+    rev: 4,
+    _deleted: false,
+  },
+  {
+    ulid: '01WELLE0000000000000000005',
+    id: 5,
+    recordedAt: hoursAgo(18 * 24),
+    scoreTenths: 50,
+    energyTenths: 40,
+    emotions: [],
+    note: null,
+    rev: 5,
+    _deleted: false,
+  },
+  {
+    ulid: '01WELLF0000000000000000006',
+    id: 6,
+    recordedAt: hoursAgo(24 * 24),
+    scoreTenths: 10,
+    energyTenths: 10,
+    emotions: [],
+    note: null,
+    rev: 6,
+    _deleted: false,
+  },
+  {
+    ulid: '01WELLG0000000000000000007',
+    id: 7,
+    recordedAt: hoursAgo(30 * 24),
+    scoreTenths: 40,
+    energyTenths: 20,
+    emotions: [],
+    note: null,
+    rev: 7,
+    _deleted: false,
+  },
 ];
 
 // A dense stretch for the emotion calendar: the grid is seven columns of squares
@@ -144,26 +265,72 @@ const CALENDAR_WELLBEING = Array.from({ length: 80 }, (_, i) => 80 - i)
 // A long filename is the overflow case here — phones name a scan
 // "IMG_20240315_143022_receipt_dishwasher.pdf" without being asked.
 const FILES: ItemFile[] = [
-  { id: 1, item_id: 3, purchase_id: 9, name: 'receipt.png', mime: 'image/png',
-    size_bytes: 307_200, created_at: '2026-09-01T10:00:00Z' },
-  { id: 2, item_id: 3, purchase_id: null,
-    name: 'IMG_20240315_143022_receipt_dishwasher_manual.pdf', mime: 'application/pdf',
-    size_bytes: 2_097_152, created_at: '2026-08-20T10:00:00Z' },
+  {
+    id: 1,
+    item_id: 3,
+    purchase_id: 9,
+    name: 'receipt.png',
+    mime: 'image/png',
+    size_bytes: 307_200,
+    created_at: '2026-09-01T10:00:00Z',
+  },
+  {
+    id: 2,
+    item_id: 3,
+    purchase_id: null,
+    name: 'IMG_20240315_143022_receipt_dishwasher_manual.pdf',
+    mime: 'application/pdf',
+    size_bytes: 2_097_152,
+    created_at: '2026-08-20T10:00:00Z',
+  },
 ];
 
 const ITEMS: Item[] = [
-  { id: 1, product_id: null, name: 'Milk (semi-skimmed)', brand: 'Waitrose Essential', category: 'food',
-    quantity: 1, unit: 'bottle', expiry: iso(-1), expiry_precision: 'day', location_id: 2,
-    barcode: null, has_image: false },
-  { id: 2, product_id: null, name: 'Chicken thighs', brand: null, category: 'food',
-    quantity: 500, unit: 'g', expiry: iso(1), expiry_precision: 'day', location_id: 2,
-    barcode: null, has_image: false },
+  {
+    id: 1,
+    product_id: null,
+    name: 'Milk (semi-skimmed)',
+    brand: 'Waitrose Essential',
+    category: 'food',
+    quantity: 1,
+    unit: 'bottle',
+    expiry: iso(-1),
+    expiry_precision: 'day',
+    location_id: 2,
+    barcode: null,
+    has_image: false,
+  },
+  {
+    id: 2,
+    product_id: null,
+    name: 'Chicken thighs',
+    brand: null,
+    category: 'food',
+    quantity: 500,
+    unit: 'g',
+    expiry: iso(1),
+    expiry_precision: 'day',
+    location_id: 2,
+    barcode: null,
+    has_image: false,
+  },
   // A medicine box, printed MM/YYYY. Its list line reads "expired since June
   // 2026" rather than a date — the longest string this meta slot ever holds, and
   // therefore the one worth measuring against a phone-width row.
-  { id: 3, product_id: null, name: 'Levetiracetam', brand: null, category: 'medication',
-    quantity: 1, unit: 'box', expiry: '2026-06-30', expiry_precision: 'month', location_id: 2,
-    barcode: null, has_image: false },
+  {
+    id: 3,
+    product_id: null,
+    name: 'Levetiracetam',
+    brand: null,
+    category: 'medication',
+    quantity: 1,
+    unit: 'box',
+    expiry: '2026-06-30',
+    expiry_precision: 'month',
+    location_id: 2,
+    barcode: null,
+    has_image: false,
+  },
 ];
 
 // An item's audit, as the server orders it: newest first, and mixing the two
@@ -172,16 +339,32 @@ const ITEMS: Item[] = [
  *  a second list above a timeline that was already the height of the screen. */
 const ITEM_PURCHASES = [
   {
-    id: 1, item_id: 3, product_id: null, barcode: null, name: 'Greek yoghurt',
-    shop: 'Waitrose', amount_minor: 250, currency: 'GBP', quantity: 2, unit: 'l',
-    unit_amount_minor: 125, unit_measure: 'L', bought_at: '2026-08-29T09:00:00Z',
+    id: 1,
+    item_id: 3,
+    product_id: null,
+    barcode: null,
+    name: 'Greek yoghurt',
+    shop: 'Waitrose',
+    amount_minor: 250,
+    currency: 'GBP',
+    quantity: 2,
+    unit: 'l',
+    unit_amount_minor: 125,
+    unit_measure: 'L',
+    bought_at: '2026-08-29T09:00:00Z',
   },
 ];
 
 const ITEM_HISTORY = [
   { id: 12, event: 'used', quantity: 200, location: 'Fridge', at: Date.now() - 3_600_000 },
   { id: 8, event: 'moved', quantity: null, location: 'Fridge', at: Date.now() - 2 * 86_400_000 },
-  { id: 3, event: 'added', quantity: 950, location: 'Spice cupboard', at: Date.now() - 9 * 86_400_000 },
+  {
+    id: 3,
+    event: 'added',
+    quantity: 950,
+    location: 'Spice cupboard',
+    at: Date.now() - 9 * 86_400_000,
+  },
 ];
 
 // Three bins on one morning, which is what the real feed does — and the row
@@ -200,20 +383,36 @@ const LOCATIONS = [
 ];
 
 const RECIPES = [
-  { id: 1, name: 'Chicken curry', instructions: null, servings: 4, ingredients: [
-    { name: 'Chicken thighs', quantity: 500, unit: 'g' },
-    { name: 'Coconut milk', quantity: 1, unit: 'tin' },
-    { name: 'Curry paste', quantity: 2, unit: 'tbsp' },
-  ] },
-  { id: 2, name: 'Beans on toast', instructions: null, servings: 1, ingredients: [
-    { name: 'Kidney beans', quantity: 1, unit: 'tin' },
-    { name: 'Bread', quantity: 2, unit: 'slices' },
-  ] },
+  {
+    id: 1,
+    name: 'Chicken curry',
+    instructions: null,
+    servings: 4,
+    ingredients: [
+      { name: 'Chicken thighs', quantity: 500, unit: 'g' },
+      { name: 'Coconut milk', quantity: 1, unit: 'tin' },
+      { name: 'Curry paste', quantity: 2, unit: 'tbsp' },
+    ],
+  },
+  {
+    id: 2,
+    name: 'Beans on toast',
+    instructions: null,
+    servings: 1,
+    ingredients: [
+      { name: 'Kidney beans', quantity: 1, unit: 'tin' },
+      { name: 'Bread', quantity: 2, unit: 'slices' },
+    ],
+  },
 ];
 
 const TRASH = [
-  { kind: 'shopping', ref: '01TRASHSHOP000000000000001', name: 'Oat milk (the barista one)',
-    deleted_at: now.getTime() - 3_600_000 },
+  {
+    kind: 'shopping',
+    ref: '01TRASHSHOP000000000000001',
+    name: 'Oat milk (the barista one)',
+    deleted_at: now.getTime() - 3_600_000,
+  },
   { kind: 'recipe', ref: '3', name: 'Lentil soup', deleted_at: now.getTime() - 86_400_000 },
 ];
 
@@ -221,27 +420,75 @@ const TRASH = [
  *  whole nutrition panel, long ingredients, allergen + dietary chips — the
  *  busiest the product page gets. */
 const PRODUCT_DETAIL = {
-  product: { id: 42, barcode: '5000328042732', name: 'Quaker Oat So Simple Original Big Pack Porridge Sachets',
-    brand: 'Quaker', quantity_label: '22x27G', source: 'off', external_id: '5000328042732',
-    name_source: 'asda', image_source: null, has_image: false },
+  product: {
+    id: 42,
+    barcode: '5000328042732',
+    name: 'Quaker Oat So Simple Original Big Pack Porridge Sachets',
+    brand: 'Quaker',
+    quantity_label: '22x27G',
+    source: 'off',
+    external_id: '5000328042732',
+    name_source: 'asda',
+    image_source: null,
+    has_image: false,
+  },
   listings: [
-    { source: 'off', external_id: '5000328042732',
-      url: 'https://world.openfoodfacts.org/product/5000328042732', raw_name: 'oat so simple' },
-    { source: 'asda', external_id: '9346702',
-      url: 'https://www.asda.com/groceries/product/9346702', raw_name: 'Quaker Oat So Simple' },
-    { source: 'waitrose', external_id: '271105',
-      url: 'https://www.waitrose.com/ecom/products/x/271105', raw_name: 'Oat So Simple' },
+    {
+      source: 'off',
+      external_id: '5000328042732',
+      url: 'https://world.openfoodfacts.org/product/5000328042732',
+      raw_name: 'oat so simple',
+    },
+    {
+      source: 'asda',
+      external_id: '9346702',
+      url: 'https://www.asda.com/groceries/product/9346702',
+      raw_name: 'Quaker Oat So Simple',
+    },
+    {
+      source: 'waitrose',
+      external_id: '271105',
+      url: 'https://www.waitrose.com/ecom/products/x/271105',
+      raw_name: 'Oat So Simple',
+    },
   ],
   prices: [
-    { source: 'waitrose', external_id: '271105', amount_minor: 450, currency: 'GBP', unit_amount_minor: null,
-      unit_measure: null, region: null, observed_at: now.getTime() },
-    { source: 'asda', external_id: '9346702', amount_minor: 475, currency: 'GBP', unit_amount_minor: 800,
-      unit_measure: 'KG', region: 'EN', observed_at: now.getTime() - 2 * 86_400_000 },
+    {
+      source: 'waitrose',
+      external_id: '271105',
+      amount_minor: 450,
+      currency: 'GBP',
+      unit_amount_minor: null,
+      unit_measure: null,
+      region: null,
+      observed_at: now.getTime(),
+    },
+    {
+      source: 'asda',
+      external_id: '9346702',
+      amount_minor: 475,
+      currency: 'GBP',
+      unit_amount_minor: 800,
+      unit_measure: 'KG',
+      region: 'EN',
+      observed_at: now.getTime() - 2 * 86_400_000,
+    },
   ],
   facts: {
-    nutrition: { basis: '100g', serving_size: '40 g', energy_kj: 1500, energy_kcal: 356,
-      fat_g: 6.5, saturates_g: 1.2, carbohydrate_g: 60, sugars_g: 1, fibre_g: 10,
-      protein_g: 11, salt_g: 0.1, extra: { sodium: 0.04 } },
+    nutrition: {
+      basis: '100g',
+      serving_size: '40 g',
+      energy_kj: 1500,
+      energy_kcal: 356,
+      fat_g: 6.5,
+      saturates_g: 1.2,
+      carbohydrate_g: 60,
+      sugars_g: 1,
+      fibre_g: 10,
+      protein_g: 11,
+      salt_g: 0.1,
+      extra: { sodium: 0.04 },
+    },
     ingredients:
       'Wholegrain rolled oats (95%), sugar, natural flavouring, salt, an improbably ' +
       'long tail of emulsifiers and stabilisers to make this paragraph wrap on a phone',
@@ -262,22 +509,46 @@ const PRODUCT_DETAIL = {
   reconciliation: { fields: [] },
   documents: [],
   purchases: [
-    { id: 1, item_id: null, product_id: 42, barcode: '5000328042732', name: 'Oat So Simple',
-      shop: 'Waitrose', amount_minor: 425, currency: 'GBP', quantity: 594,
-      unit: 'g', unit_amount_minor: 715, unit_measure: 'KG',
-      bought_at: '2026-08-20T09:00:00Z' },
-  ]
+    {
+      id: 1,
+      item_id: null,
+      product_id: 42,
+      barcode: '5000328042732',
+      name: 'Oat So Simple',
+      shop: 'Waitrose',
+      amount_minor: 425,
+      currency: 'GBP',
+      quantity: 594,
+      unit: 'g',
+      unit_amount_minor: 715,
+      unit_measure: 'KG',
+      bought_at: '2026-08-20T09:00:00Z',
+    },
+  ],
 };
 
 /** A product Open Food Facts knows under a cryptic crowd name, that no shop
  *  lists yet — the state the "Find at Asda" lookup exists for. */
 const UNLISTED_DETAIL = {
-  product: { id: 43, barcode: '5063089281581', name: 'Asda ES Balsamic Modena', brand: 'Asda',
-    quantity_label: null, source: 'off', external_id: '5063089281581', name_source: 'off',
-    image_source: null, has_image: false },
+  product: {
+    id: 43,
+    barcode: '5063089281581',
+    name: 'Asda ES Balsamic Modena',
+    brand: 'Asda',
+    quantity_label: null,
+    source: 'off',
+    external_id: '5063089281581',
+    name_source: 'off',
+    image_source: null,
+    has_image: false,
+  },
   listings: [
-    { source: 'off', external_id: '5063089281581',
-      url: 'https://world.openfoodfacts.org/product/5063089281581', raw_name: 'Asda ES Balsamic Modena' },
+    {
+      source: 'off',
+      external_id: '5063089281581',
+      url: 'https://world.openfoodfacts.org/product/5063089281581',
+      raw_name: 'Asda ES Balsamic Modena',
+    },
   ],
   prices: [],
   facts: { nutrition: null, ingredients: null, allergens: [], dietary: [] },
@@ -289,22 +560,55 @@ const UNLISTED_DETAIL = {
 /** Asda's real answer for that crowd name: the product itself ranks LAST,
  *  behind a raspberry glaze. The barcode is what identifies it. */
 const ASDA_HITS = [
-  { external_id: '2266257', name: 'Glaze with Balsamic Vinegar of Modena 250ml', brand: 'Asda',
-    barcode: '5050854946264', quantity_label: '250ml', price_label: '£2.25', price: null, image_url: null },
-  { external_id: '9020293', name: 'Raspberry Glaze with Balsamic Vinegar of Modena', brand: 'Asda',
-    barcode: '5063089281598', quantity_label: '250ml', price_label: '£2.50', price: null, image_url: null },
-  { external_id: '9020290', name: 'Extra Special Balsamic Vinegar of Modena 250ml', brand: 'Asda',
-    barcode: '5063089281581', quantity_label: '250ml', price_label: '£8.00',
-    price: { amount_minor: 800, currency: 'GBP', unit_amount_minor: null, unit_measure: null, region: 'EN' },
-    image_url: null },
+  {
+    external_id: '2266257',
+    name: 'Glaze with Balsamic Vinegar of Modena 250ml',
+    brand: 'Asda',
+    barcode: '5050854946264',
+    quantity_label: '250ml',
+    price_label: '£2.25',
+    price: null,
+    image_url: null,
+  },
+  {
+    external_id: '9020293',
+    name: 'Raspberry Glaze with Balsamic Vinegar of Modena',
+    brand: 'Asda',
+    barcode: '5063089281598',
+    quantity_label: '250ml',
+    price_label: '£2.50',
+    price: null,
+    image_url: null,
+  },
+  {
+    external_id: '9020290',
+    name: 'Extra Special Balsamic Vinegar of Modena 250ml',
+    brand: 'Asda',
+    barcode: '5063089281581',
+    quantity_label: '250ml',
+    price_label: '£8.00',
+    price: {
+      amount_minor: 800,
+      currency: 'GBP',
+      unit_amount_minor: null,
+      unit_measure: null,
+      region: 'EN',
+    },
+    image_url: null,
+  },
 ];
 
 const CONFLICTS = [
-  { id: 1, kind: 'todo', ulid: '01TODOOVERDUE0000000000001', field: 'title',
+  {
+    id: 1,
+    kind: 'todo',
+    ulid: '01TODOOVERDUE0000000000001',
+    field: 'title',
     label: 'Call the GP about the referral letter',
     mine: JSON.stringify('Call the GP about the referral letter'),
     theirs: JSON.stringify('Phone the GP re: the referral'),
-    created_at: now.getTime() - 60_000 },
+    created_at: now.getTime() - 60_000,
+  },
 ];
 
 /** Mock every backend call: pulls return the seed docs, pushes accept all.
@@ -312,23 +616,20 @@ const CONFLICTS = [
 /** Compare "September 2026"-style month headings chronologically, so the
  *  calendar's order can be asserted without hardcoding which months a
  *  relative-dated fixture lands in. */
-const byMonthLabel = (a: string, b: string): number =>
-  Date.parse(`1 ${a}`) - Date.parse(`1 ${b}`);
+const byMonthLabel = (a: string, b: string): number => Date.parse(`1 ${a}`) - Date.parse(`1 ${b}`);
 
 /** The incremental sync pull, as a route handler. Module-scope so a test that
  *  needs a different fixture than mockApi's can re-route the same collection —
  *  the emotion calendar wants a full log where the trend chart wants seven
  *  readings. */
-const syncRoute =
-  (docs: unknown[]) =>
-  (r: Parameters<Parameters<Page['route']>[1]>[0]) => {
-    if (r.request().method() === 'POST') return r.fulfill({ json: [] });
-    const since = Number(new URL(r.request().url()).searchParams.get('since') ?? '0');
-    // Incremental protocol: only send the seed once, else the pull loops forever.
-    const fresh = docs.filter((d) => (d as { rev: number }).rev > since);
-    const top = docs.reduce<number>((m, d) => Math.max(m, (d as { rev: number }).rev), since);
-    return r.fulfill({ json: { documents: fresh, checkpoint: { rev: top } } });
-  };
+const syncRoute = (docs: unknown[]) => (r: Parameters<Parameters<Page['route']>[1]>[0]) => {
+  if (r.request().method() === 'POST') return r.fulfill({ json: [] });
+  const since = Number(new URL(r.request().url()).searchParams.get('since') ?? '0');
+  // Incremental protocol: only send the seed once, else the pull loops forever.
+  const fresh = docs.filter((d) => (d as { rev: number }).rev > since);
+  const top = docs.reduce<number>((m, d) => Math.max(m, (d as { rev: number }).rev), since);
+  return r.fulfill({ json: { documents: fresh, checkpoint: { rev: top } } });
+};
 
 async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/**', (r) =>
@@ -397,9 +698,7 @@ test('today — busy composition: lays out cleanly @ phone width', async ({ page
   await page.getByText('Expiring soon').waitFor();
   // Three collections joined onto one line is the longest text Today renders,
   // and the row most likely to spill off a phone.
-  await page
-    .getByText('Food waste · Rubbish · Paper and cardboard (blue sacks)')
-    .waitFor();
+  await page.getByText('Food waste · Rubbish · Paper and cardboard (blue sacks)').waitFor();
   await page.getByText('tomorrow', { exact: true }).waitFor();
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
@@ -538,7 +837,8 @@ test('wellbeing — the charts pan back through history, and the axis stays put'
 
   const chart = page.locator('svg.chart').first();
   const words = chart.locator('text.axis-word');
-  const xs = () => words.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().x)));
+  const xs = () =>
+    words.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().x)));
   const before = await xs();
   const dotsBefore = await chart.locator('circle.dot').count();
   expect(dotsBefore).toBeGreaterThan(0);
@@ -561,7 +861,10 @@ test('wellbeing — the charts pan back through history, and the axis stays put'
   // Both charts moved together — one scroller drives both, so their day rules
   // must still agree (the same assertion as the pinned case, now off in the past).
   const rules = (n: number) =>
-    page.locator('svg.chart').nth(n).locator('line.day')
+    page
+      .locator('svg.chart')
+      .nth(n)
+      .locator('line.day')
       .evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().x)));
   expect(await rules(1)).toEqual(await rules(0));
 
@@ -784,9 +1087,7 @@ test('inventory — the row menu opens and carries all three actions @ phone wid
   // `waitFor` returns when the panel becomes VISIBLE, which is the START of its
   // fade — measuring there reads a half-transparent menu with the list showing
   // through, and leaves a screenshot that looks like a contrast bug.
-  await expect
-    .poll(() => menu.evaluate((el) => Number(getComputedStyle(el).opacity)))
-    .toBe(1);
+  await expect.poll(() => menu.evaluate((el) => Number(getComputedStyle(el).opacity))).toBe(1);
   for (const action of ['Record using some', 'Add to Buy list', 'Delete']) {
     await expect(menu.getByRole('menuitem', { name: action })).toBeVisible();
   }
@@ -801,7 +1102,9 @@ test('inventory — the row menu opens and carries all three actions @ phone wid
 // mat-dialog-content's zeroed top padding unless the dialog shell reserves it.
 // Open it and assert no text is clipped. The shop bridge is Android-only, so
 // stub it so the shop tier renders too.
-test('product-picker dialog — the Search label is not sheared @ phone width', async ({ page }, testInfo) => {
+test('product-picker dialog — the Search label is not sheared @ phone width', async ({
+  page,
+}, testInfo) => {
   await page.addInitScript(() => {
     // The shop tier renders when the bridge is present, so the stub only has
     // to be able to receive.
@@ -830,7 +1133,9 @@ test('product-picker dialog — the Search label is not sheared @ phone width', 
 // The item history: a dialog OVER the item sheet, which is the composition
 // worth measuring — two stacked surfaces, and a list whose longest line is a
 // sentence ("950g on hand · Spice cupboard") inside a phone-width box.
-test('item history dialog — the timeline lays out cleanly @ phone width', async ({ page }, testInfo) => {
+test('item history dialog — the timeline lays out cleanly @ phone width', async ({
+  page,
+}, testInfo) => {
   await mockApi(page);
   await page.goto('/inventory');
   await page.getByText('Milk (semi-skimmed)').click();
@@ -961,7 +1266,9 @@ test('item sheet — the expiry row and its precision toggle fit @ phone width',
   await expectNoHorizontalOverflow(page, testInfo, 'app-item-sheet');
 });
 
-test('all items — filter + brand + expiry rows: lays out cleanly @ phone width', async ({ page }, testInfo) => {
+test('all items — filter + brand + expiry rows: lays out cleanly @ phone width', async ({
+  page,
+}, testInfo) => {
   await mockApi(page);
   await page.goto('/items');
   await page.getByText('Chicken thighs').waitFor();
@@ -971,7 +1278,9 @@ test('all items — filter + brand + expiry rows: lays out cleanly @ phone width
   await expectNoClippedText(page, testInfo);
 });
 
-test('recipes — ingredient-chip cards: lays out cleanly @ phone width', async ({ page }, testInfo) => {
+test('recipes — ingredient-chip cards: lays out cleanly @ phone width', async ({
+  page,
+}, testInfo) => {
   await mockApi(page);
   await page.goto('/recipes');
   await page.getByText('Chicken curry').waitFor();
@@ -981,7 +1290,9 @@ test('recipes — ingredient-chip cards: lays out cleanly @ phone width', async 
   await expectNoClippedText(page, testInfo);
 });
 
-test('product page — prices, panel, chips: lays out cleanly @ phone width', async ({ page }, testInfo) => {
+test('product page — prices, panel, chips: lays out cleanly @ phone width', async ({
+  page,
+}, testInfo) => {
   await mockApi(page);
   await page.goto('/product/42');
   await page.getByText('Quaker Oat So Simple', { exact: false }).first().waitFor();
@@ -1017,7 +1328,9 @@ test('product page — the Asda match reads cleanly @ phone width', async ({ pag
   await expectNoClippedText(page, testInfo);
 });
 
-test('product page — the reconcile panel lays out cleanly @ phone width', async ({ page }, testInfo) => {
+test('product page — the reconcile panel lays out cleanly @ phone width', async ({
+  page,
+}, testInfo) => {
   await mockApi(page);
   // A product whose sources disagree — a long product name is the worst case for
   // the stacked radio options.
@@ -1065,7 +1378,9 @@ test('trash — restorable rows: lays out cleanly @ phone width', async ({ page 
   await expectNoClippedText(page, testInfo);
 });
 
-test('conflicts — kept/theirs cards: lays out cleanly @ phone width', async ({ page }, testInfo) => {
+test('conflicts — kept/theirs cards: lays out cleanly @ phone width', async ({
+  page,
+}, testInfo) => {
   await mockApi(page);
   await page.goto('/conflicts');
   await page.getByText('Kept (this device)').waitFor();
@@ -1079,7 +1394,9 @@ test('conflicts — kept/theirs cards: lays out cleanly @ phone width', async ({
 // dialog with a sticky header (search + Done) over the whole vocabulary — every
 // family, every word, on one surface. Nothing is hidden behind an accordion, so
 // a word that wraps badly or spills sideways has nowhere to hide either.
-test('emotion picker — full mosaic + sticky header: lays out cleanly @ phone width', async ({ page }, testInfo) => {
+test('emotion picker — full mosaic + sticky header: lays out cleanly @ phone width', async ({
+  page,
+}, testInfo) => {
   await mockApi(page);
   await page.goto('/wellbeing');
   // Open the seeded morning check-in (the score-2 entry — it has emotions),

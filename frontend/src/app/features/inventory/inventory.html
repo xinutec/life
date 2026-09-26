@@ -1,9 +1,7 @@
 <div class="head">
   <h2>Inventory</h2>
   <div class="toggles">
-    <button mat-stroked-button (click)="addPlace()">
-      <mat-icon>add</mat-icon> Place
-    </button>
+    <button mat-stroked-button (click)="addPlace()"><mat-icon>add</mat-icon> Place</button>
   </div>
 </div>
 
@@ -21,7 +19,12 @@
   <mat-list>
     @for (it of items(); track it.id) {
       <mat-list-item lines="2">
-        <app-product-thumb matListItemAvatar [barcode]="it.barcode" [productId]="it.product_id" [hasImage]="it.has_image" />
+        <app-product-thumb
+          matListItemAvatar
+          [barcode]="it.barcode"
+          [productId]="it.product_id"
+          [hasImage]="it.has_image"
+        />
         <span
           matListItemTitle
           class="tappable"
@@ -35,7 +38,9 @@
         <span matListItemLine class="meta-line">
           <span class="facts">
             {{ qty(it) }}
-            @if (it.location_id) { · {{ shortLoc(it.location_id) }} }
+            @if (it.location_id) {
+              · {{ shortLoc(it.location_id) }}
+            }
           </span>
           @if (it.expiry) {
             <span class="expiry" [class]="expiryOf(it).cls">{{ expiryOf(it).label }}</span>

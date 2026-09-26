@@ -100,9 +100,7 @@ describe('Shopping row tap → detail', () => {
 
   it('reports an honest miss when a barcode resolves to nothing', () => {
     const { c, router, feedback, api } = setup([]);
-    api.lookupProduct.mockReturnValueOnce(
-      throwError(() => new HttpErrorResponse({ status: 404 })),
-    );
+    api.lookupProduct.mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 404 })));
     c.view(doc({ product_id: null, barcode: '5000000000999' }));
     expect(router.navigate).not.toHaveBeenCalled();
     expect(feedback.error).toHaveBeenCalledWith('No product found for 5000000000999.');
@@ -134,7 +132,9 @@ describe('Shopping buyDone', () => {
     c.buyDone();
     // Only the row the server actually inventoried is removed locally.
     expect(store.remove).toHaveBeenCalledExactlyOnceWith('A'.repeat(26));
-    expect(feedback.error).toHaveBeenCalledWith('1 added to inventory; 1 failed and stayed on the list.');
+    expect(feedback.error).toHaveBeenCalledWith(
+      '1 added to inventory; 1 failed and stayed on the list.',
+    );
     expect(feedback.notify).not.toHaveBeenCalled();
   });
 
@@ -190,10 +190,14 @@ describe('Shopping shop coverage', () => {
   });
 
   it('names the shops on the row that has them, and nothing on the row that has none', () => {
-    const { c } = setup([linked({ ulid: 'a' }), linked({ ulid: 'b' })], [], [
-      { key: 'a', sources: ['asda', 'waitrose'] },
-      { key: 'b', sources: [] },
-    ]);
+    const { c } = setup(
+      [linked({ ulid: 'a' }), linked({ ulid: 'b' })],
+      [],
+      [
+        { key: 'a', sources: ['asda', 'waitrose'] },
+        { key: 'b', sources: [] },
+      ],
+    );
     TestBed.tick();
     expect(c.shopLine(linked({ ulid: 'a' }))).toBe('Asda · Waitrose');
     expect(c.shopsFor(linked({ ulid: 'b' }))).toEqual([]);
@@ -225,7 +229,11 @@ describe('Shopping shop coverage', () => {
   });
 
   it('estimates each shop over the rows it has priced, and says how many', () => {
-    const gbp = (source: Source, pence: number): RowPrice => ({ source, amount_minor: pence, currency: 'GBP' });
+    const gbp = (source: Source, pence: number): RowPrice => ({
+      source,
+      amount_minor: pence,
+      currency: 'GBP',
+    });
     const { c } = setup(
       [
         linked({ ulid: 'a', quantity: 3, unit: 'tins' }), // three packs
@@ -234,7 +242,11 @@ describe('Shopping shop coverage', () => {
       ],
       [],
       [
-        { key: 'a', sources: ['asda', 'waitrose'], prices: [gbp('asda', 100), gbp('waitrose', 120)] },
+        {
+          key: 'a',
+          sources: ['asda', 'waitrose'],
+          prices: [gbp('asda', 100), gbp('waitrose', 120)],
+        },
         { key: 'b', sources: ['asda'], prices: [gbp('asda', 250)] },
         { key: 'c', sources: ['asda'] },
       ],
@@ -247,9 +259,11 @@ describe('Shopping shop coverage', () => {
   });
 
   it('a ticked-off row leaves the trip it is no longer part of', () => {
-    const { c } = setup([linked({ ulid: 'a' }), linked({ ulid: 'b', done: true })], [], [
-      { key: 'a', sources: ['asda'] },
-    ]);
+    const { c } = setup(
+      [linked({ ulid: 'a' }), linked({ ulid: 'b', done: true })],
+      [],
+      [{ key: 'a', sources: ['asda'] }],
+    );
     TestBed.tick();
     expect(c.tripSummary()!.of).toBe(1);
   });

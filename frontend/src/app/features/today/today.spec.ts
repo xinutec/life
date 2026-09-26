@@ -73,7 +73,14 @@ describe('Today', () => {
         todo('plain'),
         todo('done', { status: 'done' }),
       ],
-      state: { overdue: 'open', ready: 'ready', blocked: 'blocked', waiting: 'waiting', plain: 'open', done: 'done' },
+      state: {
+        overdue: 'open',
+        ready: 'ready',
+        blocked: 'blocked',
+        waiting: 'waiting',
+        plain: 'open',
+        done: 'done',
+      },
       urgency: { overdue: 'overdue' },
     });
     const shown = t.attention().map((a) => a.todo.ulid);

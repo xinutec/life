@@ -1,10 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import {
-  MAT_BOTTOM_SHEET_DATA,
-  MatBottomSheetRef,
-} from '@angular/material/bottom-sheet';
+import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -213,9 +210,7 @@ export class ItemSheet {
           },
           error: (e: unknown) => {
             this.feedback.error(
-              isNotFound(e)
-                ? `No product found for ${code}.`
-                : 'Lookup failed — are you online?',
+              isNotFound(e) ? `No product found for ${code}.` : 'Lookup failed — are you online?',
             );
           },
         });

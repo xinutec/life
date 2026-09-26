@@ -64,7 +64,9 @@ function setup(missing: RecipeIngredient[], already: string[] = [], cooked: Cook
 
 describe('Recipe→Buy bridge', () => {
   it('sends what the recipe is short of, quantity and link included', async () => {
-    const { c, shopping } = setup([ing({ name: 'cumin', quantity: 2, unit: 'tsp', product_id: 42 })]);
+    const { c, shopping } = setup([
+      ing({ name: 'cumin', quantity: 2, unit: 'tsp', product_id: 42 }),
+    ]);
     c.loadShoppingList(3);
     await c.addMissingToBuy(recipe);
     expect(shopping.addMissing).toHaveBeenCalledWith([
@@ -158,8 +160,8 @@ describe('Cooked it', () => {
     expect(c.cookedLabel({ ingredient: 'x', kind: 'untouched', why: 'no_amount' })).toBe(
       'the recipe gives no amount',
     );
-    expect(
-      c.cookedLabel({ ingredient: 'x', kind: 'untouched', why: 'no_comparable_stock' }),
-    ).toBe('the cupboard measures it differently');
+    expect(c.cookedLabel({ ingredient: 'x', kind: 'untouched', why: 'no_comparable_stock' })).toBe(
+      'the cupboard measures it differently',
+    );
   });
 });

@@ -4,7 +4,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ListState } from './list-state';
 
 /** Render one state at a time and assert the DOM the list screens rely on. */
-function render(inputs: Partial<Record<'loading' | 'error' | 'empty', boolean> & { emptyText: string; emptyIcon: string }>) {
+function render(
+  inputs: Partial<
+    Record<'loading' | 'error' | 'empty', boolean> & { emptyText: string; emptyIcon: string }
+  >,
+) {
   const fixture = TestBed.createComponent(ListState);
   for (const [k, v] of Object.entries(inputs)) fixture.componentRef.setInput(k, v);
   fixture.detectChanges();

@@ -9,13 +9,19 @@ import { guardAuth, startHttpReplication } from './replication';
 import { SyncStatus } from './sync-status';
 
 /** Minimal Response stand-in — guardAuth classifies status/ok/redirected/headers. */
-function res(over: { status?: number; contentType?: string | null; redirected?: boolean }): Response {
+function res(over: {
+  status?: number;
+  contentType?: string | null;
+  redirected?: boolean;
+}): Response {
   const status = over.status ?? 200;
   return {
     status,
     ok: status >= 200 && status < 300,
     redirected: over.redirected ?? false,
-    headers: new Headers(over.contentType === null ? {} : { 'content-type': over.contentType ?? 'application/json' }),
+    headers: new Headers(
+      over.contentType === null ? {} : { 'content-type': over.contentType ?? 'application/json' },
+    ),
   } as Response;
 }
 
@@ -47,7 +53,11 @@ describe('guardAuth — expired-session detection on sync fetches', () => {
     // A redirect to the login page is the same story, wearing a 200.
     const lost = vi.fn();
     expect(() =>
-      guardAuth(res({ redirected: true, contentType: 'text/html' }), signal<string | null>(null), lost),
+      guardAuth(
+        res({ redirected: true, contentType: 'text/html' }),
+        signal<string | null>(null),
+        lost,
+      ),
     ).toThrow();
     expect(lost).toHaveBeenCalledOnce();
   });
@@ -62,7 +72,9 @@ describe('guardAuth — expired-session detection on sync fetches', () => {
 
   it('flags a followed redirect — the stale-cookie 302→login-page→200 case', () => {
     const err = signal<string | null>(null);
-    expect(() => guardAuth(res({ redirected: true, contentType: 'text/html' }), err)).toThrow('auth-required');
+    expect(() => guardAuth(res({ redirected: true, contentType: 'text/html' }), err)).toThrow(
+      'auth-required',
+    );
     expect(err()).toContain('login required');
   });
 

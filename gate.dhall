@@ -74,6 +74,13 @@ in  { name = "life"
         , timeout_s = 900
         }
       , G.Check::{
+        , name = "frontend formatting"
+        , cwd = "frontend"
+        , argv = G.inDevShell [ "pnpm", "run", "format:check" ]
+        , env = G.nonInteractive
+        , timeout_s = 900
+        }
+      , G.Check::{
         , name = "frontend typecheck (e2e)"
         , cwd = "frontend"
         , argv = G.inDevShell [ "pnpm", "run", "typecheck:e2e" ]

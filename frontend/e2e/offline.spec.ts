@@ -26,8 +26,7 @@ test('the app shell loads offline (requires a service worker)', async ({ page, c
       // A missing app group means the manifest is not what this test assumes.
       // `Infinity` makes the wait time out and say so; `0` would satisfy
       // `length >= want` immediately and pass without ever caching anything.
-      const want =
-        manifest.assetGroups?.find((g) => g.name === 'app')?.urls.length ?? Infinity;
+      const want = manifest.assetGroups?.find((g) => g.name === 'app')?.urls.length ?? Infinity;
       for (const key of await caches.keys()) {
         if (key.includes('assets:app:cache')) {
           return (await (await caches.open(key)).keys()).length >= want;

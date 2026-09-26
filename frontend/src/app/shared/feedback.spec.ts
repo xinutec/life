@@ -26,7 +26,11 @@ describe('Feedback', () => {
   it('notify() opens a brief self-dismissing message', () => {
     const { feedback, open } = setup();
     feedback.notify('Saved');
-    expect(open).toHaveBeenCalledWith('Saved', undefined, expect.objectContaining({ duration: 2500 }));
+    expect(open).toHaveBeenCalledWith(
+      'Saved',
+      undefined,
+      expect.objectContaining({ duration: 2500 }),
+    );
   });
 
   it('undo() runs onUndo when the action fires and skips onCommit', () => {

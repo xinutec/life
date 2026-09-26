@@ -70,7 +70,11 @@ export class BuySheet {
   );
 
   /** The offending rows, named, for a message that says which one to fix. */
-  readonly unreadableNames = computed(() => this.unreadable().map((r) => r.name).join(', '));
+  readonly unreadableNames = computed(() =>
+    this.unreadable()
+      .map((r) => r.name)
+      .join(', '),
+  );
 
   readonly canRecord = computed(() => this.shop().trim() !== '' && this.unreadable().length === 0);
 

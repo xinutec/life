@@ -14,8 +14,16 @@ export default {
     '/api/me': { userId: 'test', displayName: 'Test', avatarUrl: '', nextcloud: 'not_linked' },
     '/api/items': [
       {
-        id: 1, product_id: null, name: 'Cached Avocado', brand: null, category: 'food',
-        quantity: null, unit: null, expiry: null, location_id: null, barcode: null,
+        id: 1,
+        product_id: null,
+        name: 'Cached Avocado',
+        brand: null,
+        category: 'food',
+        quantity: null,
+        unit: null,
+        expiry: null,
+        location_id: null,
+        barcode: null,
         has_image: false,
       },
     ],

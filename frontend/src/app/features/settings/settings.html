@@ -47,8 +47,8 @@
       }
       @case ('not_linked') {
         <p class="hint">
-          Not connected. This is separate from signing in: the calendar needs its own
-          app password, which Nextcloud grants on its own page.
+          Not connected. This is separate from signing in: the calendar needs its own app password,
+          which Nextcloud grants on its own page.
         </p>
       }
       @default {
@@ -57,8 +57,8 @@
     }
     @if (ncUrl(); as url) {
       <p class="hint">
-        Approve it on Nextcloud, then come back here — this updates itself when you
-        return. Nextcloud can’t close its own tab, so close it yourself.
+        Approve it on Nextcloud, then come back here — this updates itself when you return.
+        Nextcloud can’t close its own tab, so close it yourself.
         <a [href]="url" target="_blank" rel="noopener">Open Nextcloud</a>
         if the page didn’t open by itself.
       </p>
@@ -77,7 +77,9 @@
 <mat-card class="reminder-card">
   <mat-card-header>
     <mat-card-title>Wellbeing reminders</mat-card-title>
-    <mat-card-subtitle>Daily nudges to check in — each fires only if you haven’t.</mat-card-subtitle>
+    <mat-card-subtitle
+      >Daily nudges to check in — each fires only if you haven’t.</mat-card-subtitle
+    >
   </mat-card-header>
   <mat-card-content>
     @for (rule of rules(); track rule.id) {
@@ -120,8 +122,7 @@
 
     @if (!reminderAvailable) {
       <p class="hint">
-        Reminders fire in the Life Android app. You can set them up here; they take effect
-        there.
+        Reminders fire in the Life Android app. You can set them up here; they take effect there.
       </p>
     }
   </mat-card-content>

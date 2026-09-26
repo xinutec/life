@@ -75,7 +75,9 @@ export class RecipeSheet {
       instructions: r.instructions,
       servings: r.servings,
       // Always leave a row to type into if the recipe had none.
-      ingredients: r.ingredients.length ? r.ingredients.map((g) => ({ ...g })) : [blankIngredient()],
+      ingredients: r.ingredients.length
+        ? r.ingredients.map((g) => ({ ...g }))
+        : [blankIngredient()],
     };
   }
 
@@ -140,9 +142,7 @@ export class RecipeSheet {
     this.saving.set(true);
     const body = { ...form, ingredients: form.ingredients.filter((g) => g.name.trim()) };
     const req =
-      this.editId === null
-        ? this.api.createRecipe(body)
-        : this.api.updateRecipe(this.editId, body);
+      this.editId === null ? this.api.createRecipe(body) : this.api.updateRecipe(this.editId, body);
     req.subscribe({
       next: () => this.ref.dismiss(true),
       error: (e: unknown) => {

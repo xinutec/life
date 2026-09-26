@@ -60,8 +60,15 @@ describe('Items — complete list', () => {
   });
 
   function mount() {
-    const api = { items: () => of(ITEMS), locations: () => of([]), productImageUrl: (b: string) => b };
-    TestBed.configureTestingModule({ imports: [Items], providers: [{ provide: LifeApi, useValue: api }] });
+    const api = {
+      items: () => of(ITEMS),
+      locations: () => of([]),
+      productImageUrl: (b: string) => b,
+    };
+    TestBed.configureTestingModule({
+      imports: [Items],
+      providers: [{ provide: LifeApi, useValue: api }],
+    });
     const fixture = TestBed.createComponent(Items);
     fixture.autoDetectChanges();
     return fixture;

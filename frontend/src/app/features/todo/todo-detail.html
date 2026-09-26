@@ -1,7 +1,12 @@
 @if (todo(); as td) {
   <div class="detail">
     <div class="head">
-      <mat-checkbox [checked]="td.status === 'done'" [disabled]="state() === 'blocked'" (change)="toggleDone()" aria-label="Done"></mat-checkbox>
+      <mat-checkbox
+        [checked]="td.status === 'done'"
+        [disabled]="state() === 'blocked'"
+        (change)="toggleDone()"
+        aria-label="Done"
+      ></mat-checkbox>
       <mat-form-field appearance="outline" class="title-field" subscriptSizing="dynamic">
         <mat-label>Title</mat-label>
         <input
@@ -12,7 +17,9 @@
           (keyup.enter)="saveTitle()"
         />
       </mat-form-field>
-      <button mat-icon-button (click)="close()" aria-label="Close"><mat-icon>close</mat-icon></button>
+      <button mat-icon-button (click)="close()" aria-label="Close">
+        <mat-icon>close</mat-icon>
+      </button>
     </div>
 
     <!-- Chips, not a button-toggle-group: a toggle group is one non-wrapping
@@ -20,7 +27,12 @@
          listboxes wrap, and match the type-filter grammar on the list screen.
          The selected chip is locked ([selectable]=false ⇒ taps on it are
          ignored), so a to-do always has a type / an explicit priority row. -->
-    <mat-chip-listbox class="choice" aria-label="Type" [ngModel]="td.type" (ngModelChange)="setType($event)">
+    <mat-chip-listbox
+      class="choice"
+      aria-label="Type"
+      [ngModel]="td.type"
+      (ngModelChange)="setType($event)"
+    >
       @for (t of types; track t.value) {
         <mat-chip-option [value]="t.value" [selectable]="td.type !== t.value">
           <mat-icon matChipAvatar>{{ t.icon }}</mat-icon> {{ t.label }}
@@ -34,16 +46,21 @@
       [ngModel]="td.priority"
       (ngModelChange)="setPriority($event)"
     >
-      <mat-chip-option [value]="null" [selectable]="td.priority !== null">No priority</mat-chip-option>
+      <mat-chip-option [value]="null" [selectable]="td.priority !== null"
+        >No priority</mat-chip-option
+      >
       @for (p of priorities; track p.value) {
-        <mat-chip-option [value]="p.value" [selectable]="td.priority !== p.value">{{ p.label }}</mat-chip-option>
+        <mat-chip-option [value]="p.value" [selectable]="td.priority !== p.value">{{
+          p.label
+        }}</mat-chip-option>
       }
     </mat-chip-listbox>
 
     @if (state() === 'blocked') {
       <div class="banner blocked">
         <mat-icon>lock</mat-icon>
-        <span>Blocked — waiting on
+        <span
+          >Blocked — waiting on
           @for (b of blockers(); track b.ulid) {
             <span class="wait">{{ b.title }}</span>
           }
@@ -76,7 +93,12 @@
       <div class="timing-row">
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
           <mat-label>Start after</mat-label>
-          <input matInput type="date" [ngModel]="td.notBefore" (ngModelChange)="setNotBefore($event)" />
+          <input
+            matInput
+            type="date"
+            [ngModel]="td.notBefore"
+            (ngModelChange)="setNotBefore($event)"
+          />
           @if (td.notBefore) {
             <button matSuffix mat-icon-button (click)="setNotBefore(null)" aria-label="Clear start">
               <mat-icon>close</mat-icon>
@@ -85,7 +107,9 @@
         </mat-form-field>
         <div class="presets">
           @for (p of datePresets; track p.kind) {
-            <button mat-stroked-button (click)="applyPreset('notBefore', p.kind)">{{ p.label }}</button>
+            <button mat-stroked-button (click)="applyPreset('notBefore', p.kind)">
+              {{ p.label }}
+            </button>
           }
         </div>
       </div>
@@ -152,7 +176,9 @@
         (ngModelChange)="setAddKind($event)"
       >
         @for (k of kinds; track k.value) {
-          <mat-chip-option [value]="k.value" [selectable]="addKind() !== k.value">{{ k.label }}</mat-chip-option>
+          <mat-chip-option [value]="k.value" [selectable]="addKind() !== k.value">{{
+            k.label
+          }}</mat-chip-option>
         }
       </mat-chip-listbox>
       <mat-form-field appearance="outline" class="search" subscriptSizing="dynamic">

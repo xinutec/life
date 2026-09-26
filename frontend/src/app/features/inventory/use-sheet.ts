@@ -72,9 +72,7 @@ export class UseSheet {
   readonly haveLabel = amount(this.have, this.item.unit);
 
   readonly shares = computed(() =>
-    this.have > 0
-      ? SHARES.map((s) => ({ label: s.label, amount: round(this.have * s.of) }))
-      : [],
+    this.have > 0 ? SHARES.map((s) => ({ label: s.label, amount: round(this.have * s.of) })) : [],
   );
 
   readonly valid = computed(() => {

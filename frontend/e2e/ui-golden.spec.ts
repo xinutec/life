@@ -46,7 +46,7 @@ async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/wellbeing/suggest-emotions', (r) =>
     r.fulfill({ json: { suggestions: [], stale: false, pending: false, thinkingSecs: null } }),
   );
-  const sync = (docs: typeof TODO[]) => (r: Parameters<Parameters<Page['route']>[1]>[0]) => {
+  const sync = (docs: (typeof TODO)[]) => (r: Parameters<Parameters<Page['route']>[1]>[0]) => {
     if (r.request().method() === 'POST') return r.fulfill({ json: [] });
     const since = Number(new URL(r.request().url()).searchParams.get('since') ?? '0');
     const fresh = docs.filter((d) => d.rev > since);
@@ -119,14 +119,16 @@ test('to-do edit sheet — golden after swiping up @ phone width', async ({ page
   // The sheet slides up on open; measuring or swiping mid-animation reads a
   // half-risen sheet. Wait until it's settled at the viewport bottom.
   await expect
-    .poll(() => sheet.evaluate((el) => Math.round(el.getBoundingClientRect().bottom - window.innerHeight)))
+    .poll(() =>
+      sheet.evaluate((el) => Math.round(el.getBoundingClientRect().bottom - window.innerHeight)),
+    )
     .toBeLessThanOrEqual(1);
 
   // Precondition: the button we want to reveal really is off-screen at rest —
   // otherwise the swipe would be a no-op and the test would prove nothing.
-  expect(await deleteBtn.evaluate((el) => el.getBoundingClientRect().bottom > window.innerHeight)).toBe(
-    true,
-  );
+  expect(
+    await deleteBtn.evaluate((el) => el.getBoundingClientRect().bottom > window.innerHeight),
+  ).toBe(true);
 
   // One upward flick through real CDP touch (shared ui-harness swipeUp): a
   // fast, long throw so momentum carries the short scroll all the way to the
@@ -138,9 +140,9 @@ test('to-do edit sheet — golden after swiping up @ phone width', async ({ page
   await expect
     .poll(() => sheet.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop))
     .toBeLessThanOrEqual(1);
-  expect(await deleteBtn.evaluate((el) => el.getBoundingClientRect().bottom <= window.innerHeight)).toBe(
-    true,
-  );
+  expect(
+    await deleteBtn.evaluate((el) => el.getBoundingClientRect().bottom <= window.innerHeight),
+  ).toBe(true);
 
   await expect(sheet).toHaveScreenshot('todo-edit-sheet-swiped-up.png');
 });

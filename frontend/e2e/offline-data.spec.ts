@@ -13,9 +13,7 @@ test('cached API data is readable offline', async ({ page, context }) => {
   // `Response.json()` is `any` by the DOM lib's design, so the shape is named
   // here rather than inherited. The test only cares that it is a non-empty list
   // and that the offline read matches it, so `unknown[]` is the whole contract.
-  const online = await page.evaluate<unknown[]>(() =>
-    fetch('/api/items').then((r) => r.json()),
-  );
+  const online = await page.evaluate<unknown[]>(() => fetch('/api/items').then((r) => r.json()));
   expect(online.length).toBeGreaterThan(0);
 
   // Wait until it lands in a data cache (dataGroups live in :data:* caches).

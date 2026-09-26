@@ -214,10 +214,7 @@ export class LifeApi {
   /** Mark a row bought. `purchase` is optional and its absence is normal — the
    *  buy must work with a full trolley and one hand, so the price is a note that
    *  can be skipped, never a gate. */
-  buyShopping(
-    id: number,
-    purchase?: { shop: string; amount_minor: number },
-  ): Observable<Item> {
+  buyShopping(id: number, purchase?: { shop: string; amount_minor: number }): Observable<Item> {
     return this.http.post<Item>(`/api/shopping/${id}/buy`, purchase ? { purchase } : {});
   }
 
@@ -240,9 +237,7 @@ export class LifeApi {
    *  shop nothing; only a miss goes out to search. Matching is by barcode
    *  server-side — a shop's relevance ranking is not evidence of identity. */
   findAtShop(id: number, source: Source): Observable<ShopFind> {
-    return this.http.get<ShopFind>(
-      `/api/products/id/${id}/find/${encodeURIComponent(source)}`,
-    );
+    return this.http.get<ShopFind>(`/api/products/id/${id}/find/${encodeURIComponent(source)}`);
   }
   /** Teach the backend what this device's WebView saw at a shop the server
    *  can't reach itself (Waitrose is behind a bot-wall). Every listing a hunt
@@ -372,10 +367,7 @@ export class LifeApi {
    *  Undo snackbars). `ref` is the id (item/location/recipe) or ulid
    *  (shopping/todo) from the entry. */
   restoreTrash(kind: TrashKind, ref: string): Observable<void> {
-    return this.http.post<void>(
-      `/api/trash/${kind}/${encodeURIComponent(ref)}/restore`,
-      {},
-    );
+    return this.http.post<void>(`/api/trash/${kind}/${encodeURIComponent(ref)}/restore`, {});
   }
 
   recipes(): Observable<Recipe[]> {

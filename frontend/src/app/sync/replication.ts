@@ -101,7 +101,8 @@ export function startHttpReplication<T>(opts: {
         // missing `checkpoint.rev` would rewind the pull to 0 and refetch
         // everything on every cycle.
         const body: unknown = await res.json();
-        const documents = isRecord(body) && Array.isArray(body['documents']) ? body['documents'] : null;
+        const documents =
+          isRecord(body) && Array.isArray(body['documents']) ? body['documents'] : null;
         const rev = numberField(isRecord(body) ? body['checkpoint'] : null, 'rev');
         if (documents === null || rev === null) throw new Error('pull returned a malformed batch');
         opts.syncError.set(null);

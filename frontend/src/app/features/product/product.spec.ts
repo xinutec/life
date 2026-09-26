@@ -23,17 +23,48 @@ const DETAIL: ProductDetail = {
     has_image: true,
   },
   listings: [
-    { source: 'off', external_id: '5000328042732', url: 'https://world.openfoodfacts.org/product/5000328042732', raw_name: 'oat so simple' },
-    { source: 'asda', external_id: '9346702', url: 'https://www.asda.com/groceries/product/9346702', raw_name: 'Quaker Oat So Simple Original' },
-    { source: 'waitrose', external_id: '271105', url: 'https://www.waitrose.com/ecom/products/x/271105', raw_name: 'Oat So Simple' },
+    {
+      source: 'off',
+      external_id: '5000328042732',
+      url: 'https://world.openfoodfacts.org/product/5000328042732',
+      raw_name: 'oat so simple',
+    },
+    {
+      source: 'asda',
+      external_id: '9346702',
+      url: 'https://www.asda.com/groceries/product/9346702',
+      raw_name: 'Quaker Oat So Simple Original',
+    },
+    {
+      source: 'waitrose',
+      external_id: '271105',
+      url: 'https://www.waitrose.com/ecom/products/x/271105',
+      raw_name: 'Oat So Simple',
+    },
   ],
   prices: [
     // One row per shop, cheapest first, each naming its listing — as the backend
     // guarantees. Waitrose quotes no unit price.
-    { source: 'waitrose', external_id: '271105', amount_minor: 450, currency: 'GBP',
-      unit_amount_minor: null, unit_measure: null, region: null, observed_at: Date.now() },
-    { source: 'asda', external_id: '9346702', amount_minor: 475, currency: 'GBP',
-      unit_amount_minor: 800, unit_measure: 'KG', region: 'EN', observed_at: Date.now() - 2 * 86_400_000 },
+    {
+      source: 'waitrose',
+      external_id: '271105',
+      amount_minor: 450,
+      currency: 'GBP',
+      unit_amount_minor: null,
+      unit_measure: null,
+      region: null,
+      observed_at: Date.now(),
+    },
+    {
+      source: 'asda',
+      external_id: '9346702',
+      amount_minor: 475,
+      currency: 'GBP',
+      unit_amount_minor: 800,
+      unit_measure: 'KG',
+      region: 'EN',
+      observed_at: Date.now() - 2 * 86_400_000,
+    },
   ],
   facts: {
     nutrition: {
@@ -160,11 +191,24 @@ describe('ProductPage', () => {
       ...DETAIL,
       listings: [
         ...DETAIL.listings,
-        { source: 'asda', external_id: '5511122', url: 'https://www.asda.com/groceries/product/5511122', raw_name: 'Quaker Oat So Simple (relist)' },
+        {
+          source: 'asda',
+          external_id: '5511122',
+          url: 'https://www.asda.com/groceries/product/5511122',
+          raw_name: 'Quaker Oat So Simple (relist)',
+        },
       ],
       prices: [
-        { source: 'asda', external_id: '5511122', amount_minor: 399, currency: 'GBP',
-          unit_amount_minor: null, unit_measure: null, region: 'EN', observed_at: Date.now() },
+        {
+          source: 'asda',
+          external_id: '5511122',
+          amount_minor: 399,
+          currency: 'GBP',
+          unit_amount_minor: null,
+          unit_measure: null,
+          region: 'EN',
+          observed_at: Date.now(),
+        },
       ],
     });
     const rows = page.buyRows();
@@ -223,7 +267,11 @@ describe('ProductPage', () => {
   });
 
   it('offers both shops for a barcoded product no shop lists yet', () => {
-    expect(setup(UNLISTED).page.shopLookups().map((s) => s.label)).toEqual(['Asda', 'Waitrose']);
+    expect(
+      setup(UNLISTED)
+        .page.shopLookups()
+        .map((s) => s.label),
+    ).toEqual(['Asda', 'Waitrose']);
   });
 
   it('shows the confirmed match and adds it under its own barcode', () => {
@@ -232,7 +280,13 @@ describe('ProductPage', () => {
       external_id: '9020290',
       barcode: '5063089281581',
       name: 'Extra Special Balsamic Vinegar of Modena 250ml',
-      price: { amount_minor: 800, currency: 'GBP', unit_amount_minor: null, unit_measure: null, region: 'EN' },
+      price: {
+        amount_minor: 800,
+        currency: 'GBP',
+        unit_amount_minor: null,
+        unit_measure: null,
+        region: 'EN',
+      },
     });
     const { page, api } = setup(UNLISTED, { hit: confirmed, from_cache: false, searched: true });
     page.find('asda');
@@ -261,7 +315,11 @@ describe('ProductPage', () => {
       quantity_label: '250ml',
       image_url: 'https://s7g10.scene7.com/is/image/asda/9020290?$ProdList$',
     });
-    const { fixture, page } = setup(UNLISTED, { hit: confirmed, from_cache: false, searched: true });
+    const { fixture, page } = setup(UNLISTED, {
+      hit: confirmed,
+      from_cache: false,
+      searched: true,
+    });
     page.find('asda');
     expect(page.hitSubtitle(lookup(page, 'asda').hit!)).toBe('Asda Extra Special · 250ml');
     fixture.detectChanges();
@@ -273,7 +331,11 @@ describe('ProductPage', () => {
 
   it('falls back to the verified tick when a match has no picture', () => {
     const confirmed = hit({ external_id: '7', name: 'Pictureless thing', image_url: null });
-    const { fixture, page } = setup(UNLISTED, { hit: confirmed, from_cache: false, searched: true });
+    const { fixture, page } = setup(UNLISTED, {
+      hit: confirmed,
+      from_cache: false,
+      searched: true,
+    });
     page.find('asda');
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
@@ -337,7 +399,11 @@ describe('ProductPage', () => {
 
   const CANDIDATES = [
     { external_id: '271100', name: 'Balsamic Vinegar 500ml', image_url: 'https://x/1.jpg' },
-    { external_id: '271105', name: 'Balsamic Vinegar of Modena 250ml', image_url: 'https://x/2.jpg' },
+    {
+      external_id: '271105',
+      name: 'Balsamic Vinegar of Modena 250ml',
+      image_url: 'https://x/2.jpg',
+    },
   ];
 
   /** The Waitrose SUMMARY record for a lineNumber, as the WebView returns it. */

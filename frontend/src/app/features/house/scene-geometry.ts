@@ -18,7 +18,11 @@ export interface WallSeg {
 
 /** Corner points of a room's outline. Starts at `start` heading `heading0`
  *  degrees; each wall is `[turn_deg, length_m]` — turn the heading, then step. */
-export function perimeter(walls: [number, number][], start: Pt = { x: 0, z: 0 }, heading0 = 0): Pt[] {
+export function perimeter(
+  walls: [number, number][],
+  start: Pt = { x: 0, z: 0 },
+  heading0 = 0,
+): Pt[] {
   const pts: Pt[] = [{ x: start.x, z: start.z }];
   let x = start.x;
   let z = start.z;

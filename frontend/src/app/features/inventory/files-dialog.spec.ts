@@ -36,9 +36,7 @@ function file(over: Partial<ItemFile> = {}): ItemFile {
   };
 }
 
-function setup(
-  opts: { files?: ItemFile[]; addItemFile?: () => Observable<unknown> } = {},
-) {
+function setup(opts: { files?: ItemFile[]; addItemFile?: () => Observable<unknown> } = {}) {
   const itemFiles = vi.fn(() => of(opts.files ?? []));
   const addItemFile = vi.fn(opts.addItemFile ?? (() => of(file())));
   const deleteItemFile = vi.fn(() => of(undefined));
@@ -136,7 +134,7 @@ describe('FilesDialog', () => {
     expect(png.detail).toContain('300 KB');
   });
 
-it('splits a phone-named scan so the extension cannot be trimmed away', () => {
+  it('splits a phone-named scan so the extension cannot be trimmed away', () => {
     // The head is what CSS is allowed to eat; the tail is pinned.
     const { cmp } = setup({
       files: [file({ name: 'IMG_20240315_143022_receipt_dishwasher_manual.pdf' })],

@@ -17,12 +17,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { map } from 'rxjs';
 
 import { ListState } from '../../shared/list-state';
-import {
-  WellbeingCheckin,
-  energyMeta,
-  scoreMeta,
-  toPoints,
-} from '../../shared/wellbeing-checkin';
+import { WellbeingCheckin, energyMeta, scoreMeta, toPoints } from '../../shared/wellbeing-checkin';
 import { WellbeingDoc, WellbeingStore } from '../../sync/wellbeing-store';
 import { DayLabel, TrendChart, TrendData, TrendDot } from './trend-chart';
 import { WellbeingEntry } from './wellbeing-entry';
@@ -191,9 +186,7 @@ export class Wellbeing {
 
   /** How far back the window's right edge can travel. Zero when the whole history
    *  already fits one window — the charts then don't scroll at all. */
-  readonly pannableMs = computed(() =>
-    Math.max(0, this.now() - this.spanMs() - this.oldestMs()),
-  );
+  readonly pannableMs = computed(() => Math.max(0, this.now() - this.spanMs() - this.oldestMs()));
 
   /** The left-most position of the window's right edge. */
   private readonly earliestEnd = computed(() => this.now() - this.pannableMs());
@@ -243,9 +236,7 @@ export class Wellbeing {
     this.lastLeft = scrollLeft;
     const max = scrollWidth - clientWidth;
     const pinned = max <= 0 || max - scrollLeft <= 1;
-    this.pannedEnd.set(
-      pinned ? null : this.earliestEnd() + (scrollLeft / max) * this.pannableMs(),
-    );
+    this.pannedEnd.set(pinned ? null : this.earliestEnd() + (scrollLeft / max) * this.pannableMs());
   }
 
   /** Back to the latest check-in — without it, panning back a year is a one-way

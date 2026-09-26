@@ -30,8 +30,9 @@ const KINDS: readonly { value: LinkKind; label: string }[] = [
 function presetDate(kind: 'today' | 'tomorrow' | 'weekend' | 'nextweek'): string {
   const d = new Date();
   if (kind === 'tomorrow') d.setDate(d.getDate() + 1);
-  else if (kind === 'weekend') d.setDate(d.getDate() + ((6 - d.getDay() + 7) % 7)); // next Sat
-  else if (kind === 'nextweek') d.setDate(d.getDate() + (((1 - d.getDay() + 7) % 7) || 7)); // next Mon
+  else if (kind === 'weekend')
+    d.setDate(d.getDate() + ((6 - d.getDay() + 7) % 7)); // next Sat
+  else if (kind === 'nextweek') d.setDate(d.getDate() + ((1 - d.getDay() + 7) % 7 || 7)); // next Mon
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
@@ -147,8 +148,12 @@ export class TodoDetail implements OnDestroy {
       {
         heading: 'Related',
         rows: [
-          ...out.filter((l) => l.linkKind === 'related').map((l) => ({ edge: l.ulid, target: l.target, todoRef: toTodoRef(l.target) })),
-          ...inc.filter((l) => l.linkKind === 'related').map((l) => ({ edge: l.ulid, target: l.source, todoRef: l.source.ref })),
+          ...out
+            .filter((l) => l.linkKind === 'related')
+            .map((l) => ({ edge: l.ulid, target: l.target, todoRef: toTodoRef(l.target) })),
+          ...inc
+            .filter((l) => l.linkKind === 'related')
+            .map((l) => ({ edge: l.ulid, target: l.source, todoRef: l.source.ref })),
         ],
       },
     ];
@@ -234,7 +239,10 @@ export class TodoDetail implements OnDestroy {
     void this.store.patch(this.ulid(), { due: this.clean(v) });
   }
 
-  applyPreset(field: 'notBefore' | 'due', kind: 'today' | 'tomorrow' | 'weekend' | 'nextweek'): void {
+  applyPreset(
+    field: 'notBefore' | 'due',
+    kind: 'today' | 'tomorrow' | 'weekend' | 'nextweek',
+  ): void {
     const iso = presetDate(kind);
     if (field === 'notBefore') this.setNotBefore(iso);
     else this.setDue(iso);

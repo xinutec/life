@@ -132,7 +132,12 @@ export class House implements AfterViewInit, OnDestroy {
       allPts.push(...pts);
       const ops = room.openings ?? [];
       segments(pts).forEach((s, i) => {
-        this.renderWall(s, ops.filter((o) => o.wall === i), h, red.has(n) ? redMat : wallMat);
+        this.renderWall(
+          s,
+          ops.filter((o) => o.wall === i),
+          h,
+          red.has(n) ? redMat : wallMat,
+        );
         if (isDevMode()) {
           // Number each wall (global index) so you can say "change wall 7".
           const label = this.numberSprite(String(n));
@@ -200,7 +205,12 @@ export class House implements AfterViewInit, OnDestroy {
     const len = Math.hypot(s.bx - s.ax, s.bz - s.az);
     if (len < 1e-6) return;
     const cuts = ops
-      .map((o) => ({ a0: o.offset, a1: o.offset + o.width, yb: o.sill ?? 0, yt: (o.sill ?? 0) + o.height }))
+      .map((o) => ({
+        a0: o.offset,
+        a1: o.offset + o.width,
+        yb: o.sill ?? 0,
+        yt: (o.sill ?? 0) + o.height,
+      }))
       .sort((p, q) => p.a0 - q.a0);
     if (cuts.length === 0) {
       this.addWallPanel(s, len, 0, len, 0, h, mat);

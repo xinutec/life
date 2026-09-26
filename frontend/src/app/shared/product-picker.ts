@@ -66,10 +66,7 @@ export function localHits(items: Item[], query: string): Item[] {
   if (!q) return [];
   const prefix = (it: Item) => (it.name.toLowerCase().startsWith(q) ? 0 : 1);
   return items
-    .filter(
-      (it) =>
-        it.name.toLowerCase().includes(q) || (it.brand ?? '').toLowerCase().includes(q),
-    )
+    .filter((it) => it.name.toLowerCase().includes(q) || (it.brand ?? '').toLowerCase().includes(q))
     .sort((a, b) => prefix(a) - prefix(b) || a.name.localeCompare(b.name))
     .slice(0, 8);
 }
@@ -79,9 +76,7 @@ export function localHits(items: Item[], query: string): Item[] {
 export function withoutLocalDupes(catalog: Product[], locals: Item[]): Product[] {
   const ids = new Set(locals.map((it) => it.product_id).filter((v) => v != null));
   const codes = new Set(locals.map((it) => it.barcode).filter((v) => v != null));
-  return catalog.filter(
-    (p) => !ids.has(p.id) && (p.barcode == null || !codes.has(p.barcode)),
-  );
+  return catalog.filter((p) => !ids.has(p.id) && (p.barcode == null || !codes.has(p.barcode)));
 }
 
 /** A search that finds nothing usually means "not signed in" (the shop only
@@ -139,7 +134,9 @@ export class ProductPicker {
       debounceTime(250),
       distinctUntilChanged(),
       switchMap((q) =>
-        q ? this.api.searchProducts(q).pipe(catchError(() => of([] as Product[]))) : of([] as Product[]),
+        q
+          ? this.api.searchProducts(q).pipe(catchError(() => of([] as Product[])))
+          : of([] as Product[]),
       ),
     ),
     { initialValue: [] as Product[] },
@@ -153,7 +150,9 @@ export class ProductPicker {
       debounceTime(250),
       distinctUntilChanged(),
       switchMap((q) =>
-        q ? this.api.searchAsda(q).pipe(catchError(() => of([] as AsdaHit[]))) : of([] as AsdaHit[]),
+        q
+          ? this.api.searchAsda(q).pipe(catchError(() => of([] as AsdaHit[])))
+          : of([] as AsdaHit[]),
       ),
     ),
     { initialValue: [] as AsdaHit[] },

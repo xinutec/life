@@ -15,7 +15,12 @@
   <div class="controls">
     <mat-form-field appearance="outline" subscriptSizing="dynamic" class="filter">
       <mat-label>Filter</mat-label>
-      <input matInput [ngModel]="query()" (ngModelChange)="query.set($event)" placeholder="name, brand, place…" />
+      <input
+        matInput
+        [ngModel]="query()"
+        (ngModelChange)="query.set($event)"
+        placeholder="name, brand, place…"
+      />
       @if (query()) {
         <button matSuffix mat-icon-button (click)="query.set('')" aria-label="Clear filter">
           <mat-icon>close</mat-icon>
@@ -35,12 +40,21 @@
 
   <p class="count">{{ count() }} item{{ count() === 1 ? '' : 's' }}{{ query() ? ' match' : '' }}</p>
   @if (count() === 0) {
-    <app-list-state [empty]="true" emptyIcon="search_off" [emptyText]="'Nothing matches “' + query() + '”.'" />
+    <app-list-state
+      [empty]="true"
+      emptyIcon="search_off"
+      [emptyText]="'Nothing matches “' + query() + '”.'"
+    />
   }
   <mat-list>
     @for (it of visible(); track it.id) {
       <mat-list-item lines="2">
-        <app-product-thumb matListItemAvatar [barcode]="it.barcode" [productId]="it.product_id" [hasImage]="it.has_image" />
+        <app-product-thumb
+          matListItemAvatar
+          [barcode]="it.barcode"
+          [productId]="it.product_id"
+          [hasImage]="it.has_image"
+        />
         <span
           matListItemTitle
           class="tappable"
@@ -50,7 +64,10 @@
           (keydown.enter)="editItem(it)"
           (keydown.space)="editItem(it); $event.preventDefault()"
         >
-          {{ it.name }}@if (it.brand) {<span class="brand"> · {{ it.brand }}</span>}
+          {{ it.name }}
+          @if (it.brand) {
+            <span class="brand"> · {{ it.brand }}</span>
+          }
         </span>
         <!-- Two parts, not one sentence: the line ellipsises, and whatever sits
              last disappears — which must not be the expiry. -->

@@ -225,7 +225,9 @@ export class Shops {
     }
   }
 
-  private request(invoke: (requestId: string) => void): Promise<Extract<BridgeResult, { ok: true }>> {
+  private request(
+    invoke: (requestId: string) => void,
+  ): Promise<Extract<BridgeResult, { ok: true }>> {
     if (!this.available) return Promise.reject(new Error(UNAVAILABLE));
     const requestId = crypto.randomUUID();
     return new Promise((resolve, reject) => {

@@ -8,9 +8,7 @@
     <div class="state error" role="alert">
       <mat-icon aria-hidden="true">cloud_off</mat-icon>
       <p>{{ errorText() }}</p>
-      <button mat-stroked-button (click)="retry.emit()">
-        <mat-icon>refresh</mat-icon> Retry
-      </button>
+      <button mat-stroked-button (click)="retry.emit()"><mat-icon>refresh</mat-icon> Retry</button>
     </div>
   } @else if (empty()) {
     <div class="state empty">

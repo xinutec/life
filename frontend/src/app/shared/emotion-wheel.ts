@@ -98,7 +98,10 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
           { name: 'Inquisitive', desc: 'Actively questioning and probing for understanding.' },
           // The wheel had "Unfocused" and no positive twin: it could record a bad
           // day at the keyboard and not a good one.
-          { name: 'Absorbed', desc: 'Lost in what you are doing; the hours and the world fall away.' },
+          {
+            name: 'Absorbed',
+            desc: 'Lost in what you are doing; the hours and the world fall away.',
+          },
         ],
       },
       {
@@ -508,7 +511,10 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         desc: 'Judging something as wrong or unacceptable.',
         leaves: [
           { name: 'Judgemental', desc: "Harshly critical of others' choices or worth." },
-          { name: 'Embarrassed', desc: 'Uncomfortably self-conscious, wanting to shrink from view.' },
+          {
+            name: 'Embarrassed',
+            desc: 'Uncomfortably self-conscious, wanting to shrink from view.',
+          },
           {
             // Every other group under Disgusted points outward; the whole core had
             // no way to turn on you. Twin of `Sad/Ashamed`, which sits under Guilty

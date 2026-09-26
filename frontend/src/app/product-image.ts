@@ -39,10 +39,10 @@ export class ProductImages {
 
   /** Upload new bytes; on success bump the buster so every `<img>` reloads. */
   replace(barcode: string, blob: Blob): Observable<void> {
-    return this.api.uploadProductImage(barcode, blob).pipe(
-      tap(() =>
-        this.version.update((m) => new Map(m).set(barcode, (m.get(barcode) ?? 0) + 1)),
-      ),
-    );
+    return this.api
+      .uploadProductImage(barcode, blob)
+      .pipe(
+        tap(() => this.version.update((m) => new Map(m).set(barcode, (m.get(barcode) ?? 0) + 1))),
+      );
   }
 }

@@ -96,11 +96,13 @@ export function bandsFor(entries: readonly WellbeingDoc[]): readonly CalendarBan
     }
   }
   if (!words) return [];
-  return [...weight]
-    .map(([core, w]) => ({ core, color: hue.get(core)!, fraction: w / words }))
-    // Largest first, then by name so equal shares order stably rather than by
-    // whichever family the day happened to mention first.
-    .sort((a, b) => b.fraction - a.fraction || a.core.localeCompare(b.core));
+  return (
+    [...weight]
+      .map(([core, w]) => ({ core, color: hue.get(core)!, fraction: w / words }))
+      // Largest first, then by name so equal shares order stably rather than by
+      // whichever family the day happened to mention first.
+      .sort((a, b) => b.fraction - a.fraction || a.core.localeCompare(b.core))
+  );
 }
 
 /** Drop whole weeks with nothing in them from either end.

@@ -16,9 +16,13 @@
   <mat-list>
     @for (e of entries(); track e.kind + e.ref) {
       <mat-list-item>
-        <mat-icon matListItemIcon [attr.aria-label]="meta(e.kind).label">{{ meta(e.kind).icon }}</mat-icon>
+        <mat-icon matListItemIcon [attr.aria-label]="meta(e.kind).label">{{
+          meta(e.kind).icon
+        }}</mat-icon>
         <span matListItemTitle>{{ e.name }}</span>
-        <span matListItemLine>{{ meta(e.kind).label }} · deleted {{ e.deleted_at | date: 'medium' }}</span>
+        <span matListItemLine
+          >{{ meta(e.kind).label }} · deleted {{ e.deleted_at | date: 'medium' }}</span
+        >
         <button
           matListItemMeta
           mat-icon-button

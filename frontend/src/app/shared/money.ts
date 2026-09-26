@@ -12,7 +12,10 @@ const DECIMALS = 2;
  * the point are read as integers.
  */
 export function toMinorUnits(text: string): number | null {
-  const trimmed = text.trim().replace(/^[£$€]/, '').trim();
+  const trimmed = text
+    .trim()
+    .replace(/^[£$€]/, '')
+    .trim();
   if (trimmed === '') return null;
   // One optional decimal point, at most two places after it. More places is a
   // rejection rather than a rounding: nobody paid £3.333, so the input is a

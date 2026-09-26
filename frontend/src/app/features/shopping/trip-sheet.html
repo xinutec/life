@@ -14,12 +14,7 @@
 
   <mat-form-field appearance="outline" subscriptSizing="dynamic">
     <mat-label>When</mat-label>
-    <input
-      matInput
-      type="datetime-local"
-      [ngModel]="when()"
-      (ngModelChange)="when.set($event)"
-    />
+    <input matInput type="datetime-local" [ngModel]="when()" (ngModelChange)="when.set($event)" />
   </mat-form-field>
 
   <!-- What the event will actually say, before it is written. The trip is
@@ -35,10 +30,7 @@
 
   @if (needsLinking()) {
     <div class="needs-linking">
-      <p>
-        Your Nextcloud calendar isn’t connected, so there’s nowhere to put this
-        yet.
-      </p>
+      <p>Your Nextcloud calendar isn’t connected, so there’s nowhere to put this yet.</p>
       <button mat-flat-button (click)="openSettings()">
         <mat-icon>link</mat-icon>
         Connect it in Settings

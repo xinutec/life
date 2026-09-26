@@ -15,9 +15,7 @@ describe('local-time', () => {
     // field the user reads as their own clock — an hour out all summer.
     const instant = new Date(2026, 7, 15, 10, 30);
     const text = toLocalInput(instant);
-    expect(text).toBe(
-      `2026-08-15T${String(instant.getHours()).padStart(2, '0')}:30`,
-    );
+    expect(text).toBe(`2026-08-15T${String(instant.getHours()).padStart(2, '0')}:30`);
   });
 
   it('reads the field as local time', () => {

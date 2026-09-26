@@ -58,18 +58,23 @@ describe('classifyFetchResponse — the raw-fetch sibling, same taxonomy', () =>
     expect(classifyFetchResponse(fetchRes({}))).toEqual({ kind: 'ok' });
     // An error status wearing JSON is a server fault the caller may retry —
     // never silently "ok", never auth.
-    expect(classifyFetchResponse(fetchRes({ status: 500 }))).toEqual({ kind: 'server', status: 500 });
+    expect(classifyFetchResponse(fetchRes({ status: 500 }))).toEqual({
+      kind: 'server',
+      status: 500,
+    });
   });
 
   it('maps only positive auth signals to unauthenticated', () => {
     expect(classifyFetchResponse(fetchRes({ status: 401 })).kind).toBe('unauthenticated');
     expect(classifyFetchResponse(fetchRes({ status: 403 })).kind).toBe('unauthenticated');
     // Stale cookie: 302 followed to a login page, arriving as a 200 HTML body.
-    expect(classifyFetchResponse(fetchRes({ redirected: true, contentType: 'text/html' })).kind).toBe(
+    expect(
+      classifyFetchResponse(fetchRes({ redirected: true, contentType: 'text/html' })).kind,
+    ).toBe('unauthenticated');
+    // The login page served directly on a 200 where JSON was expected.
+    expect(classifyFetchResponse(fetchRes({ contentType: 'text/html' })).kind).toBe(
       'unauthenticated',
     );
-    // The login page served directly on a 200 where JSON was expected.
-    expect(classifyFetchResponse(fetchRes({ contentType: 'text/html' })).kind).toBe('unauthenticated');
     expect(classifyFetchResponse(fetchRes({ contentType: null })).kind).toBe('unauthenticated');
   });
 

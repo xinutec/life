@@ -46,11 +46,7 @@ describe('nextCollections', () => {
     );
 
     expect(rows).toHaveLength(1);
-    expect(rows[0].kinds).toEqual([
-      'Food waste',
-      'Rubbish',
-      'Paper and cardboard (blue sacks)',
-    ]);
+    expect(rows[0].kinds).toEqual(['Food waste', 'Rubbish', 'Paper and cardboard (blue sacks)']);
   });
 
   it('orders mornings soonest first', () => {

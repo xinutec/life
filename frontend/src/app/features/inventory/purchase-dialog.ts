@@ -77,7 +77,8 @@ export class PurchaseDialog {
   readonly warrantyBad = computed(() => this.warranty().trim() !== '' && this.months() === null);
 
   readonly canSave = computed(
-    () => !this.saving() && this.shop().trim() !== '' && this.pence() !== null && !this.warrantyBad(),
+    () =>
+      !this.saving() && this.shop().trim() !== '' && this.pence() !== null && !this.warrantyBad(),
   );
 
   /** Today, as the date input spells it — the latest a purchase can be, since

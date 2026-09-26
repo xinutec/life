@@ -1,10 +1,7 @@
 import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import {
-  MAT_BOTTOM_SHEET_DATA,
-  MatBottomSheetRef,
-} from '@angular/material/bottom-sheet';
+import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -35,7 +32,14 @@ import { EmotionPicker } from './emotion-picker';
   selector: 'app-wellbeing-entry',
   templateUrl: './wellbeing-entry.html',
   styleUrl: './wellbeing-entry.scss',
-  imports: [FormsModule, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, SheetHeader],
+  imports: [
+    FormsModule,
+    MatButtonModule,
+    MatFormFieldModule,
+    MatIconModule,
+    MatInputModule,
+    SheetHeader,
+  ],
 })
 export class WellbeingEntry implements OnDestroy {
   private ref = inject(MatBottomSheetRef<WellbeingEntry>);

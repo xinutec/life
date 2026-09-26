@@ -53,7 +53,13 @@
         <mat-icon>{{ sync.icon() }}</mat-icon>
       </span>
     }
-    <button class="acct-btn" type="button" mat-icon-button [matMenuTriggerFor]="acct" aria-label="Account">
+    <button
+      class="acct-btn"
+      type="button"
+      mat-icon-button
+      [matMenuTriggerFor]="acct"
+      aria-label="Account"
+    >
       @if (user.avatarUrl && !avatarError()) {
         <img class="avatar" [src]="user.avatarUrl" alt="" (error)="avatarError.set(true)" />
       } @else {
@@ -81,7 +87,9 @@
         #rla="routerLinkActive"
         [attr.aria-current]="rla.isActive ? 'page' : null"
       >
-        <span class="ind"><mat-icon>{{ n.icon }}</mat-icon></span>
+        <span class="ind"
+          ><mat-icon>{{ n.icon }}</mat-icon></span
+        >
         <span class="label">{{ n.label }}</span>
       </a>
     }
@@ -104,9 +112,7 @@
       <mat-card-content>
         <div class="wordmark"><mat-icon>spa</mat-icon> Life</div>
         <p class="tagline">Your home, organised.</p>
-        <a mat-flat-button href="/login">
-          <mat-icon>login</mat-icon> Sign in with Nextcloud
-        </a>
+        <a mat-flat-button href="/login"> <mat-icon>login</mat-icon> Sign in with Nextcloud </a>
       </mat-card-content>
     </mat-card>
   </div>

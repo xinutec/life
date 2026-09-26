@@ -67,10 +67,7 @@ describe('localHits', () => {
 
 describe('withoutLocalDupes', () => {
   it('drops catalog rows already shown as a local item, by id or barcode', () => {
-    const locals = [
-      item({ id: 1, product_id: 10 }),
-      item({ id: 2, barcode: '5000000000001' }),
-    ];
+    const locals = [item({ id: 1, product_id: 10 }), item({ id: 2, barcode: '5000000000001' })];
     const catalog = [
       product({ id: 10 }), // dup by catalog id
       product({ id: 11, barcode: '5000000000001' }), // dup by barcode
@@ -252,9 +249,7 @@ describe('ProductPicker', () => {
     fixture.componentInstance.pickAsda(hit);
     await new Promise((r) => setTimeout(r));
 
-    expect(ref.close).toHaveBeenCalledWith(
-      expect.objectContaining({ quantity: 400, unit: 'g' }),
-    );
+    expect(ref.close).toHaveBeenCalledWith(expect.objectContaining({ quantity: 400, unit: 'g' }));
   });
 
   it('the Asda tier is backend-backed, so it shows even outside the app', async () => {
@@ -319,13 +314,25 @@ describe('ProductPicker', () => {
   it('a picked catalog product carries its pack size to the form', async () => {
     // The label, parsed, fills the quantity of stock linked to it.
     const { fixture, ref } = setup({
-      catalog: [product({ id: 7, name: 'Greek Yoghurt', quantity_label: '950g', pack: { value: 950, unit: 'g' } })],
+      catalog: [
+        product({
+          id: 7,
+          name: 'Greek Yoghurt',
+          quantity_label: '950g',
+          pack: { value: 950, unit: 'g' },
+        }),
+      ],
     });
     fixture.detectChanges();
     await new Promise((r) => setTimeout(r));
 
     fixture.componentInstance.pickProduct(
-      product({ id: 7, name: 'Greek Yoghurt', quantity_label: '950g', pack: { value: 950, unit: 'g' } }),
+      product({
+        id: 7,
+        name: 'Greek Yoghurt',
+        quantity_label: '950g',
+        pack: { value: 950, unit: 'g' },
+      }),
     );
 
     expect(ref.close).toHaveBeenCalledWith(

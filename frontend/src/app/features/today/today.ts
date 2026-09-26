@@ -81,7 +81,11 @@ export class Today {
     return this.graph
       .todoItems()
       .filter((t) => t.status !== 'done')
-      .map((todo) => ({ todo, state: this.graph.statusOf(todo), urgency: this.graph.urgencyOf(todo) }))
+      .map((todo) => ({
+        todo,
+        state: this.graph.statusOf(todo),
+        urgency: this.graph.urgencyOf(todo),
+      }))
       .filter((x) => x.state !== 'waiting' && x.state !== 'blocked')
       .filter((x) => x.urgency !== 'none' || x.state === 'ready')
       .sort(
@@ -141,7 +145,8 @@ export class Today {
   private chip(todo: TodoDoc, urgency: Urgency): { label: string; cls: string } | null {
     if (urgency !== 'none' && todo.due) {
       const d = this.graph.daysUntil(todo.due);
-      if (urgency === 'overdue') return { label: d === -1 ? 'overdue 1d' : `overdue ${-d}d`, cls: 'overdue' };
+      if (urgency === 'overdue')
+        return { label: d === -1 ? 'overdue 1d' : `overdue ${-d}d`, cls: 'overdue' };
       if (urgency === 'today') return { label: 'due today', cls: 'overdue' };
       return { label: d === 1 ? 'due tomorrow' : `due in ${d}d`, cls: 'due-soon' };
     }
