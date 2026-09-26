@@ -111,42 +111,11 @@ macro_rules! validating_deserialize {
 validating_deserialize!(Barcode);
 validating_deserialize!(ExternalId);
 
-/// Database mapping for the string ids, delegating to `str` — the columns are
-/// `VARCHAR`, and `#[derive(sqlx::Type)]` would declare an ENUM (see
-/// [`Source`](super::source::Source)).
-///
-/// Decoding **parses**, so a stored value outside the shape fails the query
-/// loudly rather than arriving as a value the rest of the code would have to
-/// second-guess.
+/// Database mapping ([`varchar_sql!`](crate::varchar_sql)), `Display`, and
+/// comparison with literals for the string ids.
 macro_rules! string_id_sql {
     ($t:ty) => {
-        impl sqlx::Type<sqlx::MySql> for $t {
-            fn type_info() -> <sqlx::MySql as sqlx::Database>::TypeInfo {
-                <str as sqlx::Type<sqlx::MySql>>::type_info()
-            }
-            fn compatible(ty: &<sqlx::MySql as sqlx::Database>::TypeInfo) -> bool {
-                <str as sqlx::Type<sqlx::MySql>>::compatible(ty)
-            }
-        }
-
-        impl<'q> sqlx::Encode<'q, sqlx::MySql> for $t {
-            fn encode_by_ref(
-                &self,
-                buf: &mut <sqlx::MySql as sqlx::Database>::ArgumentBuffer,
-            ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
-                <&str as sqlx::Encode<'q, sqlx::MySql>>::encode_by_ref(&self.as_str(), buf)
-            }
-        }
-
-        impl<'r> sqlx::Decode<'r, sqlx::MySql> for $t {
-            fn decode(
-                value: <sqlx::MySql as sqlx::Database>::ValueRef<'r>,
-            ) -> Result<Self, sqlx::error::BoxDynError> {
-                <&str as sqlx::Decode<'r, sqlx::MySql>>::decode(value)?
-                    .parse()
-                    .map_err(Into::into)
-            }
-        }
+        $crate::varchar_sql!($t);
 
         impl fmt::Display for $t {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

@@ -68,3 +68,12 @@ impl IntoResponse for AppError {
         (status, Json(json!({ "error": msg }))).into_response()
     }
 }
+
+/// 204 when the row existed to act on, else 404.
+pub fn found_or_404(found: bool) -> Result<StatusCode, AppError> {
+    if found {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(AppError::NotFound)
+    }
+}

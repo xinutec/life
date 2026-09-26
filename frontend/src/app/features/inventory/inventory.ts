@@ -1,28 +1,28 @@
-import { Component, computed, inject } from "@angular/core";
-import { MatBottomSheet, MatBottomSheetModule } from "@angular/material/bottom-sheet";
-import { MatButtonModule } from "@angular/material/button";
-import { MatIconModule } from "@angular/material/icon";
-import { MatListModule } from "@angular/material/list";
-import { MatMenuModule } from "@angular/material/menu";
+import { Component, computed, inject } from '@angular/core';
+import { MatBottomSheet, MatBottomSheetModule } from '@angular/material/bottom-sheet';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatListModule } from '@angular/material/list';
+import { MatMenuModule } from '@angular/material/menu';
 
-import { amount } from "../../shared/amount";
-import { onlineHint } from "../../shared/api-error";
-import { Feedback } from "../../shared/feedback";
-import { ListState } from "../../shared/list-state";
-import { ExpiryInfo, expiryInfo } from "../../expiry";
-import { LifeApi } from "../../life-api";
-import { ProductThumb } from "../../product-thumb";
-import { ItemsStore, LocationsStore, locationPath } from "../../stores/catalog";
-import { ShoppingStore } from "../../sync/shopping-store";
-import { Item } from "../../models";
-import { ItemSheet, ItemSheetData } from "./item-sheet";
-import { PlaceSheet, PlaceSheetData } from "./place-sheet";
-import { UseSheet, UseSheetData } from "./use-sheet";
+import { amount } from '../../shared/amount';
+import { onlineHint } from '../../shared/api-error';
+import { Feedback } from '../../shared/feedback';
+import { ListState } from '../../shared/list-state';
+import { ExpiryInfo, expiryInfo } from '../../expiry';
+import { LifeApi } from '../../life-api';
+import { ProductThumb } from '../../product-thumb';
+import { ItemsStore, LocationsStore, locationPath } from '../../stores/catalog';
+import { ShoppingStore } from '../../sync/shopping-store';
+import { Item } from '../../models';
+import { ItemSheet, ItemSheetData } from './item-sheet';
+import { PlaceSheet, PlaceSheetData } from './place-sheet';
+import { UseSheet, UseSheetData } from './use-sheet';
 
 @Component({
-  selector: "app-inventory",
-  templateUrl: "./inventory.html",
-  styleUrl: "./inventory.scss",
+  selector: 'app-inventory',
+  templateUrl: './inventory.html',
+  styleUrl: './inventory.scss',
   imports: [
     MatBottomSheetModule,
     MatListModule,
@@ -50,16 +50,11 @@ export class Inventory {
 
   /** Deletes are tombstones (restorable from Recently deleted); offer an
    *  immediate Undo so a fat-finger costs one tap, not a trip to the trash. */
-  private undoable(
-    what: string,
-    kind: "item" | "location",
-    ref: number,
-    reload: () => void,
-  ) {
+  private undoable(what: string, kind: 'item' | 'location', ref: number, reload: () => void) {
     this.feedback.undo(`${what} deleted`, () => {
       this.api.restoreTrash(kind, String(ref)).subscribe({
         next: () => reload(),
-        error: this.failed("undo the delete"),
+        error: this.failed('undo the delete'),
       });
     });
   }
@@ -74,9 +69,7 @@ export class Inventory {
   readonly placesError = this.placesStore.error;
   readonly itemsRefreshing = this.itemsStore.refreshing;
   readonly placesRefreshing = this.placesStore.refreshing;
-  private byId = computed(
-    () => new Map(this.locations().map((l) => [l.id, l] as const)),
-  );
+  private byId = computed(() => new Map(this.locations().map((l) => [l.id, l] as const)));
   readonly locationOptions = computed(() =>
     this.locations().map((l) => ({ id: l.id, label: this.pathOf(l.id) })),
   );
@@ -150,8 +143,8 @@ export class Inventory {
 
   /** The actionable tail of the location path (e.g. "Spice cupboard › Top shelf"). */
   shortLoc(id: number | null): string {
-    if (id == null) return "";
-    return this.pathOf(id).split(" › ").slice(-2).join(" › ");
+    if (id == null) return '';
+    return this.pathOf(id).split(' › ').slice(-2).join(' › ');
   }
 
   deletePlace(id: number): void {
@@ -159,12 +152,12 @@ export class Inventory {
       next: () => {
         this.reloadLocations();
         this.reloadItems(); // items there read as unplaced until restored
-        this.undoable("Place", "location", id, () => {
+        this.undoable('Place', 'location', id, () => {
           this.reloadLocations();
           this.reloadItems();
         });
       },
-      error: this.failed("delete the place"),
+      error: this.failed('delete the place'),
     });
   }
 
@@ -199,9 +192,9 @@ export class Inventory {
     this.api.deleteItem(id).subscribe({
       next: () => {
         this.reloadItems();
-        this.undoable("Item", "item", id, () => this.reloadItems());
+        this.undoable('Item', 'item', id, () => this.reloadItems());
       },
-      error: this.failed("delete the item"),
+      error: this.failed('delete the item'),
     });
   }
 }

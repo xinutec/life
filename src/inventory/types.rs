@@ -178,35 +178,7 @@ pub struct ItemHistoryEntry {
     pub at: i64,
 }
 
-// `event` is a VARCHAR, so this delegates to `str` rather than deriving
-// sqlx::Type (which would declare a SQL ENUM — see products::source).
-impl sqlx::Type<sqlx::MySql> for ItemEvent {
-    fn type_info() -> <sqlx::MySql as sqlx::Database>::TypeInfo {
-        <str as sqlx::Type<sqlx::MySql>>::type_info()
-    }
-    fn compatible(ty: &<sqlx::MySql as sqlx::Database>::TypeInfo) -> bool {
-        <str as sqlx::Type<sqlx::MySql>>::compatible(ty)
-    }
-}
-
-impl<'q> sqlx::Encode<'q, sqlx::MySql> for ItemEvent {
-    fn encode_by_ref(
-        &self,
-        buf: &mut <sqlx::MySql as sqlx::Database>::ArgumentBuffer,
-    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
-        <&str as sqlx::Encode<'q, sqlx::MySql>>::encode_by_ref(&self.as_str(), buf)
-    }
-}
-
-impl<'r> sqlx::Decode<'r, sqlx::MySql> for ItemEvent {
-    fn decode(
-        value: <sqlx::MySql as sqlx::Database>::ValueRef<'r>,
-    ) -> Result<Self, sqlx::error::BoxDynError> {
-        <&str as sqlx::Decode<'r, sqlx::MySql>>::decode(value)?
-            .parse()
-            .map_err(Into::into)
-    }
-}
+crate::varchar_sql!(ItemEvent);
 
 /// Request body for "I used some of this": how much went, in which unit.
 ///

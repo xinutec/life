@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { fromMinorUnits, toMinorUnits } from './money';
+import { formatMoney, fromMinorUnits, toMinorUnits } from './money';
 
 describe('toMinorUnits', () => {
   it('reads whole and decimal prices', () => {
@@ -60,5 +60,16 @@ describe('fromMinorUnits', () => {
       expect(minor).not.toBeNull();
       expect(fromMinorUnits(minor!)).toBe(text);
     }
+  });
+});
+
+describe('formatMoney', () => {
+  it('prefixes pounds and suffixes any other currency code', () => {
+    expect(formatMoney(357, 'GBP')).toBe('£3.57');
+    expect(formatMoney(357, 'EUR')).toBe('3.57 EUR');
+  });
+
+  it('never goes through a float', () => {
+    expect(formatMoney(1_000_000_001, 'GBP')).toBe('£10000000.01');
   });
 });

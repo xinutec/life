@@ -35,3 +35,9 @@ export function fromMinorUnits(minor: number): string {
   const rest = abs % MINOR_PER_MAJOR;
   return `${sign}${major}.${String(rest).padStart(DECIMALS, '0')}`;
 }
+
+/** Minor units with their currency: "£3.30", or "3.30 EUR" for any other. */
+export function formatMoney(minor: number, currency: string): string {
+  const amount = fromMinorUnits(minor);
+  return currency === 'GBP' ? `£${amount}` : `${amount} ${currency}`;
+}

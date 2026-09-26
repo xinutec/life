@@ -5,7 +5,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 
 use crate::conflicts::{ConflictEntry, NewConflict, repo};
-use crate::error::AppError;
+use crate::error::{AppError, found_or_404};
 use crate::session::AuthUser;
 use crate::state::AppState;
 
@@ -33,9 +33,5 @@ pub async fn resolve(
     AuthUser(user): AuthUser,
     Path(id): Path<u64>,
 ) -> Result<StatusCode, AppError> {
-    if repo::resolve(&app.pool, &user.user_id, id).await? {
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        Err(AppError::NotFound)
-    }
+    found_or_404(repo::resolve(&app.pool, &user.user_id, id).await?)
 }

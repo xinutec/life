@@ -1,31 +1,31 @@
-import { Component, computed, effect, inject, signal } from "@angular/core";
-import { toSignal } from "@angular/core/rxjs-interop";
-import { MatBottomSheet, MatBottomSheetModule } from "@angular/material/bottom-sheet";
-import { MatButtonModule } from "@angular/material/button";
-import { MatCheckboxModule } from "@angular/material/checkbox";
-import { MatIconModule } from "@angular/material/icon";
-import { MatListModule } from "@angular/material/list";
-import { MatMenuModule } from "@angular/material/menu";
-import { Router } from "@angular/router";
-import { catchError, forkJoin, map, of, tap } from "rxjs";
+import { Component, computed, effect, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { MatBottomSheet, MatBottomSheetModule } from '@angular/material/bottom-sheet';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatIconModule } from '@angular/material/icon';
+import { MatListModule } from '@angular/material/list';
+import { MatMenuModule } from '@angular/material/menu';
+import { Router } from '@angular/router';
+import { catchError, forkJoin, map, of, tap } from 'rxjs';
 
-import { Feedback } from "../../shared/feedback";
-import { isNotFound } from "../../shared/api-error";
-import { ListState } from "../../shared/list-state";
-import { LifeApi } from "../../life-api";
-import { CoverageQuery, RowPrice, Source } from "../../models";
-import { fromMinorUnits } from "../../shared/money";
-import { sourceLabel } from "../../shared/sources";
-import { ProductThumb } from "../../product-thumb";
-import { ShoppingDoc, ShoppingStore } from "../../sync/shopping-store";
-import { BuyPrices, BuyRow, BuySheet } from "./buy-sheet";
-import { ShoppingItemSheet } from "./shopping-item-sheet";
-import { TripSheet } from "./trip-sheet";
+import { Feedback } from '../../shared/feedback';
+import { isNotFound } from '../../shared/api-error';
+import { ListState } from '../../shared/list-state';
+import { LifeApi } from '../../life-api';
+import { CoverageQuery, RowPrice, Source } from '../../models';
+import { formatMoney } from '../../shared/money';
+import { sourceLabel } from '../../shared/sources';
+import { ProductThumb } from '../../product-thumb';
+import { ShoppingDoc, ShoppingStore } from '../../sync/shopping-store';
+import { BuyPrices, BuyRow, BuySheet } from './buy-sheet';
+import { ShoppingItemSheet } from './shopping-item-sheet';
+import { TripSheet } from './trip-sheet';
 
 @Component({
-  selector: "app-shopping",
-  templateUrl: "./shopping.html",
-  styleUrl: "./shopping.scss",
+  selector: 'app-shopping',
+  templateUrl: './shopping.html',
+  styleUrl: './shopping.scss',
   imports: [
     MatBottomSheetModule,
     MatListModule,
@@ -53,9 +53,7 @@ export class Shopping {
   readonly loaded = toSignal(this.store.items$.pipe(map(() => true)), {
     initialValue: false,
   });
-  readonly doneCount = computed(
-    () => this.items().filter((i) => i.done).length,
-  );
+  readonly doneCount = computed(() => this.items().filter((i) => i.done).length);
   readonly syncError = this.store.syncError;
 
   // --- Where can I get this trip? ---
@@ -111,13 +109,17 @@ export class Shopping {
 
   /** "Asda · Waitrose" — the row's own shops, named as they are everywhere else. */
   shopLine(it: ShoppingDoc): string {
-    return this.shopsFor(it).map(sourceLabel).join(" · ");
+    return this.shopsFor(it).map(sourceLabel).join(' · ');
   }
 
   /** "Asda 6/8 · Waitrose 4/8", best first — the one-shop-trip question. Rows we
    *  can't ask about are counted separately rather than folded into the
    *  denominator, so a list of hand-typed jottings doesn't read as bad coverage. */
-  readonly tripSummary = computed<{ shops: { label: string; have: number }[]; of: number; unknown: number } | null>(() => {
+  readonly tripSummary = computed<{
+    shops: { label: string; have: number }[];
+    of: number;
+    unknown: number;
+  } | null>(() => {
     const wanted = this.items().filter((it) => !it.done);
     if (!wanted.length || this.coverageUnavailable()) return null;
     const cover = this.coverage();
@@ -141,28 +143,30 @@ export class Shopping {
   /** "Asda £12.40 · 4 of 6 priced", per shop — each shop's latest shelf prices
    *  over the rows it has priced. Not a "cheapest shop": two totals over
    *  different rows do not compare, and the counts say so. GBP only. */
-  readonly estimates = computed<{ label: string; total: string; priced: number; of: number }[]>(() => {
-    const wanted = this.items().filter((it) => !it.done);
-    const byRow = this.prices();
-    const totals = new Map<Source, { minor: number; priced: number }>();
-    for (const it of wanted) {
-      for (const p of byRow.get(it.ulid) ?? []) {
-        if (p.currency !== "GBP") continue;
-        const t = totals.get(p.source) ?? { minor: 0, priced: 0 };
-        t.minor += p.amount_minor * packsOf(it);
-        t.priced += 1;
-        totals.set(p.source, t);
+  readonly estimates = computed<{ label: string; total: string; priced: number; of: number }[]>(
+    () => {
+      const wanted = this.items().filter((it) => !it.done);
+      const byRow = this.prices();
+      const totals = new Map<Source, { minor: number; priced: number }>();
+      for (const it of wanted) {
+        for (const p of byRow.get(it.ulid) ?? []) {
+          if (p.currency !== 'GBP') continue;
+          const t = totals.get(p.source) ?? { minor: 0, priced: 0 };
+          t.minor += p.amount_minor * packsOf(it);
+          t.priced += 1;
+          totals.set(p.source, t);
+        }
       }
-    }
-    return [...totals.entries()]
-      .map(([source, t]) => ({
-        label: sourceLabel(source),
-        total: `£${fromMinorUnits(t.minor)}`,
-        priced: t.priced,
-        of: wanted.length,
-      }))
-      .sort((a, b) => b.priced - a.priced || a.label.localeCompare(b.label));
-  });
+      return [...totals.entries()]
+        .map(([source, t]) => ({
+          label: sourceLabel(source),
+          total: formatMoney(t.minor, 'GBP'),
+          priced: t.priced,
+          of: wanted.length,
+        }))
+        .sort((a, b) => b.priced - a.priced || a.label.localeCompare(b.label));
+    },
+  );
 
   /** True when the coverage line is blank because we couldn't ask. */
   readonly coverageOffline = computed(
@@ -197,7 +201,7 @@ export class Shopping {
    *  so it falls back to editing the entry. */
   view(it: ShoppingDoc): void {
     if (it.product_id != null) {
-      void this.router.navigate(["/product", it.product_id]);
+      void this.router.navigate(['/product', it.product_id]);
       return;
     }
     const barcode = it.barcode?.trim();
@@ -206,12 +210,10 @@ export class Shopping {
       return;
     }
     this.api.lookupProduct(barcode).subscribe({
-      next: (p) => void this.router.navigate(["/product", p.id]),
+      next: (p) => void this.router.navigate(['/product', p.id]),
       error: (e: unknown) =>
         this.feedback.error(
-          isNotFound(e)
-            ? `No product found for ${barcode}.`
-            : "Lookup failed — are you online?",
+          isNotFound(e) ? `No product found for ${barcode}.` : 'Lookup failed — are you online?',
         ),
     });
   }
@@ -228,10 +230,7 @@ export class Shopping {
   /** Offer Undo for removed rows. The store's two-layer undo (revive locally +
    *  server-side trash restore for synced rows) does the work per doc. */
   private undoableRemove(docs: ShoppingDoc[]): void {
-    const what =
-      docs.length === 1
-        ? `Removed “${docs[0].name}”`
-        : `Removed ${docs.length} items`;
+    const what = docs.length === 1 ? `Removed “${docs[0].name}”` : `Removed ${docs.length} items`;
     this.feedback.undo(what, () => {
       for (const doc of docs) void this.store.undoDelete(doc);
     });
@@ -274,13 +273,9 @@ export class Shopping {
       const ok = flags.filter(Boolean).length;
       const failed = flags.length - ok;
       if (failed > 0) {
-        this.feedback.error(
-          `${ok} added to inventory; ${failed} failed and stayed on the list.`,
-        );
+        this.feedback.error(`${ok} added to inventory; ${failed} failed and stayed on the list.`);
       } else {
-        this.feedback.notify(
-          ok === 1 ? "Added to inventory." : `${ok} added to inventory.`,
-        );
+        this.feedback.notify(ok === 1 ? 'Added to inventory.' : `${ok} added to inventory.`);
       }
     });
   }
@@ -292,7 +287,7 @@ export class Shopping {
   }
 
   label(it: ShoppingDoc): string {
-    if (it.quantity == null) return "";
+    if (it.quantity == null) return '';
     return it.unit ? `${it.quantity} ${it.unit}` : `${it.quantity}`;
   }
 }

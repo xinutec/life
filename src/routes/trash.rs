@@ -6,7 +6,7 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 
-use crate::error::AppError;
+use crate::error::{AppError, found_or_404};
 use crate::session::AuthUser;
 use crate::state::AppState;
 use crate::trash::{TrashEntry, TrashKind, repo};
@@ -27,9 +27,5 @@ pub async fn restore(
     Path((kind, r)): Path<(String, String)>,
 ) -> Result<StatusCode, AppError> {
     let kind = TrashKind::from_str(&kind).map_err(AppError::BadRequest)?;
-    if repo::restore(&app.pool, &user.user_id, kind, &r).await? {
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        Err(AppError::NotFound)
-    }
+    found_or_404(repo::restore(&app.pool, &user.user_id, kind, &r).await?)
 }

@@ -22,7 +22,7 @@ import { assertNever, classifyApiError, onlineHint } from '../../shared/api-erro
 import { ProductImages } from '../../product-image';
 import { Feedback } from '../../shared/feedback';
 import { ListState } from '../../shared/list-state';
-import { fromMinorUnits } from '../../shared/money';
+import { formatMoney } from '../../shared/money';
 import { sourceLabel } from '../../shared/sources';
 import { ShopProduct, ShopProvider, Shops, shopPrice } from '../../shop';
 import { ASDA_FACTS } from '../../shops/asda';
@@ -143,17 +143,11 @@ function humanize(slug: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** Minor units → a display amount ("£3.57"; non-GBP falls back to "3.57 EUR"). */
-function money(amountMinor: number, currency: string): string {
-  const amount = (amountMinor / 100).toFixed(2);
-  return currency === 'GBP' ? `£${amount}` : `${amount} ${currency}`;
-}
-
 /** What a bot-walled shop's own quote reads as before we've stored it — the same
  *  string the buy rows show, from the record the WebView just fetched. */
 function priceLabel(product: ShopProduct): string | null {
   const price = shopPrice(product);
-  return price ? money(price.amount_minor, price.currency) : null;
+  return price ? formatMoney(price.amount_minor, price.currency) : null;
 }
 
 /** The product payoff screen (/product/:id): hero image, clean name, where to
@@ -773,13 +767,13 @@ export class ProductPage {
     (this.detail()?.purchases ?? []).map((p) => ({
       id: p.id,
       shop: p.shop,
-      price: `${p.currency === 'GBP' ? '£' : p.currency + ' '}${fromMinorUnits(p.amount_minor)}`,
+      price: formatMoney(p.amount_minor, p.currency),
       // The RATE first, because that is the comparable number and the whole
       // reason the pack is captured; the pack itself only says what the rate is
       // of. Absent when the unit could not be read — see purchases::repo.
       pack: [
         p.unit_amount_minor != null && p.unit_measure
-          ? `£${fromMinorUnits(p.unit_amount_minor)}/${p.unit_measure}`
+          ? `${formatMoney(p.unit_amount_minor, p.currency)}/${p.unit_measure}`
           : '',
         p.quantity != null ? `${p.quantity}${p.unit ? ' ' + p.unit : ''}` : '',
       ]
@@ -806,10 +800,10 @@ export class ProductPage {
         externalId: p.external_id,
         source: p.source,
         url: listing.get(key)?.url ?? null,
-        price: money(p.amount_minor, p.currency),
+        price: formatMoney(p.amount_minor, p.currency),
         perUnit:
           p.unit_amount_minor != null && p.unit_measure
-            ? `${money(p.unit_amount_minor, p.currency)}/${p.unit_measure}`
+            ? `${formatMoney(p.unit_amount_minor, p.currency)}/${p.unit_measure}`
             : null,
         observed: ago(p.observed_at),
       };

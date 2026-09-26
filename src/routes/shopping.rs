@@ -6,7 +6,7 @@ use axum::http::StatusCode;
 use serde::Deserialize;
 use ts_rs::TS;
 
-use crate::error::AppError;
+use crate::error::{AppError, found_or_404};
 use crate::inventory::repo as inventory_repo;
 use crate::inventory::types::{Item, NewItem};
 use crate::products::coverage;
@@ -50,11 +50,7 @@ pub async fn delete(
     AuthUser(user): AuthUser,
     Path(id): Path<u64>,
 ) -> Result<StatusCode, AppError> {
-    if repo::delete(&app.pool, &user.user_id, id).await? {
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        Err(AppError::NotFound)
-    }
+    found_or_404(repo::delete(&app.pool, &user.user_id, id).await?)
 }
 
 /// What may ride along with a buy: the price, if it was noted.

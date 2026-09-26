@@ -8,7 +8,7 @@ use axum::body::Bytes;
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 
-use crate::error::AppError;
+use crate::error::{AppError, found_or_404};
 use crate::files::repo as files_repo;
 use crate::files::types::{ItemFile, MAX_FILE_BYTES, sniff_mime};
 use crate::inventory::consume::Taken;
@@ -75,11 +75,7 @@ pub async fn delete_item(
     AuthUser(user): AuthUser,
     Path(id): Path<u64>,
 ) -> Result<StatusCode, AppError> {
-    if repo::delete_item(&app.pool, &user.user_id, id).await? {
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        Err(AppError::NotFound)
-    }
+    found_or_404(repo::delete_item(&app.pool, &user.user_id, id).await?)
 }
 
 pub async fn delete_location(
@@ -87,11 +83,7 @@ pub async fn delete_location(
     AuthUser(user): AuthUser,
     Path(id): Path<u64>,
 ) -> Result<StatusCode, AppError> {
-    if repo::delete_location(&app.pool, &user.user_id, id).await? {
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        Err(AppError::NotFound)
-    }
+    found_or_404(repo::delete_location(&app.pool, &user.user_id, id).await?)
 }
 
 /// GET /api/items/{id}/history → what has happened to this stock row, newest
@@ -162,11 +154,7 @@ pub async fn delete_purchase(
     AuthUser(user): AuthUser,
     Path((id, purchase_id)): Path<(u64, u64)>,
 ) -> Result<StatusCode, AppError> {
-    if purchases_repo::remove(&app.pool, &user.user_id, id, purchase_id).await? {
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        Err(AppError::NotFound)
-    }
+    found_or_404(purchases_repo::remove(&app.pool, &user.user_id, id, purchase_id).await?)
 }
 
 /// GET /api/items/{id}/files → what is attached to this item, newest first.
@@ -281,11 +269,7 @@ pub async fn delete_file(
     AuthUser(user): AuthUser,
     Path((id, file_id)): Path<(u64, u64)>,
 ) -> Result<StatusCode, AppError> {
-    if files_repo::remove(&app.pool, &user.user_id, id, file_id).await? {
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        Err(AppError::NotFound)
-    }
+    found_or_404(files_repo::remove(&app.pool, &user.user_id, id, file_id).await?)
 }
 
 pub async fn move_item(
@@ -340,11 +324,7 @@ pub async fn mark_low(
     AuthUser(user): AuthUser,
     Path(id): Path<u64>,
 ) -> Result<StatusCode, AppError> {
-    if repo::mark_low(&app.pool, &user.user_id, id).await? {
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        Err(AppError::NotFound)
-    }
+    found_or_404(repo::mark_low(&app.pool, &user.user_id, id).await?)
 }
 
 /// POST /api/items/{id}/use → take an amount out of a stock row.

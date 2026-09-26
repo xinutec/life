@@ -105,36 +105,5 @@ impl Source {
         }
     }
 }
-// --- Database mapping ---
-//
-// Hand-written: `#[derive(sqlx::Type)]` declares a SQL `ENUM`, and the `source`
-// columns are `VARCHAR`, which fails at runtime on real rows. Decoding parses,
-// so a stored value that isn't a `Source` fails the query loudly.
 
-impl sqlx::Type<sqlx::MySql> for Source {
-    fn type_info() -> <sqlx::MySql as sqlx::Database>::TypeInfo {
-        <str as sqlx::Type<sqlx::MySql>>::type_info()
-    }
-    fn compatible(ty: &<sqlx::MySql as sqlx::Database>::TypeInfo) -> bool {
-        <str as sqlx::Type<sqlx::MySql>>::compatible(ty)
-    }
-}
-
-impl<'q> sqlx::Encode<'q, sqlx::MySql> for Source {
-    fn encode_by_ref(
-        &self,
-        buf: &mut <sqlx::MySql as sqlx::Database>::ArgumentBuffer,
-    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
-        <&str as sqlx::Encode<'q, sqlx::MySql>>::encode_by_ref(&self.as_str(), buf)
-    }
-}
-
-impl<'r> sqlx::Decode<'r, sqlx::MySql> for Source {
-    fn decode(
-        value: <sqlx::MySql as sqlx::Database>::ValueRef<'r>,
-    ) -> Result<Self, sqlx::error::BoxDynError> {
-        <&str as sqlx::Decode<'r, sqlx::MySql>>::decode(value)?
-            .parse()
-            .map_err(Into::into)
-    }
-}
+crate::varchar_sql!(Source);

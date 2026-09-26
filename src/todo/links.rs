@@ -8,7 +8,7 @@ use sqlx::MySqlPool;
 use ulid::Ulid;
 
 use super::types::{LinkKind, NewTodoLink, TargetKind, TodoLink};
-use crate::sync::repo::next_rev;
+use crate::sync::repo::{next_rev, stamp};
 
 #[derive(sqlx::FromRow)]
 struct Row {
@@ -79,17 +79,14 @@ pub async fn create(pool: &MySqlPool, user_id: &str, new: NewTodoLink) -> Result
 
 /// Soft delete: tombstone + fresh rev so the removal syncs.
 pub async fn delete(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
-    let mut tx = pool.begin().await?;
-    let rev = next_rev(&mut tx).await?;
-    let res = sqlx::query(
-        "UPDATE todo_links SET deleted_at = NOW(), rev = ?, updated_at = NOW() \
-         WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
-    )
-    .bind(rev)
-    .bind(id)
-    .bind(user_id)
-    .execute(&mut *tx)
-    .await?;
-    tx.commit().await?;
-    Ok(res.rows_affected() > 0)
+    stamp(pool, |rev| {
+        sqlx::query(
+            "UPDATE todo_links SET deleted_at = NOW(), rev = ?, updated_at = NOW() \
+             WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
+        )
+        .bind(rev)
+        .bind(id)
+        .bind(user_id)
+    })
+    .await
 }

@@ -35,6 +35,19 @@ pub async fn next_rev(conn: &mut MySqlConnection) -> sqlx::Result<u64> {
     Ok(res.last_insert_id())
 }
 
+/// Run one tombstone or restore `UPDATE`, built by `query` around a fresh
+/// `rev`, in its own transaction so the change syncs. False when no row matched.
+pub async fn stamp<'q>(
+    pool: &MySqlPool,
+    query: impl FnOnce(u64) -> sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments>,
+) -> Result<bool> {
+    let mut tx = pool.begin().await?;
+    let rev = next_rev(&mut tx).await?;
+    let res = query(rev).execute(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(res.rows_affected() > 0)
+}
+
 // ---- the protocol, once -------------------------------------------------------
 
 /// A push failure splits invalid client input (→ 400 at the route) from
@@ -596,18 +609,16 @@ pub async fn dedupe_todo_links(pool: &MySqlPool) -> Result<u64> {
     .await?;
     let mut n = 0u64;
     for (id,) in dups {
-        let mut tx = pool.begin().await?;
-        let rev = next_rev(&mut tx).await?;
-        let res = sqlx::query(
-            "UPDATE todo_links SET deleted_at = NOW(), rev = ?, updated_at = NOW() \
-             WHERE id = ? AND deleted_at IS NULL",
-        )
-        .bind(rev)
-        .bind(id)
-        .execute(&mut *tx)
+        let removed = stamp(pool, |rev| {
+            sqlx::query(
+                "UPDATE todo_links SET deleted_at = NOW(), rev = ?, updated_at = NOW() \
+                 WHERE id = ? AND deleted_at IS NULL",
+            )
+            .bind(rev)
+            .bind(id)
+        })
         .await?;
-        tx.commit().await?;
-        n += res.rows_affected();
+        n += u64::from(removed);
     }
     Ok(n)
 }

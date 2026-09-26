@@ -6,7 +6,7 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 
-use crate::error::AppError;
+use crate::error::{AppError, found_or_404};
 use crate::session::AuthUser;
 use crate::state::AppState;
 use crate::todo::types::{NewTodo, NewTodoLink, Todo, TodoLink, UpdateTodo};
@@ -44,11 +44,7 @@ pub async fn delete(
     AuthUser(user): AuthUser,
     Path(id): Path<u64>,
 ) -> Result<StatusCode, AppError> {
-    if repo::delete(&app.pool, &user.user_id, id).await? {
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        Err(AppError::NotFound)
-    }
+    found_or_404(repo::delete(&app.pool, &user.user_id, id).await?)
 }
 
 // --- connections (todo_link) ---
@@ -73,9 +69,5 @@ pub async fn delete_link(
     AuthUser(user): AuthUser,
     Path(id): Path<u64>,
 ) -> Result<StatusCode, AppError> {
-    if links::delete(&app.pool, &user.user_id, id).await? {
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        Err(AppError::NotFound)
-    }
+    found_or_404(links::delete(&app.pool, &user.user_id, id).await?)
 }

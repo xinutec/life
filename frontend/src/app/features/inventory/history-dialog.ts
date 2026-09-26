@@ -7,7 +7,7 @@ import { MatListModule } from '@angular/material/list';
 import { ago } from '../../shared/ago';
 import { warrantyInfo } from '../../warranty';
 import { amount } from '../../shared/amount';
-import { fromMinorUnits } from '../../shared/money';
+import { formatMoney } from '../../shared/money';
 import { assertNever, classifyApiError, onlineHint } from '../../shared/api-error';
 import { Dialog } from '../../shared/dialog';
 import { Feedback } from '../../shared/feedback';
@@ -84,9 +84,9 @@ export class HistoryDialog {
       id: p.id,
       // The rate leads when there is one — it is the comparable number.
       what: [
-        `${p.currency === 'GBP' ? '£' : p.currency + ' '}${fromMinorUnits(p.amount_minor)}`,
+        formatMoney(p.amount_minor, p.currency),
         p.unit_amount_minor != null && p.unit_measure
-          ? `£${fromMinorUnits(p.unit_amount_minor)}/${p.unit_measure}`
+          ? `${formatMoney(p.unit_amount_minor, p.currency)}/${p.unit_measure}`
           : '',
       ]
         .filter((x) => x)
