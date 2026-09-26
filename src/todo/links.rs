@@ -14,24 +14,20 @@ use crate::sync::repo::{next_rev, stamp};
 struct Row {
     id: u64,
     from_ulid: String,
-    kind: String,
-    target_kind: String,
+    kind: LinkKind,
+    target_kind: TargetKind,
     target_ref: String,
 }
 
-impl TryFrom<Row> for TodoLink {
-    type Error = anyhow::Error;
-    fn try_from(r: Row) -> Result<Self> {
-        Ok(TodoLink {
+impl From<Row> for TodoLink {
+    fn from(r: Row) -> Self {
+        TodoLink {
             id: r.id,
             from: r.from_ulid,
-            kind: r.kind.parse::<LinkKind>().map_err(anyhow::Error::msg)?,
-            target_kind: r
-                .target_kind
-                .parse::<TargetKind>()
-                .map_err(anyhow::Error::msg)?,
+            kind: r.kind,
+            target_kind: r.target_kind,
             target_ref: r.target_ref,
-        })
+        }
     }
 }
 
@@ -45,7 +41,7 @@ pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<TodoLink>> {
     .bind(user_id)
     .fetch_all(pool)
     .await?;
-    rows.into_iter().map(TodoLink::try_from).collect()
+    Ok(rows.into_iter().map(TodoLink::from).collect())
 }
 
 pub async fn create(pool: &MySqlPool, user_id: &str, new: NewTodoLink) -> Result<TodoLink> {
@@ -60,8 +56,8 @@ pub async fn create(pool: &MySqlPool, user_id: &str, new: NewTodoLink) -> Result
     .bind(user_id)
     .bind(&ulid)
     .bind(&new.from)
-    .bind(new.kind.to_string())
-    .bind(new.target_kind.to_string())
+    .bind(new.kind)
+    .bind(new.target_kind)
     .bind(&new.target_ref)
     .bind(rev)
     .execute(&mut *tx)

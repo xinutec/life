@@ -12,7 +12,7 @@ use crate::error::AppError;
 use crate::products::ids::{Barcode, ExternalId, ProductId};
 use crate::products::prices::PriceInput;
 use crate::products::source::Source;
-use crate::products::types::{Choice, FieldChoice, ReconcileField};
+use crate::products::types::{Choice, DocKind, FieldChoice, ReconcileField};
 use crate::products::types::{Product, ProductDetail, ProductListing, ProductReconciliation};
 use crate::products::{asda, brandbank, off, repo, shop_cache};
 use crate::purchases::repo as purchases_repo;
@@ -776,7 +776,7 @@ pub async fn submit_facts(
     // Keep the page's payload verbatim FIRST — so we hold it even if parsing finds
     // nothing (or a better parser wants it later), and never have to drive the
     // WebView through Cloudflare again for the same product.
-    repo::upsert_document(&app.pool, id, Source::Asda, "page", &body.blob).await?;
+    repo::upsert_document(&app.pool, id, Source::Asda, DocKind::Page, &body.blob).await?;
     let facts = brandbank::parse(&body.blob).map_err(|e| AppError::BadRequest(e.to_string()))?;
     repo::store_facts(&app.pool, id, &facts, Source::Asda).await?;
     tracing::info!(

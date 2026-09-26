@@ -85,23 +85,15 @@ pub type DecisionMap = HashMap<ReconcileField, Vec<String>>;
 
 /// The decisions settled for a product's fields.
 pub async fn field_decisions(pool: &MySqlPool, product_id: ProductId) -> Result<DecisionMap> {
-    let rows: Vec<(String, Json<Vec<String>>)> = sqlx::query_as(
+    let rows: Vec<(ReconcileField, Json<Vec<String>>)> = sqlx::query_as(
         "SELECT field, seen_values FROM product_field_decisions WHERE product_id = ?",
     )
     .bind(product_id)
     .fetch_all(pool)
     .await?;
-    // A field we no longer know about is a hard error, not a row to skip: it
-    // would mean a decision is being silently ignored, and the divergence it
-    // settled would quietly come back.
-    rows.into_iter()
-        .map(|(f, v)| {
-            Ok((
-                f.parse::<ReconcileField>().map_err(anyhow::Error::msg)?,
-                v.0,
-            ))
-        })
-        .collect()
+    // A field we no longer know fails the query (it decodes as the enum) rather
+    // than being skipped, which would quietly revive the divergence it settled.
+    Ok(rows.into_iter().map(|(f, v)| (f, v.0)).collect())
 }
 
 /// Where the sources disagree with the canonical row and it isn't already
@@ -340,7 +332,7 @@ async fn upsert_fact_source(
          ON DUPLICATE KEY UPDATE source = VALUES(source), decided_at = CURRENT_TIMESTAMP",
     )
     .bind(product_id)
-    .bind(kind.as_str())
+    .bind(kind)
     .bind(source)
     .execute(pool)
     .await?;
@@ -386,7 +378,7 @@ async fn upsert_decision(
          ON DUPLICATE KEY UPDATE seen_values = VALUES(seen_values), decided_at = CURRENT_TIMESTAMP",
     )
     .bind(product_id)
-    .bind(field.as_str())
+    .bind(field)
     .bind(json)
     .execute(pool)
     .await?;

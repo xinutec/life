@@ -8,7 +8,7 @@ use ts_rs::TS;
 use crate::inventory::types::ItemCategory;
 use crate::products::ids::ProductId;
 
-#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS, sqlx::FromRow)]
 #[ts(export)]
 pub struct ShoppingItem {
     #[ts(type = "number")]

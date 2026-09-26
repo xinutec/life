@@ -5,51 +5,16 @@
 //! `deleted_at`) so deletes propagate to offline clients as tombstones. Reads hide
 //! tombstoned rows.
 
-use std::str::FromStr;
-
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use sqlx::MySqlPool;
 use ulid::Ulid;
 
 use super::types::{NewShoppingItem, ShoppingItem, UpdateShoppingItem};
-use crate::inventory::types::ItemCategory;
-use crate::products::ids::ProductId;
 use crate::sync::repo::{next_rev, stamp};
-
-#[derive(sqlx::FromRow)]
-struct Row {
-    id: u64,
-    name: String,
-    quantity: Option<f64>,
-    unit: Option<String>,
-    barcode: Option<String>,
-    category: String,
-    product_id: Option<ProductId>,
-    done: bool,
-}
-
-impl Row {
-    /// `category` is validated at every write boundary (REST enum, sync push),
-    /// so a parse failure here means the DB was edited out-of-band — error out
-    /// rather than mask it.
-    fn into_item(self) -> Result<ShoppingItem> {
-        let category = ItemCategory::from_str(&self.category).map_err(|e| anyhow!(e))?;
-        Ok(ShoppingItem {
-            id: self.id,
-            name: self.name,
-            quantity: self.quantity,
-            unit: self.unit,
-            barcode: self.barcode,
-            category,
-            product_id: self.product_id,
-            done: self.done,
-        })
-    }
-}
 
 /// To-buy items, undone first, then by name. Tombstoned rows are hidden.
 pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<ShoppingItem>> {
-    let rows: Vec<Row> = sqlx::query_as(
+    let rows: Vec<ShoppingItem> = sqlx::query_as(
         "SELECT id, name, quantity, unit, barcode, category, product_id, done \
          FROM shopping_items \
          WHERE user_id = ? AND deleted_at IS NULL ORDER BY done, name",
@@ -57,11 +22,11 @@ pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<ShoppingItem>> 
     .bind(user_id)
     .fetch_all(pool)
     .await?;
-    rows.into_iter().map(Row::into_item).collect()
+    Ok(rows)
 }
 
 pub async fn get(pool: &MySqlPool, user_id: &str, id: u64) -> Result<Option<ShoppingItem>> {
-    let row: Option<Row> = sqlx::query_as(
+    let row: Option<ShoppingItem> = sqlx::query_as(
         "SELECT id, name, quantity, unit, barcode, category, product_id, done \
          FROM shopping_items \
          WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
@@ -70,7 +35,7 @@ pub async fn get(pool: &MySqlPool, user_id: &str, id: u64) -> Result<Option<Shop
     .bind(user_id)
     .fetch_optional(pool)
     .await?;
-    row.map(Row::into_item).transpose()
+    Ok(row)
 }
 
 pub async fn create(pool: &MySqlPool, user_id: &str, new: NewShoppingItem) -> Result<ShoppingItem> {
@@ -87,7 +52,7 @@ pub async fn create(pool: &MySqlPool, user_id: &str, new: NewShoppingItem) -> Re
     .bind(new.quantity)
     .bind(&new.unit)
     .bind(&new.barcode)
-    .bind(new.category.to_string())
+    .bind(new.category)
     .bind(new.product_id)
     .bind(rev)
     .execute(&mut *tx)
@@ -123,7 +88,7 @@ pub async fn update(
     .bind(upd.quantity)
     .bind(&upd.unit)
     .bind(&upd.barcode)
-    .bind(upd.category.to_string())
+    .bind(upd.category)
     .bind(upd.product_id)
     .bind(upd.done)
     .bind(rev)

@@ -105,5 +105,3 @@ impl Source {
         }
     }
 }
-
-crate::varchar_sql!(Source);

@@ -9,7 +9,7 @@ use super::{ConflictEntry, ConflictKind, NewConflict};
 #[derive(sqlx::FromRow)]
 struct Row {
     id: u64,
-    kind: String,
+    kind: ConflictKind,
     ulid: String,
     field: String,
     label: String,
@@ -27,7 +27,7 @@ pub async fn create(pool: &MySqlPool, user_id: &str, new: NewConflict) -> Result
          VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(user_id)
-    .bind(new.kind.to_string())
+    .bind(new.kind)
     .bind(&new.ulid)
     .bind(&new.field)
     .bind(&new.label)
@@ -48,21 +48,19 @@ pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<ConflictEntry>>
     .bind(user_id)
     .fetch_all(pool)
     .await?;
-    rows.into_iter()
-        .map(|r| {
-            let kind: ConflictKind = r.kind.parse().map_err(anyhow::Error::msg)?;
-            Ok(ConflictEntry {
-                id: r.id,
-                kind,
-                ulid: r.ulid,
-                field: r.field,
-                label: r.label,
-                mine: r.mine,
-                theirs: r.theirs,
-                created_at: r.created_at.and_utc().timestamp_millis(),
-            })
+    Ok(rows
+        .into_iter()
+        .map(|r| ConflictEntry {
+            id: r.id,
+            kind: r.kind,
+            ulid: r.ulid,
+            field: r.field,
+            label: r.label,
+            mine: r.mine,
+            theirs: r.theirs,
+            created_at: r.created_at.and_utc().timestamp_millis(),
         })
-        .collect()
+        .collect())
 }
 
 /// Mark a conflict handled (keep-mine or use-other both end here). The row is

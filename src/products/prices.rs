@@ -20,7 +20,6 @@ crate::str_enum! {
         Each => "each",
     }
 }
-crate::varchar_sql!(UnitMeasure);
 
 impl UnitMeasure {
     /// A shop's own spelling ("KG", "LT", "EA"), or `None` for one we don't

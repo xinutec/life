@@ -5,8 +5,9 @@
 //! variant is written fine and then fails every read. Generating both from one
 //! table closes that hole.
 
-/// Declare a string-backed enum, its `ALL`, and both directions of its mapping.
-/// Attributes and doc comments pass through; the enum must be `Copy`.
+/// Declare a string-backed enum, its `ALL`, both directions of its mapping, and
+/// its database mapping ([`varchar_sql!`](crate::varchar_sql)). Attributes and doc comments pass
+/// through; the enum must be `Copy`.
 ///
 /// The name after the `:` appears in parse errors (`unknown location kind
 /// "attic"`), which reach the user as a sync push's 400 body.
@@ -64,6 +65,8 @@ macro_rules! str_enum {
                 }
             }
         }
+
+        $crate::varchar_sql!($name);
     };
 }
 

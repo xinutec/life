@@ -18,7 +18,7 @@ use crate::products::nutrition::{
 };
 use crate::products::source::Source;
 use crate::products::types::{
-    Candidate, FieldDivergence, ReconcileField, Reconciler, SourceDocument, SourceFacts,
+    Candidate, DocKind, FieldDivergence, ReconcileField, Reconciler, SourceDocument, SourceFacts,
 };
 
 #[derive(sqlx::FromRow)]
@@ -164,7 +164,7 @@ async fn replace_allergens_in(
         )
         .bind(product_id)
         .bind(&a.allergen)
-        .bind(a.presence.to_string())
+        .bind(a.presence)
         .bind(source)
         .execute(&mut *conn)
         .await?;
@@ -210,7 +210,7 @@ async fn replace_dietary_in(
         )
         .bind(product_id)
         .bind(&f.flag)
-        .bind(f.value.to_string())
+        .bind(f.value)
         .bind(source)
         .execute(&mut *conn)
         .await?;
@@ -225,7 +225,7 @@ pub async fn upsert_document(
     pool: &MySqlPool,
     product_id: ProductId,
     source: Source,
-    kind: &str,
+    kind: DocKind,
     body: &str,
 ) -> Result<()> {
     sqlx::query(
@@ -247,7 +247,7 @@ pub async fn get_document(
     pool: &MySqlPool,
     product_id: ProductId,
     source: Source,
-    kind: &str,
+    kind: DocKind,
 ) -> Result<Option<String>> {
     let row: Option<(String,)> = sqlx::query_as(
         "SELECT body FROM product_documents WHERE product_id = ? AND source = ? AND kind = ?",
@@ -260,18 +260,10 @@ pub async fn get_document(
     Ok(row.map(|(b,)| b))
 }
 
-#[derive(sqlx::FromRow)]
-struct DocRow {
-    source: Source,
-    kind: String,
-    fetched_at: i64,
-    bytes: i64,
-}
-
 /// Metadata for every raw payload held for a product (not the bodies) — what the
 /// product detail advertises so the client needn't re-fetch what we already have.
 pub async fn documents_for(pool: &MySqlPool, product_id: ProductId) -> Result<Vec<SourceDocument>> {
-    let rows: Vec<DocRow> = sqlx::query_as(
+    let rows: Vec<SourceDocument> = sqlx::query_as(
         "SELECT source, kind, \
          CAST(UNIX_TIMESTAMP(fetched_at) * 1000 AS SIGNED) AS fetched_at, \
          CAST(LENGTH(body) AS SIGNED) AS bytes \
@@ -280,15 +272,7 @@ pub async fn documents_for(pool: &MySqlPool, product_id: ProductId) -> Result<Ve
     .bind(product_id)
     .fetch_all(pool)
     .await?;
-    Ok(rows
-        .into_iter()
-        .map(|r| SourceDocument {
-            source: r.source,
-            kind: r.kind,
-            fetched_at: r.fetched_at,
-            bytes: r.bytes,
-        })
-        .collect())
+    Ok(rows)
 }
 
 /// Persist a product's full fact set from one source, each part restated. Skips
@@ -344,14 +328,14 @@ pub async fn facts_by_source(pool: &MySqlPool, product_id: ProductId) -> Result<
             .bind(product_id)
             .fetch_all(pool)
             .await?;
-    let allergen_rows: Vec<(Source, String, String)> = sqlx::query_as(
+    let allergen_rows: Vec<(Source, String, Presence)> = sqlx::query_as(
         "SELECT source, allergen, presence FROM product_allergens WHERE product_id = ? \
          ORDER BY allergen",
     )
     .bind(product_id)
     .fetch_all(pool)
     .await?;
-    let dietary_rows: Vec<(Source, String, String)> = sqlx::query_as(
+    let dietary_rows: Vec<(Source, String, Claim)> = sqlx::query_as(
         "SELECT source, flag, value FROM product_dietary_flags WHERE product_id = ? \
          ORDER BY flag",
     )
@@ -386,13 +370,9 @@ pub async fn facts_by_source(pool: &MySqlPool, product_id: ProductId) -> Result<
     for (source, text) in ing_rows {
         by_source.entry(source).or_insert_with(blank).ingredients = Some(text);
     }
-    // The columns are ENUMs, so a value outside the taxonomy means the schema and
-    // this code have diverged — a parse failure here is the honest report of that,
-    // not something to paper over with a default.
+    // A stored value outside the taxonomy fails the query itself (the columns
+    // decode as their enums), rather than being papered over with a default.
     for (source, allergen, presence) in allergen_rows {
-        let presence = presence
-            .parse::<Presence>()
-            .map_err(|e| anyhow::anyhow!("{e} (product {product_id}, source {source})"))?;
         by_source
             .entry(source)
             .or_insert_with(blank)
@@ -400,9 +380,6 @@ pub async fn facts_by_source(pool: &MySqlPool, product_id: ProductId) -> Result<
             .push(Allergen { allergen, presence });
     }
     for (source, flag, value) in dietary_rows {
-        let value = value
-            .parse::<Claim>()
-            .map_err(|e| anyhow::anyhow!("{e} (product {product_id}, source {source})"))?;
         by_source
             .entry(source)
             .or_insert_with(blank)
@@ -425,21 +402,14 @@ pub type FactSourceMap = HashMap<ReconcileField, Source>;
 /// The fact-source picks recorded for a product (empty if none — precedence then
 /// decides the merge).
 pub async fn fact_source_prefs(pool: &MySqlPool, product_id: ProductId) -> Result<FactSourceMap> {
-    let rows: Vec<(String, Source)> =
+    // A kind we no longer know fails the query: dropping it would un-settle a
+    // fact you already decided.
+    let rows: Vec<(ReconcileField, Source)> =
         sqlx::query_as("SELECT kind, source FROM product_fact_sources WHERE product_id = ?")
             .bind(product_id)
             .fetch_all(pool)
             .await?;
-    // As in `field_decisions`: a kind we no longer know is a hard error, because
-    // silently dropping it would un-settle a fact you already decided.
-    rows.into_iter()
-        .map(|(k, src)| {
-            Ok((
-                k.parse::<ReconcileField>().map_err(anyhow::Error::msg)?,
-                src,
-            ))
-        })
-        .collect()
+    Ok(rows.into_iter().collect())
 }
 
 /// The whole-value facts that reconcile by picking one source (not by merge).

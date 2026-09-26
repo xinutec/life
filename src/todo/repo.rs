@@ -6,64 +6,26 @@
 //! The enums are stored as their snake_case strings and parsed at this boundary.
 
 use anyhow::{Context, Result};
-use chrono::NaiveDate;
 use sqlx::MySqlPool;
 use ulid::Ulid;
 
-use super::types::{NewTodo, Todo, TodoPriority, TodoStatus, TodoType, UpdateTodo};
+use super::types::{NewTodo, Todo, TodoStatus, UpdateTodo};
 use crate::sync::repo::{next_rev, stamp};
-
-#[derive(sqlx::FromRow)]
-struct Row {
-    id: u64,
-    title: String,
-    todo_type: String,
-    status: String,
-    priority: Option<String>,
-    notes: Option<String>,
-    not_before: Option<NaiveDate>,
-    due: Option<NaiveDate>,
-    shared: bool,
-}
-
-impl TryFrom<Row> for Todo {
-    type Error = anyhow::Error;
-    fn try_from(r: Row) -> Result<Self> {
-        Ok(Todo {
-            id: r.id,
-            title: r.title,
-            todo_type: r
-                .todo_type
-                .parse::<TodoType>()
-                .map_err(anyhow::Error::msg)?,
-            status: r.status.parse::<TodoStatus>().map_err(anyhow::Error::msg)?,
-            priority: r
-                .priority
-                .map(|p| p.parse::<TodoPriority>())
-                .transpose()
-                .map_err(anyhow::Error::msg)?,
-            notes: r.notes,
-            not_before: r.not_before,
-            due: r.due,
-            shared: r.shared,
-        })
-    }
-}
 
 /// To-dos: open first, then by title. Tombstoned rows are hidden.
 pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<Todo>> {
-    let rows: Vec<Row> = sqlx::query_as(
+    let rows: Vec<Todo> = sqlx::query_as(
         "SELECT id, title, todo_type, status, priority, notes, not_before, due, shared FROM todos \
          WHERE user_id = ? AND deleted_at IS NULL ORDER BY status DESC, title",
     )
     .bind(user_id)
     .fetch_all(pool)
     .await?;
-    rows.into_iter().map(Todo::try_from).collect()
+    Ok(rows)
 }
 
 pub async fn get(pool: &MySqlPool, user_id: &str, id: u64) -> Result<Option<Todo>> {
-    let row: Option<Row> = sqlx::query_as(
+    let row: Option<Todo> = sqlx::query_as(
         "SELECT id, title, todo_type, status, priority, notes, not_before, due, shared FROM todos \
          WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
     )
@@ -71,7 +33,7 @@ pub async fn get(pool: &MySqlPool, user_id: &str, id: u64) -> Result<Option<Todo
     .bind(user_id)
     .fetch_optional(pool)
     .await?;
-    row.map(Todo::try_from).transpose()
+    Ok(row)
 }
 
 /// Same read as [`get`], but inside a caller's transaction and holding the row
@@ -84,7 +46,7 @@ async fn get_for_update(
     user_id: &str,
     id: u64,
 ) -> Result<Option<Todo>> {
-    let row: Option<Row> = sqlx::query_as(
+    let row: Option<Todo> = sqlx::query_as(
         "SELECT id, title, todo_type, status, priority, notes, not_before, due, shared FROM todos \
          WHERE id = ? AND user_id = ? AND deleted_at IS NULL FOR UPDATE",
     )
@@ -92,7 +54,7 @@ async fn get_for_update(
     .bind(user_id)
     .fetch_optional(&mut **tx)
     .await?;
-    row.map(Todo::try_from).transpose()
+    Ok(row)
 }
 
 pub async fn create(pool: &MySqlPool, user_id: &str, new: NewTodo) -> Result<Todo> {
@@ -107,8 +69,8 @@ pub async fn create(pool: &MySqlPool, user_id: &str, new: NewTodo) -> Result<Tod
     .bind(user_id)
     .bind(&ulid)
     .bind(&new.title)
-    .bind(new.todo_type.to_string())
-    .bind(new.priority.map(|p| p.to_string()))
+    .bind(new.todo_type)
+    .bind(new.priority)
     .bind(&new.notes)
     .bind(new.not_before)
     .bind(new.due)
@@ -160,9 +122,9 @@ pub async fn update(
          WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
     )
     .bind(&title)
-    .bind(todo_type.to_string())
-    .bind(status.to_string())
-    .bind(priority.map(|p| p.to_string()))
+    .bind(todo_type)
+    .bind(status)
+    .bind(priority)
     .bind(&notes)
     .bind(not_before)
     .bind(due)

@@ -178,8 +178,6 @@ pub struct ItemHistoryEntry {
     pub at: i64,
 }
 
-crate::varchar_sql!(ItemEvent);
-
 /// Request body for "I used some of this": how much went, in which unit.
 ///
 /// `unit` is required to *agree* with the row's own (see

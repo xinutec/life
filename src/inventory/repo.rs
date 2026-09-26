@@ -17,7 +17,7 @@ use crate::products::ids::{Barcode, ProductId};
 #[derive(sqlx::FromRow)]
 struct LocationRow {
     id: u64,
-    kind: String,
+    kind: LocationKind,
     name: String,
     parent_id: Option<u64>,
     sort_order: i32,
@@ -26,14 +26,13 @@ struct LocationRow {
 
 impl LocationRow {
     fn into_location(self) -> Result<Location> {
-        let kind = LocationKind::from_str(&self.kind).map_err(|e| anyhow!(e))?;
         let position = match self.position {
             Some(s) => Some(serde_json::from_str(&s).context("parsing location.position")?),
             None => None,
         };
         Ok(Location {
             id: self.id,
-            kind,
+            kind: self.kind,
             name: self.name,
             parent_id: self.parent_id,
             sort_order: self.sort_order,
@@ -48,11 +47,11 @@ struct ItemRow {
     product_id: Option<ProductId>,
     name: String,
     brand: Option<String>,
-    category: String,
+    category: ItemCategory,
     quantity: Option<f64>,
     unit: Option<String>,
     expiry: Option<NaiveDate>,
-    expiry_precision: String,
+    expiry_precision: ExpiryPrecision,
     location_id: Option<u64>,
     barcode: Option<String>,
     // A boolean SQL expression decodes as an integer.
@@ -60,24 +59,21 @@ struct ItemRow {
 }
 
 impl ItemRow {
-    fn into_item(self) -> Result<Item> {
-        let category = ItemCategory::from_str(&self.category).map_err(|e| anyhow!(e))?;
-        let expiry_precision =
-            ExpiryPrecision::from_str(&self.expiry_precision).map_err(|e| anyhow!(e))?;
-        Ok(Item {
+    fn into_item(self) -> Item {
+        Item {
             id: self.id,
             product_id: self.product_id,
             name: self.name,
             brand: self.brand,
-            category,
+            category: self.category,
             quantity: self.quantity,
             unit: self.unit,
             expiry: self.expiry,
-            expiry_precision,
+            expiry_precision: self.expiry_precision,
             location_id: self.location_id,
             barcode: self.barcode,
             has_image: self.has_image != 0,
-        })
+        }
     }
 }
 
@@ -205,7 +201,7 @@ pub async fn create_location(
          VALUES (?, ?, ?, ?, ?, ?)",
     )
     .bind(user_id)
-    .bind(new.kind.to_string())
+    .bind(new.kind)
     .bind(&new.name)
     .bind(new.parent_id)
     .bind(new.sort_order)
@@ -230,7 +226,7 @@ pub async fn list_items(pool: &MySqlPool, user_id: &str) -> Result<Vec<Item>> {
     .bind(user_id)
     .fetch_all(pool)
     .await?;
-    rows.into_iter().map(ItemRow::into_item).collect()
+    Ok(rows.into_iter().map(ItemRow::into_item).collect())
 }
 
 pub async fn get_item(pool: &MySqlPool, user_id: &str, id: u64) -> Result<Option<Item>> {
@@ -242,7 +238,7 @@ pub async fn get_item(pool: &MySqlPool, user_id: &str, id: u64) -> Result<Option
     .bind(user_id)
     .fetch_optional(pool)
     .await?;
-    row.map(ItemRow::into_item).transpose()
+    Ok(row.map(ItemRow::into_item))
 }
 
 pub async fn create_item(pool: &MySqlPool, user_id: &str, new: NewItem) -> Result<Item> {
@@ -267,7 +263,7 @@ pub async fn create_item(pool: &MySqlPool, user_id: &str, new: NewItem) -> Resul
     .bind(product_id)
     .bind(&new.name)
     .bind(&name_source)
-    .bind(new.category.to_string())
+    .bind(new.category)
     .bind(new.quantity)
     .bind(&new.unit)
     .bind(new.expiry)
@@ -348,7 +344,7 @@ pub async fn update_item(
     .bind(product_id)
     .bind(&new.name)
     .bind(name_source)
-    .bind(new.category.to_string())
+    .bind(new.category)
     .bind(new.quantity)
     .bind(&new.unit)
     .bind(new.expiry)

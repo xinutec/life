@@ -65,18 +65,28 @@ pub struct ProductListing {
 /// A raw payload we fetched from a source and kept verbatim (product_documents,
 /// 0034) — metadata only, so the UI can show what's already held (and when) and
 /// avoid re-fetching. The body itself is read on demand, not shipped here.
-#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS, sqlx::FromRow)]
 #[ts(export)]
 pub struct SourceDocument {
     pub source: Source,
-    /// Which fetch it was ('page' = Asda's Brandbank product-page blob).
-    pub kind: String,
+    pub kind: DocKind,
     /// When we fetched it (epoch millis).
     #[ts(type = "number")]
     pub fetched_at: i64,
     /// Size of the stored payload, bytes — a hint that we hold it, not the body.
     #[ts(type = "number")]
     pub bytes: i64,
+}
+
+crate::str_enum! {
+    /// Which fetch a stored document is.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[serde(rename_all = "snake_case")]
+    #[ts(export)]
+    pub enum DocKind: "document kind" {
+        /// A shop's product page: Asda's Brandbank blob.
+        Page => "page",
+    }
 }
 
 /// One source's value for a field that disagrees with the canonical product —
