@@ -62,6 +62,18 @@ fn divergences_flag_each_field_a_source_disagrees_on() {
 }
 
 #[test]
+fn a_difference_only_in_capitals_is_offered() {
+    // Deliberate: the source's spelling may be the one to adopt, or the ugly
+    // one to refuse ("aSdA"). Folding case would take that choice away.
+    let p = product("Name", "aSdA", "500g");
+    let asda = listing(Source::Asda, "Name", "Asda", "500g");
+    let divs = repo::divergences(&p, &[asda], &HashMap::new());
+    let fields: Vec<&str> = divs.iter().map(|d| d.field.as_str()).collect();
+    assert_eq!(fields, vec!["brand"]);
+    assert_eq!(divs[0].candidates[0].value, "Asda");
+}
+
+#[test]
 fn a_source_that_agrees_is_not_a_divergence() {
     let p = product("Name", "Brand", "500g");
     // Same brand, same pack; only the name differs.

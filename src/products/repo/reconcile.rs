@@ -64,6 +64,9 @@ fn trimmed(s: Option<String>) -> Option<String> {
 /// The distinct values on the table for a field — the canonical value plus every
 /// listing's — sorted. Stored with a decision as its suppression key: while this
 /// set is unchanged the divergence stays settled; any change re-surfaces it.
+///
+/// Case-sensitive on purpose: a source that differs only in capitals offers a
+/// spelling to adopt or refuse, which folding case would hide.
 fn value_set(spec: &ReconciledField, product: &Product, listings: &[Listing]) -> Vec<String> {
     let mut set = BTreeSet::new();
     if let Some(v) = trimmed((spec.current)(product)) {

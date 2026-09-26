@@ -93,7 +93,9 @@ declined diff stays quiet until that source's value changes.
 
 Two shapes fall out of this:
 
-- **Scalars** (name, brand, pack size) string-compare directly. The image
+- **Scalars** (name, brand, pack size) string-compare directly, case included:
+  "ASDA" against "Asda" is a spelling you may want to adopt (or avoid), so it
+  surfaces rather than being folded away. The image
   doesn't: the canonical picture is *bytes* and a listing offers a *URL*, so it
   is reconciled by provenance rather than by comparison (migration 0036).
 - **Facts** (nutrition, allergens, ingredients, dietary flags) are stored
