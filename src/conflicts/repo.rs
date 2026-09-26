@@ -1,22 +1,9 @@
 //! Persistence for the sync-conflict log.
 
 use anyhow::Result;
-use chrono::NaiveDateTime;
 use sqlx::MySqlPool;
 
-use super::{ConflictEntry, ConflictKind, NewConflict};
-
-#[derive(sqlx::FromRow)]
-struct Row {
-    id: u64,
-    kind: ConflictKind,
-    ulid: String,
-    field: String,
-    label: String,
-    mine: String,
-    theirs: String,
-    created_at: NaiveDateTime,
-}
+use super::{ConflictEntry, NewConflict};
 
 /// Record one reported conflict. Values are stored verbatim (JSON-encoded by
 /// the client); truncation would corrupt them, so oversized values are the
@@ -40,27 +27,15 @@ pub async fn create(pool: &MySqlPool, user_id: &str, new: NewConflict) -> Result
 
 /// Unresolved conflicts, newest first.
 pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<ConflictEntry>> {
-    let rows: Vec<Row> = sqlx::query_as(
-        "SELECT id, kind, ulid, field, label, mine, theirs, created_at \
+    Ok(sqlx::query_as(
+        "SELECT id, kind, ulid, field, label, mine, theirs, \
+         CAST(UNIX_TIMESTAMP(created_at) * 1000 AS SIGNED) AS created_at \
          FROM sync_conflicts WHERE user_id = ? AND resolved_at IS NULL \
          ORDER BY created_at DESC, id DESC",
     )
     .bind(user_id)
     .fetch_all(pool)
-    .await?;
-    Ok(rows
-        .into_iter()
-        .map(|r| ConflictEntry {
-            id: r.id,
-            kind: r.kind,
-            ulid: r.ulid,
-            field: r.field,
-            label: r.label,
-            mine: r.mine,
-            theirs: r.theirs,
-            created_at: r.created_at.and_utc().timestamp_millis(),
-        })
-        .collect())
+    .await?)
 }
 
 /// Mark a conflict handled (keep-mine or use-other both end here). The row is

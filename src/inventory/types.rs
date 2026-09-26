@@ -161,7 +161,7 @@ pub struct ItemHistory {
 }
 
 /// One thing that happened to a stock row — a line of its history.
-#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS, sqlx::FromRow)]
 #[ts(export)]
 pub struct ItemHistoryEntry {
     #[ts(type = "number")]

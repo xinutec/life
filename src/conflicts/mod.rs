@@ -24,7 +24,7 @@ str_enum! {
 /// One unresolved same-field conflict, as listed on the Conflicts screen.
 /// `mine`/`theirs` are JSON-encoded field values (the client encodes them, so
 /// numbers/nulls round-trip exactly).
-#[derive(Debug, Clone, Serialize, TS)]
+#[derive(Debug, Clone, Serialize, TS, sqlx::FromRow)]
 #[ts(export)]
 pub struct ConflictEntry {
     #[ts(type = "number")]

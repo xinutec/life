@@ -1,8 +1,6 @@
 //! Persistence for locations and items. `position` is stored as JSON text and
 //! parsed here, so it survives however MariaDB reports the JSON column type.
 
-use std::str::FromStr;
-
 use anyhow::{Context, Result, anyhow};
 use chrono::NaiveDate;
 use sqlx::MySqlPool;
@@ -638,15 +636,6 @@ pub async fn restore_location(pool: &MySqlPool, user_id: &str, id: u64) -> Resul
     Ok(res.rows_affected() > 0)
 }
 
-#[derive(sqlx::FromRow)]
-struct HistoryRow {
-    id: u64,
-    event: String,
-    quantity: Option<f64>,
-    location: Option<String>,
-    at: chrono::NaiveDateTime,
-}
-
 /// Everything that has happened to one stock row, newest first.
 ///
 /// Scoped on `h.user_id` and not merely on the item's: the history table
@@ -660,8 +649,11 @@ pub async fn item_history(
     user_id: &str,
     item_id: u64,
 ) -> Result<Vec<ItemHistoryEntry>> {
-    let rows: Vec<HistoryRow> = sqlx::query_as(
-        "SELECT h.id, h.event, h.quantity, l.name AS location, h.at \
+    // A stored event outside the enum fails the query rather than being
+    // dropped or shown blank, as `products::Source` is read.
+    Ok(sqlx::query_as(
+        "SELECT h.id, h.event, h.quantity, l.name AS location, \
+         CAST(UNIX_TIMESTAMP(h.at) * 1000 AS SIGNED) AS at \
          FROM item_history h \
          LEFT JOIN locations l ON l.id = h.location_id \
          WHERE h.item_id = ? AND h.user_id = ? \
@@ -670,21 +662,7 @@ pub async fn item_history(
     .bind(item_id)
     .bind(user_id)
     .fetch_all(pool)
-    .await?;
-    rows.into_iter()
-        .map(|r| {
-            Ok(ItemHistoryEntry {
-                id: r.id,
-                // A stored event outside the enum fails the read loudly rather
-                // than being dropped or shown as a blank line — the same rule
-                // products::Source is read under.
-                event: ItemEvent::from_str(&r.event).map_err(|e| anyhow!(e))?,
-                quantity: r.quantity,
-                location: r.location,
-                at: r.at.and_utc().timestamp_millis(),
-            })
-        })
-        .collect()
+    .await?)
 }
 
 async fn record_history(
