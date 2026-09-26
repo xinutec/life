@@ -16,6 +16,7 @@ use life::products::packsize;
 use life::products::repo::{self, Listing};
 use life::products::source::Source;
 use life::products::types::{Product, ReconcileField};
+use life::routes::products::shop_picture_to_fetch;
 
 fn product(image_source: Option<Source>, has_image: bool) -> Product {
     Product {
@@ -211,4 +212,22 @@ async fn settle_picture_quiets_it_until_a_url_changes() {
         .await
         .expect("a changed source picture re-surfaces the divergence");
     assert_eq!(d.candidates[0].value, "https://asda.example/x2.jpg");
+}
+
+#[test]
+fn an_import_fetches_a_shop_picture_only_for_a_product_without_one() {
+    let url = Some("https://ecom-su-static-prod.wtrecom.com/LN_1.jpg");
+    assert_eq!(
+        shop_picture_to_fetch(&product(None, false), Source::Waitrose, url),
+        url
+    );
+    assert_eq!(
+        shop_picture_to_fetch(&product(Some(Source::Off), true), Source::Waitrose, url),
+        None,
+        "a held picture is replaced through the reconcile, never by an import"
+    );
+    assert_eq!(
+        shop_picture_to_fetch(&product(None, false), Source::Waitrose, Some("  ")),
+        None
+    );
 }

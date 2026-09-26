@@ -294,12 +294,14 @@ pub async fn import(
         tracing::info!(source = %body.source, external_id = %ext, amount_minor = price.amount_minor, "price recorded");
     }
 
-    // Optional image: SSRF-gated against the source's host allowlist, fetched
-    // from the source CDN. A failed fetch just leaves the row image-less.
-    let hosts = body.source.image_hosts();
-    if let Some(url) = body.image_url.as_deref().filter(|s| !s.is_empty())
-        && !hosts.is_empty()
-        && let Some((bytes, mime)) = off::fetch_image_from(url, hosts).await?
+    // SSRF-gated to the source's hosts; a failed fetch is logged, since the
+    // listing is already stored.
+    if let Some(url) = shop_picture_to_fetch(&product, body.source, body.image_url.as_deref())
+        && let Some((bytes, mime)) = off::fetch_image_from(url, body.source.image_hosts())
+            .await
+            .inspect_err(|e| tracing::warn!(%url, "shop picture not fetched: {e:#}"))
+            .ok()
+            .flatten()
     {
         repo::set_image_by_id(&app.pool, product.id, &bytes, &mime).await?;
         repo::set_image_provenance(&app.pool, product.id, body.source).await?;
@@ -309,6 +311,18 @@ pub async fn import(
             .ok_or(AppError::NotFound);
     }
     Ok(Json(product))
+}
+
+/// The shop picture an import should fetch: only for a product with none, since
+/// a held picture is replaced through the picture reconcile, which the listing's
+/// `image_url` feeds.
+pub fn shop_picture_to_fetch<'a>(
+    product: &Product,
+    source: Source,
+    image_url: Option<&'a str>,
+) -> Option<&'a str> {
+    let url = image_url.map(str::trim).filter(|s| !s.is_empty())?;
+    (!product.has_image && !source.image_hosts().is_empty()).then_some(url)
 }
 
 /// GET /api/products/id/{id} → everything the product page shows in one fetch:
