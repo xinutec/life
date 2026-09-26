@@ -19,6 +19,9 @@ use super::nutrition::{Allergen, Claim, DietaryFlag, Nutrition, Presence, Produc
 struct Brandbank {
     /// e.g. "per 100ml" / "per 100g" — the basis of `calculated_nutrition`.
     calculated_nutrition_per100: Option<String>,
+    /// The label of `per100Used` values: "Per 100g" as sold, or prepared, as in
+    /// "(Boiled) Per 100g".
+    calculated_nutrition_per100_used: Option<String>,
     /// The per-100 panel: each `{ nameValue: "Energy (kcal)", per100: 61 }`.
     #[serde(default)]
     calculated_nutrition: Vec<CalcNutrient>,
@@ -28,6 +31,10 @@ struct Brandbank {
     /// Per-allergen advice: `{ nameValue: "Milk", lookupValue: "Free From" }`.
     #[serde(default)]
     allergy_advice: Vec<AllergyAdvice>,
+    /// Claims like "Suitable for Vegetarians"; some pages have these and no
+    /// dietary booleans.
+    #[serde(default)]
+    lifestyle: Vec<Lifestyle>,
 
     // Dietary / free-from booleans. `true` = the manufacturer asserts it; a
     // `false` is NOT read as a firm "no" (see `dietary`).
@@ -59,6 +66,14 @@ struct CalcNutrient {
     name_value: Option<String>,
     /// A JSON number, or occasionally a numeric string.
     per100: Option<Value>,
+    /// The same, on pages that label the panel with `calculatedNutritionPer100Used`.
+    per100_used: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Lifestyle {
+    name_value: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -153,11 +168,19 @@ impl Brandbank {
             salt_g: None,
             extra: BTreeMap::new(),
         };
+        // A qualified label ("(Boiled) Per 100g") means values as prepared,
+        // which must never be filed as the product's own.
+        let used_as_sold = self
+            .calculated_nutrition_per100_used
+            .as_deref()
+            .is_none_or(|l| !l.contains('('));
         for item in &self.calculated_nutrition {
-            let (Some(name), Some(val)) = (
-                item.name_value.as_deref(),
-                item.per100.as_ref().and_then(as_f64),
-            ) else {
+            let value = item
+                .per100
+                .as_ref()
+                .or(item.per100_used.as_ref().filter(|_| used_as_sold));
+            let (Some(name), Some(val)) = (item.name_value.as_deref(), value.and_then(as_f64))
+            else {
                 continue;
             };
             match classify(name) {
@@ -221,9 +244,21 @@ impl Brandbank {
         // case" — the same caution the search tags carry — so we never emit a
         // firm 'no' from it (that would risk telling someone a product isn't
         // vegan/gluten-free when Brandbank simply hadn't tagged it).
+        // A lifestyle claim ("Suitable for Vegans") is the same assertion, on
+        // pages that carry no booleans.
+        let says = |claim: &str| {
+            self.lifestyle.iter().any(|l| {
+                l.name_value
+                    .as_deref()
+                    .is_some_and(|v| v.trim().eq_ignore_ascii_case(claim))
+            })
+        };
         let mapped = [
-            (self.vegan, "vegan"),
-            (self.vegetarian, "vegetarian"),
+            (self.vegan || says("Suitable for Vegans"), "vegan"),
+            (
+                self.vegetarian || says("Suitable for Vegetarians"),
+                "vegetarian",
+            ),
             (self.halal, "halal"),
             (self.kosher, "kosher"),
             (self.no_gluten, "gluten_free"),

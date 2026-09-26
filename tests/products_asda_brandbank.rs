@@ -130,3 +130,48 @@ fn an_empty_blob_yields_no_facts() {
 fn malformed_json_is_an_error_not_a_panic() {
     assert!(brandbank::parse("not json").is_err());
 }
+
+#[test]
+fn an_as_sold_panel_under_per100_used_is_read() {
+    // Asda's page for some products carries the panel as `per100Used`.
+    let json = r#"{
+        "calculatedNutritionPer100": "per 100g",
+        "calculatedNutritionPer100Used": "Per 100g",
+        "calculatedNutrition": [
+            { "nameValue": "Energy (kcal)", "per100Used": "352.00000", "perServing": 264.0 }
+        ]
+    }"#;
+    let n = brandbank::parse(json)
+        .expect("parse")
+        .nutrition
+        .expect("panel");
+    assert_eq!(n.energy_kcal, Some(352.0));
+}
+
+#[test]
+fn a_prepared_panel_is_never_filed_as_the_product() {
+    // Asda's fusilli: 157 kcal per 100 g BOILED. As "per 100 g" of the product
+    // it would understate dry pasta by more than half.
+    let json = r#"{
+        "calculatedNutritionPer100": "per 100g",
+        "calculatedNutritionPer100Used": "(Boiled) Per 100g",
+        "calculatedNutrition": [
+            { "nameValue": "Energy (kcal)", "per100Used": "157.00000", "perServing": 283.0 },
+            { "nameValue": "Fat (g)", "per100Used": "0.50000" }
+        ]
+    }"#;
+    assert!(brandbank::parse(json).expect("parse").nutrition.is_none());
+}
+
+#[test]
+fn a_lifestyle_claim_is_a_dietary_yes() {
+    // The fusilli's page has no dietary booleans, only this list.
+    let json = r#"{ "lifestyle": [
+        { "nameId": "69", "nameValue": "Suitable for Vegetarians" },
+        { "nameValue": "Organic" }
+    ] }"#;
+    let dietary = brandbank::parse(json).expect("parse").dietary;
+    assert_eq!(dietary.len(), 1);
+    assert_eq!(dietary[0].flag, "vegetarian");
+    assert_eq!(dietary[0].value, Claim::Yes);
+}
