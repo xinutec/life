@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::products::ids::ProductId;
+use crate::products::prices::{Currency, UnitMeasure};
 
 /// What the client says when a buy-list row is marked bought AND the price was
 /// noted. Every field the person has to type is here; everything else (what it
@@ -18,10 +19,9 @@ pub struct NewPurchase {
     /// Minor units (pence for GBP). Integer, never a float: money must be exact.
     #[ts(type = "number")]
     pub amount_minor: i64,
-    /// ISO 4217. Defaulted rather than required, because the overwhelmingly
-    /// common case should cost no keystrokes.
-    #[serde(default = "default_currency")]
-    pub currency: String,
+    /// Defaulted rather than required: the common case should cost no keystrokes.
+    #[serde(default = "Currency::gbp")]
+    pub currency: Currency,
     /// When it was bought, for something being recorded AFTER the fact — an
     /// appliance you have owned for two years, entered so its warranty has a
     /// start. Absent means now, which is what the buy-list flow means every
@@ -36,10 +36,6 @@ pub struct NewPurchase {
     /// warranty was recorded — NOT that there is none. See migration 0046.
     #[serde(default)]
     pub warranty_months: Option<i32>,
-}
-
-fn default_currency() -> String {
-    "GBP".into()
 }
 
 /// A recorded purchase, as it reads back.
@@ -60,7 +56,7 @@ pub struct Purchase {
     pub shop: String,
     #[ts(type = "number")]
     pub amount_minor: i64,
-    pub currency: String,
+    pub currency: Currency,
     pub quantity: Option<f64>,
     pub unit: Option<String>,
     /// Derived on read, never stored: minor units per kg / litre / item, rounded.
@@ -69,10 +65,9 @@ pub struct Purchase {
     #[sqlx(default)]
     #[ts(type = "number | null")]
     pub unit_amount_minor: Option<i64>,
-    /// "KG" / "L" / "each" — the scale `unit_amount_minor` is quoted per,
-    /// matching how the shop rows above it read ("£8.00/KG").
+    /// The scale `unit_amount_minor` is quoted per, as the shop rows read.
     #[sqlx(default)]
-    pub unit_measure: Option<String>,
+    pub unit_measure: Option<UnitMeasure>,
     #[ts(type = "string")]
     pub bought_at: DateTime<Utc>,
     /// Months of cover from `bought_at`, as recorded. `None` is "not recorded",

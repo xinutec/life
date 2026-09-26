@@ -6,17 +6,16 @@ mod common;
 
 use life::db;
 use life::products::ids::{Barcode, ExternalId};
-use life::products::prices::PriceInput;
+use life::products::prices::{Currency, PriceInput, UnitMeasure};
 use life::products::repo;
 use life::products::source::Source;
 
 fn gbp(amount_minor: i64, unit: Option<(i64, &str)>) -> PriceInput {
     PriceInput {
         amount_minor,
-        currency: "GBP".into(),
+        currency: Currency::gbp(),
         unit_amount_minor: unit.map(|(a, _)| a),
-        unit_measure: unit.map(|(_, m)| m.to_string()),
-        region: Some("EN".into()),
+        unit_measure: unit.and_then(|(_, m)| UnitMeasure::from_shop(m)),
     }
 }
 
@@ -98,7 +97,7 @@ async fn latest_price_per_shop_cheapest_first_with_history() {
     assert_eq!(prices[0].source, Source::Asda); // cheapest first
     assert_eq!(prices[0].amount_minor, 357);
     assert_eq!(prices[0].unit_amount_minor, Some(892));
-    assert_eq!(prices[0].unit_measure.as_deref(), Some("KG"));
+    assert_eq!(prices[0].unit_measure, Some(UnitMeasure::Kg));
     assert_eq!(prices[1].source, Source::Waitrose);
     assert_eq!(prices[1].amount_minor, 380);
 

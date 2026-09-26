@@ -150,7 +150,7 @@ fn priced(product_id: u64, source: Source, pence: i64) -> ListingPrice {
         price: RowPrice {
             source,
             amount_minor: pence,
-            currency: "GBP".into(),
+            currency: life::products::prices::Currency::gbp(),
         },
     }
 }

@@ -254,7 +254,7 @@ async fn purchase_on(pool: &MySqlPool, user: &str, item: u64, name: &str) -> u64
     let paid = life::purchases::types::NewPurchase {
         shop: "Argos".into(),
         amount_minor: 2999,
-        currency: "GBP".into(),
+        currency: life::products::prices::Currency::gbp(),
         bought_on: None,
         warranty_months: None,
     };

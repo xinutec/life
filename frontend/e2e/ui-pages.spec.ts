@@ -460,7 +460,6 @@ const PRODUCT_DETAIL = {
       currency: 'GBP',
       unit_amount_minor: null,
       unit_measure: null,
-      region: null,
       observed_at: now.getTime(),
     },
     {
@@ -470,7 +469,6 @@ const PRODUCT_DETAIL = {
       currency: 'GBP',
       unit_amount_minor: 800,
       unit_measure: 'KG',
-      region: 'EN',
       observed_at: now.getTime() - 2 * 86_400_000,
     },
   ],
@@ -592,7 +590,6 @@ const ASDA_HITS = [
       currency: 'GBP',
       unit_amount_minor: null,
       unit_measure: null,
-      region: 'EN',
     },
     image_url: null,
   },

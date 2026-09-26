@@ -14,6 +14,7 @@ use sqlx::MySqlPool;
 use super::coverage::{AttachedListing, ListingPrice, RowPrice, Sighting};
 use super::ids::{Barcode, ExternalId, ListingId, ProductId};
 use super::packsize;
+use super::prices::Currency;
 use super::source::Source;
 use super::types::Product;
 
@@ -330,7 +331,7 @@ pub async fn latest_prices_for(pool: &MySqlPool, ids: &[ProductId]) -> Result<Ve
         sep.push_bind(id);
     }
     qb.push(") ORDER BY po.amount_minor, l.id");
-    let rows: Vec<(ProductId, Source, i64, String)> = qb.build_query_as().fetch_all(pool).await?;
+    let rows: Vec<(ProductId, Source, i64, Currency)> = qb.build_query_as().fetch_all(pool).await?;
     // Cheapest-first, so the first row per (product, shop) is that shop's price.
     let mut seen = std::collections::HashSet::new();
     Ok(rows

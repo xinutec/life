@@ -7,6 +7,71 @@ use ts_rs::TS;
 use super::ids::ExternalId;
 use super::source::Source;
 
+crate::str_enum! {
+    /// What a per-unit price is quoted per: the scale shops print ("£8.00/KG").
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[ts(export)]
+    pub enum UnitMeasure: "unit measure" {
+        #[serde(rename = "KG")]
+        Kg => "KG",
+        #[serde(rename = "L")]
+        Litre => "L",
+        #[serde(rename = "each")]
+        Each => "each",
+    }
+}
+crate::varchar_sql!(UnitMeasure);
+
+impl UnitMeasure {
+    /// A shop's own spelling ("KG", "LT", "EA"), or `None` for one we don't
+    /// know rather than a guess.
+    pub fn from_shop(label: &str) -> Option<Self> {
+        match label.trim().to_ascii_uppercase().as_str() {
+            "KG" => Some(Self::Kg),
+            "L" | "LT" | "LTR" | "LITRE" => Some(Self::Litre),
+            "EA" | "EACH" => Some(Self::Each),
+            _ => None,
+        }
+    }
+}
+
+/// An ISO 4217 code, checked once where it arrives: three letters, upper case.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, TS)]
+#[ts(export)]
+pub struct Currency(String);
+crate::varchar_sql!(Currency);
+
+impl Currency {
+    pub fn gbp() -> Self {
+        Self("GBP".into())
+    }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::str::FromStr for Currency {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let code = s.trim().to_ascii_uppercase();
+        if code.len() == 3 && code.bytes().all(|b| b.is_ascii_uppercase()) {
+            Ok(Self(code))
+        } else {
+            Err(format!(
+                "currency must be a 3-letter ISO 4217 code, got {s:?}"
+            ))
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Currency {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        String::deserialize(d)?
+            .parse()
+            .map_err(serde::de::Error::custom)
+    }
+}
+
 /// A price a source reported for a listing. The client sends this on import
 /// (derived from an Asda hit or a Waitrose product); the backend appends it to
 /// the listing's price history.
@@ -16,14 +81,12 @@ pub struct PriceInput {
     /// Shelf price in minor units (pence for GBP).
     #[ts(type = "number")]
     pub amount_minor: i64,
-    pub currency: String,
+    pub currency: Currency,
     /// Price per unit of measure (minor units) + the measure, for fair
     /// cross-pack comparison. e.g. 892 + "KG".
     #[ts(type = "number | null")]
     pub unit_amount_minor: Option<i64>,
-    pub unit_measure: Option<String>,
-    /// Nation the price is for (Asda EN/NI/SC/WA); null when the source has one.
-    pub region: Option<String>,
+    pub unit_measure: Option<UnitMeasure>,
 }
 
 /// What one shop currently charges for a product — the `prices` part of the
@@ -42,11 +105,10 @@ pub struct ShopPrice {
     pub external_id: ExternalId,
     #[ts(type = "number")]
     pub amount_minor: i64,
-    pub currency: String,
+    pub currency: Currency,
     #[ts(type = "number | null")]
     pub unit_amount_minor: Option<i64>,
-    pub unit_measure: Option<String>,
-    pub region: Option<String>,
+    pub unit_measure: Option<UnitMeasure>,
     /// When observed, epoch milliseconds (UTC).
     #[ts(type = "number")]
     pub observed_at: i64,

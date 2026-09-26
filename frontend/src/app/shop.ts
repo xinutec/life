@@ -74,7 +74,6 @@ export function shopPrice(product: ShopProduct): PriceInput | null {
     unit_amount_minor: null,
     unit_measure: null,
     // One price, no nations — unlike Asda, which quotes EN/NI/SC/WA separately.
-    region: null,
   };
 }
 

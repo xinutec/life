@@ -30,7 +30,7 @@ fn purchase(shop: &str, pence: i64) -> NewPurchase {
     NewPurchase {
         shop: shop.into(),
         amount_minor: pence,
-        currency: "GBP".into(),
+        currency: life::products::prices::Currency::gbp(),
         bought_on: None,
         warranty_months: None,
     }

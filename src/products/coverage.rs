@@ -13,6 +13,7 @@ use std::collections::{BTreeSet, HashMap};
 use ts_rs::TS;
 
 use super::ids::{Barcode, ProductId};
+use super::prices::Currency;
 use super::source::Source;
 
 /// One row of a Buy list, as the client asks about it. `key` is the client's own
@@ -55,7 +56,7 @@ pub struct RowPrice {
     /// Minor units (pence for GBP).
     #[ts(type = "number")]
     pub amount_minor: i64,
-    pub currency: String,
+    pub currency: Currency,
 }
 
 /// A shop's latest price for a catalogue product: its cheapest listing's newest

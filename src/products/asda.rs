@@ -16,7 +16,7 @@ use ts_rs::TS;
 
 use super::ids::{Barcode, ExternalId};
 use super::nutrition::{Claim, DietaryFlag};
-use super::prices::PriceInput;
+use super::prices::{Currency, PriceInput, UnitMeasure};
 
 /// Algolia application id — also the request host (`{app}-dsn.algolia.net`).
 const APP_ID: &str = "8I6WSKCCNV";
@@ -182,13 +182,10 @@ fn to_minor(pounds: f64) -> Option<i64> {
     Some(pence as i64)
 }
 
-/// The unit of measure out of Asda's per-unit label: "£8.93/KG" → "KG". `None`
-/// when there's no "/…" measure to take.
-fn unit_measure(formatted: &str) -> Option<String> {
-    formatted
-        .rsplit_once('/')
-        .map(|(_, m)| m.trim().to_string())
-        .filter(|m| !m.is_empty())
+/// The unit of measure out of Asda's per-unit label: "£8.93/KG" → Kg. `None`
+/// when there is no "/…" measure, or one we don't know.
+fn unit_measure(formatted: &str) -> Option<UnitMeasure> {
+    UnitMeasure::from_shop(formatted.rsplit_once('/')?.1)
 }
 
 /// Build a price observation from Asda's England price region, or `None` if it
@@ -197,10 +194,9 @@ fn price_input(r: &PriceRegion) -> Option<PriceInput> {
     let amount = r.price.filter(|p| *p > 0.0)?;
     Some(PriceInput {
         amount_minor: to_minor(amount)?,
-        currency: "GBP".into(),
+        currency: Currency::gbp(),
         unit_amount_minor: r.price_per_uom.filter(|p| *p > 0.0).and_then(to_minor),
         unit_measure: r.price_per_uom_formatted.as_deref().and_then(unit_measure),
-        region: Some("EN".into()),
     })
 }
 

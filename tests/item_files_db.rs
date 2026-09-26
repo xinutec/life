@@ -108,7 +108,7 @@ async fn a_receipt_knows_its_purchase_and_a_manual_does_not() {
         &NewPurchase {
             shop: "Currys".into(),
             amount_minor: 34_999,
-            currency: "GBP".into(),
+            currency: life::products::prices::Currency::gbp(),
             bought_on: None,
             warranty_months: Some(24),
         },

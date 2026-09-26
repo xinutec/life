@@ -4,7 +4,7 @@ mod common;
 
 use life::db;
 use life::products::ids::{Barcode, ExternalId, ProductId};
-use life::products::prices::PriceInput;
+use life::products::prices::{Currency, PriceInput};
 use life::products::repo;
 use life::products::shop_cache::{self, CachedListing};
 use life::products::source::Source;
@@ -106,10 +106,9 @@ async fn asking_about_nothing_queries_nothing() {
 fn price(pence: i64) -> PriceInput {
     PriceInput {
         amount_minor: pence,
-        currency: "GBP".into(),
+        currency: Currency::gbp(),
         unit_amount_minor: None,
         unit_measure: None,
-        region: None,
     }
 }
 

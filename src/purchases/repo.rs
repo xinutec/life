@@ -6,6 +6,7 @@ use sqlx::MySqlPool;
 
 use super::types::{NewPurchase, Purchase};
 use crate::products::ids::ProductId;
+use crate::products::prices::UnitMeasure;
 
 /// What the buy-list row already knows about the thing being bought. Passed
 /// separately from [`NewPurchase`] because none of it is typed by the person —
@@ -22,8 +23,6 @@ pub struct BoughtItem<'a> {
 }
 
 /// Longest ISO 4217 code, and the column width.
-const CURRENCY_LEN: usize = 3;
-
 /// Record a purchase.
 ///
 /// Validates rather than coerces. A price of "-5" or a currency of "pounds" is a
@@ -42,13 +41,6 @@ pub async fn record(
     }
     if p.amount_minor < 0 {
         bail!("a purchase cannot cost a negative amount");
-    }
-    let currency = p.currency.trim().to_ascii_uppercase();
-    if currency.len() != CURRENCY_LEN || !currency.chars().all(|c| c.is_ascii_alphabetic()) {
-        bail!(
-            "currency must be a 3-letter ISO 4217 code, got {:?}",
-            p.currency
-        );
     }
     let bought_at = bought_at_from(p.bought_on)?;
     if let Some(months) = p.warranty_months
@@ -69,7 +61,7 @@ pub async fn record(
     .bind(item.name)
     .bind(shop)
     .bind(p.amount_minor)
-    .bind(&currency)
+    .bind(&p.currency)
     .bind(item.quantity)
     .bind(item.unit)
     .bind(bought_at)
@@ -155,15 +147,19 @@ pub async fn restore(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
 
 /// What a purchase works out to per kg / litre / item, the scale shops print
 /// ("£8.00/KG"). Uses `packsize::parse` so there is one unit table.
-fn per_unit(amount_minor: i64, quantity: Option<f64>, unit: Option<&str>) -> Option<(i64, String)> {
+fn per_unit(
+    amount_minor: i64,
+    quantity: Option<f64>,
+    unit: Option<&str>,
+) -> Option<(i64, UnitMeasure)> {
     let (q, u) = (quantity?, unit?);
     let pack = crate::products::packsize::parse(&format!("{q}{u}"))?;
     // parse() guarantees a finite value greater than zero, so this cannot divide
     // by zero — but the rate is still only meaningful for a positive amount.
     let (scale, measure) = match pack.unit {
-        crate::products::packsize::PackUnit::Gram => (1000.0, "KG"),
-        crate::products::packsize::PackUnit::Millilitre => (1000.0, "L"),
-        crate::products::packsize::PackUnit::Count => (1.0, "each"),
+        crate::products::packsize::PackUnit::Gram => (1000.0, UnitMeasure::Kg),
+        crate::products::packsize::PackUnit::Millilitre => (1000.0, UnitMeasure::Litre),
+        crate::products::packsize::PackUnit::Count => (1.0, UnitMeasure::Each),
     };
     // Bound to a domain range so the cast is safe, as in `products::asda`.
     // £1,000,000 in pence: past it, the pack was misread.
@@ -177,7 +173,7 @@ fn per_unit(amount_minor: i64, quantity: Option<f64>, unit: Option<&str>) -> Opt
         clippy::cast_possible_truncation,
         reason = "guarded above: finite and within 0..=MAX_PENCE, which i64 holds exactly"
     )]
-    Some((rate as i64, measure.to_string()))
+    Some((rate as i64, measure))
 }
 
 /// Everything this person has paid for a thing, newest first.

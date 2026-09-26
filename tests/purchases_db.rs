@@ -5,6 +5,7 @@ mod common;
 
 use life::db;
 use life::products::ids::ProductId;
+use life::products::prices::{Currency, UnitMeasure};
 use life::purchases::repo::{self, BoughtItem};
 use life::purchases::types::NewPurchase;
 
@@ -42,7 +43,7 @@ fn paid(shop: &str, amount_minor: i64) -> NewPurchase {
     NewPurchase {
         shop: shop.into(),
         amount_minor,
-        currency: "GBP".into(),
+        currency: Currency::gbp(),
         bought_on: None,
         warranty_months: None,
     }
@@ -197,17 +198,8 @@ async fn a_nonsense_price_is_refused_rather_than_stored() {
             .is_err(),
         "a purchase with no shop cannot answer the question this table exists for"
     );
-    let bad_currency = NewPurchase {
-        shop: "Waitrose".into(),
-        amount_minor: 100,
-        currency: "pounds".into(),
-        bought_on: None,
-        warranty_months: None,
-    };
     assert!(
-        repo::record(&pool, user, &item, &bad_currency)
-            .await
-            .is_err(),
+        "pounds".parse::<Currency>().is_err(),
         "currency must be ISO 4217, or amounts cannot be compared at all"
     );
 
@@ -287,7 +279,7 @@ async fn the_rate_is_quoted_per_kg_and_refused_when_the_pack_cannot_be_read() {
             .expect("history");
         let p = &got[0];
         assert_eq!(
-            (p.unit_amount_minor, p.unit_measure.as_deref()),
+            (p.unit_amount_minor, p.unit_measure.map(UnitMeasure::as_str)),
             (want.map(|w| w.0), want.map(|w| w.1)),
             "case {i}: {quantity:?} {unit:?} at {amount_minor}"
         );
@@ -349,7 +341,7 @@ async fn a_hand_typed_row_is_reachable_by_its_item_and_by_nothing_else() {
     assert_eq!(
         (
             by_item[0].unit_amount_minor,
-            by_item[0].unit_measure.as_deref()
+            by_item[0].unit_measure.map(UnitMeasure::as_str)
         ),
         (Some(125), Some("L"))
     );

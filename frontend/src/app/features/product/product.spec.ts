@@ -53,7 +53,6 @@ const DETAIL: ProductDetail = {
       currency: 'GBP',
       unit_amount_minor: null,
       unit_measure: null,
-      region: null,
       observed_at: Date.now(),
     },
     {
@@ -63,7 +62,6 @@ const DETAIL: ProductDetail = {
       currency: 'GBP',
       unit_amount_minor: 800,
       unit_measure: 'KG',
-      region: 'EN',
       observed_at: Date.now() - 2 * 86_400_000,
     },
   ],
@@ -207,7 +205,6 @@ describe('ProductPage', () => {
           currency: 'GBP',
           unit_amount_minor: null,
           unit_measure: null,
-          region: 'EN',
           observed_at: Date.now(),
         },
       ],
@@ -286,7 +283,6 @@ describe('ProductPage', () => {
         currency: 'GBP',
         unit_amount_minor: null,
         unit_measure: null,
-        region: 'EN',
       },
     });
     const { page, api } = setup(UNLISTED, { hit: confirmed, from_cache: false, searched: true });
@@ -500,7 +496,6 @@ describe('ProductPage', () => {
         currency: 'GBP',
         unit_amount_minor: null,
         unit_measure: null,
-        region: null,
       },
     });
     expect(api.syncListing).not.toHaveBeenCalled(); // the server can't fetch it

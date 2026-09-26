@@ -273,7 +273,6 @@ describe('shopPrice', () => {
       currency: 'GBP',
       unit_amount_minor: null,
       unit_measure: null,
-      region: null,
     });
   });
 

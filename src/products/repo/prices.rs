@@ -5,7 +5,7 @@ use chrono::NaiveDateTime;
 use sqlx::MySqlPool;
 
 use crate::products::ids::{ExternalId, ListingId, ProductId};
-use crate::products::prices::{PriceInput, ShopPrice};
+use crate::products::prices::{Currency, PriceInput, ShopPrice, UnitMeasure};
 use crate::products::source::Source;
 
 /// Append a price observation to a listing's history. Prices are a time series —
@@ -18,15 +18,14 @@ pub async fn record_price(
 ) -> Result<()> {
     sqlx::query(
         "INSERT INTO price_observations \
-         (listing_id, amount_minor, currency, region, unit_amount_minor, unit_measure) \
-         VALUES (?, ?, ?, ?, ?, ?)",
+         (listing_id, amount_minor, currency, unit_amount_minor, unit_measure) \
+         VALUES (?, ?, ?, ?, ?)",
     )
     .bind(listing_id)
     .bind(price.amount_minor)
     .bind(&price.currency)
-    .bind(price.region.as_deref())
     .bind(price.unit_amount_minor)
-    .bind(price.unit_measure.as_deref())
+    .bind(price.unit_measure)
     .execute(pool)
     .await?;
     Ok(())
@@ -37,10 +36,9 @@ struct ShopPriceRow {
     source: Source,
     external_id: ExternalId,
     amount_minor: i64,
-    currency: String,
+    currency: Currency,
     unit_amount_minor: Option<i64>,
-    unit_measure: Option<String>,
-    region: Option<String>,
+    unit_measure: Option<UnitMeasure>,
     observed_at: NaiveDateTime,
 }
 
@@ -54,7 +52,7 @@ struct ShopPriceRow {
 pub async fn latest_prices(pool: &MySqlPool, product_id: ProductId) -> Result<Vec<ShopPrice>> {
     let rows: Vec<ShopPriceRow> = sqlx::query_as(
         "SELECT l.source, l.external_id, po.amount_minor, po.currency, po.unit_amount_minor, \
-         po.unit_measure, po.region, po.observed_at \
+         po.unit_measure, po.observed_at \
          FROM price_observations po \
          JOIN product_listings l ON l.id = po.listing_id \
          WHERE l.product_id = ? \
@@ -77,7 +75,6 @@ pub async fn latest_prices(pool: &MySqlPool, product_id: ProductId) -> Result<Ve
             currency: r.currency,
             unit_amount_minor: r.unit_amount_minor,
             unit_measure: r.unit_measure,
-            region: r.region,
             observed_at: r.observed_at.and_utc().timestamp_millis(),
         })
         .collect())
