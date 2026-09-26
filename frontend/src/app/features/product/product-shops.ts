@@ -197,7 +197,7 @@ export class ProductShops {
             name: product.name,
             brand: product.brand,
             image_url: product.image_url,
-            quantity_label: null,
+            quantity_label: product.quantity_label,
           },
         ]);
         if (matched) {
@@ -211,7 +211,7 @@ export class ProductShops {
               external_id: product.external_id,
               name: product.name ?? candidate.name,
               brand: product.brand,
-              quantity_label: null,
+              quantity_label: product.quantity_label,
               image_url: product.image_url,
               price_label: priceLabel(product),
               product,
@@ -276,6 +276,7 @@ export class ProductShops {
         external_id: hit.external_id,
         name: hit.name,
         brand: hit.brand,
+        quantity_label: hit.quantity_label,
         barcode,
         image_url: hit.image_url,
         price: hit.product ? shopPrice(hit.product) : null,

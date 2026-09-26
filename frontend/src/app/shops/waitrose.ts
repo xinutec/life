@@ -74,11 +74,18 @@ function productJs(lineNumber: string): string {
     // Waitrose states the pack on 'weights', not beside the name:
     // sizeDescription is "42g" / "100g".
     var w = p.weights || {};
+    // One item's price: on a single-item offer Waitrose reports the regular
+    // price as the current sale price, so the offer's own price wins. A
+    // multi-buy (threshold above 1) is no price for one item.
+    var offer = (pr.promotions || []).filter(function (o) {
+      return o.promotionUnitPrice && (o.groups || []).every(function (g) { return g.threshold === 1; });
+    })[0];
     AndroidShop.result(JSON.stringify({ ok: true, product: {
       source: "waitrose", external_id: p.lineNumber, name: p.name || null, brand: p.brand || null,
       barcodes: p.barCodes || [], quantity_label: w.sizeDescription || null,
       image_url: im.large || im.medium || im.extraLarge || im.small || null,
-      display_price: (pr.currentSaleUnitRetailPrice && pr.currentSaleUnitRetailPrice.price) || null,
+      display_price: (offer && offer.promotionUnitPrice) ||
+        (pr.currentSaleUnitRetailPrice && pr.currentSaleUnitRetailPrice.price) || null,
       // Carried ONLY so the number above can be checked against it: the pricing
       // block gives that amount no unit, and Waitrose renders this string itself.
       display_price_label: (typeof pr.displayPrice === "string" && pr.displayPrice) || null,

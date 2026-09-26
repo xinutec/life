@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PriceInput } from './models';
 import { ShopProduct, ShopProvider, Shops, isSignedOut, penceFromLabel, shopPrice } from './shop';
@@ -156,6 +156,78 @@ describe('Waitrose provider', () => {
     const { js } = WAITROSE.product('062593');
     expect(js).toContain('display_price_label');
     expect(js).toContain('pr.displayPrice');
+  });
+});
+
+/** Waitrose's own pricing blocks for two basmati rices: one on a "New Lower
+ *  Price" offer, one not. */
+const ON_OFFER = {
+  displayPrice: '£1.80',
+  promotions: [
+    {
+      promotionDescription: 'New Lower Price',
+      promotionType: 'NLP',
+      promotionUnitPrice: { amount: 1.8, currencyCode: 'GBP' },
+      wasDisplayPrice: '£2.50',
+      groups: [{ threshold: 1, name: 'X' }],
+    },
+  ],
+  currentSaleUnitRetailPrice: { price: { amount: 2.5, currencyCode: 'GBP' } },
+};
+const REGULAR = {
+  displayPrice: '£1.85',
+  promotions: [],
+  currentSaleUnitRetailPrice: { price: { amount: 1.85, currencyCode: 'GBP' } },
+};
+
+/** Run the real product extractor against one SUMMARY response. */
+async function extract(pricing: unknown): Promise<ShopProduct> {
+  const button = document.createElement('button');
+  button.className = 'acceptAll';
+  document.body.appendChild(button);
+  const w = window as unknown as Record<string, unknown>;
+  w['__authToken'] = 'Bearer t';
+  let reported = '';
+  vi.stubGlobal('AndroidShop', { result: (json: string) => (reported = json) });
+  const summary = {
+    products: [{ lineNumber: '504251', name: 'Rice', barCodes: [], pricing, weights: {} }],
+  };
+  vi.stubGlobal('fetch', () =>
+    Promise.resolve({ status: 200, json: () => Promise.resolve(summary) }),
+  );
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval -- the extractor is JS text, run as the WebView runs it
+    await (new Function(`return ${WAITROSE.product('504251').js.trim()}`) as () => Promise<void>)();
+  } finally {
+    vi.unstubAllGlobals();
+    button.remove();
+  }
+  return (JSON.parse(reported) as { product: ShopProduct }).product;
+}
+
+describe('Waitrose product price', () => {
+  it('is the offer price when one item is on offer', async () => {
+    // Waitrose then reports the regular price as the "current sale" price, and
+    // the guard would refuse it against the £1.80 it displays.
+    const p = await extract(ON_OFFER);
+    expect(p.display_price).toEqual({ amount: 1.8, currencyCode: 'GBP' });
+    expect(shopPrice(p)?.amount_minor).toBe(180);
+  });
+
+  it('is the sale price otherwise', async () => {
+    const p = await extract(REGULAR);
+    expect(shopPrice(p)?.amount_minor).toBe(185);
+  });
+
+  it('ignores a multi-buy, which is no price for one item', async () => {
+    const multiBuy = {
+      ...REGULAR,
+      promotions: [
+        { promotionUnitPrice: { amount: 1.5, currencyCode: 'GBP' }, groups: [{ threshold: 2 }] },
+      ],
+    };
+    const p = await extract(multiBuy);
+    expect(shopPrice(p)?.amount_minor).toBe(185);
   });
 });
 

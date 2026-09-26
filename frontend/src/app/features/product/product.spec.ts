@@ -492,6 +492,7 @@ describe('ProductPage', () => {
       external_id: '271105',
       name: 'Waitrose Balsamic Vinegar of Modena',
       brand: 'Waitrose',
+      quantity_label: '250ml',
       barcode: '5063089281581',
       image_url: 'https://ecom-su-static-prod.wtrecom.com/x.jpg',
       price: {
