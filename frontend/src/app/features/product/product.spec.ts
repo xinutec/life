@@ -116,7 +116,7 @@ const flush = () => new Promise((r) => setTimeout(r));
 
 /** One shop's lookup row, by source — what the template switches on. */
 function lookup(page: ProductPage, source: string) {
-  return page.shopLookups().find((s) => s.source === source)!;
+  return page.finder.shopLookups().find((s) => s.source === source)!;
 }
 
 describe('ProductPage', () => {
@@ -258,18 +258,18 @@ describe('ProductPage', () => {
   // The lookup is offered only when it can answer truthfully:
   it('hides a shop’s lookup once that shop lists the product', () => {
     // DETAIL is listed at both, so neither is worth looking for.
-    expect(setup().page.shopLookups()).toEqual([]);
+    expect(setup().page.finder.shopLookups()).toEqual([]);
   });
 
   it('hides every lookup with no barcode — there’d be nothing to match on', () => {
     const detail = { ...UNLISTED, product: { ...UNLISTED.product, barcode: null } };
-    expect(setup(detail).page.shopLookups()).toEqual([]);
+    expect(setup(detail).page.finder.shopLookups()).toEqual([]);
   });
 
   it('offers both shops for a barcoded product no shop lists yet', () => {
     expect(
       setup(UNLISTED)
-        .page.shopLookups()
+        .page.finder.shopLookups()
         .map((s) => s.label),
     ).toEqual(['Asda', 'Waitrose']);
   });
@@ -289,7 +289,7 @@ describe('ProductPage', () => {
       },
     });
     const { page, api } = setup(UNLISTED, { hit: confirmed, from_cache: false, searched: true });
-    page.find('asda');
+    page.finder.find('asda');
     // Asks the backend about THIS product at THIS shop; it owns both the cache
     // check and the barcode match (products::asda::match_barcode).
     expect(api.findAtShop).toHaveBeenCalledWith(42, 'asda');
@@ -299,7 +299,7 @@ describe('ProductPage', () => {
 
     // Attaching hands the backend only the listing's identity — it re-fetches
     // shop-side and re-checks the barcode itself, so no facts are client-supplied.
-    page.attachHit(lookup(page, 'asda'));
+    page.finder.attachHit(lookup(page, 'asda'));
     expect(api.syncListing).toHaveBeenCalledWith(42, 'asda', '9020290');
     expect(lookup(page, 'asda').state).toBe('idle'); // panel resets; the page reloads
   });
@@ -320,8 +320,8 @@ describe('ProductPage', () => {
       from_cache: false,
       searched: true,
     });
-    page.find('asda');
-    expect(page.hitSubtitle(lookup(page, 'asda').hit!)).toBe('Asda Extra Special · 250ml');
+    page.finder.find('asda');
+    expect(page.finder.hitSubtitle(lookup(page, 'asda').hit!)).toBe('Asda Extra Special · 250ml');
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
     const img = el.querySelector<HTMLImageElement>('.match-img');
@@ -336,20 +336,20 @@ describe('ProductPage', () => {
       from_cache: false,
       searched: true,
     });
-    page.find('asda');
+    page.finder.find('asda');
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.match-img')).toBeNull();
     expect(el.querySelector('.match .ok')).not.toBeNull();
     // Nothing to size up, so nothing shown.
-    expect(page.hitSubtitle(lookup(page, 'asda').hit!)).toBe('');
+    expect(page.finder.hitSubtitle(lookup(page, 'asda').hit!)).toBe('');
   });
 
   it('refreshes a shop row only when asked, by the listing it names', () => {
     const { page, api } = setup();
     const asda = page.buyRows().find((r) => r.label === 'Asda')!;
     expect(api.syncListing).not.toHaveBeenCalled(); // nothing on load — no timer
-    page.refresh(asda);
+    page.finder.refresh(asda);
     expect(api.syncListing).toHaveBeenCalledWith(42, 'asda', '9346702');
   });
 
@@ -358,7 +358,7 @@ describe('ProductPage', () => {
     // EAN. That's a real answer, and it must read as one — not as an error, and
     // never as a nearest-name suggestion.
     const { page } = setup(UNLISTED, { hit: null, from_cache: false, searched: true });
-    page.find('asda');
+    page.finder.find('asda');
     expect(lookup(page, 'asda').state).toBe('none');
     expect(lookup(page, 'asda').hit).toBeNull();
   });
@@ -373,7 +373,7 @@ describe('ProductPage', () => {
       price_label: null,
     });
     const { page } = setup(UNLISTED, { hit: remembered, from_cache: true, searched: false });
-    page.find('asda');
+    page.finder.find('asda');
     expect(lookup(page, 'asda').state).toBe('found');
     expect(lookup(page, 'asda').fromCache).toBe(true);
   });
@@ -391,7 +391,7 @@ describe('ProductPage', () => {
     const fixture = TestBed.createComponent(ProductPage);
     fixture.componentRef.setInput('id', '42');
     fixture.detectChanges();
-    fixture.componentInstance.find('asda');
+    fixture.componentInstance.finder.find('asda');
     expect(lookup(fixture.componentInstance, 'asda').state).toBe('error');
   });
 
@@ -436,7 +436,7 @@ describe('ProductPage', () => {
     // A browser can't reach a bot-walled shop. "We haven't checked" and "they
     // don't carry it" are opposite claims, and only one of them is true here.
     const { page } = setup(UNLISTED, { hit: null, from_cache: false, searched: false });
-    page.find('waitrose');
+    page.finder.find('waitrose');
     await flush();
     expect(lookup(page, 'waitrose').state).toBe('unknown');
   });
@@ -446,7 +446,7 @@ describe('ProductPage', () => {
       '271100': ['5000169000000'], // a look-alike: right shelf, wrong product
       '271105': ['5063089281581'], // ours
     });
-    page.find('waitrose');
+    page.finder.find('waitrose');
     await flush();
     const row = lookup(page, 'waitrose');
     expect(row.state).toBe('found');
@@ -462,7 +462,7 @@ describe('ProductPage', () => {
     // The point of a hunt that costs a page load each: the pages we read are
     // worth keeping, so the next hunt — for this product or any other — is free.
     const { page, api } = setupApp({ '271100': ['5000169000000'], '271105': ['5063089281581'] });
-    page.find('waitrose');
+    page.finder.find('waitrose');
     await flush();
     const reported = api.rememberShopListings.mock.calls.flatMap(
       (c: unknown[]) => c[1] as { external_id: string; barcode: string | null }[],
@@ -483,9 +483,9 @@ describe('ProductPage', () => {
     // The server can't re-read this shop, so what the phone saw IS the import —
     // and the price rides along, or a second shop could never be compared.
     const { page, api } = setupApp({ '271105': ['5063089281581'] });
-    page.find('waitrose');
+    page.finder.find('waitrose');
     await flush();
-    page.attachHit(lookup(page, 'waitrose'));
+    page.finder.attachHit(lookup(page, 'waitrose'));
     expect(api.importProduct).toHaveBeenCalledWith({
       source: 'waitrose',
       external_id: '271105',
@@ -508,7 +508,7 @@ describe('ProductPage', () => {
     // "None of these" is not "not in the catalogue", and the copy has to be
     // able to tell the difference.
     const { page } = setupApp({ '271100': ['1'], '271105': ['2'] });
-    page.find('waitrose');
+    page.finder.find('waitrose');
     await flush();
     expect(lookup(page, 'waitrose').state).toBe('none');
     expect(lookup(page, 'waitrose').checked).toBe(2);
@@ -518,8 +518,8 @@ describe('ProductPage', () => {
     // Asda is the server's to re-read from anywhere; a bot-walled shop's button
     // is absent in a browser rather than present and failing.
     const browser = setup().page;
-    expect(browser.canRefresh('asda')).toBe(true);
-    expect(browser.canRefresh('waitrose')).toBe(false);
+    expect(browser.finder.canRefresh('asda')).toBe(true);
+    expect(browser.finder.canRefresh('waitrose')).toBe(false);
   });
 
   it('re-reads a bot-walled shop through the app and re-imports what it says', async () => {
@@ -529,8 +529,8 @@ describe('ProductPage', () => {
       fetchProduct: vi.fn(() => Promise.resolve(waitroseProduct('271105', ['5000328042732']))),
     };
     const { page, api } = setup(DETAIL, { hit: null, from_cache: false, searched: false }, shops);
-    expect(page.canRefresh('waitrose')).toBe(true);
-    page.refresh(page.buyRows().find((r) => r.label === 'Waitrose')!);
+    expect(page.finder.canRefresh('waitrose')).toBe(true);
+    page.finder.refresh(page.buyRows().find((r) => r.label === 'Waitrose')!);
     await flush();
     expect(api.importProduct).toHaveBeenCalledWith(
       expect.objectContaining({ source: 'waitrose', external_id: '271105' }),

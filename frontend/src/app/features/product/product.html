@@ -209,7 +209,7 @@
     </div>
   }
 
-  @if (buyRows().length || shopLookups().length) {
+  @if (buyRows().length || finder.shopLookups().length) {
     <h3>Where to buy</h3>
     <div class="buy">
       @for (r of buyRows(); track r.key) {
@@ -225,14 +225,14 @@
               <span class="fine">no price yet</span>
             }
           </span>
-          @if (canRefresh(r.source)) {
-            <!-- On demand only: never refetched on a timer (see refresh()).
+          @if (finder.canRefresh(r.source)) {
+            <!-- On demand only: never refetched on a timer (see ProductShops.refresh).
                  A bot-walled shop can only be re-read inside the app, so its
                  button is absent in a browser rather than there and failing. -->
             <button
               mat-icon-button
-              (click)="refresh(r)"
-              [disabled]="attaching()"
+              (click)="finder.refresh(r)"
+              [disabled]="finder.attaching()"
               [attr.aria-label]="'Refresh the price at ' + r.label"
             >
               <mat-icon>refresh</mat-icon>
@@ -253,7 +253,7 @@
       }
     </div>
 
-    @for (shop of shopLookups(); track shop.source) {
+    @for (shop of finder.shopLookups(); track shop.source) {
       <div class="shop-lookup">
         @switch (shop.state) {
           @case ('searching') {
@@ -279,7 +279,7 @@
                 }
                 <span class="match-name">
                   {{ hit.name }}
-                  @if (hitSubtitle(hit); as sub) {
+                  @if (finder.hitSubtitle(hit); as sub) {
                     <span class="fine">{{ sub }}</span>
                   }
                   <!-- A remembered hit has no price: the cache keeps identity,
@@ -296,7 +296,11 @@
                     }
                   </span>
                 </span>
-                <button mat-flat-button (click)="attachHit(shop)" [disabled]="attaching()">
+                <button
+                  mat-flat-button
+                  (click)="finder.attachHit(shop)"
+                  [disabled]="finder.attaching()"
+                >
                   Add
                 </button>
               </div>
@@ -322,7 +326,7 @@
             <span class="fine">Couldn’t reach {{ shop.label }} — are you online?</span>
           }
           @default {
-            <button mat-button (click)="find(shop.source)">
+            <button mat-button (click)="finder.find(shop.source)">
               <mat-icon>storefront</mat-icon>
               Find at {{ shop.label }}
             </button>
