@@ -4,7 +4,7 @@
 use axum::Json;
 use axum::body::{Body, Bytes};
 use axum::extract::{Path, Query, State};
-use axum::http::{StatusCode, header};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::Response;
 use serde::Deserialize;
 
@@ -154,7 +154,7 @@ pub async fn set_image(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
     Path(barcode): Path<Barcode>,
-    headers: axum::http::HeaderMap,
+    headers: HeaderMap,
     body: Bytes,
 ) -> Result<StatusCode, AppError> {
     let content_type = headers
@@ -789,20 +789,12 @@ pub async fn image_by_id(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
     Path(id): Path<ProductId>,
+    headers: HeaderMap,
 ) -> Result<Response, AppError> {
     let (bytes, mime) = repo::get_image_by_id(&app.pool, id)
         .await?
         .ok_or(AppError::NotFound)?;
-    Response::builder()
-        .header(header::CONTENT_TYPE, mime)
-        .header(header::CACHE_CONTROL, "private, max-age=86400")
-        .header("X-Content-Type-Options", "nosniff")
-        .header(
-            header::CONTENT_SECURITY_POLICY,
-            "default-src 'none'; sandbox",
-        )
-        .body(Body::from(bytes))
-        .map_err(|e| AppError::Other(e.into()))
+    image_response(&headers, bytes, &mime)
 }
 
 /// GET /api/products/{barcode}/image → the cached image bytes.
@@ -810,22 +802,42 @@ pub async fn image(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
     Path(barcode): Path<Barcode>,
+    headers: HeaderMap,
 ) -> Result<Response, AppError> {
     let (bytes, mime) = repo::get_image(&app.pool, &barcode)
         .await?
         .ok_or(AppError::NotFound)?;
-    // Defense in depth for stored bytes served on our own origin: never let the
-    // browser sniff them into something active, and sandbox the document if the
-    // URL is opened directly (uploads are MIME-allowlisted, but old rows and
-    // future regressions shouldn't become XSS).
-    Response::builder()
-        .header(header::CONTENT_TYPE, mime)
-        .header(header::CACHE_CONTROL, "private, max-age=86400")
+    image_response(&headers, bytes, &mime)
+}
+
+/// A stored image. `no-cache` with an `ETag` of its bytes: the URL stays the same
+/// when the server replaces a picture, so each view revalidates, and an
+/// unchanged picture costs a 304.
+///
+/// Stored bytes are served on our own origin, so never let the browser sniff
+/// them into something active, and sandbox the document if the URL is opened
+/// directly.
+fn image_response(headers: &HeaderMap, bytes: Vec<u8>, mime: &str) -> Result<Response, AppError> {
+    use sha2::{Digest, Sha256};
+    let etag = format!("\"{}\"", hex::encode(&Sha256::digest(&bytes)[..16]));
+    let fresh = headers
+        .get(header::IF_NONE_MATCH)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.split(',').any(|t| t.trim() == etag));
+    let builder = Response::builder()
+        .header(header::ETAG, &etag)
+        .header(header::CACHE_CONTROL, "private, no-cache")
         .header("X-Content-Type-Options", "nosniff")
         .header(
             header::CONTENT_SECURITY_POLICY,
             "default-src 'none'; sandbox",
-        )
-        .body(Body::from(bytes))
-        .map_err(|e| AppError::Other(e.into()))
+        );
+    let res = if fresh {
+        builder.status(StatusCode::NOT_MODIFIED).body(Body::empty())
+    } else {
+        builder
+            .header(header::CONTENT_TYPE, mime)
+            .body(Body::from(bytes))
+    };
+    res.map_err(|e| AppError::Other(e.into()))
 }

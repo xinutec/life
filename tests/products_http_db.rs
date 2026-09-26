@@ -1,5 +1,5 @@
-//! POST /api/products/import against a real MariaDB, signed in through a real
-//! session. The picture URL never resolves, so nothing here needs the network;
+//! Product routes against a real MariaDB, signed in through a real session.
+//! Import's picture URL never resolves, so nothing here needs the network;
 //! which pictures an import fetches is pinned in `picture_reconcile.rs`.
 
 mod common;
@@ -47,12 +47,16 @@ fn state(pool: MySqlPool) -> AppState {
     AppState::new(pool, cfg, reqwest::Client::new())
 }
 
-async fn import(pool: &MySqlPool, barcode: &str, external_id: &str) -> StatusCode {
+async fn signed_in(pool: &MySqlPool) -> String {
     let user = UserSession {
-        user_id: "import-test".into(),
-        display_name: "Import Test".into(),
+        user_id: "products-http-test".into(),
+        display_name: "Products Test".into(),
     };
     let cookie = create_session(pool, SECRET, &user).await.expect("session");
+    format!("{COOKIE_NAME}={cookie}")
+}
+
+async fn import(pool: &MySqlPool, barcode: &str, external_id: &str) -> StatusCode {
     let body = serde_json::json!({
         "source": "waitrose",
         "external_id": external_id,
@@ -62,7 +66,7 @@ async fn import(pool: &MySqlPool, barcode: &str, external_id: &str) -> StatusCod
         "image_url": UNREACHABLE_PICTURE,
     });
     let req = Request::post("/api/products/import")
-        .header(header::COOKIE, format!("{COOKIE_NAME}={cookie}"))
+        .header(header::COOKIE, signed_in(pool).await)
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(body.to_string()))
         .unwrap();
@@ -154,4 +158,74 @@ async fn an_unreachable_picture_does_not_fail_the_import() {
     assert!(!product.has_image);
     let listings = repo::listings_for(&pool, product.id).await.unwrap();
     assert!(listings.iter().any(|l| l.source == Source::Waitrose));
+}
+
+/// GET a product image, optionally revalidating with `If-None-Match`.
+async fn image(
+    pool: &MySqlPool,
+    id: u64,
+    etag: Option<&str>,
+) -> (StatusCode, Option<String>, String) {
+    let mut req = Request::get(format!("/api/products/id/{id}/image"))
+        .header(header::COOKIE, signed_in(pool).await);
+    if let Some(tag) = etag {
+        req = req.header(header::IF_NONE_MATCH, tag);
+    }
+    let res = routes::router(state(pool.clone()))
+        .oneshot(req.body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let get = |h| {
+        res.headers()
+            .get(h)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string)
+    };
+    let (etag, cache) = (
+        get(header::ETAG),
+        get(header::CACHE_CONTROL).unwrap_or_default(),
+    );
+    (res.status(), etag, cache)
+}
+
+#[tokio::test]
+async fn a_changed_picture_is_served_at_once_and_an_unchanged_one_is_a_304() {
+    // The URL stays the same when the server replaces a picture (an import, a
+    // reconcile, another device), so a day-long cache kept the old one.
+    let pool = pool().await;
+    let bc: Barcode = "9990000000971".parse().unwrap();
+    fresh(&pool, &bc).await;
+    repo::upsert(
+        &pool,
+        &bc,
+        Some("Rice"),
+        None,
+        None,
+        Some((vec![1, 2, 3], "image/jpeg".into())),
+    )
+    .await
+    .unwrap();
+    let id = repo::get(&pool, &bc).await.unwrap().unwrap().id;
+
+    let (status, etag, cache) = image(&pool, id.0, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        cache.contains("no-cache"),
+        "revalidated on every view: {cache}"
+    );
+    let etag = etag.expect("an ETag to revalidate with");
+
+    let (status, _, _) = image(&pool, id.0, Some(&etag)).await;
+    assert_eq!(status, StatusCode::NOT_MODIFIED);
+
+    repo::set_image_by_id(&pool, id, &[4, 5, 6], "image/jpeg")
+        .await
+        .unwrap();
+    let (status, new_tag, _) = image(&pool, id.0, Some(&etag)).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "the new picture, not the cached one"
+    );
+    assert_ne!(new_tag.as_deref(), Some(etag.as_str()));
 }
