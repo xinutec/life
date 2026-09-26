@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { PriceInput } from './models';
-import { ShopProduct, ShopProvider, Shops, penceFromLabel, shopPrice } from './shop';
+import { ShopProduct, ShopProvider, Shops, isSignedOut, penceFromLabel, shopPrice } from './shop';
 import { WAITROSE } from './shops/waitrose';
 
 // The native bridge lives on window; fake it per-test.
@@ -95,6 +95,17 @@ describe('Shops bridge service', () => {
     await expect(p).rejects.toThrow('boom');
   });
 
+  it('tells a signed-out shop apart from any other failure', async () => {
+    fakeBridge();
+    const svc = new Shops();
+    const out = svc.fetchProduct(provider, '1');
+    w.__shopResolve!(lastRun!.id, { ok: false, error: 'no token', reason: 'signed_out' });
+    const other = svc.fetchProduct(provider, '2');
+    w.__shopResolve!(lastRun!.id, { ok: false, error: 'load failed' });
+    expect(isSignedOut(await out.catch((e: unknown) => e))).toBe(true);
+    expect(isSignedOut(await other.catch((e: unknown) => e))).toBe(false);
+  });
+
   it('connect opens the login and resolves when the overlay closes', async () => {
     fakeBridge();
     const svc = new Shops();
@@ -128,6 +139,7 @@ describe('Waitrose provider', () => {
     // "no token" reads as a broken extractor and sends the reader to the JS.
     const { js } = WAITROSE.product('062593');
     expect(js).toContain('signed out of waitrose.com');
+    expect(js).toContain("reason: 'signed_out'");
   });
 
   it('the extractor reads the pack size off the weights block', () => {

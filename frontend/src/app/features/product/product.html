@@ -322,6 +322,13 @@
               Haven’t checked {{ shop.label }} — the app can look for this one.
             </span>
           }
+          @case ('signedOut') {
+            <span class="fine">Signed out of {{ shop.label }}.</span>
+            <button mat-button (click)="finder.signIn(shop.source)">
+              <mat-icon>login</mat-icon>
+              Sign in
+            </button>
+          }
           @case ('error') {
             <span class="fine">Couldn’t reach {{ shop.label }} — are you online?</span>
           }

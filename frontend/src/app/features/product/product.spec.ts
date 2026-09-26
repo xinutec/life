@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { LifeApi } from '../../life-api';
 import { AsdaHit, ProductDetail, ShopFind, SourceDocument } from '../../models';
-import { ShopProduct, Shops } from '../../shop';
+import { ShopProduct, ShopSignedOut, Shops } from '../../shop';
+import { WAITROSE } from '../../shops/waitrose';
 import { ProductPage } from './product';
 
 const DETAIL: ProductDetail = {
@@ -502,6 +503,26 @@ describe('ProductPage', () => {
       },
     });
     expect(api.syncListing).not.toHaveBeenCalled(); // the server can't fetch it
+  });
+
+  it('says a signed-out shop is signed out, and signs in and retries on request', async () => {
+    // Signed out, Waitrose mints no token and every product fetch fails; that is
+    // not "are you online?", and the fix is one tap away.
+    const shops = {
+      available: true,
+      search: vi.fn(() => Promise.resolve(CANDIDATES)),
+      fetchProduct: vi.fn(() => Promise.reject(new ShopSignedOut('no token'))),
+      connect: vi.fn(() => Promise.resolve()),
+    };
+    const { page, api } = setup(UNLISTED, { hit: null, from_cache: false, searched: false }, shops);
+    page.finder.find('waitrose');
+    await flush();
+    expect(lookup(page, 'waitrose').state).toBe('signedOut');
+
+    page.finder.signIn('waitrose');
+    await flush();
+    expect(shops.connect).toHaveBeenCalledWith(WAITROSE);
+    expect(api.findAtShop).toHaveBeenCalledTimes(2);
   });
 
   it('says how many it checked when a hunt finds nothing', async () => {

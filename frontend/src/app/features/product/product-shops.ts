@@ -6,7 +6,7 @@ import { onlineHint } from '../../shared/api-error';
 import { Feedback } from '../../shared/feedback';
 import { formatMoney } from '../../shared/money';
 import { sourceLabel } from '../../shared/sources';
-import { ShopProduct, ShopProvider, Shops, shopPrice } from '../../shop';
+import { ShopProduct, ShopProvider, Shops, isSignedOut, shopPrice } from '../../shop';
 import { WAITROSE } from '../../shops/waitrose';
 
 /** How a shop lookup is going.
@@ -14,8 +14,10 @@ import { WAITROSE } from '../../shops/waitrose';
  *  `none` = the shop's own results were checked and none carried this barcode.
  *  `unknown` = nobody has ever looked, and this device can't: the shop is behind
  *  a bot-wall only the app's hidden WebView gets through. Saying "doesn't have
- *  it" for that would claim an answer nobody asked for. */
-type ShopLookup = 'idle' | 'searching' | 'found' | 'none' | 'unknown' | 'error';
+ *  it" for that would claim an answer nobody asked for.
+ *  `signedOut` = the app's session with the shop is signed out, so it would not
+ *  answer; `signIn` fixes that and looks again. */
+type ShopLookup = 'idle' | 'searching' | 'found' | 'none' | 'unknown' | 'signedOut' | 'error';
 
 /** The shops a product can be looked up at, in the order they're offered. Both
  *  are answerable from memory anywhere; only Asda can be searched afresh without
@@ -219,9 +221,19 @@ export class ProductShops {
         }
       }
       this.patchLookup(source, { state: 'none', progress: null, checked: candidates.length });
-    } catch {
-      this.patchLookup(source, { state: 'error', progress: null });
+    } catch (e: unknown) {
+      this.patchLookup(source, { state: isSignedOut(e) ? 'signedOut' : 'error', progress: null });
     }
+  }
+
+  /** Show the shop's sign-in, then look again once it closes. */
+  signIn(source: Source): void {
+    const provider = bridgeProvider(source);
+    if (!provider) return;
+    this.shops.connect(provider).then(
+      () => this.find(source),
+      () => this.feedback.error(`Could not open the ${provider.displayName} sign-in.`),
+    );
   }
 
   /** File what the WebView saw. Best-effort by design: this is a side benefit of

@@ -141,7 +141,14 @@ type BridgeRequest =
 
 type BridgeResult =
   | { ok: true; product?: ShopProduct; candidates?: ShopCandidate[]; facts?: ShopFacts }
-  | { ok: false; error: string };
+  | { ok: false; error: string; reason?: 'signed_out' };
+
+/** The shop's session is signed out, so it would not answer; `connect` fixes it. */
+export class ShopSignedOut extends Error {}
+
+export function isSignedOut(e: unknown): boolean {
+  return e instanceof ShopSignedOut;
+}
 
 interface BridgeWindow extends Window {
   ShopBridge?: Bridge;
@@ -233,6 +240,7 @@ export class Shops {
     return new Promise((resolve, reject) => {
       this.pending.set(requestId, (result) => {
         if (result.ok) resolve(result);
+        else if (result.reason === 'signed_out') reject(new ShopSignedOut(result.error));
         else reject(new Error(result.error));
       });
       invoke(requestId);

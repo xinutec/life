@@ -56,9 +56,10 @@ function productJs(lineNumber: string): string {
     var tok = window.__authToken;
     if (!tok) {
       // Signed out, Waitrose mints no Bearer at all, which otherwise looks like a
-      // broken extractor. Only "usually": this search page looks the same
-      // signed in or out, so it can't be checked from here.
-      AndroidShop.result(JSON.stringify({ ok: false,
+      // broken extractor. Reported as signed_out, the likely cause and the one a
+      // sign-in fixes; this search page looks the same either way, so it can't
+      // be confirmed from here.
+      AndroidShop.result(JSON.stringify({ ok: false, reason: 'signed_out',
         error: "the page minted no Authorization header — usually this browser is signed out of waitrose.com; log in by hand and retry" }));
       return;
     }
