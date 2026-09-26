@@ -33,8 +33,6 @@ how it got there is in `git log`. `#N` is a task in the `task` CLI.
 
 ## Infrastructure
 
-- **Rollout 502s** — a request landing mid-rollout can hit the outgoing pod after
-  it stops accepting. Fix: a `preStop` sleep of a few seconds in the Deployment.
 - **App-ingress NetworkPolicy** — held until k3s's kubelet probes are exempted.
 - **Stale Nextcloud cookie in a plain browser** — "State token does not match"
   on sign-in. The Android app recovers by dropping NC's cookies; a browser user
