@@ -1,6 +1,6 @@
-//! Product routes against a real MariaDB, signed in through a real session.
-//! Import's picture URL never resolves, so nothing here needs the network;
-//! which pictures an import fetches is pinned in `picture_reconcile.rs`.
+//! Routes against a real MariaDB, signed in through a real session. Import's
+//! picture URL never resolves, so nothing here needs the network; which
+//! pictures an import fetches is pinned in `picture_reconcile.rs`.
 
 mod common;
 
@@ -228,4 +228,95 @@ async fn a_changed_picture_is_served_at_once_and_an_unchanged_one_is_a_304() {
         "the new picture, not the cached one"
     );
     assert_ne!(new_tag.as_deref(), Some(etag.as_str()));
+}
+
+const SIGNED_IN_USER: &str = "products-http-test";
+
+async fn item_for(pool: &MySqlPool, user: &str, name: &str) -> u64 {
+    sqlx::query("INSERT INTO items (user_id, name, category) VALUES (?, ?, 'appliance')")
+        .bind(user)
+        .bind(name)
+        .execute(pool)
+        .await
+        .expect("insert item")
+        .last_insert_id()
+}
+
+async fn purchase_on(pool: &MySqlPool, user: &str, item: u64, name: &str) -> u64 {
+    let bought = life::purchases::repo::BoughtItem {
+        id: item,
+        product_id: None,
+        barcode: None,
+        name,
+        quantity: None,
+        unit: None,
+    };
+    let paid = life::purchases::types::NewPurchase {
+        shop: "Argos".into(),
+        amount_minor: 2999,
+        currency: "GBP".into(),
+        bought_on: None,
+        warranty_months: None,
+    };
+    life::purchases::repo::record(pool, user, &bought, &paid)
+        .await
+        .expect("record purchase")
+}
+
+async fn attach(pool: &MySqlPool, item: u64, purchase: u64) -> StatusCode {
+    let req = Request::post(format!("/api/items/{item}/files"))
+        .header(header::COOKIE, signed_in(pool).await)
+        .header(header::CONTENT_TYPE, "application/pdf")
+        .header("x-file-name", "receipt.pdf")
+        .header("x-purchase-id", purchase.to_string())
+        .body(Body::from(&b"%PDF-1.4\n%receipt"[..]))
+        .unwrap();
+    let res = routes::router(state(pool.clone()))
+        .oneshot(req)
+        .await
+        .unwrap();
+    let status = res.status();
+    let _ = res.into_body().collect().await;
+    status
+}
+
+#[tokio::test]
+async fn a_receipt_can_only_prove_a_live_purchase_of_its_own_item() {
+    // The purchase id arrives in a header, so without a check a file could be
+    // tied to another user's purchase, another item's, or one in the trash.
+    let pool = pool().await;
+    let other = "products-http-test-other";
+    for user in [SIGNED_IN_USER, other] {
+        sqlx::query("DELETE FROM purchases WHERE user_id = ?")
+            .bind(user)
+            .execute(&pool)
+            .await
+            .expect("clean");
+    }
+    let kettle = item_for(&pool, SIGNED_IN_USER, "Kettle").await;
+    let toaster = item_for(&pool, SIGNED_IN_USER, "Toaster").await;
+    let theirs = item_for(&pool, other, "Their kettle").await;
+    let own = purchase_on(&pool, SIGNED_IN_USER, kettle, "Kettle").await;
+    let toasters = purchase_on(&pool, SIGNED_IN_USER, toaster, "Toaster").await;
+    let foreign = purchase_on(&pool, other, theirs, "Their kettle").await;
+    let trashed = purchase_on(&pool, SIGNED_IN_USER, kettle, "Kettle").await;
+    assert!(
+        life::purchases::repo::remove(&pool, SIGNED_IN_USER, kettle, trashed)
+            .await
+            .expect("remove")
+    );
+
+    assert_eq!(attach(&pool, kettle, own).await, StatusCode::OK);
+    assert_eq!(
+        attach(&pool, kettle, toasters).await,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        attach(&pool, kettle, foreign).await,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        attach(&pool, kettle, trashed).await,
+        StatusCode::BAD_REQUEST
+    );
 }

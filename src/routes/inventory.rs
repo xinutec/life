@@ -207,6 +207,18 @@ pub async fn add_file(
                 AppError::BadRequest(format!("X-Purchase-Id is not a number: {raw}"))
             })?),
         };
+    // The id comes from a header: it must be a live purchase of THIS item, or a
+    // receipt could be tied to someone else's purchase or one in the trash.
+    if let Some(pid) = purchase_id
+        && !purchases_repo::for_item(&app.pool, &user.user_id, id)
+            .await?
+            .iter()
+            .any(|p| p.id == pid)
+    {
+        return Err(AppError::BadRequest(
+            "that purchase is not one of this item's".into(),
+        ));
+    }
     let new_id =
         files_repo::add(&app.pool, &user.user_id, id, purchase_id, name, mime, &body).await?;
     // Read the metadata back rather than assembling it here, so the created_at
