@@ -70,23 +70,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // row the catalogue happens to hold.
 const items = api('GET', '/api/items').filter((i) => i.product_id && i.barcode);
 
-// One call says which already have a listing, rather than a product-detail
-// fetch each. Asking a shop about something already linked would spend somebody
-// else's bandwidth to learn nothing.
-const covered = new Set(
-  api(
-    'POST',
-    '/api/shopping/coverage',
-    items.slice(0, 200).map((i) => ({
-      key: String(i.product_id),
-      barcode: i.barcode,
-      product_id: i.product_id,
-    })),
-  )
-    .filter((r) => r.sources.some((s) => s !== 'off'))
-    .map((r) => r.key),
-);
-
 const state = loadState();
 const askedRecently = (id) => {
   const at = state[`${source}:${id}`];
@@ -94,32 +77,33 @@ const askedRecently = (id) => {
 };
 
 // De-duplicated: two cupboard rows of the same thing are one product to price.
+// "Already listed" means a listing ATTACHED at this shop, read from the product
+// itself: coverage also counts sightings, which are exactly the products most
+// worth linking.
 const seen = new Set();
-const todo = items
-  .filter(
-    (i) =>
-      !covered.has(String(i.product_id)) &&
-      !askedRecently(i.product_id) &&
-      !seen.has(i.product_id) &&
-      seen.add(i.product_id),
-  )
-  .map((i) => ({ id: i.product_id, barcode: i.barcode, name: i.name }))
-  .slice(0, limit);
-
+const todo = [];
+for (const i of items) {
+  if (todo.length >= limit || seen.has(i.product_id) || askedRecently(i.product_id)) continue;
+  seen.add(i.product_id);
+  const detail = api('GET', `/api/products/id/${i.product_id}`);
+  if (detail.listings.some((l) => l.source === source)) continue;
+  todo.push({ id: i.product_id, barcode: i.barcode, name: i.name });
+}
 console.log(
-  `${items.length} cupboard rows, ${covered.size} already listed; ` +
+  `${items.length} cupboard rows, ${seen.size} products checked; ` +
     `trying ${todo.length} (limit ${limit}, ${delayMs / 1000}s apart)` +
     (commit ? '' : ' — DRY RUN, nothing will be written'),
 );
 
 let linked = 0;
-let ambiguous = 0;
 let missed = 0;
 for (const [i, p] of todo.entries()) {
   if (i > 0) await sleep(delayMs);
-  let hits = [];
+  // The app's own "Find at Asda": product name, a shorter second search when
+  // that finds nothing, and a barcode match. It caches what the shop returned.
+  let found;
   try {
-    hits = api('GET', `/api/products/shop/${source}?q=${encodeURIComponent(p.name ?? '')}`);
+    found = api('GET', `/api/products/id/${p.id}/find/${source}`);
   } catch {
     // A search that fails is not a product that does not exist. Say so, and
     // leave it for another run rather than recording an absence.
@@ -130,20 +114,12 @@ for (const [i, p] of todo.entries()) {
     state[`${source}:${p.id}`] = Date.now();
     saveState(state);
   }
-  const exact = hits.filter((h) => h.barcode === p.barcode);
-  if (exact.length === 0) {
+  if (!found.hit) {
     missed++;
-    console.log(`  -  ${p.id}  ${hits.length} hits, none with this barcode | ${p.name}`);
+    console.log(`  -  ${p.id}  no listing carries this barcode | ${p.name}`);
     continue;
   }
-  if (exact.length > 1) {
-    // Two listings sharing a barcode is the shop's ambiguity, not ours to
-    // resolve by picking the first.
-    ambiguous++;
-    console.log(`  !  ${p.id}  ${exact.length} listings share this barcode | ${p.name}`);
-    continue;
-  }
-  const hit = exact[0];
+  const hit = found.hit;
   if (commit) {
     api('POST', `/api/products/id/${p.id}/listings`, {
       source,
@@ -154,6 +130,6 @@ for (const [i, p] of todo.entries()) {
   console.log(`  ${commit ? '+' : '~'}  ${p.id}  ${hit.external_id}  ${hit.price_label ?? '(no price)'} | ${p.name}`);
 }
 
-console.log(`\nlinked ${linked}, no barcode match ${missed}, ambiguous ${ambiguous}`);
+console.log(`\nlinked ${linked}, no barcode match ${missed}`);
 if (commit) console.log(`asked-about set: ${Object.keys(state).length} (${statePath})`);
 if (!commit && linked > 0) console.log('re-run with --commit to record them');
