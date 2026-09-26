@@ -365,3 +365,55 @@ async fn the_picker_vocabulary_is_remembered_and_replaced_in_place() {
         ["Glad/Warm"]
     );
 }
+
+/// A poll already held open is released the moment shutdown begins, rather
+/// than running out its 25s window against the pod's grace period.
+#[tokio::test]
+async fn a_held_poll_is_released_by_shutdown() {
+    use axum::extract::State;
+    use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
+    use axum::response::IntoResponse;
+    use std::time::{Duration, Instant};
+
+    let url = common::test_db_url();
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+    // The queue is global; an unclaimed job from elsewhere would be handed out.
+    sqlx::query("DELETE FROM emotion_jobs")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let cfg = life::config::Config {
+        database_url: url,
+        session_secret: "test-secret".into(),
+        bind_addr: "127.0.0.1:0".into(),
+        nc_base_url: "https://nc.example".into(),
+        nc_client_id: "id".into(),
+        nc_client_secret: "secret".into(),
+        nc_redirect_uri: "https://life.example/auth/callback".into(),
+        static_dir: None,
+        dev_login_user: None,
+        house_scene: "scenes/house.json".into(),
+        bins_ical_url: None,
+        emotion_worker_token: Some("t".into()),
+    };
+    let app = life::state::AppState::new(pool, cfg, reqwest::Client::new());
+    let mut headers = HeaderMap::new();
+    headers.insert(header::AUTHORIZATION, HeaderValue::from_static("Bearer t"));
+
+    let started = Instant::now();
+    let poll = tokio::spawn(life::routes::emotion_worker::next(
+        State(app.clone()),
+        headers,
+    ));
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    app.begin_shutdown();
+    let res = tokio::time::timeout(Duration::from_secs(5), poll)
+        .await
+        .expect("released well inside the poll window")
+        .unwrap()
+        .map(IntoResponse::into_response)
+        .expect("a response");
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    assert!(started.elapsed() < Duration::from_secs(5));
+}

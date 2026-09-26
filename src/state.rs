@@ -58,6 +58,9 @@ pub struct AppState {
     /// In-memory, and the feed's text rather than parsed days, so "upcoming" is
     /// decided per request; the cache only spares the council.
     bins: Arc<Mutex<Option<(Instant, String)>>>,
+    /// Raised when the process is asked to stop, so a held long-poll answers now
+    /// instead of running out its window against the shutdown grace period.
+    stopping: Arc<tokio::sync::watch::Sender<bool>>,
 }
 
 /// How long a fetched bin calendar is reused. The feed asks for daily
@@ -76,7 +79,18 @@ impl AppState {
             warm_system: Arc::new(Mutex::new(None)),
             warm_taken: Arc::new(Mutex::new(None)),
             bins: Arc::new(Mutex::new(None)),
+            stopping: Arc::new(tokio::sync::watch::Sender::new(false)),
         }
+    }
+
+    /// The process is shutting down: release anything waiting on [`Self::stopping`].
+    pub fn begin_shutdown(&self) {
+        self.stopping.send_replace(true);
+    }
+
+    /// Watches for shutdown; `true` once [`Self::begin_shutdown`] has run.
+    pub fn stopping(&self) -> tokio::sync::watch::Receiver<bool> {
+        self.stopping.subscribe()
     }
 
     /// The cached bin calendar, if it is still fresh.

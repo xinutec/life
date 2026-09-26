@@ -87,6 +87,13 @@ pub async fn next(State(app): State<AppState>, headers: HeaderMap) -> Result<Res
     // know before it promises anyone an answer.
     app.mark_worker_seen();
 
+    // A poll held through shutdown would outlast the grace period's margin;
+    // answering empty sends the worker straight to the next pod.
+    let mut stopping = app.stopping();
+    if *stopping.borrow() {
+        return Ok(StatusCode::NO_CONTENT.into_response());
+    }
+
     let queued = app.job_queued();
     let deadline = Instant::now() + POLL_WINDOW;
     loop {
@@ -123,8 +130,12 @@ pub async fn next(State(app): State<AppState>, headers: HeaderMap) -> Result<Res
             return Ok(StatusCode::NO_CONTENT.into_response());
         }
         let wait = RECHECK.min(deadline - now);
-        // Whichever comes first: someone queued work, or it's time to look again.
-        let _ = tokio::time::timeout(wait, woken).await;
+        // Whichever comes first: someone queued work, it's time to look again,
+        // or the process is stopping.
+        tokio::select! {
+            _ = tokio::time::timeout(wait, woken) => {}
+            _ = stopping.wait_for(|s| *s) => return Ok(StatusCode::NO_CONTENT.into_response()),
+        }
     }
 }
 

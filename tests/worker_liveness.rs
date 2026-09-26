@@ -11,6 +11,10 @@ use life::state::AppState;
 use sqlx::mysql::MySqlPoolOptions;
 
 fn state() -> AppState {
+    state_with_token(None)
+}
+
+fn state_with_token(token: Option<&str>) -> AppState {
     let pool = MySqlPoolOptions::new()
         .connect_lazy("mysql://life:life@127.0.0.1:3307/life")
         .expect("lazy pool");
@@ -27,7 +31,7 @@ fn state() -> AppState {
         house_scene: "scenes/house.json".into(),
         // No council feed in a test: the bins route answers with an empty list.
         bins_ical_url: None,
-        emotion_worker_token: None,
+        emotion_worker_token: token.map(str::to_string),
     };
     AppState::new(pool, cfg, reqwest::Client::new())
 }
@@ -89,4 +93,23 @@ async fn one_preload_is_handed_out_once() {
     app.request_warm("system prompt".into());
     assert!(app.take_warm().is_some());
     assert!(app.take_warm().is_none());
+}
+
+/// A poll arriving while the pod stops answers empty at once, so the worker's
+/// next poll reaches the pod replacing this one. No query runs on this path.
+#[tokio::test]
+async fn a_poll_during_shutdown_answers_empty_without_waiting() {
+    use axum::extract::State;
+    use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
+    use axum::response::IntoResponse;
+
+    let app = state_with_token(Some("t"));
+    app.begin_shutdown();
+    let mut headers = HeaderMap::new();
+    headers.insert(header::AUTHORIZATION, HeaderValue::from_static("Bearer t"));
+    let res = life::routes::emotion_worker::next(State(app), headers)
+        .await
+        .map(IntoResponse::into_response)
+        .expect("a response");
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
 }

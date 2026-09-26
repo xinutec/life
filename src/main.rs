@@ -65,12 +65,16 @@ async fn main() -> Result<()> {
         }
     });
 
+    let stop_state = state.clone();
     let app = routes::router(state);
 
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
     tracing::info!("life listening on {bind_addr}");
     axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
+        .with_graceful_shutdown(async move {
+            shutdown_signal().await;
+            stop_state.begin_shutdown();
+        })
         .await?;
     tracing::info!("life stopped");
     Ok(())

@@ -35,9 +35,6 @@ how it got there is in `git log`. `#N` is a task in the `task` CLI.
 
 - **Rollout 502s** — a request landing mid-rollout can hit the outgoing pod after
   it stops accepting. Fix: a `preStop` sleep of a few seconds in the Deployment.
-- **Long-poll vs shutdown** — `/api/emotion-worker/next` waits 25s against the
-  default 30s grace period. It should return early on shutdown rather than rely
-  on the margin.
 - **App-ingress NetworkPolicy** — held until k3s's kubelet probes are exempted.
 - **Stale Nextcloud cookie in a plain browser** — "State token does not match"
   on sign-in. The Android app recovers by dropping NC's cookies; a browser user
