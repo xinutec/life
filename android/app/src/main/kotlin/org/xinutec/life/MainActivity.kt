@@ -1,7 +1,6 @@
 package org.xinutec.life
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.app.AlarmManager
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -10,25 +9,19 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.util.Base64
 import android.util.Log
 import android.view.Gravity
-import android.view.ViewGroup
-import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
-import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
-import android.webkit.WebViewClient
-import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
@@ -40,8 +33,6 @@ import org.xinutec.shell.ShellConfig
 import org.xinutec.shell.WebDebugging
 import org.xinutec.shell.WebShellActivity
 import org.xinutec.shell.sameOrigin
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * life's Angular SPA at [LIFE_URL] in the fleet's [WebShellActivity]; the
@@ -70,15 +61,7 @@ class MainActivity : WebShellActivity() {
     // A pending <input type=file> result callback, held while the picker is open.
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
 
-    // The offscreen WebView doing a shop lookup, if one is in flight. One at a
-    // time; a new request tears down the previous.
-    private var shopWeb: WebView? = null
-
-    // The visible shop-login overlay + its WebView, and the pending connect
-    // request to answer when it closes.
-    private var connectOverlay: FrameLayout? = null
-    private var connectWeb: WebView? = null
-    private var connectRequestId: String? = null
+    private val shop by lazy { ShopBridge(this, root, web, ::syncBack) }
 
     // Whether we've already dropped Nextcloud's stale cookies for this launch (see
     // onReceivedHttpError). One shot: if the login still fails after a clean start,
@@ -152,11 +135,11 @@ class MainActivity : WebShellActivity() {
         val requestId = body.optString("requestId")
         when (body.optString("op")) {
             "run" -> {
-                shopRun(body.optString("url"), body.optString("extractorJs"), requestId)
+                shop.run(body.optString("url"), body.optString("extractorJs"), requestId)
             }
 
             "connect" -> {
-                showShopConnect(body.optString("loginUrl"), requestId)
+                shop.connect(body.optString("loginUrl"), requestId)
             }
         }
     }
@@ -273,24 +256,14 @@ class MainActivity : WebShellActivity() {
 
     // The Waitrose connect overlay swallows back first: walk its history, then
     // close it, before the main app's back behaviour.
-    override fun onBackBeforeHistory(): Boolean {
-        val cw = connectWeb
-        if (connectOverlay == null) return false
-        if (cw != null && cw.canGoBack()) cw.goBack() else closeShopConnect()
-        return true
-    }
+    override fun onBackBeforeHistory(): Boolean = shop.back()
 
     // While the overlay is up, back belongs to us even at the SPA's root.
-    override fun hasExtraBackTargets(): Boolean = connectOverlay != null
+    override fun hasExtraBackTargets(): Boolean = shop.hasBackTarget
 
     // The shell releases the main WebView; the ones this app made are ours.
     override fun onDestroy() {
-        shopWeb?.let {
-            root.removeView(it)
-            it.destroy()
-        }
-        connectOverlay?.let { root.removeView(it) }
-        connectWeb?.destroy()
+        shop.destroy()
         super.onDestroy()
     }
 
@@ -407,277 +380,6 @@ class MainActivity : WebShellActivity() {
     }
 
     /**
-     * Load a shop page in a throwaway offscreen WebView and run the web app's
-     * [extractorJs] when it finishes; bot managers reject non-browser clients. A
-     * capture patch exposes any Bearer the page attaches (window.__authToken).
-     * Results come back through the per-view AndroidShop bridge, because
-     * evaluateJavascript doesn't await promises. One at a time.
-     */
-    @SuppressLint("SetJavaScriptEnabled") // the WebView runs the app's own bundle
-    private fun shopRun(url: String, extractorJs: String, requestId: String) {
-        // No origin gate here: the web-message listener already refused anything
-        // that isn't the app's own main frame.
-        if (!isShopUrl(url)) {
-            resolveShop(requestId, """{"ok":false,"error":"host not allowed"}""")
-            return
-        }
-        shopWeb?.let {
-            root.removeView(it)
-            it.destroy()
-        }
-        val hidden =
-            WebView(this).apply {
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = true
-                // Full-size, not 1×1: a bot wall's JS challenge (Cloudflare) fingerprints
-                // the render — a 1×1 viewport can fail it or its clearance redirect. The
-                // view is added *behind* the visible app (index 0), so it renders like a
-                // real browser tab yet the user never sees it.
-                layoutParams =
-                    FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                    )
-                settings.useWideViewPort = true
-                settings.loadWithOverviewMode = true
-                // Drop the WebView tells from the UA ("; wv" and "Version/4.0") so it
-                // reads as ordinary mobile Chrome — bot walls treat WebViews harshly.
-                settings.userAgentString =
-                    settings.userAgentString.replace("; wv", "").replace("Version/4.0 ", "")
-            }
-        // A shop SPA's session/consent flow leans on third-party cookies, which a
-        // WebView blocks by default.
-        CookieManager.getInstance().setAcceptThirdPartyCookies(hidden, true)
-        shopWeb = hidden
-        root.addView(hidden, 0)
-
-        val settled = AtomicBoolean(false)
-        val retries = AtomicInteger(0)
-        val finish = { payload: String ->
-            if (settled.compareAndSet(false, true)) {
-                resolveShop(requestId, payload)
-                hidden.post {
-                    root.removeView(hidden)
-                    hidden.destroy()
-                    if (shopWeb === hidden) shopWeb = null
-                }
-            }
-        }
-        hidden.addJavascriptInterface(
-            object {
-                @JavascriptInterface fun result(json: String) = runOnUiThread { finish(json) }
-            },
-            "AndroidShop",
-        )
-        hidden.webChromeClient =
-            object : WebChromeClient() {
-                override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
-                    Log.d("life-shop", "${msg.message()} (${msg.sourceId()}:${msg.lineNumber()})")
-                    return true
-                }
-            }
-        hidden.webViewClient =
-            object : WebViewClient() {
-                // A main-frame redirect to a non-http(s) scheme (an app deep link like
-                // intent://, market://) would otherwise surface as a fatal main-frame
-                // load error. Swallow those (there's nothing to open here) and log,
-                // rather than killing the whole fetch on a stray redirect.
-                override fun shouldOverrideUrlLoading(
-                    view: WebView,
-                    request: WebResourceRequest,
-                ): Boolean {
-                    val scheme = request.url.scheme
-                    if (scheme != "https" && scheme != "http") {
-                        Log.d("life-shop", "blocked non-http redirect: ${request.url}")
-                        return true
-                    }
-                    return false
-                }
-
-                // Patch fetch/XHR early, before the SPA fires its authed calls, so
-                // we catch any Bearer token it attaches.
-                override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-                    view.evaluateJavascript(SHOP_CAPTURE_JS, null)
-                }
-
-                override fun onPageFinished(view: WebView, url: String) {
-                    view.evaluateJavascript(extractorJs, null)
-                }
-
-                override fun onReceivedError(
-                    view: WebView,
-                    request: WebResourceRequest,
-                    error: android.webkit.WebResourceError,
-                ) {
-                    Log.d(
-                        "life-shop",
-                        "onReceivedError main=${request.isForMainFrame} " +
-                            "code=${error.errorCode} desc=${error.description} url=${request.url}",
-                    )
-                    if (!request.isForMainFrame) return
-                    // The first fetch after a cold start can hit a transient DNS miss
-                    // (ERR_NAME_NOT_RESOLVED): Chromium's resolver isn't ready until a
-                    // few seconds after the process starts (the VPN advertises no DNS,
-                    // so it has to fall back to the underlying network). It recovers on
-                    // its own, so re-load on a fixed cadence until it does — the page is
-                    // server-rendered, so a successful load extracts immediately. Bounded
-                    // by SHOP_TIMEOUT_MS overall and MAX_SHOP_RETRIES here.
-                    if (retries.getAndIncrement() < MAX_SHOP_RETRIES) {
-                        Log.d("life-shop", "retrying main-frame load, attempt ${retries.get()}")
-                        view.postDelayed({ if (!settled.get()) view.loadUrl(url) }, SHOP_RETRY_MS)
-                        return
-                    }
-                    finish("""{"ok":false,"error":"load failed"}""")
-                }
-
-                // A bot wall answering 403/503 arrives here, not onReceivedError. Log
-                // it (with the challenge status) so a wall is distinguishable from a
-                // network failure; don't finish — the challenge page may still resolve.
-                override fun onReceivedHttpError(
-                    view: WebView,
-                    request: WebResourceRequest,
-                    errorResponse: android.webkit.WebResourceResponse,
-                ) {
-                    if (request.isForMainFrame) {
-                        Log.d(
-                            "life-shop",
-                            "onReceivedHttpError status=${errorResponse.statusCode} url=${request.url}",
-                        )
-                    }
-                }
-            }
-        // Safety net: never leave the web app's promise hanging.
-        hidden.postDelayed({ finish("""{"ok":false,"error":"timeout"}""") }, SHOP_TIMEOUT_MS)
-        hidden.loadUrl(url)
-    }
-
-    /** Whether `raw` is an https URL on an allowlisted shop host. */
-    private fun isShopUrl(raw: String): Boolean {
-        val u =
-            try {
-                Uri.parse(raw)
-            } catch (_: Exception) {
-                return false
-            }
-        if (u.scheme != "https") return false
-        val host = u.host ?: return false
-        return SHOP_HOSTS.any { host == it || host.endsWith(".$it") }
-    }
-
-    /** Resolve the web app's pending promise with a JSON result object. */
-    private fun resolveShop(requestId: String, resultJson: String) {
-        val js =
-            "window.__shopResolve && window.__shopResolve(${JSONObject.quote(
-                requestId,
-            )}, $resultJson)"
-        web.post { web.evaluateJavascript(js, null) }
-    }
-
-    /**
-     * Show a full-screen shop WebView (at [loginUrl]) so the user signs in once.
-     * The session cookies land in the shared CookieManager, so the hidden fetch
-     * view (and any future basket/order calls) inherit a logged-in session. A
-     * "Done" button and the back key close it; the web app is notified via
-     * window.__shopConnected(requestId).
-     */
-    @SuppressLint("SetJavaScriptEnabled") // the WebView runs the app's own bundle
-    private fun showShopConnect(loginUrl: String, requestId: String) {
-        if (connectOverlay != null) return // already open
-        if (!isShopUrl(loginUrl)) {
-            notifyShopConnected(requestId)
-            return
-        }
-        connectRequestId = requestId
-        val cw =
-            WebView(this).apply {
-                layoutParams =
-                    FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                    )
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = true
-                settings.useWideViewPort = true
-                settings.loadWithOverviewMode = true
-                webChromeClient =
-                    object : WebChromeClient() {
-                        override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
-                            Log.d("life-shop", "connect: ${msg.message()}")
-                            return true
-                        }
-                    }
-                webViewClient =
-                    object : WebViewClient() {
-                        // Keep shop hosts in this view; hand anything else to the browser.
-                        override fun shouldOverrideUrlLoading(
-                            view: WebView,
-                            request: WebResourceRequest,
-                        ): Boolean {
-                            if (isShopUrl(request.url.toString())) return false
-                            try {
-                                startActivity(Intent(Intent.ACTION_VIEW, request.url))
-                            } catch (_: ActivityNotFoundException) {
-                            }
-                            return true
-                        }
-                    }
-            }
-        CookieManager.getInstance().setAcceptThirdPartyCookies(cw, true)
-        connectWeb = cw
-
-        // This WebView shows a *third-party* retailer's login page (loginUrl), not
-        // life's own web app, so life can't inject a Done control into it — a native
-        // escape button is the correct design here, not web chrome.
-        val done =
-            // dev-lint: allow-native-chrome — external login overlay
-            Button(this).apply {
-                text = "Done"
-                setOnClickListener { closeShopConnect() }
-                layoutParams =
-                    FrameLayout
-                        .LayoutParams(
-                            ViewGroup.LayoutParams.WRAP_CONTENT,
-                            ViewGroup.LayoutParams.WRAP_CONTENT,
-                        ).apply { gravity = Gravity.TOP or Gravity.END }
-            }
-        val overlay =
-            FrameLayout(this).apply {
-                layoutParams =
-                    FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                    )
-                setBackgroundColor(Color.WHITE)
-                addView(cw)
-                addView(done)
-            }
-        connectOverlay = overlay
-        root.addView(overlay)
-        // Back now belongs to the overlay, even at the SPA's root.
-        syncBack()
-        cw.loadUrl(loginUrl)
-    }
-
-    private fun closeShopConnect() {
-        val overlay = connectOverlay ?: return
-        connectOverlay = null
-        root.removeView(overlay)
-        connectWeb?.destroy()
-        connectWeb = null
-        syncBack()
-        val id = connectRequestId
-        connectRequestId = null
-        // Let the web app re-check / retry now a session may exist.
-        notifyShopConnected(id)
-    }
-
-    /** Notify the web app that a connect overlay closed (requestId may be null). */
-    private fun notifyShopConnected(requestId: String?) {
-        val arg = requestId?.let { JSONObject.quote(it) } ?: "null"
-        web.evaluateJavascript("window.__shopConnected && window.__shopConnected($arg)", null)
-    }
-
-    /**
      * Fire notification [title]/[text] at [whenMs] (epoch ms); tapping it opens
      * [url]. Re-scheduling the same [id] replaces its alarm, so the web app
      * re-arms idempotently on each open, which also covers reboots.
@@ -789,37 +491,5 @@ class MainActivity : WebShellActivity() {
                 "nc_token",
                 "nc_session_id",
             )
-
-        // Shop hosts the hidden fetch + connect overlay may load. Adding a shop
-        // (e.g. "asda.com") is a one-line change here; everything else the shop
-        // needs (URLs, consent, extraction) lives in the web app's provider.
-        private val SHOP_HOSTS = setOf("waitrose.com", "asda.com")
-
-        // Give up on a shop lookup after this long (bot-wall + SPA boot + fetch).
-        private const val SHOP_TIMEOUT_MS = 45_000L
-
-        // Cold-start DNS can be unavailable for several seconds; re-load on this cadence
-        // until it settles (see onReceivedError).
-        private const val SHOP_RETRY_MS = 2_000L
-        private const val MAX_SHOP_RETRIES = 8
-
-        // Injected at document start in the hidden shop view: patch fetch/XHR to
-        // capture whatever Bearer token the SPA attaches to its own API calls, into
-        // window.__authToken for the extractor to use. No regex (its '$' can't live
-        // in a Kotlin const raw string) — case-insensitive string compare instead.
-        private const val SHOP_CAPTURE_JS = """
-            (function () {
-              if (window.__shopCapInit) return; window.__shopCapInit = 1; window.__authToken = null;
-              function isAuth(k) { return String(k).toLowerCase() === 'authorization'; }
-              function ra(h) { if (!h) return null;
-                if (typeof h.get === 'function') return h.get('authorization') || h.get('Authorization');
-                if (Array.isArray(h)) { for (var i = 0; i < h.length; i++) { if (isAuth(h[i][0])) return h[i][1]; } return null; }
-                for (var k in h) { if (isAuth(k)) return h[k]; } return null; }
-              var of = window.fetch;
-              window.fetch = function (u, o) { try { var a = ra(o && o.headers); if (a) window.__authToken = a; } catch (e) {} return of.apply(this, arguments); };
-              var os = XMLHttpRequest.prototype.setRequestHeader;
-              XMLHttpRequest.prototype.setRequestHeader = function (k, v) { try { if (isAuth(k)) window.__authToken = v; } catch (e) {} return os.apply(this, arguments); };
-            })();
-        """
     }
 }
