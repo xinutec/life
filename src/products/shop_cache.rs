@@ -159,7 +159,7 @@ pub async fn remember(pool: &MySqlPool, listings: &[CachedListing]) -> Result<()
     Ok(())
 }
 
-/// "Does <source> carry <barcode>?", answered from memory alone.
+/// "Does `source` carry `barcode`?", answered from memory alone.
 ///
 /// `Ok(None)` means only "we don't know" — never "the shop doesn't sell it".
 /// The caller decides whether to go ask; this function never does.

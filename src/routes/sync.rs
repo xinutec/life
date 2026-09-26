@@ -26,7 +26,7 @@ fn default_limit() -> u64 {
     200
 }
 
-/// GET /api/sync/shopping?since=<rev>&limit=<n>
+/// `GET /api/sync/shopping?since=<rev>&limit=<n>`
 pub async fn pull_shopping(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -57,7 +57,7 @@ pub async fn push_shopping(
     Ok(Json(conflicts))
 }
 
-/// GET /api/sync/todo?since=<rev>&limit=<n>
+/// `GET /api/sync/todo?since=<rev>&limit=<n>`
 pub async fn pull_todo(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -87,7 +87,7 @@ pub async fn push_todo(
     Ok(Json(conflicts))
 }
 
-/// GET /api/sync/todo-link?since=<rev>&limit=<n>
+/// `GET /api/sync/todo-link?since=<rev>&limit=<n>`
 pub async fn pull_todo_link(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -117,7 +117,7 @@ pub async fn push_todo_link(
     Ok(Json(conflicts))
 }
 
-/// GET /api/sync/wellbeing?since=<rev>&limit=<n>
+/// `GET /api/sync/wellbeing?since=<rev>&limit=<n>`
 pub async fn pull_wellbeing(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,

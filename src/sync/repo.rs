@@ -1,6 +1,6 @@
 //! Persistence for the offline-first sync protocol. The revision counter is
 //! shared by every syncable table; the pull/push protocol bodies are written
-//! once, generic over the per-collection [`SyncSpec`], so the safety rules —
+//! once, generic over the per-collection `SyncSpec`, so the safety rules —
 //! FOR UPDATE row lock, rev guard, **set-only tombstone**, commit-ordered
 //! revs, validate-before-write — cannot drift between collections. A new
 //! collection implements the spec and gets the tested protocol for free.

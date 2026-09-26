@@ -161,7 +161,7 @@ fn as_barcode(raw: &str) -> Option<Barcode> {
     raw.parse().ok()
 }
 
-/// The barcodes worth querying for, deduped. See [`as_barcode`] for what's dropped.
+/// The barcodes worth querying for, deduped. See `as_barcode` for what's dropped.
 pub fn barcodes(queries: &[CoverageQuery]) -> Vec<Barcode> {
     let set: BTreeSet<Barcode> = queries
         .iter()

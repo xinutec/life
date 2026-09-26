@@ -2,7 +2,7 @@
 //! identity OAuth2 token can't reach. The user grants access at the `login` URL
 //! and we poll until NC returns `{ server, loginName, appPassword }`.
 //!
-//! https://docs.nextcloud.com/server/latest/developer_manual/client_apis/LoginFlow/
+//! <https://docs.nextcloud.com/server/latest/developer_manual/client_apis/LoginFlow/>
 
 use anyhow::{Context, Result, anyhow};
 use base64::Engine;

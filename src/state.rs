@@ -125,7 +125,7 @@ impl AppState {
     /// Take the pending warm request, if any, clearing it — one preload per ask.
     ///
     /// Handing one out also starts the silence window: the worker is about to
-    /// spend up to [`PRELOAD_GRACE`] loading weights and building the day's
+    /// spend up to `PRELOAD_GRACE` loading weights and building the day's
     /// prefix cache, and will not poll while it does.
     pub fn take_warm(&self) -> Option<String> {
         let system = self
