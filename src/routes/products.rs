@@ -584,8 +584,16 @@ pub async fn find_at_shop(
     };
     let hits = asda::search(&app.http, query, 15).await?;
     remember_hits(&app.pool, &hits).await;
+    let mut hit = asda::match_barcode(hits, &barcode);
+    if hit.is_none()
+        && let Some(second) = asda::fallback_query(query, product.brand.as_deref())
+    {
+        let hits = asda::search(&app.http, &second, 15).await?;
+        remember_hits(&app.pool, &hits).await;
+        hit = asda::match_barcode(hits, &barcode);
+    }
     Ok(Json(ShopFind {
-        hit: asda::match_barcode(hits, &barcode),
+        hit,
         from_cache: false,
         searched: true,
     }))

@@ -264,3 +264,32 @@ fn never_matches_a_barcodeless_hit() {
     let hits = vec![hit("1", None, "Something")];
     assert!(asda::match_barcode(hits, &"5063089281581".parse::<Barcode>().unwrap()).is_none());
 }
+
+#[test]
+fn a_name_asda_ranks_badly_gets_a_short_second_query() {
+    // Measured against Asda's search: "Fusilli 100% durum wheat" returns 1,156
+    // hits matching "100%" and no fusilli; "Asda Fusilli" finds it.
+    assert_eq!(
+        asda::fallback_query("Fusilli 100% durum wheat", Some("Asda")).as_deref(),
+        Some("Asda Fusilli")
+    );
+    assert_eq!(
+        asda::fallback_query("Yoghurt", Some("Yeo Valley")).as_deref(),
+        Some("Yeo Valley Yoghurt")
+    );
+    // The first of several listed brands; brand words are not the product.
+    assert_eq!(
+        asda::fallback_query(
+            "Schwartz ITALIAN HERB SEASONING",
+            Some("Mccormick, Schwartz")
+        )
+        .as_deref(),
+        Some("Mccormick ITALIAN")
+    );
+}
+
+#[test]
+fn no_second_query_without_a_brand_or_a_word_left() {
+    assert_eq!(asda::fallback_query("Artichoke hearts", None), None);
+    assert_eq!(asda::fallback_query("Evian 500ml", Some("Evian")), None);
+}

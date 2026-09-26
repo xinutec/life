@@ -259,6 +259,34 @@ fn normalize(raw: RawHit, raw_value: serde_json::Value) -> Option<AsdaHit> {
     })
 }
 
+/// A second, shorter search for when the full name finds nothing: the first
+/// listed brand and the name's first word, skipping brand words and words with
+/// digits or `%`. Asda ranks long names badly ("Fusilli 100% durum wheat"
+/// matches only "100%"); measured on the catalogue, this recovers what a third
+/// or fourth query shape would. `None` without a brand or a word left.
+pub fn fallback_query(name: &str, brand: Option<&str>) -> Option<String> {
+    let brands = brand?;
+    let brand = brands.split(',').next()?.trim();
+    if brand.is_empty() {
+        return None;
+    }
+    let words = |s: &str| {
+        s.split(|c: char| !(c.is_alphanumeric() || c == '\'' || c == '&'))
+            .filter(|w| !w.is_empty())
+            .map(str::to_lowercase)
+            .collect::<Vec<_>>()
+    };
+    let brand_words = words(brands);
+    let head = name
+        .split(|c: char| !(c.is_alphanumeric() || c == '\'' || c == '&' || c == '%'))
+        .find(|w| {
+            !w.is_empty()
+                && !w.chars().any(|c| c.is_ascii_digit() || c == '%')
+                && !brand_words.contains(&w.to_lowercase())
+        })?;
+    Some(format!("{brand} {head}"))
+}
+
 /// The hit whose barcode is this product's, or `None`.
 ///
 /// Asda can only be searched by name, and its ranking is no identity (a search
