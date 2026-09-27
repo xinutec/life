@@ -271,8 +271,7 @@ describe('shopPrice', () => {
     expect(shopPrice(product())).toEqual<PriceInput>({
       amount_minor: 250,
       currency: 'GBP',
-      unit_amount_minor: null,
-      unit_measure: null,
+      unit_price: null,
     });
   });
 

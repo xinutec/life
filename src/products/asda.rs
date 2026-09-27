@@ -16,7 +16,7 @@ use ts_rs::TS;
 
 use super::ids::{Barcode, ExternalId};
 use super::nutrition::{Claim, DietaryFlag};
-use super::prices::{Currency, PriceInput, UnitMeasure};
+use super::prices::{Currency, PriceInput, UnitMeasure, UnitPrice};
 
 /// Algolia application id — also the request host (`{app}-dsn.algolia.net`).
 const APP_ID: &str = "8I6WSKCCNV";
@@ -195,8 +195,15 @@ fn price_input(r: &PriceRegion) -> Option<PriceInput> {
     Some(PriceInput {
         amount_minor: to_minor(amount)?,
         currency: Currency::gbp(),
-        unit_amount_minor: r.price_per_uom.filter(|p| *p > 0.0).and_then(to_minor),
-        unit_measure: r.price_per_uom_formatted.as_deref().and_then(unit_measure),
+        unit_price: r
+            .price_per_uom
+            .filter(|p| *p > 0.0)
+            .and_then(to_minor)
+            .zip(r.price_per_uom_formatted.as_deref().and_then(unit_measure))
+            .map(|(amount_minor, measure)| UnitPrice {
+                amount_minor,
+                measure,
+            }),
     })
 }
 

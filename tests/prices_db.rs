@@ -6,7 +6,7 @@ mod common;
 
 use life::db;
 use life::products::ids::{Barcode, ExternalId};
-use life::products::prices::{Currency, PriceInput, UnitMeasure};
+use life::products::prices::{Currency, PriceInput, UnitMeasure, UnitPrice};
 use life::products::repo;
 use life::products::source::Source;
 
@@ -14,8 +14,10 @@ fn gbp(amount_minor: i64, unit: Option<(i64, &str)>) -> PriceInput {
     PriceInput {
         amount_minor,
         currency: Currency::gbp(),
-        unit_amount_minor: unit.map(|(a, _)| a),
-        unit_measure: unit.and_then(|(_, m)| UnitMeasure::from_shop(m)),
+        unit_price: unit.map(|(amount_minor, m)| UnitPrice {
+            amount_minor,
+            measure: UnitMeasure::from_shop(m).expect("known measure"),
+        }),
     }
 }
 
@@ -96,8 +98,13 @@ async fn latest_price_per_shop_cheapest_first_with_history() {
     assert_eq!(prices.len(), 2, "one latest price per shop");
     assert_eq!(prices[0].source, Source::Asda); // cheapest first
     assert_eq!(prices[0].amount_minor, 357);
-    assert_eq!(prices[0].unit_amount_minor, Some(892));
-    assert_eq!(prices[0].unit_measure, Some(UnitMeasure::Kg));
+    assert_eq!(
+        prices[0].unit_price,
+        Some(UnitPrice {
+            amount_minor: 892,
+            measure: UnitMeasure::Kg
+        })
+    );
     assert_eq!(prices[1].source, Source::Waitrose);
     assert_eq!(prices[1].amount_minor, 380);
 

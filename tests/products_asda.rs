@@ -6,7 +6,7 @@
 use life::products::asda;
 use life::products::ids::Barcode;
 use life::products::nutrition::Claim;
-use life::products::prices::{Currency, UnitMeasure};
+use life::products::prices::{Currency, UnitMeasure, UnitPrice};
 
 // A real multi-query response: one product hit (Lurpak). IMAGE_ID is the EAN;
 // PRICES is region-keyed (EN/SC/…).
@@ -51,8 +51,13 @@ fn maps_a_real_response() {
     assert_eq!(price.currency, Currency::gbp());
     // 8.925 is stored as just-over-8.925 in f64, so round(*100) = 893 — which
     // also matches Asda's own displayed "£8.93/KG".
-    assert_eq!(price.unit_amount_minor, Some(893));
-    assert_eq!(price.unit_measure, Some(UnitMeasure::Kg));
+    assert_eq!(
+        price.unit_price,
+        Some(UnitPrice {
+            amount_minor: 893,
+            measure: UnitMeasure::Kg
+        })
+    );
     assert_eq!(
         hit.image_url.as_deref(),
         Some("https://asdagroceries.scene7.com/is/image/asdagroceries/5740900404465?$ProdList$")

@@ -1,3 +1,5 @@
+import { UnitPrice } from '../models';
+
 /** Minor units per major unit for the currencies this app takes. GBP, and the
  *  two-decimal majority, are the only cases here; a zero-decimal currency (JPY)
  *  would need this to become a lookup rather than a constant. */
@@ -37,6 +39,11 @@ export function fromMinorUnits(minor: number): string {
   const major = Math.floor(abs / MINOR_PER_MAJOR);
   const rest = abs % MINOR_PER_MAJOR;
   return `${sign}${major}.${String(rest).padStart(DECIMALS, '0')}`;
+}
+
+/** A per-unit rate in the shops' own form: "£8.92/KG". */
+export function formatUnitPrice(u: UnitPrice, currency: string): string {
+  return `${formatMoney(u.amount_minor, currency)}/${u.measure}`;
 }
 
 /** Minor units with their currency: "£3.30", or "3.30 EUR" for any other. */

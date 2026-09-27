@@ -6,7 +6,7 @@ use sqlx::MySqlPool;
 
 use super::types::{NewPurchase, Purchase};
 use crate::products::ids::ProductId;
-use crate::products::prices::UnitMeasure;
+use crate::products::prices::{UnitMeasure, UnitPrice};
 
 /// What the buy-list row already knows about the thing being bought. Passed
 /// separately from [`NewPurchase`] because none of it is typed by the person —
@@ -147,11 +147,7 @@ pub async fn restore(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
 
 /// What a purchase works out to per kg / litre / item, the scale shops print
 /// ("£8.00/KG"). Uses `packsize::parse` so there is one unit table.
-fn per_unit(
-    amount_minor: i64,
-    quantity: Option<f64>,
-    unit: Option<&str>,
-) -> Option<(i64, UnitMeasure)> {
+fn per_unit(amount_minor: i64, quantity: Option<f64>, unit: Option<&str>) -> Option<UnitPrice> {
     let (q, u) = (quantity?, unit?);
     let pack = crate::products::packsize::parse(&format!("{q}{u}"))?;
     // parse() guarantees a finite value greater than zero, so this cannot divide
@@ -173,7 +169,10 @@ fn per_unit(
         clippy::cast_possible_truncation,
         reason = "guarded above: finite and within 0..=MAX_PENCE, which i64 holds exactly"
     )]
-    Some((rate as i64, measure))
+    Some(UnitPrice {
+        amount_minor: rate as i64,
+        measure,
+    })
 }
 
 /// Everything this person has paid for a thing, newest first.
@@ -210,10 +209,7 @@ pub async fn history(
 
 /// Fill in everything DERIVED from the stored columns, for both readers.
 fn with_derived(mut p: Purchase) -> Purchase {
-    if let Some((amount, measure)) = per_unit(p.amount_minor, p.quantity, p.unit.as_deref()) {
-        p.unit_amount_minor = Some(amount);
-        p.unit_measure = Some(measure);
-    }
+    p.unit_price = per_unit(p.amount_minor, p.quantity, p.unit.as_deref());
     // Calendar months, not 30-day blocks: a two-year warranty on something
     // bought on 3 March runs to 3 March, which is what the receipt means and
     // what somebody would check it against. `checked_add_months` also clamps a

@@ -39,6 +39,7 @@ export type { SeenListing } from './generated/SeenListing';
 export type { TelemetryEvent } from './generated/TelemetryEvent';
 export type { PriceInput } from './generated/PriceInput';
 export type { ShopPrice } from './generated/ShopPrice';
+export type { UnitPrice } from './generated/UnitPrice';
 export type { Choice } from './generated/Choice';
 export type { ReconcileField } from './generated/ReconcileField';
 export type { FieldChoice } from './generated/FieldChoice';

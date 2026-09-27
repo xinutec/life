@@ -51,8 +51,7 @@ const DETAIL: ProductDetail = {
       external_id: '271105',
       amount_minor: 450,
       currency: 'GBP',
-      unit_amount_minor: null,
-      unit_measure: null,
+      unit_price: null,
       observed_at: Date.now(),
     },
     {
@@ -60,8 +59,7 @@ const DETAIL: ProductDetail = {
       external_id: '9346702',
       amount_minor: 475,
       currency: 'GBP',
-      unit_amount_minor: 800,
-      unit_measure: 'KG',
+      unit_price: { amount_minor: 800, measure: 'KG' },
       observed_at: Date.now() - 2 * 86_400_000,
     },
   ],
@@ -203,8 +201,7 @@ describe('ProductPage', () => {
           external_id: '5511122',
           amount_minor: 399,
           currency: 'GBP',
-          unit_amount_minor: null,
-          unit_measure: null,
+          unit_price: null,
           observed_at: Date.now(),
         },
       ],
@@ -281,8 +278,7 @@ describe('ProductPage', () => {
       price: {
         amount_minor: 800,
         currency: 'GBP',
-        unit_amount_minor: null,
-        unit_measure: null,
+        unit_price: null,
       },
     });
     const { page, api } = setup(UNLISTED, { hit: confirmed, from_cache: false, searched: true });
@@ -494,8 +490,7 @@ describe('ProductPage', () => {
       price: {
         amount_minor: 265,
         currency: 'GBP',
-        unit_amount_minor: null,
-        unit_measure: null,
+        unit_price: null,
       },
     });
     expect(api.syncListing).not.toHaveBeenCalled(); // the server can't fetch it
@@ -897,8 +892,7 @@ describe('ProductPage', () => {
           currency: 'GBP',
           quantity: 594,
           unit: 'g',
-          unit_amount_minor: 715,
-          unit_measure: 'KG',
+          unit_price: { amount_minor: 715, measure: 'KG' },
           bought_at: '2026-08-30T10:00:00Z',
           warranty_months: null,
           warranty_until: null,

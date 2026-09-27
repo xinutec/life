@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::products::ids::ProductId;
-use crate::products::prices::{Currency, UnitMeasure};
+use crate::products::prices::{Currency, UnitPrice};
 
 /// What the client says when a buy-list row is marked bought AND the price was
 /// noted. Every field the person has to type is here; everything else (what it
@@ -59,15 +59,11 @@ pub struct Purchase {
     pub currency: Currency,
     pub quantity: Option<f64>,
     pub unit: Option<String>,
-    /// Derived on read, never stored: minor units per kg / litre / item, rounded.
-    /// A rate for comparing packs, not an amount paid. `None` when the pack or
-    /// its unit is unknown to `packsize::parse`.
-    #[sqlx(default)]
-    #[ts(type = "number | null")]
-    pub unit_amount_minor: Option<i64>,
-    /// The scale `unit_amount_minor` is quoted per, as the shop rows read.
-    #[sqlx(default)]
-    pub unit_measure: Option<UnitMeasure>,
+    /// Derived on read, never stored: per kg / litre / item, rounded. A rate for
+    /// comparing packs, not an amount paid. `None` when the pack or its unit is
+    /// unknown to `packsize::parse`.
+    #[sqlx(skip)]
+    pub unit_price: Option<UnitPrice>,
     #[ts(type = "string")]
     pub bought_at: DateTime<Utc>,
     /// Months of cover from `bought_at`, as recorded. `None` is "not recorded",

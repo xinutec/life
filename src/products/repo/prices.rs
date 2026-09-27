@@ -5,7 +5,7 @@ use chrono::NaiveDateTime;
 use sqlx::MySqlPool;
 
 use crate::products::ids::{ExternalId, ListingId, ProductId};
-use crate::products::prices::{Currency, PriceInput, ShopPrice, UnitMeasure};
+use crate::products::prices::{Currency, PriceInput, ShopPrice, UnitMeasure, UnitPrice};
 use crate::products::source::Source;
 
 /// Append a price observation to a listing's history. Prices are a time series —
@@ -24,8 +24,8 @@ pub async fn record_price(
     .bind(listing_id)
     .bind(price.amount_minor)
     .bind(&price.currency)
-    .bind(price.unit_amount_minor)
-    .bind(price.unit_measure)
+    .bind(price.unit_price.map(|u| u.amount_minor))
+    .bind(price.unit_price.map(|u| u.measure))
     .execute(pool)
     .await?;
     Ok(())
@@ -73,8 +73,13 @@ pub async fn latest_prices(pool: &MySqlPool, product_id: ProductId) -> Result<Ve
             external_id: r.external_id,
             amount_minor: r.amount_minor,
             currency: r.currency,
-            unit_amount_minor: r.unit_amount_minor,
-            unit_measure: r.unit_measure,
+            unit_price: r
+                .unit_amount_minor
+                .zip(r.unit_measure)
+                .map(|(amount_minor, measure)| UnitPrice {
+                    amount_minor,
+                    measure,
+                }),
             observed_at: r.observed_at.and_utc().timestamp_millis(),
         })
         .collect())

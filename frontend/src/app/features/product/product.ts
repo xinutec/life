@@ -22,7 +22,7 @@ import { ProductImages } from '../../product-image';
 import { ProductShops } from './product-shops';
 import { Feedback } from '../../shared/feedback';
 import { ListState } from '../../shared/list-state';
-import { formatMoney } from '../../shared/money';
+import { formatMoney, formatUnitPrice } from '../../shared/money';
 import { sourceLabel } from '../../shared/sources';
 import { Shops } from '../../shop';
 import { ASDA_FACTS } from '../../shops/asda';
@@ -441,9 +441,7 @@ export class ProductPage {
       // reason the pack is captured; the pack itself only says what the rate is
       // of. Absent when the unit could not be read — see purchases::repo.
       pack: [
-        p.unit_amount_minor != null && p.unit_measure
-          ? `${formatMoney(p.unit_amount_minor, p.currency)}/${p.unit_measure}`
-          : '',
+        p.unit_price ? formatUnitPrice(p.unit_price, p.currency) : '',
         p.quantity != null ? `${p.quantity}${p.unit ? ' ' + p.unit : ''}` : '',
       ]
         .filter((x) => x)
@@ -475,10 +473,7 @@ export class ProductPage {
         source: p.source,
         url: listing.get(key)?.url ?? null,
         price: formatMoney(p.amount_minor, p.currency),
-        perUnit:
-          p.unit_amount_minor != null && p.unit_measure
-            ? `${formatMoney(p.unit_amount_minor, p.currency)}/${p.unit_measure}`
-            : null,
+        perUnit: p.unit_price ? formatUnitPrice(p.unit_price, p.currency) : null,
         observed: ago(p.observed_at),
       };
     });

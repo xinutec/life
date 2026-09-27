@@ -2,7 +2,7 @@
 import type { Currency } from "./Currency";
 import type { ExternalId } from "./ExternalId";
 import type { Source } from "./Source";
-import type { UnitMeasure } from "./UnitMeasure";
+import type { UnitPrice } from "./UnitPrice";
 
 /**
  * What one shop currently charges for a product — the `prices` part of the
@@ -21,7 +21,7 @@ source: Source,
 /**
  * Source-scoped id of the listing this price came from.
  */
-external_id: ExternalId, amount_minor: number, currency: Currency, unit_amount_minor: number | null, unit_measure: UnitMeasure | null, 
+external_id: ExternalId, amount_minor: number, currency: Currency, unit_price: UnitPrice | null, 
 /**
  * When observed, epoch milliseconds (UTC).
  */

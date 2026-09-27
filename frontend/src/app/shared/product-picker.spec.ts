@@ -196,8 +196,7 @@ describe('ProductPicker', () => {
       price: {
         amount_minor: 357,
         currency: 'GBP',
-        unit_amount_minor: 892,
-        unit_measure: 'KG',
+        unit_price: { amount_minor: 892, measure: 'KG' },
       },
       image_url: 'https://asdagroceries.scene7.com/is/image/asdagroceries/5740900404465?$ProdList$',
       dietary: [],
@@ -299,8 +298,7 @@ describe('ProductPicker', () => {
         price: {
           amount_minor: 265,
           currency: 'GBP',
-          unit_amount_minor: null,
-          unit_measure: null,
+          unit_price: null,
         } satisfies PriceInput,
       }),
     );

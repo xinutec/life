@@ -107,8 +107,7 @@ fn price(pence: i64) -> PriceInput {
     PriceInput {
         amount_minor: pence,
         currency: Currency::gbp(),
-        unit_amount_minor: None,
-        unit_measure: None,
+        unit_price: None,
     }
 }
 

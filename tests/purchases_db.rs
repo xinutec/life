@@ -5,7 +5,7 @@ mod common;
 
 use life::db;
 use life::products::ids::ProductId;
-use life::products::prices::{Currency, UnitMeasure};
+use life::products::prices::Currency;
 use life::purchases::repo::{self, BoughtItem};
 use life::purchases::types::NewPurchase;
 
@@ -279,8 +279,8 @@ async fn the_rate_is_quoted_per_kg_and_refused_when_the_pack_cannot_be_read() {
             .expect("history");
         let p = &got[0];
         assert_eq!(
-            (p.unit_amount_minor, p.unit_measure.map(UnitMeasure::as_str)),
-            (want.map(|w| w.0), want.map(|w| w.1)),
+            p.unit_price.map(|u| (u.amount_minor, u.measure.as_str())),
+            want,
             "case {i}: {quantity:?} {unit:?} at {amount_minor}"
         );
     }
@@ -339,11 +339,10 @@ async fn a_hand_typed_row_is_reachable_by_its_item_and_by_nothing_else() {
     // 250p for 2 l -> £1.25/L. The rate must be filled the same way both
     // readers do it, or the two screens disagree about the same purchase.
     assert_eq!(
-        (
-            by_item[0].unit_amount_minor,
-            by_item[0].unit_measure.map(UnitMeasure::as_str)
-        ),
-        (Some(125), Some("L"))
+        by_item[0]
+            .unit_price
+            .map(|u| (u.amount_minor, u.measure.as_str())),
+        Some((125, "L"))
     );
 
     // The spending record outlives the thing it bought.

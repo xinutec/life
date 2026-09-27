@@ -34,6 +34,17 @@ impl UnitMeasure {
     }
 }
 
+/// A price per unit of measure, for comparing packs: 892 per KG. The two halves
+/// travel together because either alone says nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct UnitPrice {
+    /// Minor units per `measure`.
+    #[ts(type = "number")]
+    pub amount_minor: i64,
+    pub measure: UnitMeasure,
+}
+
 /// An ISO 4217 code, checked once where it arrives: three letters, upper case.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, TS)]
 #[ts(export)]
@@ -81,11 +92,8 @@ pub struct PriceInput {
     #[ts(type = "number")]
     pub amount_minor: i64,
     pub currency: Currency,
-    /// Price per unit of measure (minor units) + the measure, for fair
-    /// cross-pack comparison. e.g. 892 + "KG".
-    #[ts(type = "number | null")]
-    pub unit_amount_minor: Option<i64>,
-    pub unit_measure: Option<UnitMeasure>,
+    /// For fair cross-pack comparison, when the shop quotes one.
+    pub unit_price: Option<UnitPrice>,
 }
 
 /// What one shop currently charges for a product — the `prices` part of the
@@ -105,9 +113,7 @@ pub struct ShopPrice {
     #[ts(type = "number")]
     pub amount_minor: i64,
     pub currency: Currency,
-    #[ts(type = "number | null")]
-    pub unit_amount_minor: Option<i64>,
-    pub unit_measure: Option<UnitMeasure>,
+    pub unit_price: Option<UnitPrice>,
     /// When observed, epoch milliseconds (UTC).
     #[ts(type = "number")]
     pub observed_at: i64,

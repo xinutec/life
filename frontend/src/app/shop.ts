@@ -71,8 +71,7 @@ export function shopPrice(product: ShopProduct): PriceInput | null {
     currency: p.currencyCode,
     // The SUMMARY payload's per-unit price sits behind a different view; until
     // we read it, saying nothing beats guessing a measure.
-    unit_amount_minor: null,
-    unit_measure: null,
+    unit_price: null,
     // One price, no nations — unlike Asda, which quotes EN/NI/SC/WA separately.
   };
 }
