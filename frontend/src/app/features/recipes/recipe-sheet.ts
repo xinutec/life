@@ -2,10 +2,11 @@ import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
-import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
+import { Dialogs } from '@xinutec/ui-scaffold';
 
 import { onlineHint } from '../../shared/api-error';
 import { Feedback } from '../../shared/feedback';
@@ -53,7 +54,7 @@ export class RecipeSheet {
   private ref = inject(MatBottomSheetRef<RecipeSheet, boolean>);
   private data = inject<RecipeSheetData | null>(MAT_BOTTOM_SHEET_DATA, { optional: true });
   private api = inject(LifeApi);
-  private dialog = inject(MatDialog);
+  private dialog = inject(Dialogs);
   private feedback = inject(Feedback);
 
   /** null = creating; a number = editing that recipe (PUT). */

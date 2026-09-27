@@ -1,6 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { MatBottomSheet } from '@angular/material/bottom-sheet';
+import { Sheets } from '@xinutec/ui-scaffold';
 import { of } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -39,7 +39,7 @@ describe('Wellbeing history', () => {
       imports: [Wellbeing],
       providers: [{ provide: WellbeingStore, useValue: store }],
     });
-    TestBed.overrideProvider(MatBottomSheet, { useValue: sheet });
+    TestBed.overrideProvider(Sheets, { useValue: sheet });
     return { fixture: TestBed.createComponent(Wellbeing), sheet };
   }
 

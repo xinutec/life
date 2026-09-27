@@ -5,6 +5,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatListModule } from '@angular/material/list';
+import { scaffoldTitle } from '@xinutec/ui-scaffold';
 
 import { BUILD_INFO } from '../../build-info';
 import { LifeApi } from '../../life-api';
@@ -58,6 +59,7 @@ export class Settings {
   protected readonly ncUrl = signal<string | null>(null);
 
   constructor() {
+    scaffoldTitle(() => 'Settings');
     // Read the link's state on arrival rather than assuming "not connected":
     // the card's whole job is to say which it is, and defaulting to the wrong
     // one would invite a re-link that replaces a working credential.

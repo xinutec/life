@@ -1,12 +1,13 @@
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { MatBottomSheet, MatBottomSheetModule } from '@angular/material/bottom-sheet';
+import { MatBottomSheetModule } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
 import { MatMenuModule } from '@angular/material/menu';
 import { Router } from '@angular/router';
+import { Sheets } from '@xinutec/ui-scaffold';
 import { catchError, forkJoin, map, of, tap } from 'rxjs';
 
 import { Feedback } from '../../shared/feedback';
@@ -40,7 +41,7 @@ import { TripSheet } from './trip-sheet';
 export class Shopping {
   private store = inject(ShoppingStore);
   private api = inject(LifeApi);
-  private sheet = inject(MatBottomSheet);
+  private sheet = inject(Sheets);
   private feedback = inject(Feedback);
   private router = inject(Router);
 
@@ -247,7 +248,7 @@ export class Shopping {
     if (done.length === 0) return;
     const rows: BuyRow[] = done.map((it) => ({ id: it.id!, name: it.name }));
     this.sheet
-      .open(BuySheet, { data: rows })
+      .open<BuySheet, BuyRow[], BuyPrices | 'skip'>(BuySheet, { data: rows })
       .afterDismissed()
       .subscribe((res: BuyPrices | 'skip' | undefined) => {
         // Dismissed without choosing: buy nothing. Closing a sheet you opened by

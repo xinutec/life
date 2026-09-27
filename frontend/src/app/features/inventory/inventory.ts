@@ -1,9 +1,10 @@
 import { Component, computed, inject } from '@angular/core';
-import { MatBottomSheet, MatBottomSheetModule } from '@angular/material/bottom-sheet';
+import { MatBottomSheetModule } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
 import { MatMenuModule } from '@angular/material/menu';
+import { Sheets } from '@xinutec/ui-scaffold';
 
 import { amount } from '../../shared/amount';
 import { onlineHint } from '../../shared/api-error';
@@ -35,7 +36,7 @@ import { UseSheet, UseSheetData } from './use-sheet';
 })
 export class Inventory {
   private api = inject(LifeApi);
-  private sheet = inject(MatBottomSheet);
+  private sheet = inject(Sheets);
   private feedback = inject(Feedback);
   private itemsStore = inject(ItemsStore);
   private placesStore = inject(LocationsStore);

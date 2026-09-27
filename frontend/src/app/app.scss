@@ -27,25 +27,20 @@ $topbar-h: 56px;
 $bottomnav-h: 60px;
 $rail-w: 220px;
 
-// mat-toolbar provides the surface + type; this block only pins it and adds
-// the edge-to-edge safe-area handling (viewport-fit=cover): grow the bar by
-// the status-bar/notch inset and pad its content below it. Fixed to BOTH
-// horizontal edges — required by the Android WebView (see .fab-anchor note
-// in styles.scss).
+// The scaffold's bar, pinned: the surface and height through Material's own
+// tokens, plus the edge-to-edge safe-area handling (viewport-fit=cover): pad by
+// the status-bar/notch inset. Fixed to BOTH horizontal edges — required by the
+// Android WebView (see .fab-anchor note in styles.scss).
 .topbar {
   --mat-toolbar-container-background-color: var(--mat-sys-surface-container);
+  --mat-toolbar-standard-height: #{$topbar-h};
+  --mat-toolbar-mobile-height: #{$topbar-h};
   position: fixed;
   inset: 0 0 auto 0;
-  box-sizing: border-box;
-  height: calc(#{$topbar-h} + env(safe-area-inset-top));
-  gap: 0.25rem;
-  padding: env(safe-area-inset-top) 0.5rem 0 1rem;
+  padding-top: env(safe-area-inset-top);
+  background: var(--mat-sys-surface-container);
   border-bottom: 1px solid var(--mat-sys-outline-variant);
   z-index: 10;
-}
-
-.brand {
-  font: var(--mat-sys-title-large);
 }
 
 // Non-blocking "refreshing" cue: a thin line pinned just under the top bar while
@@ -58,10 +53,6 @@ $rail-w: 220px;
   top: calc(#{$topbar-h} + env(safe-area-inset-top));
   inset-inline: 0;
   z-index: 9;
-}
-
-.spacer {
-  flex: 1;
 }
 
 // Persistent sync-health indicator — only rendered when NOT synced. Offline is

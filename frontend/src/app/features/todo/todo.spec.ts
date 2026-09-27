@@ -1,6 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { MatBottomSheet } from '@angular/material/bottom-sheet';
+import { Sheets } from '@xinutec/ui-scaffold';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { BehaviorSubject, Subject, of } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
@@ -65,9 +65,7 @@ describe('Todo', () => {
         { provide: MatSnackBar, useValue: snack },
       ],
     });
-    // Todo imports MatBottomSheetModule, which re-provides MatBottomSheet at the
-    // component injector — overrideProvider forces our stub everywhere.
-    TestBed.overrideProvider(MatBottomSheet, { useValue: sheet });
+    TestBed.overrideProvider(Sheets, { useValue: sheet });
     return { fixture: TestBed.createComponent(Todo), store, graph, sheet, action$, dismissed$ };
   }
 

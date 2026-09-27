@@ -1,12 +1,13 @@
 import { Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
-import { MatBottomSheet, MatBottomSheetModule } from '@angular/material/bottom-sheet';
+import { MatBottomSheetModule } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
+import { Sheets } from '@xinutec/ui-scaffold';
 
 import { map } from 'rxjs';
 
@@ -54,7 +55,7 @@ export class Today {
   private shopping = inject(ShoppingStore);
   private todos = inject(TodoStore);
   private graph = inject(TodoGraph);
-  private sheet = inject(MatBottomSheet);
+  private sheet = inject(Sheets);
   private feedback = inject(Feedback);
   private itemsStore = inject(ItemsStore);
   private binsStore = inject(BinsStore);

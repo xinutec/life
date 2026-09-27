@@ -1,9 +1,10 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { MatBottomSheet, MatBottomSheetModule } from '@angular/material/bottom-sheet';
+import { MatBottomSheetModule } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
+import { Sheets } from '@xinutec/ui-scaffold';
 
 import { amount } from '../../shared/amount';
 import { onlineHint } from '../../shared/api-error';
@@ -30,7 +31,7 @@ import { RecipeSheet, RecipeSheetData } from './recipe-sheet';
 })
 export class Recipes {
   private api = inject(LifeApi);
-  private sheet = inject(MatBottomSheet);
+  private sheet = inject(Sheets);
   private feedback = inject(Feedback);
   private recipesStore = inject(RecipesStore);
   private cookableStore = inject(CookableStore);

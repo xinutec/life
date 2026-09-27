@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
-import { Router } from '@angular/router';
+import { Sheets } from '@xinutec/ui-scaffold';
 import { of, throwError } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -33,7 +33,7 @@ describe('TripSheet', () => {
     );
     const feedback = { notify: vi.fn(), error: vi.fn(), undo: vi.fn() };
     const ref = { dismiss: vi.fn() };
-    const router = { navigate: vi.fn().mockResolvedValue(true) };
+    const sheets = { dismissTo: vi.fn().mockResolvedValue(true) };
     TestBed.configureTestingModule({
       imports: [TripSheet],
       providers: [
@@ -42,7 +42,7 @@ describe('TripSheet', () => {
         { provide: MatBottomSheetRef, useValue: ref },
         { provide: MAT_BOTTOM_SHEET_DATA, useValue: opts.shop ? { shop: opts.shop } : null },
         { provide: Feedback, useValue: feedback },
-        { provide: Router, useValue: router },
+        { provide: Sheets, useValue: sheets },
       ],
     });
     return {
@@ -50,7 +50,7 @@ describe('TripSheet', () => {
       planShopTrip,
       feedback,
       ref,
-      router,
+      sheets,
     };
   }
 
@@ -120,10 +120,10 @@ describe('TripSheet', () => {
   });
 
   it('“Connect it in Settings” closes the sheet and goes there', () => {
-    const { fixture, ref, router } = setup({ shop: 'Asda' });
+    const { fixture, ref, sheets } = setup({ shop: 'Asda' });
     fixture.componentInstance.openSettings();
-    expect(ref.dismiss).toHaveBeenCalled();
-    expect(router.navigate).toHaveBeenCalledWith(['/settings']);
+    // In the sheet's history entry's place, so back from Settings skips it.
+    expect(sheets.dismissTo).toHaveBeenCalledWith(ref, ['/settings']);
   });
 
   it('offline says so, and keeps the sheet open to try again', () => {

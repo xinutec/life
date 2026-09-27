@@ -3,10 +3,10 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
-import { MatDialog } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
+import { Dialogs } from '@xinutec/ui-scaffold';
 
 import { EMOTION_NODES, emotionColor, emotionDesc, emotionLabel } from '../../shared/emotion-wheel';
 import { LifeApi } from '../../life-api';
@@ -24,7 +24,7 @@ import {
   toTenths,
 } from '../../shared/wellbeing-checkin';
 import { WellbeingDoc, WellbeingStore } from '../../sync/wellbeing-store';
-import { EmotionPicker } from './emotion-picker';
+import { EmotionPicker, EmotionPickerData } from './emotion-picker';
 
 /** Edit one check-in: change the score, add/edit a note, adjust the time (to
  *  backdate "this morning"), or delete it. */
@@ -46,7 +46,7 @@ export class WellbeingEntry implements OnDestroy {
   private data = inject<{ ulid: string }>(MAT_BOTTOM_SHEET_DATA);
   private store = inject(WellbeingStore);
   private feedback = inject(Feedback);
-  private dialog = inject(MatDialog);
+  private dialog = inject(Dialogs);
   private api = inject(LifeApi);
 
   private deleting = false;
@@ -154,15 +154,18 @@ export class WellbeingEntry implements OnDestroy {
   /** Open the feelings-wheel picker seeded with the current set; on Done, store
    *  the new selection (Cancel returns undefined and leaves it untouched). */
   editEmotions(): void {
-    const ref = this.dialog.open(EmotionPicker, {
-      data: { selected: [...(this.entry()?.emotions ?? [])], ulid: this.ulid, note: this.note() },
-      panelClass: 'emotion-pane',
-      width: '100%',
-      maxWidth: '100vw',
-      height: '100%',
-      maxHeight: '100%',
-      autoFocus: false,
-    });
+    const ref = this.dialog.open<EmotionPicker, EmotionPickerData, string[] | undefined>(
+      EmotionPicker,
+      {
+        data: { selected: [...(this.entry()?.emotions ?? [])], ulid: this.ulid, note: this.note() },
+        panelClass: 'emotion-pane',
+        width: '100%',
+        maxWidth: '100vw',
+        height: '100%',
+        maxHeight: '100%',
+        autoFocus: false,
+      },
+    );
     ref.afterClosed().subscribe((next: string[] | undefined) => {
       if (next) void this.store.patch(this.ulid, { emotions: next });
     });

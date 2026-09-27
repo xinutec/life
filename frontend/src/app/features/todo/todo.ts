@@ -1,12 +1,13 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { MatBottomSheet, MatBottomSheetModule } from '@angular/material/bottom-sheet';
+import { MatBottomSheetModule } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
+import { Sheets } from '@xinutec/ui-scaffold';
 import { map } from 'rxjs';
 
 import { Feedback } from '../../shared/feedback';
@@ -35,7 +36,7 @@ import { PRIORITIES, TODO_TYPES, prioRank } from './todo-meta';
 })
 export class Todo {
   private store = inject(TodoStore);
-  private sheet = inject(MatBottomSheet);
+  private sheet = inject(Sheets);
   private feedback = inject(Feedback);
   readonly graph = inject(TodoGraph);
 

@@ -1,14 +1,14 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
-import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { Dialogs, Sheets } from '@xinutec/ui-scaffold';
 
 import { isNotFound } from '../../shared/api-error';
 import { ITEM_CATEGORIES, ITEM_CATEGORY_LABEL, ItemCategory } from '../../models';
@@ -39,12 +39,12 @@ import { canonicalBarcode } from '../../shared/barcode';
 })
 export class ShoppingItemSheet {
   private ref = inject(MatBottomSheetRef<ShoppingItemSheet>);
+  private sheets = inject(Sheets);
   private data = inject<{ ulid?: string } | null>(MAT_BOTTOM_SHEET_DATA, { optional: true });
   private store = inject(ShoppingStore);
   private api = inject(LifeApi);
-  private dialog = inject(MatDialog);
+  private dialog = inject(Dialogs);
   private feedback = inject(Feedback);
-  private router = inject(Router);
 
   private items = toSignal(this.store.items$, { initialValue: [] as ShoppingDoc[] });
 
@@ -199,16 +199,14 @@ export class ShoppingItemSheet {
   viewProduct(): void {
     const pid = this.productId();
     if (pid != null) {
-      this.ref.dismiss();
-      void this.router.navigate(['/product', pid]);
+      void this.sheets.dismissTo(this.ref, ['/product', pid]);
       return;
     }
     const barcode = this.barcode().trim();
     if (!barcode) return;
     this.api.lookupProduct(barcode).subscribe({
       next: (p) => {
-        this.ref.dismiss();
-        void this.router.navigate(['/product', p.id]);
+        void this.sheets.dismissTo(this.ref, ['/product', p.id]);
       },
       error: (e: unknown) => {
         this.feedback.error(

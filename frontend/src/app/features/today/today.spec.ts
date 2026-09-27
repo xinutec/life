@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { MatBottomSheet } from '@angular/material/bottom-sheet';
+import { Sheets } from '@xinutec/ui-scaffold';
 import { of } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -56,7 +56,7 @@ describe('Today', () => {
         { provide: ShoppingStore, useValue: shopping },
         { provide: TodoStore, useValue: todoStore },
         { provide: TodoGraph, useValue: graph },
-        { provide: MatBottomSheet, useValue: sheet },
+        { provide: Sheets, useValue: sheet },
         { provide: Feedback, useValue: { undo: vi.fn() } },
       ],
     });

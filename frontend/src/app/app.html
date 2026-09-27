@@ -5,40 +5,19 @@
     <mat-progress-bar class="refresh-bar" mode="indeterminate" aria-label="Refreshing" />
   }
   <a class="skip-link" href="#main">Skip to content</a>
-  <mat-toolbar class="topbar">
-    <button
-      type="button"
-      mat-icon-button
-      [matMenuTriggerFor]="moreMenu"
-      [matBadge]="alerts.conflictCount()"
-      [matBadgeHidden]="alerts.conflictCount() === 0"
-      matBadgeColor="warn"
-      matBadgeSize="small"
-      [attr.aria-label]="
-        alerts.conflictCount() > 0
-          ? 'Menu — ' + alerts.conflictCount() + ' sync conflict(s) need attention'
-          : 'Menu'
-      "
-    >
-      <mat-icon>menu</mat-icon>
-    </button>
-    <mat-menu #moreMenu="matMenu">
-      <button mat-menu-item (click)="scanProduct()">
-        <mat-icon>qr_code_scanner</mat-icon>
-        <span>Scan a product</span>
-      </button>
-      @for (m of more; track m.path) {
-        <a mat-menu-item [routerLink]="m.path">
-          <mat-icon>{{ m.icon }}</mat-icon>
-          <span>{{ m.label }}</span>
-          @if (m.path === '/conflicts' && alerts.conflictCount() > 0) {
-            <span class="count-badge alert menu-badge">{{ alerts.conflictCount() }}</span>
-          }
-        </a>
-      }
-    </mat-menu>
-    <span class="brand">Life</span>
-    <span class="spacer"></span>
+  <!-- The bar every fleet app draws (@xinutec/ui-scaffold): the menu and "Life"
+       on a main screen, an arrow and the screen's name on one drilled into. -->
+  <ui-scaffold
+    class="topbar"
+    title="Life"
+    [menu]="moreMenu"
+    [menuBadge]="alerts.conflictCount()"
+    [menuLabel]="
+      alerts.conflictCount() > 0
+        ? 'Menu — ' + alerts.conflictCount() + ' sync conflict(s) need attention'
+        : 'Menu'
+    "
+  >
     @if (sync.health() !== 'synced') {
       <span
         class="sync-status"
@@ -64,14 +43,29 @@
         <mat-icon>account_circle</mat-icon>
       }
     </button>
-    <mat-menu #acct="matMenu">
-      <div class="acct-name">{{ user.displayName }}</div>
-      <button mat-menu-item (click)="signOut()">
-        <mat-icon>logout</mat-icon>
-        <span>Sign out</span>
-      </button>
-    </mat-menu>
-  </mat-toolbar>
+  </ui-scaffold>
+  <mat-menu #moreMenu="matMenu">
+    <button mat-menu-item (click)="scanProduct()">
+      <mat-icon>qr_code_scanner</mat-icon>
+      <span>Scan a product</span>
+    </button>
+    @for (m of more; track m.path) {
+      <a mat-menu-item [routerLink]="m.path">
+        <mat-icon>{{ m.icon }}</mat-icon>
+        <span>{{ m.label }}</span>
+        @if (m.path === '/conflicts' && alerts.conflictCount() > 0) {
+          <span class="count-badge alert menu-badge">{{ alerts.conflictCount() }}</span>
+        }
+      </a>
+    }
+  </mat-menu>
+  <mat-menu #acct="matMenu">
+    <div class="acct-name">{{ user.displayName }}</div>
+    <button mat-menu-item (click)="signOut()">
+      <mat-icon>logout</mat-icon>
+      <span>Sign out</span>
+    </button>
+  </mat-menu>
 
   <main id="main" class="content" tabindex="-1">
     <router-outlet />

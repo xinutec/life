@@ -1,12 +1,12 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatListModule } from '@angular/material/list';
+import { Sheets } from '@xinutec/ui-scaffold';
 
 import { ExpiryInfo, expiryInfo } from '../../expiry';
 import { LifeApi } from '../../life-api';
@@ -41,7 +41,7 @@ type SortKey = 'name' | 'expiry';
   ],
 })
 export class Items {
-  private sheet = inject(MatBottomSheet);
+  private sheet = inject(Sheets);
   private api = inject(LifeApi);
   private feedback = inject(Feedback);
   private itemsStore = inject(ItemsStore);

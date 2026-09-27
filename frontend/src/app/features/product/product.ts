@@ -1,10 +1,10 @@
-import { Location } from '@angular/common';
 import { Component, computed, effect, inject, input, numberAttribute, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatRadioModule } from '@angular/material/radio';
+import { scaffoldTitle } from '@xinutec/ui-scaffold';
 
 import { LifeApi } from '../../life-api';
 import {
@@ -103,7 +103,6 @@ export class ProductPage {
   readonly id = input.required({ transform: numberAttribute });
 
   private api = inject(LifeApi);
-  private location = inject(Location);
   private feedback = inject(Feedback);
   private images = inject(ProductImages);
   private shops = inject(Shops);
@@ -116,6 +115,7 @@ export class ProductPage {
   readonly errorText = signal('');
 
   constructor() {
+    scaffoldTitle(() => 'Product');
     effect(() => this.load(this.id()));
   }
 
@@ -173,10 +173,6 @@ export class ProductPage {
     this.detail,
     () => this.reload(),
   );
-
-  back(): void {
-    this.location.back();
-  }
 
   // --- Our own name: a hand correction when every source is wrong ---
 

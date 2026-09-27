@@ -1,14 +1,14 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
-import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatSelectModule } from '@angular/material/select';
+import { Dialogs, Sheets } from '@xinutec/ui-scaffold';
 
 import { isNotFound, onlineHint } from '../../shared/api-error';
 import { Feedback } from '../../shared/feedback';
@@ -69,11 +69,11 @@ interface ItemForm {
 })
 export class ItemSheet {
   private ref = inject(MatBottomSheetRef<ItemSheet, boolean>);
+  private sheets = inject(Sheets);
   private data = inject<ItemSheetData>(MAT_BOTTOM_SHEET_DATA);
   private api = inject(LifeApi);
-  private dialog = inject(MatDialog);
+  private dialog = inject(Dialogs);
   private feedback = inject(Feedback);
-  private router = inject(Router);
 
   readonly categories = ITEM_CATEGORIES;
   /** Its display name — the picker shows what a category is called, not its key. */
@@ -252,16 +252,14 @@ export class ItemSheet {
   viewProduct(): void {
     const pid = this.form().product_id;
     if (pid != null) {
-      this.ref.dismiss();
-      void this.router.navigate(['/product', pid]);
+      void this.sheets.dismissTo(this.ref, ['/product', pid]);
       return;
     }
     const barcode = this.form().barcode?.trim();
     if (!barcode) return;
     this.api.lookupProduct(barcode).subscribe({
       next: (p) => {
-        this.ref.dismiss();
-        void this.router.navigate(['/product', p.id]);
+        void this.sheets.dismissTo(this.ref, ['/product', p.id]);
       },
       error: (e: unknown) => {
         this.feedback.error(

@@ -1,17 +1,6 @@
 // No page-level padding/max-width here: the app shell's `.content` owns the
 // page box (insets, max-width, and the bottom-nav clearance) for every screen.
 
-.head {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-
-  h1 {
-    margin: 0.5rem 0;
-    font: var(--mat-sys-title-large);
-  }
-}
-
 .hero {
   display: block;
   max-width: 100%;

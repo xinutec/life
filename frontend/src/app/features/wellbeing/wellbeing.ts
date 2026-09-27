@@ -10,10 +10,11 @@ import {
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { MatBottomSheet, MatBottomSheetModule } from '@angular/material/bottom-sheet';
+import { MatBottomSheetModule } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
+import { Sheets } from '@xinutec/ui-scaffold';
 import { map } from 'rxjs';
 
 import { ListState } from '../../shared/list-state';
@@ -101,7 +102,7 @@ function dayKey(d: Date): string {
 })
 export class Wellbeing {
   private store = inject(WellbeingStore);
-  private sheet = inject(MatBottomSheet);
+  private sheet = inject(Sheets);
 
   readonly items = toSignal(this.store.items$, { initialValue: [] as WellbeingDoc[] });
   readonly loaded = toSignal(this.store.items$.pipe(map(() => true)), { initialValue: false });

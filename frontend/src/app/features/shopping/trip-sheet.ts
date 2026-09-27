@@ -6,7 +6,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { Router } from '@angular/router';
+import { Sheets } from '@xinutec/ui-scaffold';
 
 import { classifyApiError } from '../../shared/api-error';
 import { Feedback } from '../../shared/feedback';
@@ -46,11 +46,11 @@ function nextHour(from: Date): Date {
 })
 export class TripSheet {
   private ref = inject(MatBottomSheetRef<TripSheet>);
+  private sheets = inject(Sheets);
   private data = inject<{ shop?: string } | null>(MAT_BOTTOM_SHEET_DATA, { optional: true });
   private store = inject(ShoppingStore);
   private api = inject(LifeApi);
   private feedback = inject(Feedback);
-  private router = inject(Router);
 
   private allItems = toSignal(this.store.items$, { initialValue: [] as ShoppingDoc[] });
 
@@ -111,8 +111,7 @@ export class TripSheet {
   }
 
   openSettings(): void {
-    this.ref.dismiss();
-    void this.router.navigate(['/settings']);
+    void this.sheets.dismissTo(this.ref, ['/settings']);
   }
 
   close(): void {

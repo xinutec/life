@@ -1,14 +1,12 @@
 import { Component, effect, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { MatBadgeModule } from '@angular/material/badge';
-import { MatDialog } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { Dialogs, Scaffold } from '@xinutec/ui-scaffold';
 
 import { assertNever, classifyApiError, isNotFound } from './shared/api-error';
 import { Alerts } from './shared/alerts';
@@ -89,13 +87,12 @@ function cacheMe(m: Me | null): void {
     RouterOutlet,
     RouterLink,
     RouterLinkActive,
-    MatBadgeModule,
     MatButtonModule,
     MatCardModule,
     MatIconModule,
     MatMenuModule,
     MatProgressBarModule,
-    MatToolbarModule,
+    Scaffold,
     MatTooltipModule,
   ],
 })
@@ -105,7 +102,7 @@ export class App {
   private swUpdates = inject(SwUpdates);
   private wellbeingReminder = inject(WellbeingReminder);
   private auth = inject(AuthState);
-  private dialog = inject(MatDialog);
+  private dialog = inject(Dialogs);
   private feedback = inject(Feedback);
   private router = inject(Router);
   protected readonly alerts = inject(Alerts);

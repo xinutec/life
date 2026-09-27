@@ -12,6 +12,9 @@ import {
   expectNoOccludedControls,
   expectNoStarvedText,
   expectViewportIsPhone,
+  expectUpInTheBar,
+  expectBackClosesOverlay,
+  expectRecoversFromMissingBundle,
 } from '@xinutec/ui-harness';
 
 /**
@@ -674,6 +677,45 @@ async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/sync/shopping*', sync(SHOPPING));
   await page.route('**/api/sync/wellbeing*', sync(WELLBEING));
 }
+
+// A service worker can serve an index naming a bundle a later deploy removed, and
+// the app's own recovery is inside that bundle (dev-lint #1803). The recovery is
+// inline in `src/index.html`; this is the check that it is there and works.
+test('a bundle a deploy removed reloads into the app, not a blank screen', async ({ page }) => {
+  await mockApi(page);
+  await expectRecoversFromMissingBundle(page, '/today', 'ui-scaffold h1');
+});
+
+// The product page has many parents, so its arrow returns to whichever opened it
+// (Android's "Up vs Back"), and to the cupboard only when nothing in the app did.
+test('the product page: the arrow is in the bar and goes back to its opener', async ({ page }) => {
+  await mockApi(page);
+  const linked = ITEMS.map((it) =>
+    it.name === 'Milk (semi-skimmed)' ? { ...it, product_id: 42 } : it,
+  );
+  await page.route('**/api/items*', (r) => r.fulfill({ json: linked }));
+  // Opened from All items, not the cupboard the route falls back to.
+  await page.goto('/items');
+  await page.getByText('Milk (semi-skimmed)').click();
+  await page.getByRole('button', { name: 'View product' }).click();
+  await page.waitForURL('**/product/42');
+  await expectUpInTheBar(page);
+  await page.locator('ui-scaffold mat-toolbar > button:first-child').click();
+  await page.waitForURL('**/items');
+
+  // Opened straight from a link: nothing in the app is behind it.
+  await page.goto('/product/42');
+  await expectUpInTheBar(page);
+  await page.locator('ui-scaffold mat-toolbar > button:first-child').click();
+  await page.waitForURL('**/inventory');
+});
+
+test('back closes an item sheet and stays on the screen', async ({ page }) => {
+  await mockApi(page);
+  await page.goto('/inventory');
+  await page.getByText('Milk (semi-skimmed)').waitFor();
+  await expectBackClosesOverlay(page, () => page.getByText('Milk (semi-skimmed)').click());
+});
 
 // The checker-checker: a device spread can silently override the viewport.
 test('the suite really runs at phone geometry', async ({ page }) => {

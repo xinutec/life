@@ -2,6 +2,7 @@ import { Component, computed, effect, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
+import { scaffoldTitle } from '@xinutec/ui-scaffold';
 
 import { Alerts } from '../../shared/alerts';
 import { Feedback } from '../../shared/feedback';
@@ -44,6 +45,7 @@ export class Conflicts {
   readonly busy = signal<ReadonlySet<number>>(new Set());
 
   constructor() {
+    scaffoldTitle(() => 'Sync conflicts');
     this.conflictsStore.refresh();
     // Keep the menu badge in step with what this screen shows — fires on load and
     // after each optimistic resolve, once there's a real count to reconcile.

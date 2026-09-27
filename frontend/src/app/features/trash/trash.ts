@@ -3,6 +3,7 @@ import { DatePipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
+import { scaffoldTitle } from '@xinutec/ui-scaffold';
 
 import { isNotFound } from '../../shared/api-error';
 import { Feedback } from '../../shared/feedback';
@@ -51,6 +52,7 @@ export class Trash {
   readonly busy = signal<ReadonlySet<string>>(new Set());
 
   constructor() {
+    scaffoldTitle(() => 'Recently deleted');
     this.reload();
   }
 
