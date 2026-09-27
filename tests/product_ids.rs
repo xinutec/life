@@ -6,7 +6,7 @@
 //! The traversal and query-parameter cases below are the ones that matter, since
 //! both types are spliced directly into outbound URLs.
 
-use life::products::ids::{Barcode, ExternalId};
+use life::products::ids::{Barcode, ExternalId, barcode_hint};
 
 #[test]
 fn a_barcode_is_one_to_fourteen_digits() {
@@ -14,11 +14,46 @@ fn a_barcode_is_one_to_fourteen_digits() {
         "5000112548167".parse::<Barcode>().unwrap().as_str(),
         "5000112548167"
     );
-    assert_eq!("7".parse::<Barcode>().unwrap().as_str(), "7");
+    assert_eq!("7".parse::<Barcode>().unwrap().as_str(), "00000007");
     assert_eq!(
         "12345678901234".parse::<Barcode>().unwrap().as_str(),
         "12345678901234"
     );
+}
+
+#[test]
+fn one_product_number_is_one_string_however_it_was_padded() {
+    // Real pairs from the catalogue and Asda: a scanned UPC-A against Asda's
+    // 13-digit form, EAN-8s Asda pads to 13, EAN-13s it pads to 14.
+    for (given, canonical) in [
+        ("065928546009", "0065928546009"),
+        ("0065928546009", "0065928546009"),
+        ("000002684710", "02684710"),
+        ("0000050378289", "50378289"),
+        ("50378289", "50378289"),
+        ("05054070704431", "5054070704431"),
+        ("634158823732", "0634158823732"),
+        ("5000112548167", "5000112548167"),
+    ] {
+        assert_eq!(
+            given.parse::<Barcode>().unwrap().as_str(),
+            canonical,
+            "{given}"
+        );
+    }
+}
+
+#[test]
+fn all_zeros_is_no_barcode() {
+    // Asda sends `0` for a product it has no barcode for.
+    assert!("0".parse::<Barcode>().is_err());
+    assert!("0000000000000".parse::<Barcode>().is_err());
+}
+
+#[test]
+fn a_hint_is_canonical_when_it_is_a_barcode_and_kept_when_not() {
+    assert_eq!(barcode_hint(" 065928546009 "), "0065928546009");
+    assert_eq!(barcode_hint("QR-thing"), "QR-thing");
 }
 
 #[test]

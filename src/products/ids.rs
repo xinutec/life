@@ -16,7 +16,14 @@ use std::str::FromStr;
 use serde::{Deserialize, Deserializer, Serialize};
 use ts_rs::TS;
 
-/// A product's EAN/UPC: 1 to 14 ASCII digits, and nothing else.
+/// A product's EAN/UPC: 1 to 14 ASCII digits, and nothing else, in one
+/// canonical padding.
+///
+/// GS1 compares GTINs as 14 digits with leading zeros, so `065928546009` (UPC-A)
+/// and `0065928546009` are one product. Stored as Open Food Facts normalises
+/// them: leading zeros off, then padded to 8 (EAN-8) or 13 (EAN-13), 14 kept.
+/// That keeps the familiar printed form, and OFF's lookups, while making equal
+/// codes equal strings.
 ///
 /// The cap and the digits-only rule are what make it safe to splice into the
 /// outbound Open Food Facts URL — no path segment or query parameter can hide in
@@ -37,14 +44,29 @@ impl FromStr for Barcode {
     type Err = String;
 
     /// Trims first: a leading space is a transport artefact, not a different
-    /// barcode.
+    /// barcode. All zeros is a shop's "none" (Asda sends `0`), not a product.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.trim();
         if s.is_empty() || s.len() > 14 || !s.bytes().all(|b| b.is_ascii_digit()) {
             return Err("barcode must be 1-14 digits".to_string());
         }
-        Ok(Barcode(s.to_string()))
+        let digits = s.trim_start_matches('0');
+        let width = match digits.len() {
+            0 => return Err("barcode must not be all zeros".to_string()),
+            1..=8 => 8,
+            9..=13 => 13,
+            _ => 14,
+        };
+        Ok(Barcode(format!("{digits:0>width$}")))
     }
+}
+
+/// A scanned or typed barcode kept as a hint (an item's, a Buy row's): the
+/// canonical [`Barcode`] when it is one, else as typed, so an odd code is kept
+/// rather than refused.
+pub fn barcode_hint(s: &str) -> String {
+    s.parse::<Barcode>()
+        .map_or_else(|_| s.trim().to_string(), |b| b.0)
 }
 
 /// A barcode is also a well-formed external id — digits are inside

@@ -10,7 +10,7 @@ use super::types::{
     ExpiryPrecision, Item, ItemCategory, ItemEvent, ItemHistoryEntry, ItemNameSource, Location,
     LocationKind, NewItem, NewLocation,
 };
-use crate::products::ids::{Barcode, ProductId};
+use crate::products::ids::{Barcode, ProductId, barcode_hint};
 
 #[derive(sqlx::FromRow)]
 struct LocationRow {
@@ -271,7 +271,7 @@ pub async fn create_item(pool: &MySqlPool, user_id: &str, new: NewItem) -> Resul
             .to_string(),
     )
     .bind(new.location_id)
-    .bind(&new.barcode)
+    .bind(new.barcode.as_deref().map(barcode_hint))
     .execute(pool)
     .await?;
     let id = res.last_insert_id();
@@ -348,7 +348,7 @@ pub async fn update_item(
     .bind(new.expiry)
     .bind(expiry_precision)
     .bind(new.location_id)
-    .bind(&new.barcode)
+    .bind(new.barcode.as_deref().map(barcode_hint))
     .bind(id)
     .bind(user_id)
     .execute(pool)
@@ -380,6 +380,7 @@ pub async fn mark_low_matching(
     barcode: Option<&str>,
     product_id: Option<u64>,
 ) -> Result<bool> {
+    let barcode = barcode.map(barcode_hint);
     // Strongest key first, so a renamed row still resolves by barcode or link.
     let row: Option<(u64,)> = sqlx::query_as(
         "SELECT id FROM items \
@@ -393,11 +394,11 @@ pub async fn mark_low_matching(
     .bind(user_id)
     .bind(product_id)
     .bind(product_id)
-    .bind(barcode)
-    .bind(barcode)
+    .bind(&barcode)
+    .bind(&barcode)
     .bind(name.trim())
     .bind(product_id)
-    .bind(barcode)
+    .bind(&barcode)
     .fetch_optional(pool)
     .await?;
     let Some((id,)) = row else {

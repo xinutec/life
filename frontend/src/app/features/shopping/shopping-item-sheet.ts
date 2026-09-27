@@ -18,6 +18,7 @@ import { SheetHeader } from '../../shared/sheet-header';
 import { LifeApi } from '../../life-api';
 import { ScannerDialog } from '../scanner/scanner-dialog';
 import { ShoppingDoc, ShoppingStore } from '../../sync/shopping-store';
+import { canonicalBarcode } from '../../shared/barcode';
 
 /** Add/edit one shopping row — the FAB's bottom sheet. Add mode stays open
  *  after each add (groceries are entered in bursts): clear, notify, refocus.
@@ -89,7 +90,7 @@ export class ShoppingItemSheet {
     const name = this.name().trim();
     if (!name) return;
     const unit = this.unit()?.trim();
-    const barcode = this.barcode().trim() || null;
+    const barcode = canonicalBarcode(this.barcode()) || null;
     const fields = {
       name,
       quantity: this.quantity(),

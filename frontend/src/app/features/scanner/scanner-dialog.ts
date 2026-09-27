@@ -15,6 +15,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 
 import { isRecord } from '../../shared/narrow';
+import { canonicalBarcode } from '../../shared/barcode';
 
 // BarcodeDetector is a browser global (Chromium) with no TS lib types, so give
 // it the minimal shape we use — typed, not `any`, so the call sites stay safe.
@@ -174,7 +175,7 @@ export class ScannerDialog implements OnDestroy {
 
   private finish(code: string): void {
     this.cleanup();
-    this.ref.close(code);
+    this.ref.close(canonicalBarcode(code));
   }
 
   cancel(): void {
