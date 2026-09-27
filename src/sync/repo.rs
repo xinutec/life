@@ -439,9 +439,9 @@ impl SyncSpec for Todo {
         doc.deleted
     }
 
-    /// The enums ride as raw strings (the row shape); anything the typed REST
-    /// boundary (`todo::repo`'s `TryFrom`) could not parse back is rejected
-    /// here instead of 500ing the whole list on a later read.
+    /// The enums ride as raw strings (the row shape); anything the typed REST read
+    /// could not decode back is rejected here instead of 500ing the whole list on
+    /// a later read.
     fn validate(doc: &TodoDoc) -> Result<(), String> {
         doc.todo_type.parse::<TodoType>()?;
         doc.status.parse::<TodoStatus>()?;

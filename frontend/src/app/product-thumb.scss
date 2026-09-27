@@ -60,7 +60,7 @@
   color: var(--mat-sys-on-surface-variant, #757575);
 }
 
-// Compact square variant for the Buy list, matching its original inline thumb.
+// Compact square variant for the Buy list's rows.
 :host(.inline-thumb) {
   .picker,
   .thumb {

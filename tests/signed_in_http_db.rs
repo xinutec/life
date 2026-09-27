@@ -191,7 +191,7 @@ async fn image(
 #[tokio::test]
 async fn a_changed_picture_is_served_at_once_and_an_unchanged_one_is_a_304() {
     // The URL stays the same when the server replaces a picture (an import, a
-    // reconcile, another device), so a day-long cache kept the old one.
+    // reconcile, another device), so a cache that never revalidates keeps the old one.
     let pool = pool().await;
     let bc: Barcode = "9990000000971".parse().unwrap();
     fresh(&pool, &bc).await;

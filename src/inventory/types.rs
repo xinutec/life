@@ -1,5 +1,5 @@
 //! Domain types for the location/item model. `kind` and `category` are stored
-//! as short strings in the DB and parsed into these enums at the repo boundary.
+//! as short strings and decode straight into these enums.
 
 use crate::products::ids::ProductId;
 use crate::str_enum;

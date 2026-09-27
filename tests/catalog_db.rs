@@ -33,8 +33,8 @@ async fn item_resolves_through_catalog_product() {
     db::migrate(&pool).await.expect("migrate");
 
     let user = "catalog-test-user";
-    // A catalogue key has to be EAN-shaped now; the item side still carries
-    // whatever was scanned, which is why `new_item` keeps taking a `&str`.
+    // A catalogue key has to be EAN-shaped; the item side still carries whatever
+    // was scanned, which is why `new_item` takes a `&str`.
     let barcode: Barcode = "9990000009999".parse().unwrap();
     // Clean any prior run.
     sqlx::query("DELETE FROM items WHERE user_id = ?")

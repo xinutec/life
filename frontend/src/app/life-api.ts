@@ -362,8 +362,8 @@ export class LifeApi {
     return this.http.get<TrashEntry[]>('/api/trash');
   }
   /** Restore one trash entry — the deliberate undelete path (also used by the
-   *  Undo snackbars). `ref` is the id (item/location/recipe) or ulid
-   *  (shopping/todo) from the entry. */
+   *  Undo snackbars). `ref` is the entry's own: an id for server-only kinds, a
+   *  ulid for synced ones. */
   restoreTrash(kind: TrashKind, ref: string): Observable<void> {
     return this.http.post<void>(`/api/trash/${kind}/${encodeURIComponent(ref)}/restore`, {});
   }

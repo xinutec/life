@@ -146,8 +146,8 @@ export class Recipes {
             ? `Took ${took} of ${lines.length} off the shelf.`
             : `Nothing came off the shelf — see why below.`,
         );
-        // The cupboard moved, so "can I cook this" is stale. (There is no
-        // reload() — refresh() re-fetches without blanking what's on screen.)
+        // The cupboard moved, so "can I cook this" is stale; refresh() re-fetches
+        // without blanking what's on screen.
         this.cookableStore.refresh();
       },
       error: (e: unknown) => {

@@ -336,8 +336,6 @@ const ITEMS: Item[] = [
   },
 ];
 
-// An item's audit, as the server orders it: newest first, and mixing the two
-// readings of `quantity` — a delta on the `used` row, a level on the others.
 /** What the row cost. Present so the dialog's newest section is measured too —
  *  a second list above a timeline that was already the height of the screen. */
 const ITEM_PURCHASES = [
@@ -357,6 +355,8 @@ const ITEM_PURCHASES = [
   },
 ];
 
+// An item's audit, as the server orders it: newest first, and mixing the two
+// readings of `quantity` — a delta on the `used` row, a level on the others.
 const ITEM_HISTORY = [
   { id: 12, event: 'used', quantity: 200, location: 'Fridge', at: Date.now() - 3_600_000 },
   { id: 8, event: 'moved', quantity: null, location: 'Fridge', at: Date.now() - 2 * 86_400_000 },
@@ -645,8 +645,8 @@ async function mockApi(page: Page): Promise<void> {
   );
   await page.route('**/api/items*', (r) => r.fulfill({ json: ITEMS }));
   await page.route('**/api/items/*/history', (r) =>
-    // Events AND what was paid — the dialog reads both now, and a purchase from
-    // a hand-typed row is only reachable here.
+    // Events AND what was paid: a purchase from a hand-typed row is only
+    // reachable here.
     r.fulfill({ json: { entries: ITEM_HISTORY, purchases: ITEM_PURCHASES } }),
   );
   await page.route('**/api/bins', (r) => r.fulfill({ json: BINS }));
@@ -1102,10 +1102,10 @@ test('inventory — items + places: lays out cleanly @ phone width', async ({ pa
   await expectNoStarvedText(page, testInfo, null, ['.facts']);
 });
 
-// Every row action lives behind the ⋮ now, so the menu IS the interface — a row
-// whose only control does not open, or opens something that does not fit, leaves
-// the screen read-only. Naming the three items rather than counting them: a
-// count passes when the wrong one is present.
+// Every row action lives behind the ⋮, so the menu IS the interface: a row whose
+// only control does not open, or opens something that does not fit, leaves the
+// screen read-only. The three items are named, not counted: a count passes when
+// the wrong one is present.
 test('inventory — the row menu opens and carries all three actions @ phone width', async ({
   page,
 }, testInfo) => {
@@ -1273,10 +1273,9 @@ test('purchase dialog — the price/date pair and the months suffix fit @ phone 
   await expectNoHorizontalOverflow(page, testInfo, 'app-purchase-dialog');
 });
 
-// The item sheet's expiry row is a field and a toggle-group side by side, which
-// is the composition the header of this file names as the classic overflow
-// culprit. Measured in BOTH states, because they are different widths: the date
-// input carries a native picker icon the month one does not.
+// The item sheet's expiry row is a field and a toggle group side by side, the
+// classic overflow culprit. Measured in BOTH states, which are different widths:
+// the date input carries a native picker icon the month one does not.
 test('item sheet — the expiry row and its precision toggle fit @ phone width', async ({
   page,
 }, testInfo) => {

@@ -92,9 +92,8 @@ describe('nextCollections', () => {
 
   it('names the day the council stated, whatever the hour it is read at', () => {
     // The feed states a bare day with no timezone, and it must appear as that
-    // day — never the one before, however late the reader is up.
-    // Only the parsing is under test here; the reference day is covered below.
-    // guarding is checked here, and the reference day below.
+    // day, never the one before, however late the reader is up. Only the
+    // parsing is under test here; the reference day is covered below.
     const lateAtNight = new Date('2026-08-10T23:30:00Z');
     const rows = nextCollections([day('2026-09-24', 'Rubbish collection')], lateAtNight);
     expect(rows[0].when).toBe('Thu 24 Sept');

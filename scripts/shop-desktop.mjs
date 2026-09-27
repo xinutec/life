@@ -21,7 +21,7 @@ import { join } from 'node:path';
 const CDP = process.env.CDP_PY
   ?? `${process.env.HOME}/Code/xinutec-infra/mac-mini/browser/cdp.py`;
 
-// The same patch MainActivity.kt injects at document start, plus the bridge the
+// The same patch ShopBridge.kt injects at document start, plus the bridge the
 // extractor reports through. Kept byte-comparable to the Kotlin so a shop that
 // starts failing here is failing there too.
 const INJECT = `

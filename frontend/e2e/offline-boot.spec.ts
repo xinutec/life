@@ -21,7 +21,7 @@ test('a signed-in app opened offline stays signed in', async ({ page, context })
   // full shell (same completeness wait as offline.spec.ts — going offline
   // mid-prefetch is a flake).
   await page.goto('/');
-  await expect(page.locator('mat-toolbar .brand')).toBeVisible();
+  await expect(page.locator('ui-scaffold h1', { hasText: 'Life' })).toBeVisible();
   await page.waitForFunction(() => navigator.serviceWorker?.controller != null, null, {
     timeout: 35_000,
   });
@@ -52,7 +52,7 @@ test('a signed-in app opened offline stays signed in', async ({ page, context })
   await page.goto('/todo');
 
   // The cached identity renders the signed-in shell immediately…
-  await expect(page.locator('mat-toolbar .brand')).toBeVisible();
+  await expect(page.locator('ui-scaffold h1', { hasText: 'Life' })).toBeVisible();
 
   // …and it must SURVIVE replication's first cycle: wait until a sync fetch has
   // provably happened (ngsw answers it with the synthetic 504), give the signal
@@ -68,5 +68,5 @@ test('a signed-in app opened offline stays signed in', async ({ page, context })
   await page.waitForTimeout(1_000);
 
   await expect(page.locator('.signin')).toHaveCount(0);
-  await expect(page.locator('mat-toolbar .brand')).toBeVisible();
+  await expect(page.locator('ui-scaffold h1', { hasText: 'Life' })).toBeVisible();
 });

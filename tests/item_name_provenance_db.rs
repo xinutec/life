@@ -112,8 +112,8 @@ async fn a_typed_name_outranks_the_catalogue_but_a_left_alone_one_follows_it() {
         .expect("present");
     assert_eq!(got.name, "Cooks' Ingredients Black Peppercorns");
 
-    // Must hold: correcting a
-    // product reaches items already in the cupboard, with no refresh step.
+    // Must hold: correcting a product reaches items already in the cupboard,
+    // with no refresh step.
     sqlx::query("UPDATE products SET name = ? WHERE id = ?")
         .bind("Cooks' Ingredients Black Peppercorns 100g")
         .bind(proper)

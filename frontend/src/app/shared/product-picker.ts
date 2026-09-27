@@ -88,8 +88,8 @@ function shopMessage(e: unknown, provider: ShopProvider): string {
     : `Search failed — try “Connect ${provider.displayName}” first.`;
 }
 
-/** Shops offered in the shop tier. Adding one (Asda) is a single entry here plus
- *  its `shops/<shop>.ts` provider. */
+/** Shops the app's WebView searches in the shop tier. Adding one is a single
+ *  entry here plus its `shops/<shop>.ts` provider. */
 const PROVIDERS: ShopProvider[] = [WAITROSE];
 
 /** Find-a-product dialog, shared by the Buy and Inventory sheets. One query,

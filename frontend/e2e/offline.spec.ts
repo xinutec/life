@@ -7,10 +7,10 @@ test('the app shell loads offline (requires a service worker)', async ({ page, c
   await page.goto('/');
   await expect(page.locator('app-root')).not.toBeEmpty();
 
-  // The fix: a service worker must install and control the page. With none, this
-  // times out — the red that proves offline is broken.
+  // A service worker must install and control the page; with none this times
+  // out, which is the red that proves offline is broken.
   await page.waitForFunction(() => navigator.serviceWorker?.controller != null, null, {
-    timeout: 35_000, // registerWhenStable can take up to 30s
+    timeout: 35_000, // the SW installs after the first load settles
   });
 
   // …and it must finish prefetching the ENTIRE shell. Going offline mid-prefetch

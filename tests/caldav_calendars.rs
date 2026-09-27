@@ -250,9 +250,8 @@ fn a_slash_in_a_login_cannot_open_a_new_path_segment() {
 
 #[test]
 fn a_path_on_the_base_is_replaced_not_appended() {
-    // Documents today's behaviour, which the `join("/remote.php/…")` this grew
-    // out of also had. A Nextcloud under a sub-path would want appending — a
-    // real question, and deliberately not answered here.
+    // Documents today's behaviour: a Nextcloud under a sub-path would want
+    // appending — a real question, deliberately not answered here.
     let url = calendar_home("https://cloud.example.org/nextcloud", "pippijn").unwrap();
     assert_eq!(
         url.as_str(),

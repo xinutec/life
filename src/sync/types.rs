@@ -90,11 +90,10 @@ pub struct WellbeingDoc {
     #[serde(rename = "scoreTenths")]
     pub score_tenths: u8,
     /// Optional energy reading (10..50 tenths, drained..energetic; higher = better,
-    /// like the score); `None` = mood-only check-in. The UI presents its complement
-    /// as "fatigue" (none..severe) — the inversion is display-only.
+    /// like the score); `None` = mood-only check-in.
     #[serde(default, rename = "energyTenths")]
     pub energy_tenths: Option<u8>,
-    /// Fine-grained feelings-wheel leaf words; independent of mood/fatigue.
+    /// Fine-grained feelings-wheel tokens; independent of mood and energy.
     #[serde(default)]
     pub emotions: Vec<String>,
     pub note: Option<String>,

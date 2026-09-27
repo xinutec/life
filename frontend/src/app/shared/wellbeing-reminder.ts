@@ -87,8 +87,7 @@ function loadConfig(): WellbeingReminderConfig {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { rules: [] };
     // Parsed as `unknown`: this blob outlives every deploy that ran on this
-    // device, so `as Partial<Config>` described a shape nothing guarantees —
-    // and the per-rule filter below then read its fields through that claim.
+    // device, so no shape is guaranteed and each rule is checked below.
     const parsed: unknown = JSON.parse(raw);
     const rulesField = isRecord(parsed) ? parsed['rules'] : null;
     const rules: unknown[] = Array.isArray(rulesField) ? rulesField : [];

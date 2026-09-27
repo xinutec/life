@@ -71,8 +71,8 @@ describe('emotion-wheel', () => {
   it('every node carries a unique qualified token', () => {
     const tokens = EMOTION_NODES.map((n) => n.token);
     expect(new Set(tokens).size).toBe(tokens.length); // no collisions
-    // Two nodes now carry this name (Angry and Sad), so what matters is not
-    // which comes first in the array but which a legacy bare word resolves to —
+    // Two nodes carry this name (Angry and Sad), so what matters is not which
+    // comes first in the array but which a legacy bare word resolves to —
     // asserted in the pinning test below.
     expect(EMOTION_NODES.filter((n) => n.name === 'Withdrawn')).toHaveLength(2);
   });

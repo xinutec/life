@@ -69,8 +69,8 @@ export class ScannerDialog implements OnDestroy {
     afterNextRender(() => void this.start());
   }
 
-  // Traced with a stable prefix so it's greppable in the Android WebView's
-  // logcat (the wrapper forwards console messages). See android/MainActivity.kt.
+  // Traced with a stable prefix so it's greppable in logcat, where the shared
+  // shell (WebShellActivity) mirrors the page's console.
   private log(...args: unknown[]): void {
     console.debug('[scan]', ...args);
   }
