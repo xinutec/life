@@ -126,7 +126,8 @@ describe('ProductPage', () => {
   ) {
     const api = {
       getProductDetail: vi.fn(() => of(detail)),
-      productImageByIdUrl: (id: number) => `/api/products/id/${id}/image`,
+      productImageByIdUrl: (id: number, v?: number) =>
+        `/api/products/id/${id}/image${v ? `?v=${v}` : ''}`,
       findAtShop: vi.fn(() => of(find)),
       syncListing: vi.fn(() => of(detail.product)),
       importProduct: vi.fn(() => of(detail.product)),
@@ -640,6 +641,26 @@ describe('ProductPage', () => {
       { field: 'brand', choice: 'asda' },
       { field: 'quantity_label', choice: 'keep' },
     ]);
+  });
+
+  it('reloads the picture after adopting a shop’s, whose URL does not change', () => {
+    const { page } = setup({
+      ...DETAIL,
+      reconciliation: {
+        fields: [
+          {
+            field: 'picture',
+            label: 'Picture',
+            current: null,
+            candidates: [{ source: 'asda', value: 'https://asda.example/p.jpg' }],
+          },
+        ],
+      },
+    });
+    const before = page.imageUrl();
+    page.setChoice('picture', 'asda');
+    page.applyReconcile();
+    expect(page.imageUrl()).not.toBe(before);
   });
 
   it('defaults every field to keep, so applying without a pick changes nothing', () => {

@@ -311,6 +311,10 @@ export class ProductPage {
       next: (d) => {
         this.reconciling.set(false);
         this.choices.set({});
+        // An adopted picture keeps its URL, so the <img> needs telling.
+        if (decisions.some((c) => c.field === 'picture' && c.choice !== ProductPage.KEEP)) {
+          this.images.changed(d.product);
+        }
         this.detail.set(d);
         this.feedback.notify('Updated the product details.');
       },
@@ -382,7 +386,7 @@ export class ProductPage {
 
   readonly imageUrl = computed(() => {
     const d = this.detail();
-    return d?.product.has_image ? this.api.productImageByIdUrl(d.product.id) : null;
+    return d?.product.has_image ? this.images.urlById(d.product.id) : null;
   });
 
   /** A picture is being uploaded — the button is disabled and says so, because
@@ -409,7 +413,7 @@ export class ProductPage {
     const barcode = this.detail()?.product.barcode;
     if (!barcode) return;
     this.savingImage.set(true);
-    this.images.replace(barcode, file).subscribe({
+    this.images.replace(barcode, file, this.id()).subscribe({
       next: () => {
         this.savingImage.set(false);
         // Re-read so `has_image` flips on for a product that had none — without

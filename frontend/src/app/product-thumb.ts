@@ -5,7 +5,6 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatSnackBar } from '@angular/material/snack-bar';
 
 import { ImagePickerDirective } from './image-picker';
-import { LifeApi } from './life-api';
 import { ProductImages, showThumb } from './product-image';
 
 /**
@@ -88,7 +87,6 @@ export class ProductThumb {
   readonly hasImage = input<boolean | undefined>(undefined);
 
   private images = inject(ProductImages);
-  private api = inject(LifeApi);
   private snack = inject(MatSnackBar);
 
   /** True in the custom Android app (the clipboard bridge is present) — there we
@@ -115,7 +113,7 @@ export class ProductThumb {
       productId &&
       showThumb({ barcode: null, product_id: productId, has_image: this.hasImage() }, this.failed())
     ) {
-      return this.api.productImageByIdUrl(productId);
+      return this.images.urlById(productId);
     }
     return null;
   });

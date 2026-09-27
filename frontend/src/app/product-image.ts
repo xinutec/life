@@ -22,27 +22,43 @@ export function showThumb(it: ThumbSource, failed: boolean): boolean {
   return !failed && linked && it.has_image !== false;
 }
 
-/** Shared per-barcode cache-buster for product images. A cached image lives at a
- *  stable URL with a long `Cache-Control`, so after a replace the browser and
- *  service worker would keep serving the old bytes — bumping a version and
- *  appending it as `?v=` forces a reload. The map is app-wide, so replacing an
- *  image in one view refreshes it everywhere it's shown. */
+/** Shared cache-buster for product images. An image lives at a stable URL, and
+ *  a page keeps showing the bytes it already loaded for a URL whatever the
+ *  headers say — so after a change, bumping a version and appending it as `?v=`
+ *  forces a reload. App-wide, so a change in one view refreshes every view. */
 @Injectable({ providedIn: 'root' })
 export class ProductImages {
   private api = inject(LifeApi);
+  /** Keyed `b:<barcode>` and `p:<product id>`: the two URLs an image has. */
   private version = signal<ReadonlyMap<string, number>>(new Map());
 
-  /** `<img src>` for a barcode's image, cache-busted after any replace. */
+  /** `<img src>` for a barcode's image, cache-busted after any change. */
   url(barcode: string): string {
-    return this.api.productImageUrl(barcode, this.version().get(barcode));
+    return this.api.productImageUrl(barcode, this.version().get(`b:${barcode}`));
+  }
+
+  /** `<img src>` for a product's image by id, cache-busted after any change. */
+  urlById(id: number): string {
+    return this.api.productImageByIdUrl(id, this.version().get(`p:${id}`));
+  }
+
+  /** The picture changed server-side: reload it under both its URLs. */
+  changed(product: { id?: number; barcode?: string | null }): void {
+    const keys = [
+      product.barcode ? `b:${product.barcode}` : null,
+      product.id != null ? `p:${product.id}` : null,
+    ].filter((k) => k !== null);
+    this.version.update((m) => {
+      const next = new Map(m);
+      for (const k of keys) next.set(k, (m.get(k) ?? 0) + 1);
+      return next;
+    });
   }
 
   /** Upload new bytes; on success bump the buster so every `<img>` reloads. */
-  replace(barcode: string, blob: Blob): Observable<void> {
+  replace(barcode: string, blob: Blob, id?: number): Observable<void> {
     return this.api
       .uploadProductImage(barcode, blob)
-      .pipe(
-        tap(() => this.version.update((m) => new Map(m).set(barcode, (m.get(barcode) ?? 0) + 1))),
-      );
+      .pipe(tap(() => this.changed({ barcode, id })));
   }
 }

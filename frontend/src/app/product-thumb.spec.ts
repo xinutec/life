@@ -12,6 +12,7 @@ import { ProductThumb } from './product-thumb';
 function fakeImages() {
   return {
     url: (barcode: string) => `/api/products/${barcode}/image`,
+    urlById: (id: number) => `/api/products/id/${id}/image`,
     replace: vi.fn(() => of(undefined)),
   };
 }
