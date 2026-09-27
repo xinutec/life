@@ -2,6 +2,8 @@
 //! picture URL never resolves, so nothing here needs the network; which
 //! pictures an import fetches is pinned in `picture_reconcile.rs`.
 
+mod test_config;
+
 mod common;
 
 use axum::body::Body;
@@ -33,16 +35,7 @@ fn state(pool: MySqlPool) -> AppState {
     let cfg = Config {
         database_url: url,
         session_secret: SECRET.into(),
-        bind_addr: "127.0.0.1:0".into(),
-        nc_base_url: "https://nc.example".into(),
-        nc_client_id: "id".into(),
-        nc_client_secret: "secret".into(),
-        nc_redirect_uri: "https://life.example/auth/callback".into(),
-        static_dir: None,
-        dev_login_user: None,
-        house_scene: "scenes/house.json".into(),
-        bins_ical_url: None,
-        emotion_worker_token: None,
+        ..test_config::config()
     };
     AppState::new(pool, cfg, reqwest::Client::new())
 }

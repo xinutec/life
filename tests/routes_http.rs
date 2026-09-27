@@ -4,6 +4,8 @@
 //! fallback. The pool is created lazily and never connects, because every path
 //! here is rejected (401/404) before any query runs.
 
+mod test_config;
+
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
@@ -25,19 +27,8 @@ fn state_with_static(static_dir: Option<String>) -> AppState {
         .connect_lazy("mysql://life:life@127.0.0.1:3307/life")
         .expect("lazy pool");
     let cfg = Config {
-        database_url: "mysql://life:life@127.0.0.1:3307/life".into(),
-        session_secret: "test-secret".into(),
-        bind_addr: "127.0.0.1:0".into(),
-        nc_base_url: "https://nc.example".into(),
-        nc_client_id: "id".into(),
-        nc_client_secret: "secret".into(),
-        nc_redirect_uri: "https://life.example/auth/callback".into(),
         static_dir,
-        dev_login_user: None,
-        house_scene: "scenes/house.json".into(),
-        // No council feed in a test: the bins route answers with an empty list.
-        bins_ical_url: None,
-        emotion_worker_token: None,
+        ..test_config::config()
     };
     let http = reqwest::Client::new();
     AppState::new(pool, cfg, http)

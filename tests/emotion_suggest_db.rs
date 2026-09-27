@@ -5,6 +5,8 @@
 //! answer that arrives after the note moved on is discarded rather than shown as
 //! if it described the new text.
 
+mod test_config;
+
 mod common;
 
 use life::db;
@@ -385,17 +387,8 @@ async fn a_held_poll_is_released_by_shutdown() {
         .unwrap();
     let cfg = life::config::Config {
         database_url: url,
-        session_secret: "test-secret".into(),
-        bind_addr: "127.0.0.1:0".into(),
-        nc_base_url: "https://nc.example".into(),
-        nc_client_id: "id".into(),
-        nc_client_secret: "secret".into(),
-        nc_redirect_uri: "https://life.example/auth/callback".into(),
-        static_dir: None,
-        dev_login_user: None,
-        house_scene: "scenes/house.json".into(),
-        bins_ical_url: None,
         emotion_worker_token: Some("t".into()),
+        ..test_config::config()
     };
     let app = life::state::AppState::new(pool, cfg, reqwest::Client::new());
     let mut headers = HeaderMap::new();

@@ -3,7 +3,8 @@
 //! Hand-written, `Display` matches on `Self` and breaks the build on a new
 //! variant, but `FromStr` ends in `other => Err(..)` and compiles, so the new
 //! variant is written fine and then fails every read. Generating both from one
-//! table closes that hole.
+//! table closes that hole, and two variants given one string are an unreachable
+//! `FromStr` arm, which `Cargo.toml` denies.
 
 /// Declare a string-backed enum, its `ALL`, its string mapping both ways and its
 /// database mapping ([`varchar_sql!`](crate::varchar_sql)); the enum must be `Copy`.

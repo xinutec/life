@@ -4,6 +4,8 @@
 //! nothing. The rule is a dot in the last path segment: `/today` is a route and
 //! `/main-ABC123.js` is a file.
 
+mod test_config;
+
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use life::config::Config;
@@ -39,18 +41,8 @@ impl Drop for StaticDir {
 async fn get(path: &str) -> (StatusCode, String) {
     let dir = StaticDir::new();
     let cfg = Config {
-        database_url: "mysql://unused:unused@127.0.0.1:1/unused".into(),
-        session_secret: String::new(),
-        bind_addr: String::new(),
-        nc_base_url: "https://nc.example.org".into(),
-        nc_client_id: "cid".into(),
-        nc_client_secret: "secret".into(),
-        nc_redirect_uri: "https://life.example.org/auth/callback".into(),
         static_dir: Some(dir.0.to_string_lossy().into_owned()),
-        dev_login_user: None,
-        house_scene: "scenes/house.json".into(),
-        bins_ical_url: None,
-        emotion_worker_token: None,
+        ..test_config::config()
     };
     let pool = sqlx::MySqlPool::connect_lazy(&cfg.database_url).expect("lazy pool");
     let res = routes::router(AppState::new(pool, cfg, reqwest::Client::new()))

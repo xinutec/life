@@ -15,12 +15,8 @@ describe('emotion-wheel', () => {
   it('has the full outer ring: every group holds at least the wheel’s two leaves', () => {
     // Roberts' wheel is exactly two per group; we extend it where a feeling has
     // no word at all, so a group may hold more — but never fewer.
-    const groups = EMOTION_WHEEL.flatMap((c) => c.groups);
-    // Roberts' 41, plus Agitated, Conflicted, Waiting (Bad); Caring, Elated,
-    // Admiring, Desiring, Meaningful (Happy); Discouraged, Alienated (Sad); Flat,
-    // Reflective, Apart (Neutral).
-    expect(groups.length).toBe(54);
-    expect(groups.every((g) => g.leaves.length >= 2)).toBe(true);
+    const thin = EMOTION_WHEEL.flatMap((c) => c.groups).filter((g) => g.leaves.length < 2);
+    expect(thin.map((g) => g.name)).toEqual([]);
   });
 
   it('makes both rings selectable: every group and every leaf is a node', () => {

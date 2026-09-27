@@ -12,6 +12,9 @@ unsafe_code = "forbid"
 # A `pub` item nobody uses is either dead or an unfinished wiring-up; both are
 # worth seeing.
 unreachable_pub = "warn"
+# Denied, not warned: `str_enum!` generates a `FromStr` match, so two variants
+# given the same string are an unreachable arm, and the build must stop there.
+unreachable_patterns = "deny"
 
 [lints.clippy]
 # Debugging leftovers. The app logs through `tracing`; a stray dbg!/println!
