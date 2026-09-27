@@ -16,6 +16,7 @@
     "e2e": "ng build && playwright test",
     "ui-check": "playwright test e2e/ui-pages.spec.ts",
     "ui-golden": "playwright test e2e/ui-golden.spec.ts",
+    "offline-check": "playwright test --project offline",
     "ui-golden:update": "playwright test e2e/ui-golden.spec.ts --update-snapshots",
     "lint": "eslint src e2e playwright.config.ts",
     "typecheck:e2e": "tsc -p tsconfig.e2e.json",

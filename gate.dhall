@@ -117,6 +117,18 @@ in  { name = "life"
         , env = G.nonInteractive
         , timeout_s = 1800
         }
+      , {-  The service worker, on the same build: it installs, caches the shell and
+            the read API, and a signed-in app opened offline stays signed in. Its
+            own Playwright project, because the layout suite blocks workers.
+        -}
+        G.Check::{
+        , name = "frontend offline-check (service worker)"
+        , cwd = "frontend"
+        , argv = G.inDevShell [ "pnpm", "run", "offline-check" ]
+        , artifacts = [ "test-results" ]
+        , env = G.nonInteractive
+        , timeout_s = 600
+        }
       , {-  `--no-daemon`: a daemon started outside this shell, without
             ANDROID_HOME, gets reused here and fails "SDK location not found".
         -}

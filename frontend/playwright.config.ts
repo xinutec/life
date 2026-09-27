@@ -9,10 +9,28 @@ import harness from './e2e/harness.mjs';
  * geometry, port, server and tolerances come from @xinutec/ui-harness; this
  * app's specifics are in e2e/harness.mjs.
  */
-export default defineConfig(
-  // goldens: e2e/ui-golden.spec.ts keeps one committed baseline per name, with
-  // no {projectName}/{platform} suffix — these only ever run on one machine (a
-  // dev's Mac; CI runs Rust only, never Playwright, see .github/workflows).
-  // Update them with `pnpm run ui-golden:update`.
-  phoneConfig(harness, devices, { goldens: true }),
-);
+// goldens: e2e/ui-golden.spec.ts keeps one committed baseline per name, with
+// no {projectName}/{platform} suffix — these only ever run on one machine (a
+// dev's Mac; CI runs Rust only, never Playwright, see .github/workflows).
+// Update them with `pnpm run ui-golden:update`.
+const base = phoneConfig(harness, devices, { goldens: true });
+const [phone] = base.projects ?? [];
+
+/** The specs that exist to test the service worker. */
+const OFFLINE = /offline.*\.spec\.ts$/;
+
+export default defineConfig({
+  ...base,
+  projects: [
+    // The harness blocks service workers, because one defeats `page.route` for
+    // the mocked layout suite. The offline specs mock nothing and test the
+    // worker itself, so they run in a project of their own that allows it.
+    { ...phone, testIgnore: OFFLINE },
+    {
+      ...phone,
+      name: 'offline',
+      testMatch: OFFLINE,
+      use: { ...phone.use, serviceWorkers: 'allow' },
+    },
+  ],
+});

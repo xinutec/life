@@ -244,6 +244,26 @@
       "argv": [
         "nix",
         "develop",
+        "--no-warn-dirty",
+        "--command",
+        "pnpm",
+        "run",
+        "offline-check"
+      ],
+      "artifacts": [
+        "test-results"
+      ],
+      "cwd": "frontend",
+      "env": {
+        "CI": "true"
+      },
+      "name": "frontend offline-check (service worker)",
+      "timeout_s": 600
+    },
+    {
+      "argv": [
+        "nix",
+        "develop",
         "git+file:../../recall?ref=HEAD#android",
         "--no-warn-dirty",
         "--command",
