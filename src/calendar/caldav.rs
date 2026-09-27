@@ -1,11 +1,9 @@
 //! CalDAV: the one way life writes into Nextcloud, as an ordinary calendar
-//! client rather than touching NC's database (docs/design/overview.md §2b).
-//! It authenticates with the Login Flow v2 app password; the identity OAuth2
-//! token cannot reach these endpoints.
+//! client (docs/design/overview.md §2b), with the Login Flow v2 app password;
+//! the identity OAuth2 token cannot reach these endpoints.
 //!
-//! A PROPFIND precedes each PUT because the writable collection isn't fixed:
-//! `personal` may be renamed or deleted, and read-only subscriptions (the bins
-//! feed) live in the same home and look writable until written to.
+//! A PROPFIND precedes each PUT: `personal` may be renamed or deleted, and
+//! read-only subscriptions (the bins feed) look writable until written to.
 
 use anyhow::{Context, Result, anyhow};
 use quick_xml::events::Event as XmlEvent;

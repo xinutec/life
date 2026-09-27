@@ -40,14 +40,11 @@ export interface MergeTrace {
  *  misclassify a field — an array can never be compared by identity by accident. */
 export type FieldEq = 'value' | 'array';
 
-/** The equality strategies valid for a field of type `V`:
- *  - an array field → `'array'` (element-wise; identity reads a fresh-but-equal
- *    copy as changed — the emotions sync bug);
- *  - a primitive / nullable-primitive → `'value'` (identity, undefined ≡ null).
- *  A non-array OBJECT field resolves to `never` on purpose: there's no safe
- *  strategy for one yet, so introducing such a field is a COMPILE error until
- *  `FieldEq` gains a deep comparer — it can never silently fall back to identity
- *  (the very trap that made array identity a bug). */
+/** The equality strategies valid for a field of type `V`: an array → `'array'`
+ *  (identity would read a fresh-but-equal copy as changed, the emotions sync
+ *  bug); a primitive → `'value'` (undefined ≡ null). A non-array OBJECT resolves
+ *  to `never`, so such a field fails to compile until `FieldEq` gains a deep
+ *  comparer, rather than silently falling back to identity. */
 type EqFor<V> =
   NonNullable<V> extends readonly unknown[]
     ? 'array'
@@ -86,17 +83,11 @@ function logMergeTrace(t: MergeTrace): void {
   });
 }
 
-/** A field-level 3-way-merge conflict handler for a synced collection. A
- *  conflict is one row changed on two devices; diff each side against the base
- *  this device last synced:
- *
- *  - only I changed it → mine; only they did → theirs;
- *  - both did → mine (the push is the latest intent), and the losing value goes
- *    to `onConflicts` for the conflict log.
- *
- *  A server tombstone stands (a push can't clear it; trash restore is the one
- *  undelete), and a local delete beats remote edits. `ulid`, `id` and `rev`
- *  always come from the master. */
+/** A field-level 3-way merge for one row changed on two devices, each side
+ *  diffed against the base this device last synced: only mine changed → mine;
+ *  only theirs → theirs; both → mine (the latest intent), and the loser goes to
+ *  `onConflicts`. A server tombstone stands (trash restore is the one undelete),
+ *  a local delete beats remote edits, and `ulid`/`id`/`rev` come from the master. */
 export function makeConflictHandler<
   T extends { rev: number },
   C = Omit<T, 'ulid' | 'id' | 'rev'>,
@@ -119,14 +110,11 @@ export function makeConflictHandler<
   };
   const eq = (f: string, a: unknown, b: unknown): boolean => eqBy(spec[f], a, b);
   return {
-    /** Replication equality. RxDB asks this in BOTH directions, and the
-     *  upstream one is load-bearing: `isEqual(assumedMaster, current,
-     *  'upstream-check-if-equal')` decides whether a local doc still needs
-     *  pushing — `false` is what queues the push. Revs are server-minted, so
-     *  a local edit changes content but NOT `rev`, so comparing rev alone
-     *  would drop every field edit (see replication-push.spec.ts). The content
-     *  fields must be compared too — under each field's declared strategy, so
-     *  array fields (emotions) don't read as forever-changed (see [[eqBy]]). */
+    /** Replication equality, asked in BOTH directions. Upstream it decides whether
+     *  a local doc still needs pushing (`false` queues the push). A local edit
+     *  changes content but not the server-minted `rev`, so rev alone would drop
+     *  every edit: fields are compared too, each by its strategy ([[eqBy]]),
+     *  see replication-push.spec.ts. */
     isEqual: (a, b) =>
       !!a._deleted === !!b._deleted &&
       (!!a._deleted || (a.rev === b.rev && keys.every((f) => eq(f, get(a, f), get(b, f))))),

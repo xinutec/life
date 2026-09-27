@@ -270,14 +270,10 @@ async fn external_import_against_real_db() {
 
 #[tokio::test]
 async fn a_stored_source_outside_the_enum_fails_the_read_loudly() {
-    // `Source` decodes by parsing, so a `source` column holding something that
-    // isn't a source is an error on the read rather than a value the rest of the
-    // code has to second-guess. The row stays findable and repairable instead of
-    // arriving as a silent default — the same policy the facts columns follow.
-    //
-    // This also guards the mapping itself: `#[derive(sqlx::Type)]` would declare
-    // these columns as SQL `ENUM` while they are `VARCHAR`, which failed every
-    // read of a real row.
+    // `Source` decodes by parsing, so a `source` column holding a non-source is an
+    // error on read, not a silent default: the row stays findable and repairable.
+    // It also guards the mapping: `#[derive(sqlx::Type)]` would declare these
+    // VARCHAR columns as SQL `ENUM`, which failed every read of a real row.
     let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");

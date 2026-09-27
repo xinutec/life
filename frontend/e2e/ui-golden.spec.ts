@@ -2,14 +2,11 @@ import { test, expect, type Page } from '@playwright/test';
 import { swipeUp } from '@xinutec/ui-harness';
 
 /**
- * Pixel-diff check for what layout assertions can't catch: colour, spacing, an
- * icon swapped. Baseline in e2e/__screenshots__/; after an intended change run
- * `pnpm run ui-golden:update` and inspect the diff before committing.
+ * Pixel-diff for what layout checks miss: colour, spacing, a swapped icon. After
+ * an intended change run `pnpm run ui-golden:update` and inspect the diff.
  *
- * The subject is the to-do edit sheet. It stays stable across days because the
- * shot is of the SHEET (the list behind has relative due dates) and the seed
- * to-do has an absolute due date and no start gate. Fonts are awaited, since a
- * shot taken mid-FOUT diffs against itself.
+ * The subject is the to-do edit sheet, whose seed has an absolute due date, so
+ * the shot is stable across days. Fonts are awaited: a mid-FOUT shot diffs.
  */
 
 const ME = { userId: 'test', displayName: 'Test User', avatarUrl: '', nextcloud: 'active' };
@@ -98,12 +95,9 @@ test.describe('dark scheme', () => {
 });
 
 /**
- * A real finger swipe up the open sheet. The sheet is capped at 80vh and its
- * form is taller than that, so "Delete to-do" sits below the fold at rest;
- * swiping up should scroll the sheet body and bring it fully into view. We
- * drive genuine touch events through CDP (Input.dispatchTouchEvent) rather
- * than a wheel/scrollTop shortcut, so this also proves touch-scrolling works
- * inside the bottom sheet — the exact gesture a thumb makes on the phone.
+ * A real finger swipe up the open sheet (CDP touch events, not scrollTop): the
+ * sheet is capped at 80vh, so "Delete to-do" starts below the fold and the swipe
+ * must scroll the sheet body to it — the gesture a thumb makes on the phone.
  */
 test('to-do edit sheet — golden after swiping up @ phone width', async ({ page }) => {
   await mockApi(page);

@@ -547,14 +547,12 @@ impl SyncSpec for TodoLink {
             .bind(&doc.target_ref)
     }
 
-    /// Two offline devices can add the SAME connection (same from/kind/target)
-    /// under different ulids — client-side dedupe can't see across devices.
-    /// Land the newcomer already tombstoned when a live semantic twin exists:
-    /// the earlier edge wins, and the duplicate dies on every device through
-    /// the normal pull. No FOR UPDATE here: it would take the todo_links lock
-    /// before next_rev's sync_rev lock, reversing the lock order the REST path
-    /// uses (sync_rev first) and risking a deadlock. A rare race that slips two
-    /// live twins through is caught by the boot-time dedupe_todo_links backstop.
+    /// Two offline devices can add the same connection under different ulids.
+    /// Land the newcomer already tombstoned when a live twin exists, so the
+    /// earlier edge wins everywhere through the normal pull. No FOR UPDATE: it
+    /// would take the todo_links lock before sync_rev's, reversing the REST
+    /// path's order and risking deadlock; boot-time dedupe_todo_links catches
+    /// the rare race.
     async fn tombstone_on_insert(
         tx: &mut MySqlConnection,
         user_id: &str,

@@ -17,10 +17,9 @@ const SOON_DAYS = 90;
 /**
  * Read a warranty end date. `now` is injectable for tests.
  *
- * `until` is DERIVED server-side from the purchase date plus the recorded
- * months, and is `null` when no warranty was recorded — which is most
- * purchases. That is not "no warranty": nobody recorded one, and this returns
- * `null` so nothing renders a claim either way.
+ * `until` is derived server-side, and `null` when no warranty was recorded —
+ * most purchases. That is "nobody recorded one", not "no warranty", so `null`
+ * comes back and nothing renders a claim either way.
  */
 export function warrantyInfo(until: string | null, now: Date = new Date()): WarrantyInfo | null {
   if (!until) return null;

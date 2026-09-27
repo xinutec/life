@@ -49,13 +49,9 @@ fn cache_control_for(res: &Response<ServeFileSystemResponseBody>) -> Option<Head
 }
 
 /// Serve the app's page for a client-side ROUTE, and 404 anything that plainly
-/// named a file.
-///
-/// ⚠ **A missing FILE must not be handed the page**: a woff2 answered with
-/// `200 text/html` renders as broken icons and reports nothing.
-///
-/// The test is a dot in the last path segment — a heuristic, but enumerating
-/// the bundle's assets would change with every build.
+/// named a file: a woff2 answered with `200 text/html` renders as broken icons
+/// and reports nothing. The test is a dot in the last segment — a heuristic, but
+/// listing the bundle's assets would change with every build.
 fn spa(index: &str, path: &str) -> axum::response::Response {
     use axum::response::IntoResponse as _;
 

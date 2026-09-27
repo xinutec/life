@@ -2,19 +2,12 @@ import { Signal, signal } from '@angular/core';
 import { Observable, Subject, of } from 'rxjs';
 import { catchError, map, switchMap, tap } from 'rxjs/operators';
 
-/** A root-scoped, cached read model over a server GET. As a singleton it keeps
- *  a tab's last data across route switches (no blank placeholder on return) and
- *  lets views reading the same resource share one fetch.
+/** A root-scoped, cached read model over a server GET: a tab keeps its last data
+ *  across route switches, and views share one fetch. `refresh()` re-fetches
+ *  without clearing, so it is safe on every view entry and after every mutation.
  *
- *  `refresh()` re-fetches in the background without clearing the value, so it is
- *  safe to call on every view entry and after every mutation.
- *
- *  ```ts
- *  @Injectable({ providedIn: 'root' })
- *  export class ItemsStore extends CachedResource<Item[]> {
- *    constructor() { const api = inject(LifeApi); super(() => api.items()); }
- *  }
- *  ```
+ *      @Injectable({ providedIn: 'root' })
+ *      export class ItemsStore extends CachedResource<Item[]> { … super(() => api.items()) }
  */
 export class CachedResource<T> {
   private readonly _value = signal<T | null>(null);

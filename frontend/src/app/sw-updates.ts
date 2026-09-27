@@ -15,12 +15,10 @@ export type { UpdateOutcome };
 const RECOVERY_KEY = 'life.sw-recovery-attempted';
 
 /**
- * Self-update: the Angular wiring over `@xinutec/ui-harness/sw-updates`, which
- * holds the policy (no reload mid-session, re-check on becoming visible, one
- * automatic recovery per tab). The policy is not an `@Injectable` because
- * ui-harness compiles with plain `tsc`.
- *
- * Here: feeding `SwUpdate.versionUpdates` (VERSION_READY) in, and the reload.
+ * Self-update: Angular wiring over `@xinutec/ui-harness/sw-updates`, which holds
+ * the policy (no reload mid-session, re-check when visible, one automatic
+ * recovery per tab) and can't be `@Injectable` (plain `tsc`). Here: feeding
+ * `SwUpdate.versionUpdates` in, and the reload.
  */
 @Injectable({ providedIn: 'root' })
 export class SwUpdates {

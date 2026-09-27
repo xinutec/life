@@ -57,14 +57,10 @@ fn is_deceptive_format(c: char) -> bool {
     )
 }
 
-/// Flatten a client-supplied label to a single harmless log field.
-///
-/// **The endpoint's security boundary**: a label containing a newline would
-/// forge whole log lines.
-///
-/// Control characters become spaces, whitespace runs collapse, and the result is
-/// capped in chars. `char::is_control` misses U+2028/U+2029; `split_whitespace`
-/// catches them.
+/// Flatten a client-supplied label to one harmless log field — **the endpoint's
+/// security boundary**: a newline would forge log lines. Control characters
+/// become spaces, whitespace runs collapse (`split_whitespace` also catches the
+/// U+2028/U+2029 that `char::is_control` misses), capped in chars.
 pub fn one_line(label: &str, max: usize) -> String {
     let unbroken: String = label
         .chars()

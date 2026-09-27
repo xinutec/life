@@ -1,11 +1,7 @@
 //! Storage for emotion suggestions: the per-check-in cache, and the queue the
-//! Mac's worker drains.
-//!
-//! The split of responsibility is the point. This module never talks to a model;
-//! it decides only *what is known* about a check-in's feelings (the last computed
-//! set and which wording produced it) and *what still needs computing*. Whether a
-//! model exists at all is the caller's problem — the queue is happy to hold work
-//! for a worker that isn't running yet, and the results simply appear later.
+//! Mac's worker drains. It never talks to a model; it knows only what has been
+//! computed for a check-in (and from which wording) and what still needs it. The
+//! queue happily holds work for a worker that isn't running yet.
 
 use sqlx::MySqlPool;
 
@@ -279,13 +275,9 @@ pub async fn complete(
 }
 
 /// Remember the vocabulary the picker just offered, so the day's prompt can be
-/// rebuilt later without a request to read it from (migration 0038). A cache of
-/// what the client declared, never an authority — the wheel stays the one source
-/// of truth.
-///
-/// Best-effort by construction: the caller ignores the result, because failing a
-/// suggestion the user asked for in order to record a hint for tomorrow would be
-/// the wrong trade.
+/// rebuilt later (migration 0038): a cache of what the client declared, never an
+/// authority. Best-effort: failing a suggestion the user asked for to record a
+/// hint for tomorrow would be the wrong trade.
 pub async fn remember_vocabulary(
     pool: &MySqlPool,
     user_id: &str,

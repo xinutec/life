@@ -238,14 +238,11 @@ impl Brandbank {
     }
 
     fn dietary(&self) -> Vec<DietaryFlag> {
-        // Brandbank booleans map to our dietary slugs (aligned with OFF's and the
-        // Asda search tags so all sources merge). `true` = an asserted claim →
-        // 'yes'. A `false` asserts NOTHING: it is "not claimed", not "not the
-        // case" — the same caution the search tags carry — so we never emit a
-        // firm 'no' from it (that would risk telling someone a product isn't
-        // vegan/gluten-free when Brandbank simply hadn't tagged it).
-        // A lifestyle claim ("Suitable for Vegans") is the same assertion, on
-        // pages that carry no booleans.
+        // Brandbank booleans map to our dietary slugs, as OFF's and Asda's tags do.
+        // `true` (or a lifestyle claim, "Suitable for Vegans") asserts → 'yes'. A
+        // `false` is "not claimed", not "not the case", so it never becomes a
+        // firm 'no': that could tell someone a product isn't vegan when Brandbank
+        // simply hadn't tagged it.
         let says = |claim: &str| {
             self.lifestyle.iter().any(|l| {
                 l.name_value

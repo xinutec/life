@@ -87,12 +87,8 @@ pub async fn delete_location(
 }
 
 /// GET /api/items/{id}/history → what has happened to this stock row, newest
-/// first.
-///
-/// An unknown id answers with an empty list rather than a 404: the audit is
-/// append-only and nothing guarantees a row has one — items added before the
-/// table existed have none — so "no history" and "no such item" are the same
-/// answer here, and distinguishing them would tell a caller whether somebody
+/// first. An unknown id gets an empty list, not a 404: items older than the
+/// audit have no history anyway, and a 404 would tell a caller whether somebody
 /// else's item id exists.
 pub async fn item_history(
     State(app): State<AppState>,

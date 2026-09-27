@@ -147,14 +147,11 @@ export class WellbeingCheckin {
   /** The ulid of the entry a person wants to say more about. */
   readonly detail = output<string>();
 
-  /** The entry just logged, while the amend window is still open.
+  /** The entry just logged, while the amend window is open.
    *
-   *  A signal rather than reading `pending`, which the template cannot see.
-   *  Logging a bare score is the rare case; most check-ins get more said.
-   *
-   *  ⚠ Deliberately NOT an auto-opened sheet. Tapping an adjacent face inside
-   *  this same window is how a half-step (a 3.5) is recorded, and a sheet
-   *  opening over the strip would take that gesture away to save one tap. */
+   *  ⚠ Deliberately NOT an auto-opened sheet: tapping an adjacent face in this
+   *  window records a half-step (a 3.5), and a sheet over the strip would take
+   *  that gesture away to save one tap. */
   readonly justLogged = signal<string | null>(null);
 
   readonly scores = WELLBEING_SCORES;

@@ -188,14 +188,12 @@ export class Recipes {
     }
   }
 
-  /** The Recipe→Buy bridge: everything this recipe needs and the cupboard hasn't
-   *  got, onto the Buy list in one tap.
+  /** Everything this recipe needs and the cupboard hasn't got, onto the Buy
+   *  list in one tap. Local-first, so it works in the shop.
    *
-   *  Carries the quantity, unlike the Inventory→Buy bridge — there the number is
-   *  what you own, here it is what the recipe is short of, which is exactly what
-   *  to buy. Sends the LINE's name, not the linked product's: "cumin" is what
-   *  you look for in a shop, and `product_id` rides along to say precisely which
-   *  jar if the line ever named one. Local-first, so it works in the shop. */
+   *  Carries the quantity — here it is what the recipe is short of, so what to
+   *  buy. Sends the line's name ("cumin", what you look for in a shop), with
+   *  `product_id` to say which jar if the line names one. */
   async addMissingToBuy(recipe: Recipe): Promise<void> {
     const missing = this.shoppingFor(recipe.id);
     if (!missing?.length) return;

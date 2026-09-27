@@ -1,14 +1,10 @@
-//! The product domain's identifiers as types: each shape is validated once, in
-//! `FromStr`, and `ProductId` cannot be passed as a `ListingId`. A value is
-//! well-formed downstream, so [`Source::listing_url`](super::source::Source::listing_url)
-//! and the Open Food Facts client may splice it into outbound URLs.
+//! The product domain's identifiers as types, each validated once in `FromStr`,
+//! so [`Source::listing_url`](super::source::Source::listing_url) and the Open
+//! Food Facts client may splice them into URLs. The frontend's aliases are
+//! documentation only.
 //!
-//! `shopping_items.barcode` is deliberately not a [`Barcode`]: it is whatever the
-//! phone scanned, a hint on a synced row, and failing validation would strand an
-//! offline edit. Catalog identity is `shopping_items.product_id`.
-//!
-//! The frontend aliases (`type Barcode = string`) are documentation only; the
-//! guarantee is here, where values are constructed.
+//! `shopping_items.barcode` is deliberately not a [`Barcode`]: it is a hint on a
+//! synced row, and failing validation would strand an offline edit.
 
 use std::fmt;
 use std::str::FromStr;
@@ -16,19 +12,12 @@ use std::str::FromStr;
 use serde::{Deserialize, Deserializer, Serialize};
 use ts_rs::TS;
 
-/// A product's EAN/UPC: 1 to 14 ASCII digits, and nothing else, in one
-/// canonical padding.
+/// A product's EAN/UPC: 1 to 14 digits, in one canonical padding.
 ///
-/// GS1 compares GTINs as 14 digits with leading zeros, so `065928546009` (UPC-A)
-/// and `0065928546009` are one product. Stored as Open Food Facts normalises
-/// them: leading zeros off, then padded to 8 (EAN-8) or 13 (EAN-13), 14 kept.
-/// That keeps the familiar printed form, and OFF's lookups, while making equal
-/// codes equal strings.
-///
-/// The cap and the digits-only rule are what make it safe to splice into the
-/// outbound Open Food Facts URL — no path segment or query parameter can hide in
-/// a value of this type. (Database lookups are parameterised regardless; this is
-/// about the URL.)
+/// GS1 compares GTINs as 14 digits, so `065928546009` and `0065928546009` are one
+/// product. Stored as Open Food Facts normalises: zeros off, then padded to 8 or
+/// 13, 14 kept — the printed form, with equal codes equal strings. Digits only is
+/// what makes it safe to splice into the OFF URL.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS)]
 #[ts(as = "String")]
 pub struct Barcode(String);
@@ -79,14 +68,11 @@ impl From<&Barcode> for ExternalId {
     }
 }
 
-/// A source-scoped listing id: 1 to 64 characters of `[A-Za-z0-9_-]`.
+/// A source-scoped listing id: 1 to 64 characters of `[A-Za-z0-9_-]`, which is
+/// what lets `listing_url` format it into a URL directly.
 ///
-/// Asda's CIN, Waitrose's lineNumber, Open Food Facts' barcode-as-id. Unique
-/// only within its own [`Source`](super::source::Source) — the identity of a
-/// listing is the *pair*, which is why nothing here tries to be globally unique.
-///
-/// Same splice guarantee as [`Barcode`]: the character set is the reason
-/// `listing_url` can format one into a product-page URL directly.
+/// Asda's CIN, Waitrose's lineNumber, OFF's barcode. Unique only within its
+/// [`Source`](super::source::Source): a listing's identity is the pair.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS)]
 #[ts(as = "String")]
 pub struct ExternalId(String);

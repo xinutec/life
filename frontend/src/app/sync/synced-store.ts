@@ -133,14 +133,11 @@ export abstract class SyncedStore<T extends SyncDoc> {
     }
   }
 
-  /** Ask replication to pull now — e.g. right after a server-side trash restore,
-   *  so a resurrected row appears without waiting for the next natural sync.
+  /** Pull now, e.g. right after a trash restore, so the row reappears at once.
    *
-   *  ⚠ **`start()`, NOT `reSync()`.** rxdb's `reSync()` emits into a Subject
-   *  that exists only once the replication has started, and a tab that lost
-   *  the leadership election never starts it — so the call is silently dropped
-   *  and a restored row never comes back. `start()` re-syncs when started and
-   *  starts otherwise; `replication.spec.ts` pins that behaviour. */
+   *  ⚠ `start()`, NOT rxdb's `reSync()`: that emits into a Subject which exists
+   *  only once replication has started, and a tab that lost the leader election
+   *  never starts it, so the call is dropped (pinned by replication.spec.ts). */
   reSync(): void {
     void this.replication?.start();
   }

@@ -173,13 +173,9 @@ async fn replace_allergens_in(
 }
 
 /// Replace THIS SOURCE's dietary flags, leaving other sources' claims alone
-/// (migration 0028). Open Food Facts and Asda each tag the same product, and a
-/// re-lookup of one must not erase the other's contribution; `facts_for` merges
-/// them on read.
-///
-/// Atomic for the same reason as `replace_allergens`: half a replace would drop
-/// claims this source actually makes, and `merge_dietary` reads a missing "no"
-/// as an unopposed "yes".
+/// (migration 0028): a re-lookup of OFF must not erase Asda's; `facts_for` merges
+/// on read. Atomic, as `replace_allergens`: half a replace drops real claims, and
+/// `merge_dietary` reads a missing "no" as an unopposed "yes".
 pub async fn replace_dietary(
     pool: &MySqlPool,
     product_id: ProductId,
@@ -275,14 +271,10 @@ pub async fn documents_for(pool: &MySqlPool, product_id: ProductId) -> Result<Ve
     Ok(rows)
 }
 
-/// Persist a product's full fact set from one source, each part restated. Skips
-/// nutrition/ingredients the source didn't provide (leaving any existing rows);
-/// allergens and dietary flags always replace (their absence is meaningful).
-///
-/// One transaction for the lot: a source's facts describe one product as that
-/// source understands it, and a partly-stored set is a description nobody wrote —
-/// Asda's nutrition beside OFF's allergens, attributed to Asda. Either the whole
-/// account lands or none of it does.
+/// Persist a product's full fact set from one source. Nutrition and ingredients
+/// the source didn't provide are left as they are; allergens and dietary flags
+/// always replace, since their absence is meaningful. One transaction: a partial
+/// set would put, say, Asda's nutrition beside OFF's allergens, attributed to Asda.
 pub async fn store_facts(
     pool: &MySqlPool,
     product_id: ProductId,

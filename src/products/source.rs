@@ -12,11 +12,9 @@ use crate::str_enum;
 str_enum! {
     /// A source of product data: a shop, Open Food Facts, or our own hand-entry.
     ///
-    /// **Variants are alphabetical, and that is load-bearing**: the derived `Ord` is
-    /// what `BTreeSet<Source>` sorts by, which is how shop lists reach the screen in
-    /// a stable order (see [[super::coverage]]). Alphabetical means no shop is
-    /// implicitly ranked above another by where it happens to sit in this list —
-    /// where a genuine preference is meant, it is written down explicitly
+    /// **Variants are alphabetical, and that is load-bearing**: the derived `Ord`
+    /// orders `BTreeSet<Source>`, so shop lists reach the screen in a stable order
+    /// that ranks no shop by position. A real preference is written down
     /// ([`Source::name_rank`]).
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
     #[serde(rename_all = "lowercase")]

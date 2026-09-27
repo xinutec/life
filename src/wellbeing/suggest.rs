@@ -1,15 +1,10 @@
-//! Emotion suggestions: a local model ranks which feelings from the app's
-//! vocabulary fit a check-in note, so the picker can offer them first.
-//!
-//! The model runs on the Mac, which the fleet cannot dial, so this module builds a
-//! self-contained prompt, [`store`](super::suggest_store) queues it, and the Mac's
-//! worker polls for it and posts the answer back.
-//!
-//! The prompt carries the picker's candidate list and a few-shot of the user's
-//! own past taggings, which teaches their calibration (*Low* rather than *Grief*);
-//! on held-out check-ins that roughly doubled agreement. [`filter_suggestions`]
-//! drops any token not in the candidate list. With no worker running the picker
-//! just shows the wheel.
+//! Emotion suggestions: a local model ranks which of the vocabulary's feelings
+//! fit a check-in note, so the picker offers them first. The model runs on the
+//! Mac, which the fleet cannot dial: this builds a self-contained prompt,
+//! [`store`](super::suggest_store) queues it, and the Mac's worker answers. The
+//! prompt's few-shot of the user's own taggings teaches their calibration (*Low*,
+//! not *Grief*), which roughly doubled agreement; [`filter_suggestions`] drops
+//! tokens outside the candidates. With no worker, the picker shows the wheel.
 
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use serde::{Deserialize, Serialize};

@@ -1,12 +1,9 @@
-//! "Which shops sell this?", from memory alone: a whole list costs two queries
-//! and no outbound traffic.
+//! "Which shops sell this?", from memory alone: two queries for a whole list.
 //!
-//! Merges two kinds of knowledge: an **attached listing** (`product_listings`,
-//! the shop's own line for the product) and a **sighting** (`shop_listings`, see
-//! [`super::shop_cache`]: a past query showed this barcode there).
-//!
-//! Neither is a stock check. It says where a thing is sold, which answers "can
-//! I do this trip in one shop?", not what is on the shelf tonight.
+//! Merges an **attached listing** (`product_listings`, the shop's own line) and a
+//! **sighting** (`shop_listings`, [`super::shop_cache`]: a past query showed the
+//! barcode there). Neither is a stock check: it answers "can I do this trip in
+//! one shop?", not what is on the shelf tonight.
 
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};

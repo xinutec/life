@@ -57,14 +57,12 @@ str_enum! {
 }
 
 str_enum! {
-    /// What kind of thing an item is.
+    /// What kind of thing an item is, split by where it lives and what you ask of
+    /// it (`Cookware` and `Tableware` are different cupboards). `Other` is offered
+    /// last, or it becomes the bucket for everything.
     ///
-    /// Split by where a thing lives and what you ask of it, not by material:
-    /// `Cookware` and `Tableware` are different cupboards and questions. `Other`
-    /// is offered last, or it becomes the bucket for everything.
-    ///
-    /// A closed set by decision: categories are part of the program, and a new
-    /// one is added here (the column and the sync schema are free strings).
+    /// A closed set by decision: categories are part of the program, and a new one
+    /// is added here (the column and the sync schema are free strings).
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[serde(rename_all = "snake_case")]
     #[ts(export)]

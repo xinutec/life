@@ -148,13 +148,11 @@ h3 {
 }
 
 // A list row's second line: facts, then expiry. The expiry keeps its width and
-// the facts give way — against a long expiry they collapse to "1 box…", losing
-// the location. Deliberate: an expiry is actionable, a cupboard is a lookup.
+// the facts give way: an expiry is actionable, a cupboard is a lookup.
 //
-// ⚠ The class is repeated to beat Material's one-class
-// `.mdc-list-item__secondary-text { display: block }`, which a plain
-// `.meta-line` ties and loses to on source order. Inside a component,
-// encapsulation won that tie for you; here nothing does.
+// ⚠ The class is doubled to beat Material's one-class
+// `.mdc-list-item__secondary-text { display: block }`, which a plain `.meta-line`
+// ties and loses on source order (component encapsulation won it before).
 .meta-line.meta-line {
   display: flex;
   align-items: baseline;
@@ -185,14 +183,10 @@ app-house .canvas canvas {
   display: block;
 }
 
-// Emotion chips — the feelings-wheel grammar, shared by the picker dialog, the
-// wellbeing entry sheet and the timeline. Family hues approximate the printed
-// wheel; chips tint them over the surface via color-mix so both themes stay
-// legible. `--c` is set per family below.
-// The seven family hues are a fixed categorical palette (the printed feelings
-// wheel's colours) — a semantic identity that must stay stable across light/dark,
-// not a theme surface. Chips tint them over the themed surface via color-mix, so
-// they still adapt; only the base hue is intentionally constant.
+// Emotion chips, shared by the picker, the entry sheet and the timeline. The
+// seven family hues are the printed wheel's colours: a categorical identity that
+// stays constant across light and dark. Chips tint them over the themed surface
+// with color-mix, so they still adapt. `--c` is set per family below.
 :root {
   // dev-lint: allow-hardcoded-color feelings-wheel family palette — fixed categorical identity
   --emo-happy: #e1b300;

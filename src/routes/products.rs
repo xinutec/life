@@ -24,14 +24,10 @@ pub struct SearchParams {
     q: String,
 }
 
-/// GET /api/products/shop/asda?q= → live name search against Asda's storefront
-/// (see products::asda). Distinct from the local catalog tier at
-/// GET /api/products: this hits the shop, so the picker offers it as its own
-/// explicit tier. A blank query returns `[]` with no outbound call.
-///
-/// Every hit is remembered (products::shop_cache), not just the one the caller
-/// uses: each carries its own EAN, so one search teaches many barcode → CIN
-/// mappings.
+/// GET /api/products/shop/asda?q= → live name search against Asda (see
+/// products::asda), the picker's explicit shop tier. A blank query is `[]` with
+/// no outbound call. Every hit is remembered (products::shop_cache): each carries
+/// its EAN, so one search teaches many barcode → CIN mappings.
 pub async fn search_asda(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
@@ -522,17 +518,12 @@ fn cached_as_hit(c: shop_cache::CachedListing) -> asda::AsdaHit {
     }
 }
 
-/// GET /api/products/id/{id}/find/{source} → does this shop carry this product's
-/// barcode?
+/// GET /api/products/id/{id}/find/{source} → does this shop carry the barcode?
 ///
-/// `shop_listings` answers first, with no outbound traffic; on a miss the shop
-/// is asked and its whole result remembered. Identity is the barcode, never the
-/// name ([`asda::match_barcode`]), so `None` with `searched` means no hit carried
-/// this EAN.
-///
-/// Every shop can be asked, but only Asda can be searched from the server;
-/// Waitrose's bot wall needs the app's WebView. For it a miss is
-/// `searched: false`, and the phone searches and reports to `remember_seen`.
+/// `shop_listings` answers first; on a miss the shop is asked and its whole
+/// result remembered. Identity is the barcode, never the name
+/// ([`asda::match_barcode`]). Only Asda can be searched from here: for Waitrose
+/// a miss is `searched: false`, and the phone reports to `remember_seen`.
 pub async fn find_at_shop(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
@@ -599,14 +590,10 @@ pub async fn find_at_shop(
     }))
 }
 
-/// POST /api/products/shop/{source}/listings → remember listings a client's
-/// WebView saw at a shop the server can't reach.
-///
-/// The mirror image of `remember_hits`, for a bot-walled shop only the phone
-/// can see, so a hunt's page loads are paid once.
-///
-/// Forgiving in shape, but refuses anything that would poison the barcode
-/// index. Returns how many rows were stored.
+/// POST /api/products/shop/{source}/listings → remember listings a phone's
+/// WebView saw at a shop the server can't reach (`remember_hits`' mirror), so a
+/// hunt's page loads are paid once. Forgiving in shape, but refuses anything that
+/// would poison the barcode index. Returns how many rows were stored.
 pub async fn remember_seen(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,

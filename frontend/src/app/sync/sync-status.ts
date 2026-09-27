@@ -9,26 +9,19 @@ export type SyncHealth = 'synced' | 'offline' | 'error' | 'stale';
 
 /** Every replication that reports here, spelled once.
  *
- *  ⚠ **A closed union, not `string`, and the reason is that these are KEYS.**
- *  `reportError`, `clearError` and `reportSuccess` all index the same maps by
- *  this value, so one typo puts a success under a name whose error nobody ever
- *  clears — an indicator stuck in a state no cycle can leave, with nothing to
- *  see in review. Adding a synced collection now fails to compile until its
- *  label is added here, which is the point. */
+ *  ⚠ A closed union because these are KEYS: the error and success maps are
+ *  indexed by it, and a typo would file a success under a name whose error is
+ *  never cleared. A new synced collection fails to compile until it is added. */
 export type SyncSource = 'shopping sync' | 'todo sync' | 'todo-link sync' | 'wellbeing sync';
 
 /** How often the freshness question is re-asked. `health()` is a computed, so
  *  without something moving underneath it a success cannot age. */
 const TICK_MS = 30_000;
 
-/** The one place that knows whether local edits have actually reached the
- *  server — data in IndexedDB looks saved either way. Every replication
- *  reports its cycle outcome here; the shell renders a persistent
- *  indicator whenever health() isn't `synced`.
- *
- *  Kept dependency-free and push-updated (no polling): signals in, computed
- *  out. Errors are tracked per source (store label) so one failing collection
- *  doesn't mask another recovering. */
+/** The one place that knows whether local edits reached the server — data in
+ *  IndexedDB looks saved either way. Replications report each cycle here and the
+ *  shell shows an indicator whenever health() isn't `synced`. Errors are per
+ *  source, so one failing collection doesn't mask another recovering. */
 @Injectable({ providedIn: 'root' })
 export class SyncStatus {
   /** navigator.onLine, kept live via the window online/offline events. */

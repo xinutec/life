@@ -8,14 +8,12 @@ pub(crate) fn norm(s: &str) -> String {
     s.trim().to_lowercase()
 }
 
-/// The stock that counts as this ingredient: anything linked to the same
-/// catalog product, plus anything whose name matches case-insensitively.
+/// The stock that counts as this ingredient: anything linked to the same catalog
+/// product, plus anything whose name matches case-insensitively.
 ///
-/// The two rules are ALTERNATIVES, deliberately — not a precedence with the
-/// link winning. An ingredient is a kind of thing ("cumin") and a product is one
-/// barcode ("Bart Ground Cumin 38g"), so treating a link as authoritative would
-/// make the jar you actually own stop counting the day you buy another brand.
-/// Union means a link can only ever find MORE stock, never less.
+/// A union, not a precedence: an ingredient is a kind ("cumin"), a product one
+/// barcode, so a winning link would stop the jar you own counting the day you buy
+/// another brand. A link can only find more stock, never less.
 pub(crate) fn stock_for<'a>(ingredient: &RecipeIngredient, inventory: &'a [Item]) -> Vec<&'a Item> {
     let want_name = norm(&ingredient.name);
     inventory

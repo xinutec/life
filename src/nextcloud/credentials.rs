@@ -38,14 +38,12 @@ pub struct Credentials {
     pub app_password: String,
 }
 
-/// What signing a CalDAV request with what we hold would actually get you.
+/// What signing a CalDAV request with what we hold would get you.
 ///
-/// Three outcomes rather than an `Option`, because the two empty-handed ones
-/// need different things from the user: [`NotLinked`](Usable::NotLinked) wants
-/// the grant run for the first time, and [`NeedsReauth`](Usable::NeedsReauth)
-/// wants the existing one replaced. Telling someone "connect your calendar"
-/// when it *is* connected and merely stale sends them looking for a button that
-/// says something else.
+/// Not an `Option`: the two empty-handed outcomes ask different things of the
+/// user. [`NotLinked`](Usable::NotLinked) needs the grant run once;
+/// [`NeedsReauth`](Usable::NeedsReauth) needs it replaced, and "connect your
+/// calendar" would send them looking for the wrong button.
 pub enum Usable {
     /// No grant has ever completed — Login Flow v2 has not been run.
     NotLinked,

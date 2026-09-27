@@ -75,14 +75,12 @@ impl ItemRow {
     }
 }
 
-/// The resolved item read: holding fields from `items`, display fields
-/// (name/brand/barcode/image) resolved against the linked catalog product. A
-/// macro (not a const) so it stays a compile-time literal — sqlx rejects
-/// runtime-built query strings.
+/// The resolved item read: holding fields from `items`, display fields resolved
+/// against the linked catalog product. A macro so it stays a literal for sqlx.
 ///
-/// The name is resolved by PROVENANCE: only a `name_source = 'user'` name
-/// outranks the catalogue's. Either fixed precedence is wrong for someone — a
-/// marketing-sentence OFF name, or a hand-typed shorthand.
+/// Only a `name_source = 'user'` name outranks the catalogue's: either fixed
+/// precedence is wrong for someone (a marketing-sentence OFF name, a hand-typed
+/// shorthand).
 macro_rules! item_select {
     () => {
         "SELECT i.id AS id, i.product_id AS product_id, \
@@ -639,12 +637,10 @@ pub async fn restore_location(pool: &MySqlPool, user_id: &str, id: u64) -> Resul
 
 /// Everything that has happened to one stock row, newest first.
 ///
-/// Scoped on `h.user_id` and not merely on the item's: the history table
-/// carries its own copy of who did it, and reading through the item would hand
-/// back another user's rows if an item ever changed hands. Empty is a real
-/// answer — a row added before the audit existed has no history, and so does
-/// an id belonging to somebody else, which is the same thing as far as this
-/// caller is allowed to know.
+/// Scoped on `h.user_id`, the history's own record of who did it, not through
+/// the item, which could change hands. Empty is a real answer: a row older than
+/// the audit has none, and so, as far as this caller may know, does another
+/// user's id.
 pub async fn item_history(
     pool: &MySqlPool,
     user_id: &str,

@@ -906,14 +906,10 @@ test('wellbeing — the charts pan back through history, and the axis stays put'
   await expectNoHorizontalOverflow(page, testInfo, null, CHART_SCROLLERS);
   await expectNoClippedText(page, testInfo);
 
-  // Changing zoom while panned must re-seat the scroller. The window's end is a
-  // timestamp, so it survives the change and the charts still look right — but
-  // scrollLeft is still measured against the old rail. The symptom is that the
-  // NEXT touch teleports the window, so the assertion is: a scroll event that
-  // moves nothing changes nothing.
-  //
-  // Let each change land before provoking the next, or the wait resolves on the
-  // pan's transition instead of the zoom's.
+  // Changing zoom while panned must re-seat the scroller: scrollLeft is still
+  // measured against the old rail, so the NEXT touch would teleport the window.
+  // Hence: a scroll event that moves nothing changes nothing. Let each change
+  // land first, or the wait resolves on the pan's transition, not the zoom's.
   const caption = page.locator('.caption').first();
   const atOldest = (await caption.textContent())!;
   await pan.evaluate((el) => (el.scrollLeft = (el.scrollWidth - el.clientWidth) * 0.5));

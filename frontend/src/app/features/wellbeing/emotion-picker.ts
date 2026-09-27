@@ -38,12 +38,9 @@ const POLL_MS = 2000;
 
 /** Browse and search the feelings wheel to add or remove a check-in's emotions.
  *
- *  Browse shows the whole vocabulary as a mosaic of plain words (colour for the
- *  family, weight for the ring), so you meet words you wouldn't search for;
- *  only chosen words get chrome. An ⓘ opens one gloss in place.
- *
- *  Works in `Core/Name` tokens throughout, normalising the incoming selection
- *  on open. Closes with the new tokens (Done) or `undefined` if dismissed. */
+ *  Browse shows the whole vocabulary as plain words (colour for the family,
+ *  weight for the ring), so you meet words you wouldn't search for. Works in
+ *  `Core/Name` tokens; closes with the new tokens, or `undefined` if dismissed. */
 @Component({
   selector: 'app-emotion-picker',
   templateUrl: './emotion-picker.html',

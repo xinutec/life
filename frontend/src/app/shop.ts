@@ -107,12 +107,10 @@ export interface FactsProvider {
 }
 
 /**
- * Everything shop-specific — URLs, consent handling, result extraction — lives in
- * a provider, in the web app, so adding a shop (Asda) needs no APK change. Each
- * op returns the page URL to load plus the extractor JS to run in the hidden
- * WebView. That JS reads `window.__authToken` (any Bearer the page minted, captured
- * by the native layer) and reports `AndroidShop.result(JSON.stringify(...))`:
- * `{ ok, candidates }` for search, `{ ok, product }` for product, or `{ ok:false, error }`.
+ * Everything shop-specific lives in a provider in the web app, so a new shop
+ * needs no APK change. Each op returns a page URL and extractor JS for the hidden
+ * WebView; the JS may read `window.__authToken` and reports through
+ * `AndroidShop.result(…)`: `{ ok, candidates }`, `{ ok, product }` or `{ ok:false, error }`.
  */
 export interface ShopProvider {
   /** The source this provider speaks for (see FactsProvider.id). */

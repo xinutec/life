@@ -1,15 +1,10 @@
-/** A three-tier emotion vocabulary: core emotions, each with secondary groups,
- *  each with tertiary leaves, all with a plain-English gloss. Static data; a
- *  check-in stores emotions and their path to the core is derived here.
- *
- *  Based on the Geoffrey Roberts Feelings Wheel, extended where it has no word
- *  for a real feeling, so a group may hold more than two leaves. A secondary
- *  group is a valid answer on its own: "Frustrated" is often the whole truth.
+/** The emotion vocabulary: cores, secondary groups, tertiary leaves, each with a
+ *  gloss. Based on the Geoffrey Roberts Feelings Wheel, extended where it lacks a
+ *  real feeling. A secondary group is a valid answer on its own.
  *
  *  ⚠ Identity is the token `Core/Name` ([[emotionToken]]), not the word: some
- *  leaves ("Embarrassed", "Overwhelmed") sit under two cores with different
- *  glosses. A name is unique within its core and contains no `/`. Every stored
- *  emotion is a token, so adding to the wheel cannot re-point a record. */
+ *  leaves sit under two cores. Stored emotions are tokens, so adding to the wheel
+ *  cannot re-point a record. */
 
 /** One outer-ring (tertiary) leaf: the word plus a brief gloss. */
 export interface EmotionLeafDef {

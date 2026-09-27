@@ -11,12 +11,10 @@ import { WAITROSE } from '../../shops/waitrose';
 
 /** How a shop lookup is going.
  *
- *  `none` = the shop's own results were checked and none carried this barcode.
- *  `unknown` = nobody has ever looked, and this device can't: the shop is behind
- *  a bot-wall only the app's hidden WebView gets through. Saying "doesn't have
- *  it" for that would claim an answer nobody asked for.
- *  `signedOut` = the app's session with the shop is signed out, so it would not
- *  answer; `signIn` fixes that and looks again. */
+ *  `none`: the shop's results were checked and none carried this barcode.
+ *  `unknown`: nobody has looked, and this device can't (a bot-walled shop), so
+ *  "doesn't have it" would be an answer nobody got.
+ *  `signedOut`: the app's shop session is signed out; `signIn` fixes it. */
 type ShopLookup = 'idle' | 'searching' | 'found' | 'none' | 'unknown' | 'signedOut' | 'error';
 
 /** The shops a product can be looked up at, in the order they're offered. Both
@@ -122,12 +120,9 @@ export class ProductShops {
 
   /** Ask whether a shop carries this barcode.
    *
-   *  The server answers from what past queries taught it, so a repeat lookup
-   *  costs the shop nothing. On a miss it searches the shops it can reach and
-   *  matches on the EAN — never on the shop's relevance order, which is no
-   *  evidence of identity. When it can't reach the shop at all it says so
-   *  (`searched: false`) rather than reporting an absence it never checked, and
-   *  the hunt below takes over if this device can do the looking. */
+   *  The server answers from past queries first, then searches the shops it can
+   *  reach and matches on the EAN, never on relevance order. If it can't reach
+   *  the shop it says `searched: false`, and the hunt below takes over. */
   find(source: Source): void {
     this.patchLookup(source, { state: 'searching', hit: null, progress: null, checked: 0 });
     this.api.findAtShop(this.id(), source).subscribe({
@@ -148,14 +143,11 @@ export class ProductShops {
     });
   }
 
-  /** Walk a bot-walled shop's own search results in the app's hidden WebView
-   *  until one of them carries our barcode.
+  /** Walk a bot-walled shop's search results in the hidden WebView until one
+   *  carries our barcode.
    *
-   *  Waitrose's search hits carry no EAN — only a product fetch does — so this
-   *  is a page load per candidate, which is exactly why every one it passes over
-   *  is reported to the backend on the way. The eight pages a fruitless hunt
-   *  costs are then eight lookups nobody has to pay for again, for this product
-   *  or any other. */
+   *  Waitrose's hits carry no EAN, so each candidate costs a page load; every one
+   *  passed over is reported to the backend, so no hunt pays for it again. */
   private async hunt(source: Source): Promise<void> {
     const provider = bridgeProvider(source);
     const d = this.detail();

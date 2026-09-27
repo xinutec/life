@@ -1,21 +1,10 @@
-//! The pending half of a Nextcloud login, carried in a signed cookie.
-//!
-//! **Why not `state` alone.** From a browser with no NC session, `oauth2/authorize`
-//! detours through NC's Login Flow, which drops the query, and the callback then
-//! arrives with an empty `state=`:
-//!
-//! ```text
-//! GET …/oauth2/authorize?client_id=…&redirect_uri=…&state=f360a3be…
-//!  → 303 …/login/flow?providedRedirectUri=&clientIdentifier=…
-//! ```
-//!
-//! The cookie binds the login to the browser that started it, which is what
-//! `state` proves; `state` is still checked whenever NC returns it. Being signed,
-//! the cookie also survives a pod restart mid-login.
-//!
-//! Accepted risk: with an empty `state` the cookie is the only binding, so login
-//! CSRF needs someone on the VPN who lands a callback in the victim's browser
-//! within the 10-minute window. The alternative is no login at all.
+//! The pending half of a Nextcloud login, in a signed cookie that binds it to
+//! the browser that started it, which is what `state` proves. Needed because
+//! from a browser with no NC session `oauth2/authorize` detours through Login
+//! Flow, which drops the query, and the callback arrives with an empty `state=`.
+//! `state` is still checked whenever NC returns it; the signature survives a pod
+//! restart mid-login. Accepted risk: login CSRF then needs someone on the VPN to
+//! land a callback within the 10-minute window. The alternative is no login.
 
 use chrono::{DateTime, Duration, Utc};
 use rand::Rng;

@@ -312,14 +312,11 @@ export class Wellbeing {
     return { times: readings.map((r) => r.t), tenths: readings.map((r) => r.v) };
   }
 
-  /** Build a trend over the visible window. x is the reading's true position in
-   *  time across the window (so the line reads chronologically); a half-step plots
-   *  between two lines and takes a colour to match, so height and colour tell the
-   *  same story, as they do for whole readings.
+  /** Build a trend over the visible window: x is the reading's true time, and a
+   *  half-step plots between two lines with a colour to match.
    *
-   *  Only the window's own readings, plus the halo, are turned into dots — which
-   *  is what keeps the drawn SVG the same size whether the history is a fortnight
-   *  or a decade. */
+   *  Only the window's readings, plus the halo, become dots, so the SVG is the
+   *  same size for a fortnight's history as for a decade's. */
   private buildChart(series: Series): TrendData {
     const { w, h, padLeft, padRight, padTop, padBottom } = CHART;
     const plotH = h - padTop - padBottom;

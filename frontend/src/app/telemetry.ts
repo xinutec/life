@@ -4,13 +4,10 @@ import { TelemetryCore } from '@xinutec/ui-harness/telemetry';
 import { filter } from 'rxjs';
 
 /**
- * The Angular binding for the fleet's activity trace; the queue, flushing,
- * transport and label rules live in `@xinutec/ui-harness/telemetry`. The
- * `@Injectable` can't ship from there: that package is built by plain `tsc`,
- * and an uncompiled decorator fails production builds with "JIT compiler
- * unavailable".
- *
- * Instrumented once from the app shell, so screens need no annotation.
+ * The Angular binding for the fleet's activity trace, whose logic lives in
+ * `@xinutec/ui-harness/telemetry`. The `@Injectable` can't ship from there: a
+ * decorator compiled by plain `tsc` fails production builds ("JIT compiler
+ * unavailable"). Instrumented once from the shell; screens need no annotation.
  */
 @Injectable({ providedIn: 'root' })
 export class Telemetry {

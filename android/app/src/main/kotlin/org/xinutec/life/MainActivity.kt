@@ -74,11 +74,9 @@ class MainActivity : WebShellActivity() {
     /**
      * The native capabilities the web app drives, exposed only to [ALLOWED_ORIGINS].
      *
-     * `addWebMessageListener` injects per origin, and each listener also checks
-     * `sourceOrigin` and `isMainFrame`; `addJavascriptInterface` would reach every
-     * frame, and the shop bridge runs caller-supplied JavaScript. Without
-     * [WebViewFeature.WEB_MESSAGE_LISTENER] the bridges are absent and the web app
-     * falls back to browser behaviour; never fall back to `addJavascriptInterface`.
+     * `addWebMessageListener` is per origin, and each listener checks `sourceOrigin`
+     * and `isMainFrame`. Never fall back to `addJavascriptInterface`, which reaches
+     * every frame: the shop bridge runs caller-supplied JavaScript.
      */
     override fun onWebViewCreated(web: WebView) {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return

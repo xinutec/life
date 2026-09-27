@@ -1,11 +1,8 @@
-//! The trash: everything the user deleted, restorable. Deletes anywhere in the
-//! app only ever tombstone (`deleted_at`); this module lists those tombstones
-//! across all entity kinds and clears them again on restore. Nothing is purged.
-//!
-//! For the synced entities a restore bumps the global `rev`,
-//! so the resurrected row propagates to every device through the normal pull.
-//! The sync push path itself can never clear a tombstone (set-only, see
-//! `sync::repo`) — this explicit restore is the one deliberate undelete.
+//! The trash: everything the user deleted, restorable. Deletes only ever
+//! tombstone (`deleted_at`); this lists tombstones across all kinds and clears
+//! them on restore. Nothing is purged. A synced row's restore bumps `rev`, so it
+//! reaches every device through the pull; this is the one deliberate undelete,
+//! since a sync push can never clear a tombstone.
 
 pub mod repo;
 

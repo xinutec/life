@@ -1,12 +1,8 @@
-//! A shop's pack label (`950g`, `33 cl`, `22x27G`, `EACH`) as an amount to
-//! compute with; the raw string is still what is shown.
-//!
-//! Mass becomes grams and volume millilitres here, so parsed packs compare
-//! directly. [`crate::inventory::consume`] deliberately does not convert: there
-//! `kg` against `g` is two people's amounts disagreeing, here it is one label.
-//!
-//! Unrecognised labels parse to `None` rather than a guess, so no `oz` (mass or
-//! fluid?), `gr` or `ltr`.
+//! A shop's pack label (`950g`, `33 cl`, `22x27G`, `EACH`) as an amount; the raw
+//! string is still what is shown. Mass becomes grams and volume millilitres, so
+//! packs compare directly ([`crate::inventory::consume`] deliberately doesn't
+//! convert: there `kg` against `g` is two people disagreeing). Unrecognised
+//! labels are `None`, not a guess: no `oz`, `gr` or `ltr`.
 
 use serde::Serialize;
 use ts_rs::TS;

@@ -8,12 +8,9 @@ import { ImagePickerDirective } from './image-picker';
 import { ProductImages, showThumb } from './product-image';
 
 /**
- * The native clipboard port the Android WebView wrapper injects (see the app's
- * MainActivity). Present only inside the custom app; absent in a browser.
- *
- * An origin-scoped message port (`WebViewCompat.addWebMessageListener`), so it
- * is never injected into a frame that isn't this app — it reads the system
- * clipboard.
+ * The clipboard port the Android wrapper injects (see its MainActivity); absent
+ * in a browser. Origin-scoped (`addWebMessageListener`), so no other frame gets
+ * a way to read the system clipboard.
  */
 interface AndroidClipboard {
   postMessage(message: string): void;
@@ -62,15 +59,13 @@ function readClipboardImage(): Promise<string | null> {
 /** Client ceiling, mirrors the backend's 5 MiB cap. */
 const MAX_BYTES = 5 * 1024 * 1024;
 
-/** A product thumbnail that is also a one-tap image picker
- *  ([[ImagePickerDirective]]), owning the whole pick → upload → reload flow:
+/** A product thumbnail that is also a one-tap image picker, owning the whole
+ *  pick → upload → reload flow:
  *
- *      <app-product-thumb matListItemAvatar [barcode]="it.barcode"
- *                         [hasImage]="it.has_image" />
+ *      <app-product-thumb [barcode]="it.barcode" [hasImage]="it.has_image" />
  *
- *  With no image it shows an `add_a_photo` placeholder; in the Android app it
- *  also offers "Paste copied image". A barcodeless item with a `[productId]`
- *  shows that product's image read-only; with neither, an inert icon. */
+ *  A barcodeless item with a `[productId]` shows that product's image
+ *  read-only; with neither, an inert icon. */
 @Component({
   selector: 'app-product-thumb',
   templateUrl: './product-thumb.html',

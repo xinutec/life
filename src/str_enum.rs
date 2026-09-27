@@ -5,24 +5,12 @@
 //! variant is written fine and then fails every read. Generating both from one
 //! table closes that hole.
 
-/// Declare a string-backed enum, its `ALL`, both directions of its mapping, and
-/// its database mapping ([`varchar_sql!`](crate::varchar_sql)). Attributes and doc comments pass
-/// through; the enum must be `Copy`.
-///
-/// The name after the `:` appears in parse errors (`unknown location kind
-/// "attic"`), which reach the user as a sync push's 400 body.
-///
+/// Declare a string-backed enum, its `ALL`, its string mapping both ways and its
+/// database mapping ([`varchar_sql!`](crate::varchar_sql)); the enum must be `Copy`.
+/// The name after `:` appears in parse errors, which reach the user as a sync
+/// push's 400 body.
 /// ```ignore
-/// str_enum! {
-///     /// A node kind in the spatial tree.
-///     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-///     #[serde(rename_all = "snake_case")]
-///     #[ts(export)]
-///     pub enum LocationKind: "location kind" {
-///         House => "house",
-///         Room => "room",
-///     }
-/// }
+/// str_enum! { pub enum LocationKind: "location kind" { House => "house", Room => "room" } }
 /// ```
 #[macro_export]
 macro_rules! str_enum {

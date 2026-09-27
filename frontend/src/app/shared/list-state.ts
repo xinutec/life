@@ -3,12 +3,10 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 
-/** The loading / error / empty status line above a list; the list itself stays
- *  in the host template.
+/** The loading / error / empty status line above a list:
  *
  *    <app-list-state [loading]="!loaded()" [empty]="items().length === 0"
  *                    emptyText="No items yet." emptyIcon="inventory_2" />
- *    <mat-list> … </mat-list>
  *
  *  HTTP-backed screens pass [error] and handle (retry); RxDB-backed ones, which
  *  cannot fail to load, omit both. */

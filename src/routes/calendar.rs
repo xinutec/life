@@ -130,13 +130,9 @@ pub async fn plan_shop_trip(
 }
 
 /// Turn a CalDAV failure into a response, recording a rejected password on the
-/// way past.
-///
-/// The recording matters as much as the status: until the row says
-/// `needs_reauth`, /api/me keeps answering "active" and the app keeps offering
-/// a calendar that cannot be written to. Failing to write the flag must not
-/// mask the failure that revealed it, so it is logged and the original error is
-/// still what comes back.
+/// way: until the row says `needs_reauth`, /api/me keeps offering a calendar
+/// that cannot be written to. Failing to record it is logged, and the original
+/// error still comes back.
 async fn dav_failed(app: &AppState, user_id: &str, err: DavError) -> AppError {
     match err {
         DavError::Unauthorized => {

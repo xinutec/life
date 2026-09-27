@@ -10,14 +10,11 @@ export type ApiFailure =
   | { readonly kind: 'unauthenticated' }
   | { readonly kind: 'server'; readonly status: number };
 
-/** Classify an HttpClient error at the boundary. This is the ONE place allowed to
- *  read the raw status off an `HttpErrorResponse`; every callsite consumes the
- *  `ApiFailure` instead (enforced by dev-lint's DL-ANGULAR-HTTP-ERROR-CLASSIFIED).
- *  It is the HttpClient-world sibling of sync/replication.ts's `guardAuth`, which
- *  does the same job for the fetch-based RxDB replication. Total over `unknown`
- *  so it can sit in any `error:` handler. `withFetch()` reports a dropped
- *  connection as status 0 — that is the offline signal we must not confuse with
- *  an auth failure. */
+/** Classify an HttpClient error. The ONE place that reads the raw status off an
+ *  `HttpErrorResponse` (dev-lint DL-ANGULAR-HTTP-ERROR-CLASSIFIED); the fetch-based
+ *  replication's twin is `guardAuth`. Total over `unknown`, for any `error:`
+ *  handler. `withFetch()` reports a dropped connection as status 0: offline,
+ *  which must not be mistaken for an auth failure. */
 export function classifyApiError(e: unknown): ApiFailure {
   if (e instanceof HttpErrorResponse) {
     if (e.status === 0) return { kind: 'offline' };

@@ -1,14 +1,10 @@
 //! Asda product search via its public Algolia index. The key is search-only and
-//! shipped to every browser, so the server can query it with no login or bot
-//! wall; that is why Asda works in the web app and Waitrose (a WebView provider
-//! in the frontend's `shops/`) does not.
+//! shipped to every browser, so the server needs no login or bot wall, unlike
+//! Waitrose (a WebView provider in the frontend's `shops/`).
 //!
-//! `IMAGE_ID` is the primary EAN: both the scene7 image key and a real barcode.
-//! It is not searchable, so this is name search only.
-//!
-//! If searches start failing with 4xx, the key has rotated: copy the
-//! `x-algolia-api-key` request header from a search in browser devtools into
-//! `SEARCH_KEY`.
+//! `IMAGE_ID` is the primary EAN, but not searchable: this is name search only.
+//! On 4xx the key has rotated: copy the `x-algolia-api-key` header from a search
+//! in browser devtools into `SEARCH_KEY`.
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};

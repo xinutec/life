@@ -21,14 +21,11 @@ amount_minor: number,
  */
 currency: Currency, 
 /**
- * When it was bought, for something being recorded AFTER the fact — an
- * appliance you have owned for two years, entered so its warranty has a
- * start. Absent means now, which is what the buy-list flow means every
- * time: you are standing in the shop.
+ * When it was bought, for something recorded after the fact (an appliance
+ * entered so its warranty has a start). Absent means now: the buy-list flow.
  *
- * A DATE, not a datetime, and the server does the conversion. Nobody knows
- * what time of day they bought a dishwasher, and a client that picks
- * midnight in its own zone hands the server a day that can be off by one.
+ * A DATE, converted by the server: nobody knows what time they bought a
+ * dishwasher, and a client's own midnight can be a day off.
  */
 bought_on: string | null, 
 /**
