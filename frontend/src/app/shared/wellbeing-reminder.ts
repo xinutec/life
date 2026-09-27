@@ -137,11 +137,9 @@ function saveArmedIds(ids: string[]): void {
 }
 
 /**
- * Drives the daily wellbeing-check-in reminders off the native {@link Reminders}
- * bridge. Each rule is one wall-clock alarm, keyed by the rule's id; the whole set
- * is re-armed on every app open and every check-in change (the "simple" model — an
- * alarm survives the app closing but not a reboot, and is re-armed on the next
- * open). A no-op outside the Android app, where the bridge is absent.
+ * The daily check-in reminders: one wall-clock alarm per rule, keyed by its id.
+ * The whole set is re-armed on every app open and check-in change, since an
+ * alarm survives the app closing but not a reboot. A no-op outside the app.
  */
 @Injectable({ providedIn: 'root' })
 export class WellbeingReminder {

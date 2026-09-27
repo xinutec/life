@@ -174,13 +174,10 @@ internal class ShopBridge(
                             "code=${error.errorCode} desc=${error.description} url=${request.url}",
                     )
                     if (!request.isForMainFrame) return
-                    // The first fetch after a cold start can hit a transient DNS miss
-                    // (ERR_NAME_NOT_RESOLVED): Chromium's resolver isn't ready until a
-                    // few seconds after the process starts (the VPN advertises no DNS,
-                    // so it has to fall back to the underlying network). It recovers on
-                    // its own, so re-load on a fixed cadence until it does — the page is
-                    // server-rendered, so a successful load extracts immediately. Bounded
-                    // by SHOP_TIMEOUT_MS overall and MAX_SHOP_RETRIES here.
+                    // The first load after a cold start can miss DNS (ERR_NAME_NOT_RESOLVED)
+                    // until Chromium's resolver falls back past the VPN, which advertises
+                    // none. It recovers on its own, so re-load on a fixed cadence, bounded
+                    // by MAX_SHOP_RETRIES here and SHOP_TIMEOUT_MS overall.
                     if (retries.getAndIncrement() < MAX_SHOP_RETRIES) {
                         Log.d("life-shop", "retrying main-frame load, attempt ${retries.get()}")
                         view.postDelayed({ if (!settled.get()) view.loadUrl(url) }, SHOP_RETRY_MS)

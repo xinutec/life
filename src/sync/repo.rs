@@ -22,12 +22,10 @@ use super::types::{
     Checkpoint, PullResponse, PushEntry, ShoppingDoc, TodoDoc, TodoLinkDoc, WellbeingDoc,
 };
 
-/// Allocate the next global revision, **inside the caller's transaction**. The
-/// `LAST_INSERT_ID(val + 1)` trick bumps and returns the counter atomically; the
-/// row lock it takes is held until the caller commits, so revisions are handed out
-/// in *commit* order — a pull can never advance past a rev that is assigned but not
-/// yet committed. Must run on the same connection as the write it
-/// stamps.
+/// Allocate the next global revision, **inside the caller's transaction**, on the
+/// connection of the write it stamps. `LAST_INSERT_ID(val + 1)` bumps and returns
+/// the counter atomically, and its row lock is held until commit, so revisions
+/// are handed out in *commit* order: a pull can never pass an uncommitted rev.
 pub async fn next_rev(conn: &mut MySqlConnection) -> sqlx::Result<u64> {
     let res = sqlx::query("UPDATE sync_rev SET val = LAST_INSERT_ID(val + 1) WHERE id = 1")
         .execute(&mut *conn)
@@ -591,10 +589,9 @@ pub async fn push_todo_link(
 }
 
 /// Boot-time cleanup: tombstone live duplicate edges (same user/from/kind/target
-/// under different ulids) that a race let past the push-time guard. The lowest
-/// id survives, so every device agrees; each
-/// tombstone gets its own rev so it propagates like any other delete.
-/// Idempotent and cheap once clean.
+/// under different ulids) that a race let past the push-time guard. The lowest id
+/// survives, so every device agrees; each tombstone gets its own rev and
+/// propagates like any delete. Idempotent and cheap once clean.
 pub async fn dedupe_todo_links(pool: &MySqlPool) -> Result<u64> {
     let dups: Vec<(u64,)> = sqlx::query_as(
         "SELECT t.id FROM todo_links t JOIN todo_links k \

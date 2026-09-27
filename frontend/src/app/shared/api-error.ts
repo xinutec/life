@@ -1,10 +1,9 @@
 import { HttpErrorResponse } from '@angular/common/http';
 
 /** The three ways an HttpClient call can fail that the app makes decisions on.
- *  A discriminated union so callers `switch (f.kind)` exhaustively — the compiler
- *  then forces every site to handle `offline` distinctly from `unauthenticated`,
- *  which is the whole point: a network failure must never be mistaken for a
- *  logged-out session (that mistake showed the sign-in screen to offline users). */
+ *  A discriminated union, so every `switch (f.kind)` must handle `offline` apart
+ *  from `unauthenticated`: a network failure must never read as a logged-out
+ *  session, which would show offline users the sign-in screen. */
 export type ApiFailure =
   | { readonly kind: 'offline' }
   | { readonly kind: 'unauthenticated' }

@@ -120,11 +120,9 @@ async fn name_source_for_update(
 
 /// The `expiry_precision` an UPDATE should write.
 ///
-/// `None` is "no statement", not "day", and the difference is the whole point of
-/// the column: an update that quietly wrote `day` would re-print the invented
-/// 30th of a month-precision box as a real one, which is exactly the fault
-/// migration 0045 exists to stop. Only the item form knows whether a person
-/// picked a month or a day, so only it says.
+/// `None` is "no statement", not "day": an update that wrote `day` would re-print
+/// the invented month-end of a month-precision box as real, the fault migration
+/// 0045 exists to stop. Only the item form knows which a person picked.
 async fn expiry_precision_for_update(
     pool: &MySqlPool,
     user_id: &str,

@@ -33,11 +33,10 @@ export function guardAuth(
   }
 }
 
-/** Start the standard HTTP pull/push replication every synced collection uses
- *  (see docs/design/sync.md). One implementation instead of three
- *  copies — the shape is identical per collection: GET `path?since&limit` for
- *  pulls, POST `path` with the RxDB rows for pushes, rev-checkpointing, the
- *  auth guard, and quiet retry on transient errors. */
+/** The HTTP pull/push replication every synced collection uses (see
+ *  docs/design/sync.md): GET `path?since&limit` pulls, POST `path` pushes the
+ *  RxDB rows, with rev checkpoints, the auth guard, and quiet retry on transient
+ *  errors. */
 export function startHttpReplication<T>(opts: {
   collection: RxCollection<T>;
   /** Stable RxDB replication identity, e.g. 'shopping-http-sync'. */
@@ -53,10 +52,8 @@ export function startHttpReplication<T>(opts: {
    *  keys the status maps — see `SyncSource`. */
   label: SyncSource;
   /** Raised once the server refuses us for want of a session. Replication then
-   *  STOPS: a 401 is not a transient error, and retrying it on a timer forever
-   *  neither recovers nor informs — it just burns a request every few seconds
-   *  until the tab is closed. Only a fresh login can help, so we say so and
-   *  stand down. */
+   *  STOPS: retrying a 401 on a timer neither recovers nor informs; only a fresh
+   *  login helps. */
   onAuthLost: () => void;
   /** How often to ask the server whether anything is new, in milliseconds.
    *  Overridable only so tests need not wait a minute; nothing in the app sets

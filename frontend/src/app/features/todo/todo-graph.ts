@@ -46,12 +46,10 @@ const TARGET_ICON: Record<TargetKind, string> = {
   place: 'place',
 };
 
-/** The connection graph: it fuses the to-do + link stores with the app's entity
- *  catalogs (items / recipes / rooms / shopping / places) so a link can be
- *  resolved to a label, searched for, and — the powerful bit — used to derive
- *  whether a to-do is *ready* or *blocked*. All signal-driven (zoneless). Entity
- *  catalogs come from the HTTP API (SW-cached, so they work offline) and fail
- *  soft to empty. */
+/** The connection graph: fuses the to-do and link stores with the app's entity
+ *  catalogs (items, recipes, rooms, shopping, places), so a link resolves to a
+ *  label, can be searched for, and decides whether a to-do is *ready* or
+ *  *blocked*. Catalogs come from the SW-cached API and fail soft to empty. */
 @Injectable({ providedIn: 'root' })
 export class TodoGraph {
   private todos = inject(TodoStore);

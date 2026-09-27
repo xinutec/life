@@ -118,11 +118,9 @@ export class LifeApi {
   }): Observable<void> {
     return this.http.post<void>('/api/items/low', identity);
   }
-  /** What has happened to one stock row, newest first. Empty for a row added
-   *  before the audit existed — "no history" is an answer, not a failure. */
-  /** Everything the history dialog shows: the events, and what was paid. The
-   *  purchases ride alongside rather than among them — a purchase is a fact
-   *  about the item, not one of the things that happened to it. */
+  /** Everything the history dialog shows: the events, newest first (none for a
+   *  row older than the audit), and what was paid. Purchases ride alongside, not
+   *  among them: a purchase is a fact about the item, not something done to it. */
   itemHistory(id: number): Observable<ItemHistory> {
     return this.http.get<ItemHistory>(`/api/items/${id}/history`);
   }

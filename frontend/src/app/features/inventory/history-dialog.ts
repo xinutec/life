@@ -73,12 +73,9 @@ export class HistoryDialog {
   readonly loaded = computed(() => this.entries() !== null);
   readonly lines = computed(() => (this.entries() ?? []).map((e) => this.line(e)));
 
-  /** What this row cost, newest first.
-   *
-   *  Shown HERE and not only on the product page, because for a hand-typed
-   *  buy-list row the product page cannot show it: there is no barcode and no
-   *  catalogue product to hang it on, and the item is the only key that always
-   *  exists. Without this the price was recorded and then unreachable. */
+  /** What this row cost, newest first. Here and not only on the product page:
+   *  a hand-typed buy-list row has no barcode or catalogue product, and the item
+   *  is the only key that always exists. */
   readonly paid = computed(() =>
     this.purchases().map((p) => ({
       id: p.id,

@@ -214,11 +214,9 @@ fn nowhere_to_write_is_none_rather_than_a_guess() {
 
 // ── the calendar home URL ───────────────────────────────────────────────────
 //
-// Built segment by segment so `url` does the percent-encoding. A login is not
-// always the tidy word the happy path assumes: Nextcloud accepts email-style
-// logins, and a login carrying a `/` must land as one escaped segment rather
-// than opening a new one — that last case is the reason this is not a
-// `format!`.
+// Built segment by segment so `url` percent-encodes: Nextcloud accepts
+// email-style logins, and a login with a `/` must stay one escaped segment,
+// which is why this is not a `format!`.
 
 use life::calendar::caldav::calendar_home;
 

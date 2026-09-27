@@ -187,13 +187,10 @@ export class App {
             break;
           case 'offline':
           case 'server':
-            // Couldn't confirm identity, but this is NOT a logout. Keep the
-            // last-known `me` (already hydrated from cache) so the app opens; if
-            // there's no cache, `offline` drives an "offline" notice rather than
-            // telling the user to sign in when the real problem is connectivity.
-            // Being offline is surfaced ambiently by the toolbar sync indicator
-            // (SyncStatus watches navigator.onLine), so a shown-from-cache app
-            // still signals its connectivity — no need to alarm here.
+            // Couldn't confirm identity, but this is NOT a logout: keep the cached
+            // `me` so the app opens. With no cache, `offline` shows an offline
+            // notice rather than a sign-in prompt for what is a connectivity
+            // problem; the toolbar's sync indicator already says we're offline.
             this.offline.set(true);
             break;
           default:

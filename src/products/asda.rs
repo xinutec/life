@@ -97,13 +97,10 @@ struct RawHit {
     nutritional_info: std::collections::BTreeMap<String, i64>,
 }
 
-/// Asda's lifestyle tag → our dietary flag slug. We map the diet/lifestyle and
-/// free-from tags — a genuine dietary restriction, and (for free-from) safety-
-/// relevant — so the two sources' flags line up and merge instead of sitting
-/// alongside as near-duplicates. Asda's remaining tags are nutrition *claims*
-/// (LowSalt, LowFat, HighFibre, …): marketing about quantity, not a dietary
-/// yes/no, so they'd only clutter the dietary chips — left in `raw_json` rather
-/// than promoted to a flag. Nothing is lost: the full record is stored verbatim.
+/// Asda's lifestyle tag → our dietary flag slug, so its flags merge with OFF's
+/// instead of sitting beside them as near-duplicates. Only diet/lifestyle and
+/// free-from tags: the rest (LowSalt, HighFibre, …) are marketing about quantity,
+/// not a yes/no, and stay in the stored `raw_json`.
 const LIFESTYLE_FLAGS: &[(&str, &str)] = &[
     ("Vegan", "vegan"),
     ("Vegetarian", "vegetarian"),
@@ -118,13 +115,11 @@ const LIFESTYLE_FLAGS: &[(&str, &str)] = &[
     ("Organic", "organic"),
 ];
 
-/// Asda's lifestyle tags as dietary flags.
+/// Asda's lifestyle tags as dietary flags, every one 'yes'.
 ///
-/// **A 0 is not a "no".** Asda ships all 24 tags on every product and sets the
-/// ones it claims: Quaker Oat So Simple has `Vegetarian: 0` though oats plainly
-/// are, while an oat drink has `Vegetarian: 1`. So 0 means "not claimed" and
-/// must assert NOTHING — reading it as a negative would have the app telling you
-/// a vegetarian product isn't one. Every flag here is therefore 'yes'.
+/// **A 0 is not a "no".** Asda ships all 24 tags and sets the ones it claims:
+/// Quaker Oat So Simple has `Vegetarian: 0`, though oats plainly are. Reading 0
+/// as a negative would tell you a vegetarian product isn't one.
 fn lifestyle_flags(info: &std::collections::BTreeMap<String, i64>) -> Vec<DietaryFlag> {
     LIFESTYLE_FLAGS
         .iter()
@@ -156,13 +151,9 @@ fn non_empty(s: Option<String>) -> Option<String> {
     s.map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
 }
 
-/// Pounds (Asda gives prices as floats) → integer minor units (pence). Rounded,
-/// so float error can't leak into stored money.
-///
-/// `None` for anything that isn't a real price. `as i64` on an f64 saturates
-/// (and turns NaN into 0) without saying so, which on money means a malformed
-/// payload lands in the price history as a plausible-looking number. A price we
-/// can't read is not a price.
+/// Asda's float pounds → integer pence, rounded, or `None` for anything that
+/// isn't a real price: `as i64` saturates (and turns NaN into 0) silently, which
+/// would put a malformed payload in the price history as a plausible number.
 fn to_minor(pounds: f64) -> Option<i64> {
     /// £1,000,000 in pence. Not a technical limit — an i64 holds far more —
     /// but the point past which a "price" is evidence the payload is wrong.

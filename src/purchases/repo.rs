@@ -22,13 +22,11 @@ pub struct BoughtItem<'a> {
     pub unit: Option<&'a str>,
 }
 
-/// Longest ISO 4217 code, and the column width.
 /// Record a purchase.
 ///
-/// Validates rather than coerces. A price of "-5" or a currency of "pounds" is a
-/// client bug or a fat finger, and silently storing either would put a number
-/// into the spending history that nobody can later tell apart from a real one —
-/// the whole value of this table is that its numbers are true.
+/// Validates rather than coerces: a price of "-5" is a client bug or a fat
+/// finger, and stored it would be indistinguishable from a real number in a
+/// history whose whole value is that its numbers are true.
 pub async fn record(
     pool: &MySqlPool,
     user_id: &str,
@@ -97,11 +95,9 @@ fn bought_at_from(on: Option<chrono::NaiveDate>) -> Result<DateTime<Utc>> {
 
 /// What this person paid for ONE cupboard item, newest first.
 ///
-/// Separate from [`history`] because it answers a different question and needs a
-/// key that always exists. `history` is "what have I paid for this THING, ever"
-/// and is keyed on the catalogue; this is "what did this particular row cost",
-/// and it is the only way to reach a purchase from a hand-typed buy-list row,
-/// which has no barcode and no product (migration 0044).
+/// Unlike [`history`] ("this THING, ever", keyed on the catalogue), keyed on the
+/// item: the only way to reach a purchase from a hand-typed buy-list row, which
+/// has no barcode and no product (migration 0044).
 pub async fn for_item(pool: &MySqlPool, user_id: &str, item_id: u64) -> Result<Vec<Purchase>> {
     let rows = sqlx::query_as::<_, Purchase>(
         "SELECT id, item_id, product_id, barcode, name, shop, amount_minor, currency, \

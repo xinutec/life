@@ -5,12 +5,9 @@
   font: var(--mat-sys-body-small);
 }
 
-// The dead end with the way out of it. Deliberately NOT the error container:
-// nothing went wrong and nothing was lost — the calendar simply isn't connected
-// yet, and alarm colours here would make a prerequisite read as a fault. It
-// appears directly under the button you just pressed, which is attention
-// enough, and it leaves the Connect button free to be the ordinary primary
-// action it is.
+// The dead end with the way out. Deliberately NOT the error container: nothing
+// went wrong, the calendar just isn't connected, and alarm colours would make a
+// prerequisite read as a fault. It sits right under the button you pressed.
 .needs-linking {
   display: flex;
   flex-direction: column;

@@ -71,11 +71,9 @@ export type { WarmEmotionsRequest } from './generated/WarmEmotionsRequest';
 import type { ItemCategory as ItemCategoryT } from './generated/ItemCategory';
 import { keysOf } from './shared/narrow';
 
-/** Every ItemCategory, in the order category pickers show them. The `Record`
- *  keys make the compiler prove the list is exhaustive and duplicate-free — a
- *  new enum value won't build until it's placed here. */
-// Ordered as a person would scan it, not alphabetically: the everyday ones
-// first, `other` last because a fallback offered early gets picked early.
+/** Every ItemCategory, in the order pickers show them: the everyday ones first,
+ *  `other` last, because a fallback offered early gets picked early. The `Record`
+ *  keys make the compiler prove the list exhaustive and duplicate-free. */
 export const ITEM_CATEGORIES = keysOf({
   food: true,
   cookware: true,

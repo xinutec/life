@@ -55,11 +55,9 @@ pub async fn delete(
 
 /// What may ride along with a buy: the price, if it was noted.
 ///
-/// Optional because it must be, not because it is a nicety. Marking something
-/// bought is the gesture that empties the list, and it has to keep working with
-/// a full trolley and one hand — a capture step that blocks it would be skipped,
-/// and then the list stops being used at all. Recording nothing is a valid,
-/// common answer.
+/// Optional because it must be: marking things bought empties the list with a
+/// full trolley and one hand, and a capture step that blocked it would get the
+/// list abandoned. Recording nothing is a valid, common answer.
 #[derive(Debug, Default, Deserialize, TS)]
 #[ts(export)]
 pub struct BuyRequest {

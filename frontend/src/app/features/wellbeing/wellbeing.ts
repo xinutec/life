@@ -296,11 +296,9 @@ export class Wellbeing {
 
   /** Collect one metric's readings, newest first.
    *
-   *  Sorted here rather than taken on trust from the store's `recordedAt desc`
-   *  (wellbeing-store.ts): a binary search over a list that turned out not to be
-   *  ordered doesn't fail, it quietly plots the window backwards. The sort costs
-   *  one pass per data change and none per scroll frame, so the invariant the
-   *  search needs is established where the search can see it. */
+   *  Sorted here, not trusted from the store's order: a binary search over a list
+   *  that isn't ordered doesn't fail, it quietly plots the window backwards. One
+   *  pass per data change, none per scroll frame. */
   private seriesOf(value: (e: WellbeingDoc) => number | null | undefined): Series {
     const readings: { t: number; v: number }[] = [];
     for (const e of this.items()) {

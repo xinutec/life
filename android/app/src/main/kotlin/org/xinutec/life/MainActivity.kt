@@ -126,9 +126,8 @@ class MainActivity : WebShellActivity() {
 
     /** `{op:"run", url, extractorJs, requestId}` / `{op:"connect", loginUrl,
      *  requestId}`. Both answer through `window.__shopResolve` /
-     *  `window.__shopConnected` as they always did — a hidden WebView's result
-     *  arrives long after the message that asked for it. So no reply proxy: a
-     *  handler that never answers on the message channel does not hold one. */
+     *  `window.__shopConnected`, not a reply proxy: a hidden WebView's result
+     *  arrives long after the message that asked for it. */
     private fun onShopMessage(body: JSONObject) {
         val requestId = body.optString("requestId")
         when (body.optString("op")) {

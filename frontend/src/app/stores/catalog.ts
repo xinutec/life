@@ -4,12 +4,9 @@ import { CachedResource } from '../shared/cached-resource';
 import { LifeApi } from '../life-api';
 import { BinDay, ConflictEntry, Item, Loc, Recipe, TrashEntry } from '../models';
 
-/** Root-scoped caches for the server read-catalogs that more than one view shows.
- *  Being singletons, they retain their data across a tab switch (the component is
- *  destroyed, the store isn't) and let every view of the same data share one
- *  fetch. Each is just a loader — all the retain/refresh/error logic lives once in
- *  {@link CachedResource}. Call `.refresh()` on entering a view and after a
- *  mutation; read `.value()` / `.loaded()` / `.error()` in the template. */
+/** The server read-catalogs more than one view shows, each a
+ *  {@link CachedResource}: `.refresh()` on entering a view and after a mutation;
+ *  read `.value()` / `.loaded()` / `.error()` in the template. */
 
 @Injectable({ providedIn: 'root' })
 export class ItemsStore extends CachedResource<Item[]> {

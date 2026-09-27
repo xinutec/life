@@ -104,12 +104,9 @@ pub async fn get_by_id(pool: &MySqlPool, id: ProductId) -> Result<Option<Product
     Ok(row.map(Product::from))
 }
 
-/// The canonical product carrying a listing for (source, external_id), or None.
-/// Resolved through `product_listings`, so it finds a product via ANY of its
-/// sources — not only the one it was first created from.
-///
-/// Spells its columns out rather than using `product_select!` — see that macro:
-/// the join makes half of them ambiguous, so each needs its alias.
+/// The canonical product carrying a listing for (source, external_id), found
+/// through `product_listings`, so via ANY of its sources. Its columns are spelt
+/// out (see `product_select!`).
 pub async fn get_by_source_external(
     pool: &MySqlPool,
     source: Source,
@@ -525,13 +522,10 @@ pub async fn get_image(pool: &MySqlPool, barcode: &Barcode) -> Result<Option<(Ve
     })
 }
 
-/// Replace just the image bytes for a barcode, leaving name/brand/quantity as
-/// they are. Creates a bare catalog row if the barcode was never looked up (so
-/// you can give an image to a product OFF has never heard of); `source='user'`
-/// marks a hand-uploaded image, but only on insert — a later OFF metadata
-/// refresh keeps its own `source`. `image_source='user'` is set on every write:
-/// a hand upload is ours, so picture reconciliation never nags to replace it. The
-/// unique `barcode` key drives the upsert.
+/// Replace just the image bytes for a barcode, creating a bare catalog row if
+/// it was never looked up (a picture for a product OFF has never heard of).
+/// `source='user'` only on insert; `image_source='user'` on every write, since a
+/// hand upload is ours and picture reconciliation never nags to replace it.
 pub async fn set_image(
     pool: &MySqlPool,
     barcode: &Barcode,

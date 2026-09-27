@@ -606,8 +606,6 @@ const CONFLICTS = [
   },
 ];
 
-/** Mock every backend call: pulls return the seed docs, pushes accept all.
- *  Catch-all FIRST — Playwright runs handlers last-registered-first. */
 /** Compare "September 2026"-style month headings chronologically, so the
  *  calendar's order can be asserted without hardcoding which months a
  *  relative-dated fixture lands in. */
@@ -626,6 +624,8 @@ const syncRoute = (docs: unknown[]) => (r: Parameters<Parameters<Page['route']>[
   return r.fulfill({ json: { documents: fresh, checkpoint: { rev: top } } });
 };
 
+/** Mock every backend call: pulls return the seed docs, pushes accept all.
+ *  Catch-all FIRST: Playwright runs handlers last-registered-first. */
 async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/**', (r) =>
     r.request().method() === 'GET' ? r.fulfill({ json: [] }) : r.fulfill({ status: 204, body: '' }),
@@ -1509,12 +1509,9 @@ test('emotion picker ⓘ — the gloss opens in place, one at a time @ phone wid
   await expect(page.getByRole('button', { name: 'Add Absorbed' })).toBeVisible();
 });
 
-// Tapping a to-do opens the edit sheet — a
-// dense form (two mat-button-toggle-groups, notes, two date rows with presets,
-// connections, a search box, delete). Everything the overlap check can't catch
-// on a static page lives here: this sheet is where a too-wide toggle-group
-// spills off the right of a phone. Check both the sheet's contents overlap-free
-// AND that nothing in it overflows the sheet horizontally.
+// Tapping a to-do opens the edit sheet, the densest form in the app (two toggle
+// groups, notes, two date rows with presets, connections, search, delete): where
+// a too-wide toggle group spills off a phone. Checks both overlap and overflow.
 test('to-do detail — tapping a to-do opens a clean edit sheet @ phone width', async ({
   page,
 }, testInfo) => {

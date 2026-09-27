@@ -299,11 +299,9 @@ async fn a_linked_ingredient_matches_stock_by_product_not_by_name() {
     assert_eq!(orphaned.ingredients[0].product_id, None);
 }
 
-/// The recipes LIST — `GET /api/recipes`, the screen's first fetch. Its
-/// ingredient query is a three-table
-/// join, so what it pins is mostly about the joins: an unlinked line must
-/// survive the LEFT JOIN to products (an inner one would silently drop it), and
-/// the ingredients must land on the right recipe.
+/// The recipes LIST (`GET /api/recipes`, the screen's first fetch) is a
+/// three-table join: an unlinked line must survive the LEFT JOIN to products (an
+/// inner one would drop it), and ingredients must land on the right recipe.
 #[tokio::test]
 async fn list_recipes_returns_live_recipes_with_their_ingredients() {
     let url = common::test_db_url();

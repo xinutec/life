@@ -77,11 +77,9 @@ async fn canonical_name_is_sticky_a_new_source_does_not_silently_switch_it() {
     );
     assert_eq!(p.name_source, Some(Source::Off));
 
-    // A retailer listing arrives with a cleaner title. It does NOT silently take
-    // over the canonical name — no source overwrites another behind your back.
-    // The retailer's name is captured on its own listing as a candidate to
-    // approve, and the canonical name
-    // stays exactly what it was.
+    // A retailer listing arrives with a cleaner title. It does NOT take over the
+    // canonical name behind your back: it is captured on its own listing as a
+    // candidate to approve, and the canonical name stays as it was.
     let p = repo::upsert_external(
         &pool,
         Source::Asda,

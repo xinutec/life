@@ -16,7 +16,7 @@ test('a signed-in app opened offline stays signed in', async ({ page, context })
     };
   });
 
-  // Phase 1 — online: serve.mjs answers /api/me, so the shell signs in (which
+  // Phase 1 — online: harness.mjs answers /api/me, so the shell signs in (which
   // caches the identity), and the service worker installs and prefetches the
   // full shell (same completeness wait as offline.spec.ts — going offline
   // mid-prefetch is a flake).

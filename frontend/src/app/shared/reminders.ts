@@ -19,11 +19,9 @@ type ReminderRequest =
   | { op: 'cancel'; id: string };
 
 /**
- * Schedules device-local Android notifications through the native ReminderBridge.
- * The bridge fires an alarm at a wall-clock time even when the app is closed —
- * only possible inside the Life Android app, so `available` is false in a plain
- * browser and callers must feature-detect before offering reminder UI. Every method
- * is a safe no-op when the bridge is absent, so callers needn't guard each call.
+ * Device-local Android notifications through the native ReminderBridge, which
+ * fires at a wall-clock time even with the app closed. Only inside the Android
+ * app: `available` is false in a browser, and every method is then a no-op.
  */
 @Injectable({ providedIn: 'root' })
 export class Reminders {

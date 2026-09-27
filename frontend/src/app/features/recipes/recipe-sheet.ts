@@ -114,11 +114,9 @@ export class RecipeSheet {
           product_id: pick.product_id,
           product_name: pick.product_id ? pick.name : null,
         });
-        // The unit only. A linked product's pack size now suggests one — grams
-        // for a thing sold by weight — which is how a line gets a unit at all
-        // without anyone typing it, and comparable stock depends on having one.
-        // Its quantity is not taken: what the shop sells is not what the recipe
-        // needs, and 950g of flour is a sack, not a loaf.
+        // The unit only: a linked product's pack size suggests one (grams for a
+        // thing sold by weight), and comparable stock depends on having one. Not
+        // its quantity: 950g of flour is what the shop sells, not what the recipe needs.
         if (pick.unit != null && !row.unit?.trim()) this.patchIngredient(i, { unit: pick.unit });
         if (!pick.product_id) {
           this.feedback.error(`“${pick.name}” isn’t in the product catalogue, so nothing to link`);

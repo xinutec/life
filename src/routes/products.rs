@@ -496,11 +496,9 @@ pub struct ShopFind {
 
 /// A remembered listing, shaped as a search hit.
 ///
-/// Price and dietary flags are deliberately absent rather than stale: the cache
-/// keeps identity (this barcode is this CIN), which doesn't rot, and not the
-/// figures that do. Attaching re-fetches those from the shop for real, so the
-/// only thing this has to be good enough for is letting you confirm it's the
-/// right product.
+/// Price and dietary flags are absent rather than stale: the cache keeps identity
+/// (this barcode is this CIN), which doesn't rot. Attaching re-fetches the rest,
+/// so this only has to let you confirm it's the right product.
 fn cached_as_hit(c: shop_cache::CachedListing) -> asda::AsdaHit {
     asda::AsdaHit {
         external_id: c.external_id,
@@ -700,12 +698,9 @@ pub async fn sync_listing(
     {
         repo::record_price(&app.pool, lid, price).await?;
     }
-    // The picture is part of the identity we know about this product, not a
-    // rotting figure — so pull it onto the product now, the same SSRF-gated
-    // fetch the picker's import path and OFF lookups use. Only when the product
-    // has none yet: an image we already have (from OFF, or a hand upload) is not
-    // overwritten, matching the pack-size rule above. Best-effort — a failed
-    // fetch just leaves the product image-less, never fails the attach.
+    // The picture is identity, not a rotting figure, so it comes onto the product
+    // now through the same SSRF-gated fetch, but only if it has none (like pack
+    // size above). Best-effort: a failed fetch never fails the attach.
     if !updated.has_image
         && let Some(url) = hit.image_url.as_deref().filter(|s| !s.is_empty())
         && let Some((bytes, mime)) = off::fetch_image_from(url, Source::Asda.image_hosts()).await?

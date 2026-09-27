@@ -3,7 +3,6 @@
 //! Sync-aware exactly like `shopping::repo`: every write allocates a global `rev`
 //! in its transaction, stamps `updated_at`, and *soft*-deletes (sets `deleted_at`)
 //! so deletes propagate to offline clients as tombstones. Reads hide tombstones.
-//! The enums are stored as their snake_case strings and parsed at this boundary.
 
 use anyhow::{Context, Result};
 use sqlx::MySqlPool;

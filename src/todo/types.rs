@@ -86,12 +86,10 @@ pub struct NewTodo {
     pub shared: bool,
 }
 
-/// Partial update, as `PATCH` implies: **an absent field is left alone.** For the
-/// nullable columns, `null` is *not* the same as absent — it clears the value,
-/// while absent preserves it. That distinction is what lets a caller send
-/// `{"notes": "..."}` without having to restate the whole to-do (and without
-/// silently resetting `shared` to private, which a `#[serde(default)]` bool would
-/// do).
+/// Partial update, as `PATCH` implies: **an absent field is left alone**, while
+/// `null` on a nullable column clears it. So a caller can send `{"notes": "..."}`
+/// without restating the to-do, or silently resetting `shared` to private as a
+/// `#[serde(default)]` bool would.
 #[derive(Debug, Default, Deserialize)]
 pub struct UpdateTodo {
     #[serde(default)]

@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 // Beyond the shell loading offline, the read data (inventory etc.) must be
 // readable offline too — the Tube case. ngsw dataGroups cache the API responses
-// network-first; offline they come from cache. (serve.mjs mocks /api/items.)
+// network-first; offline they come from cache. (harness.mjs mocks /api/items.)
 test('cached API data is readable offline', async ({ page, context }) => {
   await page.goto('/');
   await page.waitForFunction(() => navigator.serviceWorker?.controller != null, null, {

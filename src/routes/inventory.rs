@@ -333,13 +333,10 @@ pub async fn mark_low(
     found_or_404(repo::mark_low(&app.pool, &user.user_id, id).await?)
 }
 
-/// POST /api/items/{id}/use → take an amount out of a stock row.
-///
-/// Returns the item as it now stands. A quantity the row can't be measured
-/// against is a 400 that says which unit it *is* in, rather than a silent
-/// no-op: the whole value of this is that the number in the cupboard stays
-/// true, and quietly declining to change it would undermine that as surely as
-/// changing it wrongly would.
+/// POST /api/items/{id}/use → take an amount out of a stock row; returns the
+/// item as it now stands. A quantity the row can't be measured against is a 400
+/// naming the row's unit, not a silent no-op: the cupboard's number must stay
+/// true, and quietly not changing it undermines that as much as a wrong change.
 pub async fn use_item(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
