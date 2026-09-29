@@ -27,7 +27,7 @@ RUN GIT_SHA="$GIT_SHA" node scripts/stamp-version.mjs
 RUN pnpm exec ng build --configuration production
 
 # --- backend: build the Rust binary (deps cached in their own layer) ---
-FROM rust:1-bookworm AS backend
+FROM rust:1.98-bookworm AS backend
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 # Prime the dependency cache with a stub crate, then build for real.

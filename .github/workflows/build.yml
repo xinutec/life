@@ -9,7 +9,7 @@ concurrency:
 on:
   push:
     branches: [main]
-    # Images build from rust:1-bookworm / node:24-alpine, never the flake, so a
+    # Images build from rust:1.98-bookworm / node:24-alpine, never the flake, so a
     # flake.lock-only change can't affect the image — skip the rebuild.
     paths-ignore:
       - "**/flake.lock"
@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    container: rust:1-bookworm
+    container: rust:1.98-bookworm
     services:
       mariadb:
         image: mariadb:11.8
