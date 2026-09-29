@@ -27,7 +27,7 @@ how it got there is in `git log`. `#N` is a task in the `task` CLI.
 - **Expiry view** — is a fuller view wanted beyond Today's "Expiring soon" card?
 - **Product extras** — paste-URL → `og:image`; manual "refresh from OFF"; a
   `@zxing/browser` scanner fallback (`BarcodeDetector` is Chromium-only);
-  contributing missing products to OFF (needs Pippijn's OFF account).
+  contributing missing products to OFF (needs the user's OFF account).
 
 ## Infrastructure
 

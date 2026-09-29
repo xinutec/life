@@ -36,7 +36,7 @@ createServer(async (req, res) => {
 
   if (path === '/api/me') {
     res.writeHead(200, noStore);
-    return res.end(JSON.stringify({ userId: 'pippijn', displayName: 'Pippijn', avatarUrl: '', nextcloud: 'not_linked' }));
+    return res.end(JSON.stringify({ userId: 'user', displayName: 'User', avatarUrl: '', nextcloud: 'not_linked' }));
   }
   if (path === '/api/house') {
     try {

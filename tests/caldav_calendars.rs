@@ -222,10 +222,10 @@ use life::calendar::caldav::calendar_home;
 
 #[test]
 fn a_plain_login_gets_the_ordinary_dav_path() {
-    let url = calendar_home("https://cloud.example.org", "pippijn").unwrap();
+    let url = calendar_home("https://cloud.example.org", "user").unwrap();
     assert_eq!(
         url.as_str(),
-        "https://cloud.example.org/remote.php/dav/calendars/pippijn/"
+        "https://cloud.example.org/remote.php/dav/calendars/user/"
     );
 }
 
@@ -252,9 +252,9 @@ fn a_slash_in_a_login_cannot_open_a_new_path_segment() {
 fn a_path_on_the_base_is_replaced_not_appended() {
     // Documents today's behaviour: a Nextcloud under a sub-path would want
     // appending — a real question, deliberately not answered here.
-    let url = calendar_home("https://cloud.example.org/nextcloud", "pippijn").unwrap();
+    let url = calendar_home("https://cloud.example.org/nextcloud", "user").unwrap();
     assert_eq!(
         url.as_str(),
-        "https://cloud.example.org/remote.php/dav/calendars/pippijn/"
+        "https://cloud.example.org/remote.php/dav/calendars/user/"
     );
 }

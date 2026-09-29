@@ -7,7 +7,7 @@
 -- stands alone with its own `name` (one-offs with no barcode). This is the
 -- catalog-vs-inventory split.
 --
--- Single-user app, so `products` is simply Pippijn's catalog (no per-user
+-- Single-user app, so `products` is simply the user's catalog (no per-user
 -- sharing concerns). Additive + backfilled; items.barcode/name are kept.
 
 -- products: surrogate id PK + optional, unique barcode + catalog fields.

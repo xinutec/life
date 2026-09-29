@@ -14,8 +14,8 @@ items, shops, reconciliation), [`ui-grammar.md`](docs/design/ui-grammar.md).
 CI (`.github/workflows/build.yml`) gates on clippy + `cargo test`, then builds
 and pushes the single image **`xinutec/life:latest`** to Docker Hub (backend
 binary + built Angular bundle + scenes, all served from one process). The
-Kubernetes manifests live in the **home monorepo** (`xinutec/pippijn` →
-`code/kubes/life/k8s/`); the image tag is the only contract between this repo
+Kubernetes manifests live in the **home monorepo**
+(`code/kubes/life/k8s/`); the image tag is the only contract between this repo
 and the running deployment.
 
 There is **no image automation** (no Flux/Argo image controller): the Deployment
@@ -25,6 +25,7 @@ checkout — this is the single implementation, and it applies manifests and
 restarts only what is behind:
 
 ```sh
+# dev-lint: allow-pii the repository's name
 ~/Code/pippijn/code/kubes/deploy.sh life
 ```
 
