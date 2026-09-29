@@ -18,10 +18,11 @@
     "ui-golden": "playwright test e2e/ui-golden.spec.ts",
     "offline-check": "playwright test --project offline",
     "ui-golden:update": "playwright test e2e/ui-golden.spec.ts --update-snapshots",
-    "lint": "eslint src e2e playwright.config.ts",
+    "lint": "eslint src e2e playwright.config.ts && stylelint \"src/**/*.scss\"",
     "typecheck:e2e": "tsc -p tsconfig.e2e.json",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "lint:styles": "stylelint \"src/**/*.scss\""
   },
   "dependencies": {
     "@angular/cdk": "^22.1.7",
@@ -55,6 +56,8 @@
     "eslint": "^10.11.0",
     "jsdom": "^30.1.0",
     "prettier": "^3.9.9",
+    "stylelint": "^17.14.0",
+    "stylelint-config-recommended-scss": "^17.0.1",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.70.1",
     "vitest": "^4.1.11"
