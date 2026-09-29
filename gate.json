@@ -73,8 +73,6 @@
         "life",
         "--password",
         "life",
-        "--port",
-        "3320",
         "--url-env",
         "LIFE_TEST_DATABASE_URL",
         "--",
