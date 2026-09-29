@@ -166,10 +166,6 @@ export class TodoDetail implements OnDestroy {
   readonly query = signal('');
   readonly results = computed(() => this.graph.search(this.query(), this.ulid()));
 
-  typeMeta(type: TodoType) {
-    return TODO_TYPES.find((t) => t.value === type) ?? { label: type, icon: 'task_alt' };
-  }
-
   /** Input handlers: record the edit and mark the field dirty so a dismiss
    *  will flush it (a bare `.set` would not). */
   onTitleInput(value: string): void {

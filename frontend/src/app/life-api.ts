@@ -33,7 +33,6 @@ import {
   SuggestEmotionsRequest,
   SuggestEmotionsResponse,
   CookedLine,
-  TelemetryEvent,
   TrashEntry,
   TrashKind,
   WarmEmotionsRequest,
@@ -164,9 +163,6 @@ export class LifeApi {
     return `/api/items/${id}/files/${fileId}`;
   }
 
-  moveItem(id: number, locationId: number | null): Observable<Item> {
-    return this.http.post<Item>(`/api/items/${id}/move`, { location_id: locationId });
-  }
   deleteLocation(id: number): Observable<unknown> {
     return this.http.delete(`/api/locations/${id}`);
   }
@@ -199,15 +195,6 @@ export class LifeApi {
 
   shopping(): Observable<ShoppingItem[]> {
     return this.http.get<ShoppingItem[]>('/api/shopping');
-  }
-  addShopping(body: Partial<ShoppingItem>): Observable<ShoppingItem> {
-    return this.http.post<ShoppingItem>('/api/shopping', body);
-  }
-  updateShopping(id: number, body: Partial<ShoppingItem>): Observable<ShoppingItem> {
-    return this.http.patch<ShoppingItem>(`/api/shopping/${id}`, body);
-  }
-  deleteShopping(id: number): Observable<unknown> {
-    return this.http.delete(`/api/shopping/${id}`);
   }
   /** Mark a row bought. `purchase` is optional and its absence is normal — the
    *  buy must work with a full trolley and one hand, so the price is a note that
@@ -254,12 +241,6 @@ export class LifeApi {
    *  that row rather than that nowhere sells it. */
   shopCoverage(rows: CoverageQuery[]): Observable<RowCoverage[]> {
     return this.http.post<RowCoverage[]>('/api/shopping/coverage', rows);
-  }
-  /** Fold a batch of client activity events (navigations, taps) into the backend
-   *  log stream. Best-effort telemetry — see `Telemetry`; callers ignore the
-   *  result. */
-  sendTelemetry(events: TelemetryEvent[]): Observable<void> {
-    return this.http.post<void>('/api/telemetry', events);
   }
   /** URL of the cached product image (use directly as <img src>). Pass a
    *  `version` after a replace to bust the browser/service-worker cache. */
