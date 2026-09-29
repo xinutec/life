@@ -55,6 +55,10 @@
 
       devShells = nixpkgs.lib.genAttrs systems (system: {
         default = nixpkgs.legacyPackages.${system}.mkShell {
+          # Playwright's browsers come from the lock, not ~/Library/Caches: the
+          # driver's version must match @playwright/test's (tables/deps.dhall).
+          PLAYWRIGHT_BROWSERS_PATH = nixpkgs.legacyPackages.${system}.playwright-driver.browsers;
+          PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "1";
           packages = with nixpkgs.legacyPackages.${system}; [
             cargo
             rustc
