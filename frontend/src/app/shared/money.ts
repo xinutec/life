@@ -18,7 +18,6 @@ export function toMinorUnits(text: string): number | null {
     .trim()
     .replace(/^[£$€]/, '')
     .trim();
-  if (trimmed === '') return null;
   // One optional decimal point, at most two places after it. More places is a
   // rejection rather than a rounding: nobody paid £3.333, so the input is a
   // typo and guessing which digit was meant is not this function's business.

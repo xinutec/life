@@ -20,6 +20,8 @@ describe('canonicalBarcode', () => {
 
   it('leaves what is not a barcode as typed, trimmed', () => {
     expect(canonicalBarcode(' QR-thing ')).toBe('QR-thing');
+    expect(canonicalBarcode('A12')).toBe('A12'); // short enough to be padded, if it were digits
+    expect(canonicalBarcode('12A')).toBe('12A');
     expect(canonicalBarcode('0')).toBe('0');
   });
 });

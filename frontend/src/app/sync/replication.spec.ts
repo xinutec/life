@@ -136,8 +136,18 @@ describe('AuthState', () => {
  *  `live: true` is not enough: without a pull stream RxDB performs the FIRST
  *  pull and nothing after it, so an open tab silently freezes at whatever the
  *  server held when it loaded. This asserts a SECOND pull happens unprompted. */
-describe('startHttpReplication — the pull keeps going', () => {
-  async function harness(pollMs: number) {
+const json = (body: unknown, status = 200): Response =>
+  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+
+const EMPTY_BATCH = { documents: [], checkpoint: { rev: 0 } };
+
+describe('startHttpReplication', () => {
+  /** A replication against a server that answers every pull with `respond`. */
+  async function harness(
+    pollMs: number,
+    respond: (init?: RequestInit) => Response = (init) =>
+      json(init?.method === 'POST' ? [] : EMPTY_BATCH),
+  ) {
     // ast-grep-ignore: life-single-rxdb
     const db = await createRxDatabase({
       name: `poll-spec-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -158,35 +168,37 @@ describe('startHttpReplication — the pull keeps going', () => {
       },
     });
     const pulls: string[] = [];
+    const pushes: string[] = [];
     vi.stubGlobal(
       'fetch',
-      vi.fn((url: string) => {
-        pulls.push(String(url));
-        return Promise.resolve(
-          new Response(JSON.stringify({ documents: [], checkpoint: { rev: 0 } }), {
-            headers: { 'content-type': 'application/json' },
-          }),
-        );
+      vi.fn((url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') pushes.push(typeof init.body === 'string' ? init.body : '');
+        else pulls.push(String(url));
+        return Promise.resolve(respond(init));
       }),
     );
+    const syncError = signal<string | null>(null);
+    const syncStatus = new SyncStatus();
+    const onAuthLost = vi.fn();
     const replication = startHttpReplication({
       collection: added.entries as RxCollection<{ ulid: string; rev: number }>,
       identifier: 'poll-spec-sync',
       path: '/api/sync/entries',
-      syncError: signal<string | null>(null),
+      syncError,
       // ⚠ The REAL SyncStatus: a partial stub cast to it fails at runtime, not
       // at compile time, when a method is added.
-      syncStatus: new SyncStatus(),
+      syncStatus,
       label: 'wellbeing sync',
-      onAuthLost: () => {},
+      onAuthLost,
       pollMs,
     });
-    await replication.awaitInitialReplication();
-    return { db, pulls, replication };
+    const entries = added.entries as RxCollection<{ ulid: string; rev: number }>;
+    return { db, entries, pulls, pushes, replication, syncError, syncStatus, onAuthLost };
   }
 
   it('pulls again on its own after the first cycle', async () => {
     const { db, pulls, replication } = await harness(40);
+    await replication.awaitInitialReplication();
     expect(pulls).toHaveLength(1);
     await vi.waitFor(() => expect(pulls.length).toBeGreaterThanOrEqual(3), { timeout: 2000 });
     expect(pulls.every((u) => u.startsWith('/api/sync/entries?since='))).toBe(true);
@@ -199,8 +211,78 @@ describe('startHttpReplication — the pull keeps going', () => {
     // on every tick of something faster than it claims, would fix the freeze by
     // hammering the server instead. One request per interval, no more.
     const { db, pulls, replication } = await harness(10_000);
+    await replication.awaitInitialReplication();
     await new Promise((r) => setTimeout(r, 300));
     expect(pulls).toHaveLength(1);
+    await replication.cancel();
+    await db.close();
+  });
+
+  it('asks each pull for what came after the last checkpoint', async () => {
+    // One new row per pull: RxDB keeps a checkpoint only from a batch that
+    // carried something.
+    let rev = 0;
+    const { db, pulls, replication } = await harness(40, () => {
+      rev += 7;
+      return json({ documents: [{ ulid: `r${rev}`, rev, _deleted: false }], checkpoint: { rev } });
+    });
+    await vi.waitFor(() => expect(pulls.length).toBeGreaterThanOrEqual(3), { timeout: 2000 });
+    expect(pulls[0]).toContain('since=0&');
+    expect(pulls[2]).toContain('since=14&');
+    await replication.cancel();
+    await db.close();
+  });
+
+  it('pulls at once when the device comes back online', async () => {
+    const { db, pulls, replication } = await harness(10_000);
+    await replication.awaitInitialReplication();
+    window.dispatchEvent(new Event('online'));
+    await vi.waitFor(() => expect(pulls).toHaveLength(2), { timeout: 2000 });
+    await replication.cancel();
+    await db.close();
+  });
+
+  it('pushes a local write to the sync path', async () => {
+    const { db, entries, pushes, replication } = await harness(10_000);
+    await replication.awaitInitialReplication();
+    await entries.insert({ ulid: 'local1', rev: 0 });
+    await vi.waitFor(() => expect(pushes.join()).toContain('local1'), { timeout: 2000 });
+    await replication.cancel();
+    await db.close();
+  });
+
+  it('treats a batch with no checkpoint as a failed cycle', async () => {
+    // Taking it would rewind the pull to 0 and refetch everything, every cycle.
+    const { db, replication, syncStatus } = await harness(10_000, () =>
+      json({ documents: [{ ulid: 'r1', rev: 1, _deleted: false }], checkpoint: {} }),
+    );
+    await vi.waitFor(() => expect(syncStatus.health()).toBe('error'), { timeout: 2000 });
+    expect(syncStatus.message()).toContain('saved on this device');
+    await replication.cancel();
+    await db.close();
+  });
+
+  it('stops and asks for a login when the session is gone', async () => {
+    // Retrying a 401 every few seconds neither recovers nor tells anyone.
+    const { db, pulls, replication, syncError, onAuthLost } = await harness(40, () =>
+      json({ error: 'not authenticated' }, 401),
+    );
+    await vi.waitFor(() => expect(onAuthLost).toHaveBeenCalledOnce(), { timeout: 2000 });
+    expect(syncError()).toContain('login required');
+    expect(replication.isStopped()).toBe(true);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(pulls).toHaveLength(1);
+    await db.close();
+  });
+
+  it('keeps going after a server error, which is not a lost session', async () => {
+    const { db, replication, syncStatus, onAuthLost } = await harness(10_000, () =>
+      json({ error: 'boom' }, 500),
+    );
+    await vi.waitFor(() => expect(syncStatus.health()).toBe('error'), { timeout: 2000 });
+    await new Promise((r) => setTimeout(r, 100));
+    expect(onAuthLost).not.toHaveBeenCalled();
+    expect(replication.isStopped()).toBe(false);
     await replication.cancel();
     await db.close();
   });

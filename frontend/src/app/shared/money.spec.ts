@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatMoney, fromMinorUnits, toMinorUnits } from './money';
+import { formatMoney, formatUnitPrice, fromMinorUnits, toMinorUnits } from './money';
 
 describe('toMinorUnits', () => {
   it('reads whole and decimal prices', () => {
@@ -35,12 +35,14 @@ describe('toMinorUnits', () => {
   it('accepts a currency symbol and a comma decimal', () => {
     expect(toMinorUnits('£3.30')).toBe(330);
     expect(toMinorUnits(' 3,30 ')).toBe(330);
+    expect(toMinorUnits(' £ 3.30')).toBe(330);
   });
 
   it('refuses anything that is not a price, rather than guessing', () => {
     // A wrong number sits in the spending history looking exactly like a real
     // one; an absent one is visibly missing.
-    for (const bad of ['', '  ', 'free', '3.333', '-3', '3.', '.3', '1e3', '3 30']) {
+    const huge = '9'.repeat(20); // past the integers a number can hold exactly
+    for (const bad of ['', '  ', 'free', '3.333', '-3', '3.', '.3', '1e3', '3 30', '3£30', huge]) {
       expect(toMinorUnits(bad)).toBeNull();
     }
   });
@@ -52,6 +54,8 @@ describe('fromMinorUnits', () => {
     expect(fromMinorUnits(5)).toBe('0.05');
     expect(fromMinorUnits(300)).toBe('3.00');
     expect(fromMinorUnits(1299)).toBe('12.99');
+    expect(fromMinorUnits(0)).toBe('0.00');
+    expect(fromMinorUnits(-330)).toBe('-3.30');
   });
 
   it('round-trips every price the parser accepts', () => {
@@ -71,5 +75,11 @@ describe('formatMoney', () => {
 
   it('never goes through a float', () => {
     expect(formatMoney(1_000_000_001, 'GBP')).toBe('£10000000.01');
+  });
+});
+
+describe('formatUnitPrice', () => {
+  it('reads like the shelf label', () => {
+    expect(formatUnitPrice({ amount_minor: 892, measure: 'KG' }, 'GBP')).toBe('£8.92/KG');
   });
 });

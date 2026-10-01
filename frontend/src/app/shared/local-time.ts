@@ -13,20 +13,13 @@ export function toLocalInput(instant: string | Date): string {
   );
 }
 
-/** Exactly what the field emits, and nothing else. */
-const WALL_CLOCK = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
-
 /** The input's local wall-clock text → an ISO instant, or null if it isn't one.
- *  `YYYY-MM-DDTHH:mm` parses as local time, as the field means. The shape is
- *  checked first because `new Date()` accepts half-typed input like
- *  `"2026-08-"`; empty, partial and impossible (`02-31`) values are null. */
+ *  `YYYY-MM-DDTHH:mm` parses as local time, as the field means. Parsing alone
+ *  is not enough: `new Date()` accepts half-typed input like `"2026-08-"`, and
+ *  an impossible day ROLLS OVER rather than failing, so 31 February becomes
+ *  3 March, a shop trip on a day nobody chose. The instant must print back as
+ *  exactly the text that was typed. */
 export function fromLocalInput(value: string): string | null {
-  const text = value.trim();
-  if (!WALL_CLOCK.test(text)) return null;
-  const d = new Date(text);
-  if (Number.isNaN(d.getTime())) return null;
-  // And the date has to be the one that was typed. An impossible day does not
-  // come back as `Invalid Date` — it ROLLS OVER, so 31 February quietly becomes
-  // 3 March, which as a shop trip is a real appointment on a day nobody chose.
-  return toLocalInput(d) === text.slice(0, 16) ? d.toISOString() : null;
+  const d = new Date(value);
+  return toLocalInput(d) === value.slice(0, 16) ? d.toISOString() : null;
 }
