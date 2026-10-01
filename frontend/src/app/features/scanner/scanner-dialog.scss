@@ -2,8 +2,7 @@
   position: relative;
   width: min(92vw, 420px);
   aspect-ratio: 3 / 4;
-  // dev-lint: allow-hardcoded-color camera viewfinder scrim — deliberately theme-independent over live video
-  background: #000;
+  background: var(--media-bed);
   border-radius: 8px;
   overflow: hidden;
   display: flex;
@@ -20,11 +19,9 @@
   .reticle {
     position: absolute;
     inset: 28% 12%;
-    // dev-lint: allow-hardcoded-color camera viewfinder scrim — deliberately theme-independent over live video
-    border: 2px solid rgba(255, 255, 255, 0.85);
+    border: 2px solid var(--media-frame);
     border-radius: 8px;
-    // dev-lint: allow-hardcoded-color camera viewfinder scrim — deliberately theme-independent over live video
-    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 0 0 9999px var(--media-mask);
   }
 
   .hint {
@@ -33,11 +30,9 @@
     left: 0;
     right: 0;
     text-align: center;
-    // dev-lint: allow-hardcoded-color camera viewfinder scrim — deliberately theme-independent over live video
-    color: #fff;
+    color: var(--on-media);
     // Legible over a bright barcode / camera feed.
-    // dev-lint: allow-hardcoded-color camera viewfinder scrim — deliberately theme-independent over live video
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    text-shadow: var(--on-media-shadow);
     margin: 0;
   }
 
@@ -47,10 +42,8 @@
     position: absolute;
     top: 0.5rem;
     right: 0.5rem;
-    // dev-lint: allow-hardcoded-color camera viewfinder scrim — deliberately theme-independent over live video
-    color: #fff;
-    // dev-lint: allow-hardcoded-color camera viewfinder scrim — deliberately theme-independent over live video
-    background: rgba(0, 0, 0, 0.4);
+    color: var(--on-media);
+    background: var(--scrim-weak);
   }
 
   // "Type it instead" overlay: sits above the action row, on the video.
@@ -62,8 +55,7 @@
     display: flex;
     gap: 0.5rem;
     align-items: center;
-    // dev-lint: allow-hardcoded-color camera viewfinder scrim — deliberately theme-independent over live video
-    background: rgba(0, 0, 0, 0.65);
+    background: var(--scrim-strong);
     border-radius: 8px;
     padding: 0.5rem;
 
@@ -73,8 +65,7 @@
   }
 
   .err {
-    // dev-lint: allow-hardcoded-color camera viewfinder scrim — deliberately theme-independent over live video
-    color: #fff;
+    color: var(--on-media);
     text-align: center;
     padding: 1.5rem;
     // A column, not block flow plus text-align: as a flex child the icon gets the
@@ -102,8 +93,7 @@
     gap: 0.5rem;
 
     .type-instead {
-      // dev-lint: allow-hardcoded-color camera viewfinder scrim — deliberately theme-independent over live video
-      color: #fff;
+      color: var(--on-media);
     }
   }
 }

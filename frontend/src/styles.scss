@@ -1,5 +1,7 @@
 // Angular Material 3 theme. Green palette distinguishes life from home (teal),
 // health (violet) and recall (azure).
+// The fleet's theme-independent colours: scrims and text over media.
+@use '@xinutec/ui-harness/tokens';
 @use '@angular/material' as mat;
 
 html {
