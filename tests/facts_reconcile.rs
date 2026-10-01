@@ -230,3 +230,54 @@ async fn reconcile_records_a_fact_source_and_settles() {
         .await
         .unwrap();
 }
+
+#[tokio::test]
+async fn adopting_a_fact_from_a_source_without_it_is_refused() {
+    let url = common::test_db_url();
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    let barcode: Barcode = "5000000000919".parse().unwrap();
+    sqlx::query("DELETE FROM products WHERE barcode = ?")
+        .bind(&barcode)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let product = repo::upsert_external(
+        &pool,
+        Source::Off,
+        &ExternalId::from(&barcode),
+        Some(&barcode),
+        &repo::ListingFields {
+            raw_name: Some("Oat Drink"),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    // Only the retailer has a panel; OFF lists the product without one.
+    repo::upsert_nutrition(&pool, product.id, &panel(61.0), Source::Asda)
+        .await
+        .unwrap();
+
+    let picked = repo::reconcile(
+        &pool,
+        product.id,
+        &[FieldChoice {
+            field: ReconcileField::Nutrition,
+            choice: Choice::Off,
+            value: None,
+        }],
+    )
+    .await;
+
+    assert!(picked.is_err(), "OFF has no panel to adopt");
+    let prefs = repo::fact_source_prefs(&pool, product.id).await.unwrap();
+    assert_eq!(prefs.get(&ReconcileField::Nutrition), None);
+
+    sqlx::query("DELETE FROM products WHERE id = ?")
+        .bind(product.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+}
