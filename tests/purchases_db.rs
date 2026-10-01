@@ -210,6 +210,45 @@ async fn a_nonsense_price_is_refused_rather_than_stored() {
 }
 
 #[tokio::test]
+async fn something_free_is_still_a_purchase() {
+    // A free sample, the free half of a two-for-one: £0.00 is a true price.
+    let pool = db::connect(&common::test_db_url()).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+    let user = "test-user-purchases-free";
+    sqlx::query("DELETE FROM purchases WHERE user_id = ?")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .expect("clean");
+    let item = BoughtItem {
+        id: item_row(&pool, user, "Sample sachet").await,
+        product_id: None,
+        barcode: None,
+        name: "Sample sachet",
+        quantity: None,
+        unit: None,
+    };
+
+    repo::record(&pool, user, &item, &paid("Waitrose", 0))
+        .await
+        .expect("a free purchase is recorded");
+    let got = repo::for_item(&pool, user, item.id).await.expect("history");
+    assert_eq!(got.len(), 1);
+    assert_eq!(got[0].amount_minor, 0);
+
+    sqlx::query("DELETE FROM purchases WHERE user_id = ?")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .expect("clean up");
+    sqlx::query("DELETE FROM items WHERE user_id = ?")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .expect("clean up items");
+}
+
+#[tokio::test]
 async fn the_rate_is_quoted_per_kg_and_refused_when_the_pack_cannot_be_read() {
     // The pack is captured so £3.30 can be compared with £3.30, which needs a
     // RATE. Quoted per kg / per litre because that is the scale the shop prices
