@@ -50,6 +50,7 @@ fn everything_mass_lands_in_grams_and_everything_volume_in_millilitres() {
     assert_eq!(parse("500mg"), grams(0.5));
     assert_eq!(parse("33 cl"), millilitres(330.0));
     assert_eq!(parse("50 cl"), millilitres(500.0));
+    assert_eq!(parse("5 dl"), millilitres(500.0));
     assert_eq!(parse("2 litres"), millilitres(2000.0));
 }
 
