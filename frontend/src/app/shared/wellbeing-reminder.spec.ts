@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { TestBed } from '@angular/core/testing';
+import { BehaviorSubject, NEVER, Observable } from 'rxjs';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createRule, nextFireForRule, parseHhMm } from './wellbeing-reminder';
+import { WellbeingStore } from '../sync/wellbeing-store';
+import { WellbeingReminder, createRule, nextFireForRule, parseHhMm } from './wellbeing-reminder';
 
 describe('parseHhMm', () => {
   it('parses valid local times', () => {
@@ -14,6 +17,8 @@ describe('parseHhMm', () => {
     expect(parseHhMm('24:00')).toBeNull();
     expect(parseHhMm('09:60')).toBeNull();
     expect(parseHhMm('ab:cd')).toBeNull();
+    expect(parseHhMm('x09:00')).toBeNull();
+    expect(parseHhMm('09:00x')).toBeNull();
     expect(parseHhMm('')).toBeNull();
   });
 });
@@ -69,5 +74,126 @@ describe('nextFireForRule', () => {
     const last = new Date(2026, 6, 20, 12, 0).getTime();
     const at = nextFireForRule(evening, new Date(2026, 6, 20, 13, 0), last);
     expect(new Date(at!)).toEqual(new Date(2026, 6, 20, 18, 0, 0, 0));
+  });
+});
+
+/** The service against the phone's reminder port: what it schedules and cancels. */
+describe('WellbeingReminder', () => {
+  interface Sent {
+    op: 'schedule' | 'cancel';
+    id: string;
+    whenMs?: number;
+    url?: string;
+  }
+  let sent: Sent[];
+  let checkins: BehaviorSubject<{ recordedAt: string }[]>;
+
+  beforeEach(() => {
+    localStorage.clear();
+    sent = [];
+    checkins = new BehaviorSubject<{ recordedAt: string }[]>([]);
+    Object.assign(window, {
+      ReminderBridge: { postMessage: (m: string) => sent.push(JSON.parse(m) as Sent) },
+    });
+  });
+
+  afterEach(() => {
+    delete (window as { ReminderBridge?: unknown }).ReminderBridge;
+  });
+
+  /** A fresh service, as on an app open: config and armed ids come from storage.
+   *  `items$` is the check-ins, or NEVER for an app closed before they loaded. */
+  function open(items$: Observable<{ recordedAt: string }[]> = checkins): WellbeingReminder {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [{ provide: WellbeingStore, useValue: { items$ } }],
+    });
+    const reminder = TestBed.inject(WellbeingReminder);
+    reminder.init();
+    return reminder;
+  }
+
+  const rule = (id: string, time = '09:00') => ({ id, time, quietHours: 3 });
+
+  it('arms one alarm per rule, opening Today when tapped', () => {
+    open().setConfig({ rules: [rule('a'), rule('b', '20:00')] });
+    const scheduled = sent.filter((m) => m.op === 'schedule');
+    expect(scheduled.map((m) => m.id)).toEqual(['a', 'b']);
+    expect(scheduled.every((m) => m.url === '/today')).toBe(true);
+  });
+
+  it('cancels the alarm of a removed rule', () => {
+    const reminder = open();
+    reminder.setConfig({ rules: [rule('a'), rule('b')] });
+    sent = [];
+    reminder.setConfig({ rules: [rule('a')] });
+    expect(sent).toContainEqual({ op: 'cancel', id: 'b' });
+    expect(sent.some((m) => m.op === 'schedule' && m.id === 'b')).toBe(false);
+  });
+
+  it('cancels it on the next open when the app closed before re-arming', () => {
+    open().setConfig({ rules: [rule('a'), rule('b')] });
+    // Removed while the check-ins had not loaded: saved, but nothing re-armed.
+    open(NEVER).setConfig({ rules: [rule('a')] });
+    sent = [];
+    open();
+    expect(sent).toContainEqual({ op: 'cancel', id: 'b' });
+    expect(sent.some((m) => m.op === 'schedule' && m.id === 'a')).toBe(true);
+  });
+
+  it('cancels the alarm of a rule edited to a time it cannot fire at', () => {
+    const reminder = open();
+    reminder.setConfig({ rules: [rule('a')] });
+    sent = [];
+    reminder.setConfig({ rules: [rule('a', 'soon')] });
+    expect(sent).toEqual([{ op: 'cancel', id: 'a' }]);
+  });
+
+  it('moves the alarm to tomorrow when a check-in lands inside the quiet window', () => {
+    // 08:00, a 09:00 rule with three quiet hours.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const now = new Date(2026, 9, 1, 8, 0);
+    vi.setSystemTime(now);
+    open().setConfig({ rules: [rule('a')] });
+    expect(sent.at(-1)?.whenMs).toBe(new Date(2026, 9, 1, 9, 0).getTime());
+    // Newest first, as the store lists them; the older one must not count.
+    checkins.next([
+      { recordedAt: now.toISOString() },
+      { recordedAt: new Date(2026, 8, 29, 8, 0).toISOString() },
+    ]);
+    expect(sent.at(-1)?.whenMs).toBe(new Date(2026, 9, 2, 9, 0).getTime());
+    vi.useRealTimers();
+  });
+
+  it('drops stored rules it cannot fire, and survives a corrupt store', () => {
+    localStorage.setItem(
+      'life.reminder.wellbeing',
+      JSON.stringify({
+        rules: [
+          rule('ok'),
+          { id: 'always', time: '09:00', quietHours: 0 },
+          rule('bad', '25:00'),
+          { id: 'x', time: '09:00' },
+          { id: 7, time: '09:00', quietHours: 3 },
+          { id: 'y', time: '09:00', quietHours: -1 },
+          'not a rule',
+        ],
+      }),
+    );
+    expect(
+      open()
+        .getConfig()
+        .rules.map((r) => r.id),
+    ).toEqual(['ok', 'always']);
+    localStorage.setItem('life.reminder.wellbeing', '{not json');
+    expect(open().getConfig().rules).toEqual([]);
+  });
+
+  it('does nothing outside the Android app', () => {
+    delete (window as { ReminderBridge?: unknown }).ReminderBridge;
+    const reminder = open();
+    reminder.setConfig({ rules: [rule('a')] });
+    expect(reminder.available).toBe(false);
+    expect(sent).toEqual([]);
   });
 });

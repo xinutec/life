@@ -43,6 +43,34 @@ describe('monotonePath', () => {
     }
   });
 
+  it('keeps every segment between its own two points, for any series', () => {
+    // The stronger form: no segment strays past either end it joins, so a dip
+    // between two good days is never drawn. Seeded, so a failure reproduces.
+    // (A tangent too SHALLOW stays inside too; only exact values could see it.)
+    let seed = 7;
+    const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let run = 0; run < 200; run++) {
+      const dots: TrendDot[] = [];
+      let x = 0;
+      for (let i = 0; i < 2 + Math.floor(rand() * 10); i++) {
+        x += 1 + Math.floor(rand() * 30);
+        dots.push(dot(x, 10 + Math.round(rand() * 4) * 20));
+      }
+      const c = coords(monotonePath(dots));
+      for (let i = 0; i + 1 < dots.length; i++) {
+        const lo = Math.min(dots[i].cy, dots[i + 1].cy) - 0.1;
+        const hi = Math.max(dots[i].cy, dots[i + 1].cy) + 0.1;
+        for (const { x: px, y } of c.slice(3 * i, 3 * i + 4)) {
+          expect(y, `run ${run}, segment ${i}`).toBeGreaterThanOrEqual(lo);
+          expect(y, `run ${run}, segment ${i}`).toBeLessThanOrEqual(hi);
+          // Nor does it run back in time.
+          expect(px, `run ${run}, segment ${i}`).toBeGreaterThanOrEqual(dots[i].cx);
+          expect(px, `run ${run}, segment ${i}`).toBeLessThanOrEqual(dots[i + 1].cx);
+        }
+      }
+    }
+  });
+
   // The property that makes panning possible: the host draws only a window's
   // worth of points, so the curve it draws there must be the curve the whole
   // history would have drawn. Two points of halo either side is what buys it —

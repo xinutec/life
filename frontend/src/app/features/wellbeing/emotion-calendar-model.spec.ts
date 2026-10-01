@@ -324,6 +324,16 @@ describe('buildCalendar', () => {
     expect(months.map((m) => m.key)).toEqual(['2026-06', '2026-07', '2026-08', '2026-09']);
   });
 
+  it('carries on into the new year', () => {
+    const months = buildCalendar(
+      [doc('2026-11-20T09:00:00Z', ['Happy/Calm'])],
+      LONDON,
+      '2027-01-05',
+    );
+    expect(months.map((m) => m.key)).toEqual(['2026-11', '2026-12', '2027-01']);
+    expect(day(months, '2027-01-05')).toBeDefined();
+  });
+
   it('is empty for no readings at all', () => {
     expect(buildCalendar([], LONDON, '2026-09-12')).toEqual([]);
   });
