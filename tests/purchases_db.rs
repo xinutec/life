@@ -287,6 +287,8 @@ async fn the_rate_is_quoted_per_kg_and_refused_when_the_pack_cannot_be_read() {
         // A unit `packsize::parse` refuses. An unreadable unit means the rate is
         // unknown; inventing a dimension would be worse than saying nothing.
         case(Some(3.0), Some("sachets"), 300, None),
+        // Past £1,000,000/kg the pack was misread, not the price.
+        case(Some(0.001), Some("g"), 425, None),
         // No pack at all — the common case for a hand-typed buy-list row.
         case(None, None, 300, None),
     ];
@@ -530,6 +532,17 @@ async fn a_removed_purchase_is_in_the_trash_with_its_receipt_and_comes_back() {
         linked,
         Some(purchase),
         "the receipt is still the purchase's"
+    );
+    assert!(
+        !life::trash::repo::restore(
+            &pool,
+            user,
+            life::trash::TrashKind::Purchase,
+            &purchase.to_string()
+        )
+        .await
+        .expect("restore again"),
+        "restoring twice is a no-op"
     );
 
     sqlx::query("DELETE FROM purchases WHERE user_id = ?")

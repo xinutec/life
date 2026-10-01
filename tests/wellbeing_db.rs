@@ -62,6 +62,7 @@ async fn wellbeing_sync_and_restore_against_real_db() {
         .iter()
         .find(|d| d.ulid == ulid)
         .expect("present");
+    assert!(!got.deleted, "a live check-in lands live");
     assert_eq!(got.score_tenths, 20); // a 2, in tenths
     assert_eq!(got.energy_tenths, Some(20));
     assert_eq!(got.emotions, vec!["Withdrawn", "Anxious"]);
