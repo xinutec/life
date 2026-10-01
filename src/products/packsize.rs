@@ -55,16 +55,13 @@ pub fn parse(label: &str) -> Option<PackSize> {
 
 /// `"22x27g"` → `(22.0, "27g")`. Anything that is not a leading count and a
 /// separator → `(1.0, the whole thing)`, so a stray `x` inside a word (`"box of
-/// 6"`) falls through to the ordinary path rather than splitting it.
+/// 6"`) falls through to the ordinary path rather than splitting it. A count of
+/// zero, below zero or not finite is left to the caller's positive-size check.
 fn split_multipack(text: &str) -> (f64, &str) {
     for separator in ['x', '×'] {
-        let Some((count, rest)) = text.split_once(separator) else {
-            continue;
-        };
-        let Ok(n) = count.trim().parse::<f64>() else {
-            continue;
-        };
-        if n.is_finite() && n > 0.0 && !rest.trim().is_empty() {
+        if let Some((count, rest)) = text.split_once(separator)
+            && let Ok(n) = count.trim().parse::<f64>()
+        {
             return (n, rest);
         }
     }

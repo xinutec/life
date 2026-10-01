@@ -125,4 +125,7 @@ fn a_pack_of_nothing_is_not_a_reading() {
     // pack size, and a zero-quantity stock row would read as "we are out".
     assert_eq!(parse("0g"), None);
     assert_eq!(parse("0x100g"), None);
+    for nonsense in ["-2x100g", "inf x 5g", "NaN x 5g", "6x"] {
+        assert_eq!(parse(nonsense), None, "{nonsense}");
+    }
 }

@@ -5,7 +5,9 @@
 
 use chrono::NaiveDate;
 use life::inventory::types::{ExpiryPrecision, Item, ItemCategory};
-use life::recipes::cooking::{CookedLine, LineOutcome, Take, Untouched, plan, settled};
+use life::recipes::cooking::{
+    CookedLine, LineOutcome, Take, Untouched, plan, settled, taken_per_row,
+};
 use life::recipes::types::{Recipe, RecipeIngredient};
 
 fn item(id: u64, name: &str, quantity: Option<f64>, unit: Option<&str>) -> Item {
@@ -88,13 +90,26 @@ fn every_ingredient_is_reported_even_the_untouched_ones() {
             ing("flour", Some(200.0), Some("g")),
             ing("salt", None, None),
             ing("saffron", Some(1.0), Some("pinch")),
+            ing("pepper", Some(0.0), Some("g")),
+            ing("chilli", Some(-1.0), Some("g")),
         ]),
         &[
             item(1, "flour", Some(950.0), Some("g")),
             item(2, "salt", None, None),
+            item(3, "pepper", Some(20.0), Some("g")),
+            item(4, "chilli", Some(20.0), Some("g")),
         ],
     );
-    assert_eq!(lines.len(), 3, "one line in, one line out");
+    assert_eq!(lines.len(), 5, "one line in, one line out");
+    for nothing in ["pepper", "chilli"] {
+        assert_eq!(
+            outcome(&lines, nothing),
+            LineOutcome::Untouched {
+                why: Untouched::NoAmount
+            },
+            "{nothing}: a zero or negative amount is no amount"
+        );
+    }
     assert_eq!(
         outcome(&lines, "salt"),
         LineOutcome::Untouched {
@@ -246,6 +261,11 @@ fn two_lines_naming_the_same_thing_drain_it_once_between_them() {
         "the second line sees what the first already took"
     );
     assert_eq!(settled(&lines), [(1, 0.0)], "one row, one final amount");
+    assert_eq!(
+        taken_per_row(&lines),
+        [(1, 500.0)],
+        "the history records what came off the bag in total"
+    );
 }
 
 #[test]
