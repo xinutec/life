@@ -26,6 +26,6 @@
   position: absolute;
   inset: 0 0 auto 0;
   z-index: 1;
-  // dev-lint: allow-hardcoded-color the scene is a fixed dark surface in BOTH schemes
+  // the scene is a fixed dark surface in BOTH schemes
   --mat-sys-on-surface-variant: #e3e6e8;
 }

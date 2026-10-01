@@ -188,21 +188,13 @@ app-house .canvas canvas {
 // stays constant across light and dark. Chips tint them over the themed surface
 // with color-mix, so they still adapt. `--c` is set per family below.
 :root {
-  // dev-lint: allow-hardcoded-color feelings-wheel family palette — fixed categorical identity
   --emo-happy: #e1b300;
-  // dev-lint: allow-hardcoded-color feelings-wheel family palette — fixed categorical identity
   --emo-sad: #4e86c6;
-  // dev-lint: allow-hardcoded-color feelings-wheel family palette — fixed categorical identity
   --emo-disgusted: #8b9097;
-  // dev-lint: allow-hardcoded-color feelings-wheel family palette — fixed categorical identity
   --emo-angry: #e15a4e;
-  // dev-lint: allow-hardcoded-color feelings-wheel family palette — fixed categorical identity
   --emo-fearful: #d79a3c;
-  // dev-lint: allow-hardcoded-color feelings-wheel family palette — fixed categorical identity
   --emo-bad: #4fa07e;
-  // dev-lint: allow-hardcoded-color feelings-wheel family palette — fixed categorical identity
   --emo-surprised: #9c74ce;
-  // dev-lint: allow-hardcoded-color feelings-wheel family palette — fixed categorical identity
   --emo-neutral: #9aa0a6;
   --emo-unknown: var(--mat-sys-outline);
 }
