@@ -161,7 +161,7 @@ fn per_unit(amount_minor: i64, quantity: Option<f64>, unit: Option<&str>) -> Opt
     if !rate.is_finite() || !(0.0..=MAX_PENCE).contains(&rate) {
         return None;
     }
-    #[allow(
+    #[expect(
         clippy::cast_possible_truncation,
         reason = "guarded above: finite and within 0..=MAX_PENCE, which i64 holds exactly"
     )]

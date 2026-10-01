@@ -162,7 +162,7 @@ fn to_minor(pounds: f64) -> Option<i64> {
     if !pence.is_finite() || !(0.0..=MAX_PENCE).contains(&pence) {
         return None;
     }
-    #[allow(
+    #[expect(
         clippy::cast_possible_truncation,
         reason = "guarded above: finite and within 0..=MAX_PENCE, which i64 holds exactly"
     )]
