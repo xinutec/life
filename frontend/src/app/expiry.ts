@@ -76,6 +76,7 @@ export function monthEnd(month: string): string | null {
   const mon = Number(m[2]);
   if (mon < 1 || mon > 12) return null;
   const last = new Date(Date.UTC(year, mon, 0));
+  // dev-lint: allow-utc-calendar-day built at UTC midnight, so its UTC day is the day
   return last.toISOString().slice(0, 10);
 }
 
