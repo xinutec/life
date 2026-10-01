@@ -95,7 +95,7 @@ export function makeConflictHandler<
   /** Type-directed, exhaustive: every content field of `C` with a strategy valid
    *  for its type. Its keys ARE the field set the merge diffs (see [[FieldSpec]]). */
   fields: FieldSpec<C>;
-  onConflicts?: (kept: T & { _deleted: boolean }, conflicts: FieldConflict[]) => void;
+  onConflicts: (kept: T & { _deleted: boolean }, conflicts: FieldConflict[]) => void;
   /** Observe every resolve() decision. Defaults to a `console.debug` trace;
    *  a test injects a spy to assert the merge disturbed no local edit. */
   trace?: (t: MergeTrace) => void;
@@ -162,7 +162,7 @@ export function makeConflictHandler<
         deleted: !!mine._deleted,
         noBase: false,
       });
-      if (conflicts.length > 0) opts.onConflicts?.(mine, conflicts);
+      if (conflicts.length > 0) opts.onConflicts(mine, conflicts);
       return Promise.resolve(merged);
     },
   };

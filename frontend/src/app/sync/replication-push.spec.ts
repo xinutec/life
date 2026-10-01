@@ -58,6 +58,7 @@ async function setup(opts?: { pull?: PullHandler; push?: PushHandler }) {
       schema,
       conflictHandler: makeConflictHandler<Doc>({
         fields: { recordedAt: 'value', score: 'value', note: 'value' },
+        onConflicts: () => undefined,
       }),
     },
   });

@@ -50,6 +50,7 @@ describe('field-level 3-way merge', () => {
     expect(merged.name).toBe('Greek yoghurt');
     expect(merged.quantity).toBe(2);
     expect(merged.rev).toBe(6); // server identity fields come from the master
+    expect(merged._deleted).toBe(false); // a merge never deletes a live row
     expect(onConflicts).not.toHaveBeenCalled();
   });
 
@@ -83,11 +84,19 @@ describe('field-level 3-way merge', () => {
   });
 
   it('a server tombstone stands — matching the set-only server invariant', async () => {
-    const { resolve, onConflicts } = setup();
+    const { resolve, onConflicts, trace } = setup();
     const real = { ...base, _deleted: true, rev: 6 };
     const mine = { ...base, name: 'edited offline' };
     expect(await resolve(real, mine)).toBe(real);
     expect(onConflicts).not.toHaveBeenCalled();
+    expect(trace.mock.calls[0][0]).toEqual({
+      ulid: 'a',
+      mine: [],
+      theirs: [],
+      collided: [],
+      deleted: true,
+      noBase: false,
+    });
   });
 
   it('a local delete stands even when the other device edited', async () => {
@@ -148,7 +157,14 @@ describe('field-level 3-way merge', () => {
       },
       'test',
     );
-    expect(trace.mock.calls[0][0]).toMatchObject({ ulid: 'a', noBase: true, mine: [], theirs: [] });
+    expect(trace.mock.calls[0][0]).toEqual({
+      ulid: 'a',
+      mine: [],
+      theirs: [],
+      collided: [],
+      deleted: false,
+      noBase: true,
+    });
   });
 
   it('array-valued fields (emotions) compare by value, not reference', async () => {
@@ -171,6 +187,14 @@ describe('field-level 3-way merge', () => {
     expect(handler.isEqual(abase, { ...abase, tags: ['Anxious', 'Withdrawn'] }, 'test')).toBe(
       false,
     );
+    // Same first word, different second: every position counts, not any.
+    expect(handler.isEqual(abase, { ...abase, tags: ['Withdrawn', 'Numb'] }, 'test')).toBe(false);
+    // A prefix is not the whole list, whichever side is shorter.
+    expect(handler.isEqual({ ...abase, tags: ['Withdrawn'] }, abase, 'test')).toBe(false);
+    // A doc missing the field differs from one that has it, without throwing.
+    const absent = { ...abase, tags: undefined as unknown as string[] };
+    expect(handler.isEqual(absent, abase, 'test')).toBe(false);
+    expect(handler.isEqual(abase, absent, 'test')).toBe(false);
 
     const same = await handler.resolve(
       {
