@@ -1,7 +1,7 @@
 //! Router-level tests: drive `routes::router()` end-to-end via oneshot, no live
 //! DB or socket. These cover the seams the repo/pure-fn tests can't reach — the
-//! `AuthUser` 401 path, the `AppError`→status/JSON mapping, and the SPA/404
-//! fallback. The pool is created lazily and never connects, because every path
+//! `AuthUser` 401 path, the `AppError`→status/JSON mapping, the SPA/404
+//! fallback, and that every URL the clients call has a route. The pool is created lazily and never connects, because every path
 //! here is rejected (401/404) before any query runs.
 
 mod test_config;
@@ -69,23 +69,163 @@ async fn healthz_is_open() {
     assert_eq!(body, "ok");
 }
 
+/// One API call a client makes: the method when the source states it, and the
+/// path with every interpolation replaced by `1`.
+#[derive(Debug)]
+struct Call {
+    method: Option<String>,
+    path: String,
+    origin: String,
+}
+
+/// The text of a quoted URL with each `${..}` or `{..}` hole filled with `1`
+/// and any query string dropped.
+fn fill_holes(url: &str) -> String {
+    let mut out = String::new();
+    let mut depth = 0;
+    for c in url.chars() {
+        match c {
+            '{' => {
+                if depth == 0 {
+                    if out.ends_with('$') {
+                        out.pop();
+                    }
+                    out.push('1');
+                }
+                depth += 1;
+            }
+            '}' => depth -= 1,
+            _ if depth == 0 => out.push(c),
+            _ => {}
+        }
+    }
+    out.split('?').next().unwrap_or_default().to_string()
+}
+
+/// The method and URL of the `this.http.<method>(` call starting `at`, if the
+/// URL is a literal, which may sit on the next line.
+fn http_call(src: &str, at: usize) -> Option<(String, &str)> {
+    let rest = &src[at + "this.http.".len()..];
+    let method = rest.split(['<', '(']).next()?;
+    let open = rest.find('(')?;
+    let args = rest[open + 1..].trim_start();
+    let quote = args.chars().next().filter(|q| matches!(q, '\'' | '`'))?;
+    let url = &args[1..];
+    Some((method.to_uppercase(), &url[..url.find(quote)?]))
+}
+
+/// Every API call in `src`: each `this.http.` call, with its method, and every
+/// other quoted `/api/` URL outside comments.
+fn calls_in(src: &str, origin: &str) -> Vec<Call> {
+    let line_of = |at: usize| src[..at].matches('\n').count() + 1;
+    let mut calls = Vec::new();
+    for (at, _) in src.match_indices("this.http.") {
+        let (method, url) = http_call(src, at).unwrap_or_else(|| {
+            panic!(
+                "{origin}:{}: an HTTP call whose URL is not a literal",
+                line_of(at)
+            )
+        });
+        calls.push(Call {
+            method: Some(method),
+            path: fill_holes(url),
+            origin: format!("{origin}:{}", line_of(at)),
+        });
+    }
+    for (n, line) in src.lines().enumerate() {
+        let code = line.trim_start();
+        if code.starts_with("//")
+            || code.starts_with('*')
+            || code.starts_with('#')
+            || line.contains("this.http.")
+        {
+            continue;
+        }
+        let mut rest = line;
+        while let Some(at) = rest.find("/api/") {
+            let before = &rest[..at];
+            let tail = &rest[at..];
+            let end = tail.find(['\'', '`', '"']).unwrap_or(tail.len());
+            if before.ends_with(['\'', '`', '"']) || before.ends_with("{base}") {
+                calls.push(Call {
+                    method: None,
+                    path: fill_holes(&tail[..end]),
+                    origin: format!("{origin}:{}", n + 1),
+                });
+            }
+            rest = &tail[end..];
+        }
+    }
+    calls
+}
+
+fn client_calls() -> Vec<Call> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut sources = vec![root.join("tools/emotion_worker.py")];
+    let mut dirs = vec![root.join("frontend/src/app")];
+    while let Some(dir) = dirs.pop() {
+        for entry in std::fs::read_dir(&dir).expect("read frontend dir") {
+            let path = entry.expect("dir entry").path();
+            let name = path.to_string_lossy();
+            if path.is_dir() {
+                if !name.ends_with("/generated") {
+                    dirs.push(path);
+                }
+            } else if name.ends_with(".ts") && !name.ends_with(".spec.ts") {
+                sources.push(path);
+            }
+        }
+    }
+    let mut calls = Vec::new();
+    for path in sources {
+        let src = std::fs::read_to_string(&path).expect("read client source");
+        let origin = path
+            .strip_prefix(root)
+            .unwrap_or(&path)
+            .display()
+            .to_string();
+        calls.extend(calls_in(&src, &origin));
+    }
+    calls
+}
+
 #[tokio::test]
-async fn protected_api_requires_auth_and_maps_to_401_json() {
-    // A representative sample of the authenticated surface — no cookie present.
-    for path in [
-        "/api/me",
-        "/api/items",
-        "/api/todo",
-        "/api/trash",
-        "/api/conflicts",
-    ] {
-        let (status, body) = get(path).await;
-        assert_eq!(status, StatusCode::UNAUTHORIZED, "GET {path}");
-        // AppError::Unauthorized renders as a JSON error body, not empty/plain.
+async fn every_api_call_a_client_makes_reaches_an_authenticated_route() {
+    let calls = client_calls();
+    assert!(
+        calls.iter().any(|c| c.path == "/api/sync/shopping")
+            && calls.iter().any(|c| c.path == "/api/emotion-worker/next"),
+        "the scan missed known calls: {calls:#?}"
+    );
+    for call in calls {
+        let method = call.method.as_deref().unwrap_or("GET");
+        let req = Request::builder()
+            .method(method)
+            .uri(&call.path)
+            .body(Body::empty())
+            .unwrap();
+        let (status, body) = send(req).await;
+        // No cookie, so a real route answers 401, except the one public call. A
+        // 404 means no route has that path; a 405 means the path exists but not
+        // for the client's method.
+        let reached = if call.path == "/logout" {
+            status == StatusCode::SEE_OTHER
+        } else {
+            status == StatusCode::UNAUTHORIZED
+                || (call.method.is_none() && status == StatusCode::METHOD_NOT_ALLOWED)
+        };
         assert!(
-            body.contains("\"error\"") && body.contains("not authenticated"),
-            "GET {path} body was {body:?}"
+            reached,
+            "{} {method} {}: {status} {body}",
+            call.origin, call.path
         );
+        if status == StatusCode::UNAUTHORIZED {
+            assert!(
+                body.contains("not authenticated"),
+                "{}: {body}",
+                call.origin
+            );
+        }
     }
 }
 
