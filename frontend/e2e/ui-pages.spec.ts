@@ -1,7 +1,32 @@
 import { test, expect, type Page } from '@playwright/test';
 // The fleet-shared harness, published as @xinutec/ui-harness (source repo
 // ~/Code/ui-harness). Ships compiled JS, so it loads straight from node_modules.
-import type { Item, ItemFile } from '../src/app/models';
+import type {
+  AsdaHit,
+  BinDay,
+  ConflictEntry,
+  ConnectState,
+  HouseScene,
+  Item,
+  ItemFile,
+  ItemHistory,
+  ItemHistoryEntry,
+  Loc,
+  Me,
+  ProductDetail,
+  PullResponse,
+  Purchase,
+  Recipe,
+  RowCoverage,
+  ShopFind,
+  SuggestEmotionsResponse,
+  TrashEntry,
+} from '../src/app/models';
+import type { Synced } from '../src/app/sync/replication';
+import type { ShoppingDoc } from '../src/app/sync/shopping-store';
+import type { TodoDoc } from '../src/app/sync/todo-store';
+import type { TodoLinkDoc } from '../src/app/sync/todo-link-store';
+import type { WellbeingDoc } from '../src/app/sync/wellbeing-store';
 // The real vocabulary, not a copy of it: the calendar fixture needs BREADTH
 // and a hand-written word list cannot keep it (see CAL_VOCAB).
 import { EMOTION_NODES } from '../src/app/shared/emotion-wheel';
@@ -29,7 +54,12 @@ const iso = (daysFromNow: number): string => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-const ME = { userId: 'test', displayName: 'Test User', avatarUrl: '', nextcloud: 'active' };
+const ME = {
+  userId: 'test',
+  displayName: 'Test User',
+  avatarUrl: '',
+  nextcloud: 'active',
+} satisfies Me;
 
 /** Busy to-do set: overdue+high (two pills + note), due-soon, ready, waiting. */
 const TODOS = [
@@ -43,6 +73,7 @@ const TODOS = [
     notes: 'ask for the clinic line — they only pick up mornings',
     notBefore: null,
     due: iso(-3),
+    shared: false,
     rev: 1,
     _deleted: false,
   },
@@ -56,6 +87,7 @@ const TODOS = [
     notes: null,
     notBefore: null,
     due: iso(2),
+    shared: false,
     rev: 2,
     _deleted: false,
   },
@@ -69,6 +101,7 @@ const TODOS = [
     notes: 'vinegar under the sink',
     notBefore: null,
     due: null,
+    shared: false,
     rev: 3,
     _deleted: false,
   },
@@ -82,10 +115,11 @@ const TODOS = [
     notes: null,
     notBefore: iso(10),
     due: null,
+    shared: false,
     rev: 4,
     _deleted: false,
   },
-];
+] satisfies Synced<TodoDoc>[];
 
 const SHOPPING = [
   {
@@ -95,6 +129,8 @@ const SHOPPING = [
     quantity: 2,
     unit: 'tubs',
     barcode: null,
+    category: 'food',
+    product_id: null,
     done: false,
     rev: 1,
     _deleted: false,
@@ -106,11 +142,13 @@ const SHOPPING = [
     quantity: 3,
     unit: 'tins',
     barcode: null,
+    category: 'food',
+    product_id: null,
     done: true,
     rev: 2,
     _deleted: false,
   },
-];
+] satisfies Synced<ShoppingDoc>[];
 
 /** Wellbeing chart elements wider than the phone by design, exempted from the
  *  overflow check by element so the rest of the chart stays checked: the `.pan`
@@ -210,7 +248,7 @@ const WELLBEING = [
     rev: 7,
     _deleted: false,
   },
-];
+] satisfies Synced<WellbeingDoc>[];
 
 // A dense stretch for the emotion calendar: the grid is seven columns of squares
 // that must survive a phone, and seven scattered readings would not exercise it.
@@ -352,8 +390,10 @@ const ITEM_PURCHASES = [
     unit: 'l',
     unit_price: { amount_minor: 125, measure: 'L' },
     bought_at: '2026-08-29T09:00:00Z',
+    warranty_months: null,
+    warranty_until: null,
   },
-];
+] satisfies Purchase[];
 
 // An item's audit, as the server orders it: newest first, and mixing the two
 // readings of `quantity` — a delta on the `used` row, a level on the others.
@@ -367,7 +407,7 @@ const ITEM_HISTORY = [
     location: 'Spice cupboard',
     at: Date.now() - 9 * 86_400_000,
   },
-];
+] satisfies ItemHistoryEntry[];
 
 // Three bins on one morning, which is what the real feed does — and the row
 // that has to fit a phone: three names joined on one line.
@@ -376,13 +416,13 @@ const BINS = [
   { kind: 'Rubbish collection', date: iso(1) },
   { kind: 'Paper and cardboard (blue sacks) collection', date: iso(1) },
   { kind: 'Recycling collection', date: iso(8) },
-];
+] satisfies BinDay[];
 
 const LOCATIONS = [
   { id: 1, kind: 'room', name: 'Kitchen', parent_id: null, sort_order: 0, position: null },
   { id: 2, kind: 'fridge', name: 'Fridge', parent_id: 1, sort_order: 0, position: null },
   { id: 3, kind: 'cupboard', name: 'Spice cupboard', parent_id: 1, sort_order: 1, position: null },
-];
+] satisfies Loc[];
 
 const RECIPES = [
   {
@@ -391,9 +431,9 @@ const RECIPES = [
     instructions: null,
     servings: 4,
     ingredients: [
-      { name: 'Chicken thighs', quantity: 500, unit: 'g' },
-      { name: 'Coconut milk', quantity: 1, unit: 'tin' },
-      { name: 'Curry paste', quantity: 2, unit: 'tbsp' },
+      { name: 'Chicken thighs', quantity: 500, unit: 'g', product_id: null, product_name: null },
+      { name: 'Coconut milk', quantity: 1, unit: 'tin', product_id: null, product_name: null },
+      { name: 'Curry paste', quantity: 2, unit: 'tbsp', product_id: null, product_name: null },
     ],
   },
   {
@@ -402,11 +442,11 @@ const RECIPES = [
     instructions: null,
     servings: 1,
     ingredients: [
-      { name: 'Kidney beans', quantity: 1, unit: 'tin' },
-      { name: 'Bread', quantity: 2, unit: 'slices' },
+      { name: 'Kidney beans', quantity: 1, unit: 'tin', product_id: null, product_name: null },
+      { name: 'Bread', quantity: 2, unit: 'slices', product_id: null, product_name: null },
     ],
   },
-];
+] satisfies Recipe[];
 
 const TRASH = [
   {
@@ -416,7 +456,7 @@ const TRASH = [
     deleted_at: now.getTime() - 3_600_000,
   },
   { kind: 'recipe', ref: '3', name: 'Lentil soup', deleted_at: now.getTime() - 86_400_000 },
-];
+] satisfies TrashEntry[];
 
 /** A fully-populated product detail: two shops with prices + deep links, the
  *  whole nutrition panel, long ingredients, allergen + dietary chips — the
@@ -433,6 +473,7 @@ const PRODUCT_DETAIL = {
     name_source: 'asda',
     image_source: null,
     has_image: false,
+    pack: null,
   },
   listings: [
     {
@@ -520,9 +561,11 @@ const PRODUCT_DETAIL = {
       unit: 'g',
       unit_price: { amount_minor: 715, measure: 'KG' },
       bought_at: '2026-08-20T09:00:00Z',
+      warranty_months: null,
+      warranty_until: null,
     },
   ],
-};
+} satisfies ProductDetail;
 
 /** A product Open Food Facts knows under a cryptic crowd name, that no shop
  *  lists yet — the state the "Find at Asda" lookup exists for. */
@@ -538,6 +581,7 @@ const UNLISTED_DETAIL = {
     name_source: 'off',
     image_source: null,
     has_image: false,
+    pack: null,
   },
   listings: [
     {
@@ -552,7 +596,8 @@ const UNLISTED_DETAIL = {
   facts_by_source: [],
   reconciliation: { fields: [] },
   documents: [],
-};
+  purchases: [],
+} satisfies ProductDetail;
 
 /** Asda's real answer for that crowd name: the product itself ranks LAST,
  *  behind a raspberry glaze. The barcode is what identifies it. */
@@ -566,6 +611,7 @@ const ASDA_HITS = [
     price_label: '£2.25',
     price: null,
     image_url: null,
+    dietary: [],
   },
   {
     external_id: '9020293',
@@ -576,6 +622,7 @@ const ASDA_HITS = [
     price_label: '£2.50',
     price: null,
     image_url: null,
+    dietary: [],
   },
   {
     external_id: '9020290',
@@ -590,8 +637,9 @@ const ASDA_HITS = [
       unit_price: null,
     },
     image_url: null,
+    dietary: [],
   },
-];
+] satisfies AsdaHit[];
 
 const CONFLICTS = [
   {
@@ -604,7 +652,7 @@ const CONFLICTS = [
     theirs: JSON.stringify('Phone the GP re: the referral'),
     created_at: now.getTime() - 60_000,
   },
-];
+] satisfies ConflictEntry[];
 
 /** Compare "September 2026"-style month headings chronologically, so the
  *  calendar's order can be asserted without hardcoding which months a
@@ -615,44 +663,50 @@ const byMonthLabel = (a: string, b: string): number => Date.parse(`1 ${a}`) - Da
  *  needs a different fixture than mockApi's can re-route the same collection —
  *  the emotion calendar wants a full log where the trend chart wants seven
  *  readings. */
-const syncRoute = (docs: unknown[]) => (r: Parameters<Parameters<Page['route']>[1]>[0]) => {
-  if (r.request().method() === 'POST') return r.fulfill({ json: [] });
+type SyncDoc = Synced<TodoDoc> | Synced<TodoLinkDoc> | Synced<ShoppingDoc> | Synced<WellbeingDoc>;
+
+const syncRoute = (docs: SyncDoc[]) => (r: Parameters<Parameters<Page['route']>[1]>[0]) => {
+  // A push answers its conflicts: none.
+  if (r.request().method() === 'POST') return r.fulfill({ json: [] satisfies SyncDoc[] });
   const since = Number(new URL(r.request().url()).searchParams.get('since') ?? '0');
   // Incremental protocol: only send the seed once, else the pull loops forever.
-  const fresh = docs.filter((d) => (d as { rev: number }).rev > since);
-  const top = docs.reduce<number>((m, d) => Math.max(m, (d as { rev: number }).rev), since);
-  return r.fulfill({ json: { documents: fresh, checkpoint: { rev: top } } });
+  const fresh = docs.filter((d) => d.rev > since);
+  const top = docs.reduce((m, d) => Math.max(m, d.rev), since);
+  return r.fulfill({
+    json: { documents: fresh, checkpoint: { rev: top } } satisfies PullResponse<SyncDoc>,
+  });
 };
 
 /** Mock every backend call: pulls return the seed docs, pushes accept all.
  *  Catch-all FIRST: Playwright runs handlers last-registered-first. */
 async function mockApi(page: Page): Promise<void> {
-  await page.route('**/api/**', (r) =>
-    r.request().method() === 'GET' ? r.fulfill({ json: [] }) : r.fulfill({ status: 204, body: '' }),
-  );
-  // ⚠ A sync pull needs the batch OBJECT, not the catch-all's `[]`. Registered
+  await page.route('**/api/**', (r) => r.fulfill({ status: 204, body: '' }));
+  // ⚠ A sync pull needs the batch OBJECT, not the catch-all's empty 204. Registered
   // after it so it wins (Playwright matches the newest route first); a test
   // needing real rows re-routes its collection with `syncRoute`.
-  await page.route('**/api/sync/**', (r) => {
-    if (r.request().method() === 'POST') return r.fulfill({ json: [] });
-    const since = Number(new URL(r.request().url()).searchParams.get('since') ?? '0');
-    return r.fulfill({ json: { documents: [], checkpoint: { rev: since } } });
-  });
+  await page.route('**/api/sync/**', syncRoute([]));
   await page.route('**/api/me', (r) => r.fulfill({ json: ME }));
   // No worker in a test run: nothing suggested, nothing pretending to think.
   await page.route('**/api/wellbeing/suggest-emotions', (r) =>
-    r.fulfill({ json: { suggestions: [], stale: false, pending: false, thinkingSecs: null } }),
+    r.fulfill({
+      json: {
+        suggestions: [],
+        stale: false,
+        pending: false,
+        thinkingSecs: null,
+      } satisfies SuggestEmotionsResponse,
+    }),
   );
   await page.route('**/api/items*', (r) => r.fulfill({ json: ITEMS }));
   await page.route('**/api/items/*/history', (r) =>
     // Events AND what was paid: a purchase from a hand-typed row is only
     // reachable here.
-    r.fulfill({ json: { entries: ITEM_HISTORY, purchases: ITEM_PURCHASES } }),
+    r.fulfill({ json: { entries: ITEM_HISTORY, purchases: ITEM_PURCHASES } satisfies ItemHistory }),
   );
   await page.route('**/api/bins', (r) => r.fulfill({ json: BINS }));
   // Not linked: the state that actually renders a card with a button in it.
   await page.route('**/api/nextcloud/connect/status', (r) =>
-    r.fulfill({ json: { status: 'not_linked' } }),
+    r.fulfill({ json: { status: 'not_linked' } satisfies ConnectState }),
   );
   await page.route('**/api/locations*', (r) => r.fulfill({ json: LOCATIONS }));
   await page.route('**/api/recipes', (r) => r.fulfill({ json: RECIPES }));
@@ -667,13 +721,15 @@ async function mockApi(page: Page): Promise<void> {
   // (products::asda::match_barcode). So the wire carries an already-confirmed
   // hit, and what's exercised here is how that answer renders.
   await page.route('**/api/products/id/43/find/asda', (r) =>
-    r.fulfill({ json: { hit: ASDA_HITS[2], from_cache: false } }),
+    r.fulfill({
+      json: { hit: ASDA_HITS[2], from_cache: false, searched: true } satisfies ShopFind,
+    }),
   );
   await page.route('**/api/conflicts*', (r) => r.fulfill({ json: CONFLICTS }));
   const sync = syncRoute;
   await page.route('**/api/sync/todo?*', sync(TODOS));
   await page.route('**/api/sync/todo', sync(TODOS));
-  await page.route('**/api/sync/todo_link*', sync([]));
+  await page.route('**/api/sync/todo-link*', sync([]));
   await page.route('**/api/sync/shopping*', sync(SHOPPING));
   await page.route('**/api/sync/wellbeing*', sync(WELLBEING));
 }
@@ -949,7 +1005,7 @@ test('buy — the sold-at and estimate lines fit @ phone width', async ({ page }
   await page.route('**/api/sync/shopping*', syncRoute(linked));
   await page.route('**/api/shopping/coverage', (r) =>
     r.fulfill({
-      json: linked.map((row) => ({
+      json: linked.map((row): RowCoverage => ({
         key: row.ulid,
         sources: ['asda', 'waitrose'],
         prices: [
@@ -1049,7 +1105,8 @@ test('plan-a-trip sheet — the unlinked-calendar way out lays out cleanly @ pho
   // second button to a sheet that was already the height of the screen.
   await mockApi(page);
   await page.route('**/api/calendar/shop-trip', (r) =>
-    r.fulfill({ status: 409, json: { error: 'nextcloud not linked' } }),
+    // The app reads only the status; the body is an untyped `json!` on the server.
+    r.fulfill({ status: 409, body: '' }),
   );
   await page.goto('/shopping');
   await page.getByRole('button', { name: 'Plan a trip' }).click();
@@ -1390,7 +1447,7 @@ test('product page — the reconcile panel lays out cleanly @ phone width', asyn
             },
           ],
         },
-      },
+      } satisfies ProductDetail,
     }),
   );
   await page.goto('/product/44');
@@ -1552,7 +1609,12 @@ test('emotion calendar — the day grid and a selection fit @ phone width', asyn
   await mockApi(page);
   // Registered after mockApi so it wins: the calendar needs a full log, not the
   // seven readings the trend chart is built around.
-  await page.route('**/api/sync/wellbeing*', syncRoute(CALENDAR_WELLBEING));
+  // Two days deliberately omit a field (see CALENDAR_WELLBEING): stored docs
+  // exist without them, so the reader is tested against what no current server sends.
+  await page.route(
+    '**/api/sync/wellbeing*',
+    syncRoute(CALENDAR_WELLBEING as Synced<WellbeingDoc>[]),
+  );
   await page.goto('/emotions');
 
   const grid = page.locator('.cal .grid').first();
@@ -1707,7 +1769,7 @@ const HOUSE_SCENE = {
     },
   ],
   furniture: [{ cx: 1.6, cz: 0.6, w: 0.6, d: 0.6, h: 0.9 }],
-};
+} satisfies HouseScene;
 
 test('house — a 404 reads as "no layout yet", not as an error @ phone width', async ({
   page,

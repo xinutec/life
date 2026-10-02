@@ -1,6 +1,13 @@
 import { test, expect, type Page } from '@playwright/test';
 import { swipeUp } from '@xinutec/ui-harness';
 
+import type { Me, PullResponse, SuggestEmotionsResponse } from '../src/app/models';
+import type { Synced } from '../src/app/sync/replication';
+import type { ShoppingDoc } from '../src/app/sync/shopping-store';
+import type { TodoDoc } from '../src/app/sync/todo-store';
+import type { TodoLinkDoc } from '../src/app/sync/todo-link-store';
+import type { WellbeingDoc } from '../src/app/sync/wellbeing-store';
+
 /**
  * Pixel-diff for what layout checks miss: colour, spacing, a swapped icon. After
  * an intended change run `pnpm run ui-golden:update` and inspect the diff.
@@ -9,7 +16,12 @@ import { swipeUp } from '@xinutec/ui-harness';
  * the shot is stable across days. Fonts are awaited: a mid-FOUT shot diffs.
  */
 
-const ME = { userId: 'test', displayName: 'Test User', avatarUrl: '', nextcloud: 'active' };
+const ME = {
+  userId: 'test',
+  displayName: 'Test User',
+  avatarUrl: '',
+  nextcloud: 'active',
+} satisfies Me;
 
 /** One rich, fully-deterministic to-do: a priority, an absolute due date, a
  *  note — enough that the golden exercises the toggle-groups, the ready banner,
@@ -27,7 +39,9 @@ const TODO = {
   shared: false,
   rev: 1,
   _deleted: false,
-};
+} satisfies Synced<TodoDoc>;
+
+type SyncDoc = Synced<TodoDoc> | Synced<TodoLinkDoc> | Synced<ShoppingDoc> | Synced<WellbeingDoc>;
 
 /** Minimal backend: the to-do sync serves the one seed doc; every other sync /
  *  read is empty so the stores settle without error. Incremental protocol, so
@@ -35,20 +49,27 @@ const TODO = {
  *
  *  ⚠ The collection is `todo-link`, with a HYPHEN. */
 async function mockApi(page: Page): Promise<void> {
-  await page.route('**/api/**', (r) =>
-    r.request().method() === 'GET' ? r.fulfill({ json: [] }) : r.fulfill({ status: 204, body: '' }),
-  );
+  await page.route('**/api/**', (r) => r.fulfill({ status: 204, body: '' }));
   await page.route('**/api/me', (r) => r.fulfill({ json: ME }));
   // No worker in a test run: nothing suggested, nothing pretending to think.
   await page.route('**/api/wellbeing/suggest-emotions', (r) =>
-    r.fulfill({ json: { suggestions: [], stale: false, pending: false, thinkingSecs: null } }),
+    r.fulfill({
+      json: {
+        suggestions: [],
+        stale: false,
+        pending: false,
+        thinkingSecs: null,
+      } satisfies SuggestEmotionsResponse,
+    }),
   );
-  const sync = (docs: (typeof TODO)[]) => (r: Parameters<Parameters<Page['route']>[1]>[0]) => {
-    if (r.request().method() === 'POST') return r.fulfill({ json: [] });
+  const sync = (docs: SyncDoc[]) => (r: Parameters<Parameters<Page['route']>[1]>[0]) => {
+    if (r.request().method() === 'POST') return r.fulfill({ json: [] satisfies SyncDoc[] });
     const since = Number(new URL(r.request().url()).searchParams.get('since') ?? '0');
     const fresh = docs.filter((d) => d.rev > since);
     const top = docs.reduce((m, d) => Math.max(m, d.rev), since);
-    return r.fulfill({ json: { documents: fresh, checkpoint: { rev: top } } });
+    return r.fulfill({
+      json: { documents: fresh, checkpoint: { rev: top } } satisfies PullResponse<SyncDoc>,
+    });
   };
   await page.route('**/api/sync/todo?*', sync([TODO]));
   await page.route('**/api/sync/todo', sync([TODO]));

@@ -13,6 +13,9 @@ import { SyncSource, SyncStatus } from './sync-status';
  *  redirect to a non-JSON login page), report "login required", call `onAuthLost` and throw to
  *  abort the cycle; offline or server failures (including the service
  *  worker's 504) return, and the caller's generic throw retries them. */
+/** A document as it travels over sync: the local doc plus RxDB's tombstone. */
+export type Synced<T> = T & { _deleted: boolean };
+
 export function guardAuth(
   res: Response,
   syncError: WritableSignal<string | null>,
@@ -108,7 +111,7 @@ export function startHttpReplication<T>(opts: {
         // `clearError` alone would let the indicator claim "synced" forever.
         opts.syncStatus.reportSuccess(opts.label);
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- _deleted is what the pull rows carry; the type adds RxDB's flag to T
-        return { documents: documents as (T & { _deleted: boolean })[], checkpoint: { rev } };
+        return { documents: documents as Synced<T>[], checkpoint: { rev } };
       },
     },
     push: {
@@ -130,7 +133,7 @@ export function startHttpReplication<T>(opts: {
         const conflicts: unknown = await res.json();
         if (!Array.isArray(conflicts)) throw new Error('push returned a malformed response');
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- checked to be an array on the line above
-        return conflicts as (T & { _deleted: boolean })[];
+        return conflicts as Synced<T>[];
       },
     },
   });

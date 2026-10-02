@@ -9,6 +9,7 @@
 use crate::products::ids::ProductId;
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 /// One shopping row as it travels over sync. `rev` is the server revision; a pull
 /// returns rows ordered by it and the client checkpoints on the maximum seen.
@@ -123,15 +124,18 @@ pub struct TodoLinkDoc {
 }
 
 /// A page of pulled documents plus the advanced checkpoint.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
+#[ts(export)]
 pub struct PullResponse<D> {
     pub documents: Vec<D>,
     pub checkpoint: Checkpoint,
 }
 
 /// The opaque (to the client) pull cursor: the highest `rev` delivered so far.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct Checkpoint {
+    #[ts(type = "number")]
     pub rev: u64,
 }
 
