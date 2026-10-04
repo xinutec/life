@@ -146,14 +146,34 @@ in  { name = "life"
             ]
         , timeout_s = 1800
         }
-      , {-  `deploy/hm-agents.nix` runs the worker from this flake output, which
-            no other row builds. A repo that fails to build stops home-manager
-            activation for every local input, not just this one.
+      , {-  `deploy/hm-agents.nix` runs the worker and the LLM host from these
+            flake outputs, which no other row builds. A repo that fails to build
+            stops home-manager activation for every local input, not just this one.
         -}
         G.Check::{
-        , name = "the emotion worker builds (what home-manager deploys)"
+        , name = "the Mac agents build (what home-manager deploys)"
         , argv =
-            [ "nix", "build", "--no-warn-dirty", "--no-link", ".#emotion-worker" ]
+            [ "nix"
+            , "build"
+            , "--no-warn-dirty"
+            , "--no-link"
+            , ".#emotion-worker"
+            , ".#llm-host"
+            ]
+        , timeout_s = 1800
+        }
+      , G.Check::{
+        , name = "the LLM host's tests"
+        , argv =
+            [ "nix"
+            , "develop"
+            , "--no-warn-dirty"
+            , ".#llm-host"
+            , "--command"
+            , "pytest"
+            , "-q"
+            , "llm-host/tests"
+            ]
         , timeout_s = 1800
         }
       , G.devLint "../"

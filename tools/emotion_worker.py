@@ -12,18 +12,17 @@ answer is the model's raw text. Deciding whether that text names real feelings
 is life's job, where the vocabulary is known and the check is tested — a worker
 that could widen its own answer set would be a hole in that guarantee.
 
-This worker does not load the model. The Mac holds exactly one copy of it, in
-recall's `llm-host` daemon (recall/src/recall/llmhost.py, 127.0.0.1:8092), which
-also serves recall's own summaries and Ask. Loading a second copy here would put
-two ~4.3 GB models on a machine that is also transcribing; the holder loads on
-demand, generates one request at a time, and releases the weights after five idle
-minutes. So the model shows up in this file as an HTTP call.
+This worker does not load the model. The `llm-host` daemon holds it
+(llm-host/src/life_llm_host/host.py, 127.0.0.1:8093): it loads on demand,
+generates one request at a time, and releases the ~4.3 GB of weights after five
+idle minutes, on a machine that is also transcribing. Kept apart so this worker
+stays stdlib-only, the model shows up in this file as an HTTP call.
 
 Environment:
   LIFE_URL              base URL of the life server (default https://life.xinutec.org)
   EMOTION_WORKER_TOKEN  shared secret; must match the server's (required)
   EMOTION_MODEL         model id the holder should use
-  EMOTION_LLM_HOST      where the holder listens (default http://127.0.0.1:8092)
+  EMOTION_LLM_HOST      where the holder listens (default http://127.0.0.1:8093)
 
 Standard library only — any python3 will run it:
 
@@ -43,15 +42,15 @@ from typing import Any
 LOG = logging.getLogger("emotion-worker")
 
 DEFAULT_MODEL = "mlx-community/Qwen2.5-7B-Instruct-4bit"
-DEFAULT_LLM_HOST = "http://127.0.0.1:8092"
+DEFAULT_LLM_HOST = "http://127.0.0.1:8093"
 # The answer is a short JSON array of tokens. A tight bound keeps a model that
 # starts rambling from pinning the GPU.
 MAX_TOKENS = 128
 # Longer than the server's poll window, so a held-open poll is never mistaken for
 # a dead connection; short enough that a genuinely wedged one is noticed.
 POLL_TIMEOUT = 40
-# The holder may have to load the weights first and it serialises callers, so a
-# request can queue behind recall's. Nobody is waiting on this.
+# The holder may have to load the weights first, which has taken minutes on this
+# machine. Nobody is waiting on this.
 GENERATE_TIMEOUT = 300
 # The holder answers /health without taking its lock, so this is quick even when
 # a generation or a load is in flight. Only a wedged daemon makes it wait.
@@ -96,11 +95,10 @@ def post_result(base: str, token: str, job_id: int, *, content: str | None, erro
 
 
 class Model:
-    """The model, addressed where it actually lives: recall's llm-host.
+    """The model, addressed where it actually lives: the llm-host.
 
     Nothing is cached here. The holder decides when the weights are resident and
-    when they go back, for every consumer at once — which is the only way the
-    Mac can hold one copy rather than one per interested process.
+    when they go back.
     """
 
     def __init__(self, name: str, host: str) -> None:
