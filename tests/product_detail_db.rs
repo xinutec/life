@@ -118,18 +118,30 @@ async fn canonical_name_is_sticky_a_new_source_does_not_silently_switch_it() {
         Some("Quaker Porridge Oats 500g")
     );
 
-    // A genuinely empty canonical name IS seeded from the best-ranked source
-    // present — fill-if-empty still fills.
+    // A genuinely empty canonical name IS seeded, on the next import, from the
+    // best-ranked source present (Asda over Open Food Facts), whichever source
+    // that import came from — fill-if-empty still fills.
     sqlx::query("UPDATE products SET name = NULL, name_source = NULL WHERE id = ?")
         .bind(p.id)
         .execute(&pool)
         .await
         .unwrap();
-    repo::refresh_canonical_name(&pool, p.id).await.unwrap();
-    let seeded = repo::get_by_id(&pool, p.id).await.unwrap().unwrap();
-    assert!(
-        seeded.name.is_some(),
-        "an empty canonical name is filled from a listing"
+    let seeded = repo::upsert_external(
+        &pool,
+        Source::Off,
+        &ExternalId::from(&barcode),
+        Some(&barcode),
+        &repo::ListingFields {
+            raw_name: Some("quaker oats porridge oats 500 g value pack"),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        (seeded.name.as_deref(), seeded.name_source),
+        (Some("Quaker Porridge Oats 500g"), Some(Source::Asda)),
+        "an empty canonical name is filled from the best-ranked listing"
     );
 }
 

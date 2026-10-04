@@ -217,7 +217,9 @@ async fn a_pack_size_survives_a_re_pull_of_the_listing() {
     .unwrap();
     assert_eq!(product.quantity_label, None, "nothing has supplied one yet");
 
-    repo::set_quantity_label(&pool, product.id, "22x27G")
+    sqlx::query("UPDATE products SET quantity_label = '22x27G' WHERE id = ?")
+        .bind(product.id)
+        .execute(&pool)
         .await
         .unwrap();
     let read = repo::get_by_id(&pool, product.id)

@@ -86,20 +86,6 @@ async fn upsert_nutrition_in(
     Ok(())
 }
 
-/// Set the product's pack-size label (e.g. Asda's "22x27G").
-pub async fn set_quantity_label(
-    pool: &MySqlPool,
-    product_id: ProductId,
-    label: &str,
-) -> Result<()> {
-    sqlx::query("UPDATE products SET quantity_label = ? WHERE id = ?")
-        .bind(label)
-        .bind(product_id)
-        .execute(pool)
-        .await?;
-    Ok(())
-}
-
 /// Upsert this source's ingredients text (one block per product+source, 0033).
 pub async fn set_ingredients(
     pool: &MySqlPool,
@@ -188,7 +174,7 @@ pub async fn replace_dietary(
     Ok(())
 }
 
-async fn replace_dietary_in(
+pub(super) async fn replace_dietary_in(
     conn: &mut MySqlConnection,
     product_id: ProductId,
     flags: &[DietaryFlag],
@@ -282,15 +268,26 @@ pub async fn store_facts(
     source: Source,
 ) -> Result<()> {
     let mut tx = pool.begin().await?;
+    store_facts_in(&mut tx, product_id, facts, source).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// [`store_facts`] on the caller's connection, for a caller with more to commit.
+pub(super) async fn store_facts_in(
+    conn: &mut MySqlConnection,
+    product_id: ProductId,
+    facts: &ProductFacts,
+    source: Source,
+) -> Result<()> {
     if let Some(n) = &facts.nutrition {
-        upsert_nutrition_in(&mut tx, product_id, n, source).await?;
+        upsert_nutrition_in(&mut *conn, product_id, n, source).await?;
     }
     if let Some(ing) = &facts.ingredients {
-        set_ingredients_in(&mut tx, product_id, ing, source).await?;
+        set_ingredients_in(&mut *conn, product_id, ing, source).await?;
     }
-    replace_allergens_in(&mut tx, product_id, &facts.allergens, source).await?;
-    replace_dietary_in(&mut tx, product_id, &facts.dietary, source).await?;
-    tx.commit().await?;
+    replace_allergens_in(&mut *conn, product_id, &facts.allergens, source).await?;
+    replace_dietary_in(&mut *conn, product_id, &facts.dietary, source).await?;
     Ok(())
 }
 

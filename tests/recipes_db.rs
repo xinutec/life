@@ -1,5 +1,6 @@
 //! Recipes against a real MariaDB.
 
+mod catalogue;
 mod common;
 
 use life::db;
@@ -186,7 +187,7 @@ async fn a_linked_ingredient_matches_stock_by_product_not_by_name() {
         .await
         .unwrap();
 
-    prod_repo::upsert(
+    catalogue::looked_up(
         &pool,
         &barcode,
         Some("Bart Ground Cumin 38g"),
@@ -194,8 +195,7 @@ async fn a_linked_ingredient_matches_stock_by_product_not_by_name() {
         Some("38g"),
         None,
     )
-    .await
-    .unwrap();
+    .await;
     let product = prod_repo::get(&pool, &barcode)
         .await
         .unwrap()
@@ -323,7 +323,7 @@ async fn list_recipes_returns_live_recipes_with_their_ingredients() {
         .execute(&pool)
         .await
         .unwrap();
-    prod_repo::upsert(
+    catalogue::looked_up(
         &pool,
         &barcode,
         Some("Bart Ground Cumin 38g"),
@@ -331,8 +331,7 @@ async fn list_recipes_returns_live_recipes_with_their_ingredients() {
         None,
         None,
     )
-    .await
-    .unwrap();
+    .await;
     let product = prod_repo::get(&pool, &barcode).await.unwrap().unwrap();
 
     // Named out of alphabetical order, so the ORDER BY has something to do.

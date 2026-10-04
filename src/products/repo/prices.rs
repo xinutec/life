@@ -12,7 +12,7 @@ use crate::products::source::Source;
 /// never overwritten — so "current price" is the latest row, and history is all
 /// of them.
 pub async fn record_price(
-    pool: &MySqlPool,
+    conn: impl sqlx::Executor<'_, Database = sqlx::MySql>,
     listing_id: ListingId,
     price: &PriceInput,
 ) -> Result<()> {
@@ -26,7 +26,7 @@ pub async fn record_price(
     .bind(&price.currency)
     .bind(price.unit_price.map(|u| u.amount_minor))
     .bind(price.unit_price.map(|u| u.measure))
-    .execute(pool)
+    .execute(conn)
     .await?;
     Ok(())
 }

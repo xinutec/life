@@ -6,6 +6,7 @@ pub mod asda;
 pub mod brandbank;
 pub mod coverage;
 pub mod ids;
+pub mod ingest;
 pub mod nutrition;
 pub mod off;
 pub mod packsize;

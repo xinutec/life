@@ -1,6 +1,7 @@
 //! Product cache against a real MariaDB (no Open Food Facts call — pure cache
 //! layer).
 
+mod catalogue;
 mod common;
 
 use life::db;
@@ -27,7 +28,7 @@ async fn product_cache_against_real_db() {
     assert!(repo::get(&pool, &bc).await.unwrap().is_none());
 
     // Cache with an image.
-    repo::upsert(
+    catalogue::looked_up(
         &pool,
         &bc,
         Some("Test Yog"),
@@ -35,8 +36,7 @@ async fn product_cache_against_real_db() {
         Some("950g"),
         Some((vec![1, 2, 3, 4], "image/png".into())),
     )
-    .await
-    .unwrap();
+    .await;
     let p = repo::get(&pool, &bc).await.unwrap().expect("cached");
     assert_eq!(p.name.as_deref(), Some("Test Yog"));
     assert_eq!(p.quantity_label.as_deref(), Some("950g"));
@@ -59,9 +59,7 @@ async fn product_cache_against_real_db() {
     // A second OFF lookup FILLS GAPS, it does not overwrite: the cached name and
     // image stand, because a source disagreeing with what we hold is a divergence
     // to approve (see repo::divergences), not something to apply behind your back.
-    repo::upsert(&pool, &bc, Some("Test Yog 2"), None, None, None)
-        .await
-        .unwrap();
+    catalogue::looked_up(&pool, &bc, Some("Test Yog 2"), None, None, None).await;
     let p2 = repo::get(&pool, &bc).await.unwrap().expect("cached");
     assert_eq!(p2.name.as_deref(), Some("Test Yog"), "the held name stands");
     assert!(p2.has_image, "and so does the held image");
@@ -72,9 +70,7 @@ async fn product_cache_against_real_db() {
         .execute(&pool)
         .await
         .unwrap();
-    repo::upsert(&pool, &bc, None, Some("BrandY"), None, None)
-        .await
-        .unwrap();
+    catalogue::looked_up(&pool, &bc, None, Some("BrandY"), None, None).await;
     let p2b = repo::get(&pool, &bc).await.unwrap().expect("cached");
     assert_eq!(p2b.brand.as_deref(), Some("BrandY"), "an empty field fills");
 
@@ -124,9 +120,7 @@ async fn catalog_search_against_real_db() {
         ("9991100000003", "Oat Milk", "Oatlyzz"),
     ] {
         let bc: Barcode = bc.parse().unwrap();
-        repo::upsert(&pool, &bc, Some(name), Some(brand), None, None)
-            .await
-            .unwrap();
+        catalogue::looked_up(&pool, &bc, Some(name), Some(brand), None, None).await;
     }
 
     // Name substring, case-insensitive (utf8mb4 collation), name-ordered.
@@ -218,14 +212,24 @@ async fn external_import_against_real_db() {
         p.id
     );
 
-    // A shop's pack size, promoted onto the canonical row and read back as an
-    // amount. This composition is what POST /api/products/import performs: set
-    // the label, then RE-READ, because the row it handed back a moment earlier
-    // still says `pack: None` — and a caller that links stock from the returned
-    // product would fill a form from that stale answer.
+    // A shop's pack size fills the gap on the canonical row, and the product the
+    // import hands back already carries it read as an amount: a caller links
+    // stock from that answer the moment it arrives.
     assert!(p.pack.is_none(), "nothing was imported with a pack size");
-    repo::set_quantity_label(&pool, p.id, "400G").await.unwrap();
-    let measured = repo::get_by_id(&pool, p.id).await.unwrap().unwrap();
+    let measured = repo::upsert_external(
+        &pool,
+        source,
+        &ext,
+        None,
+        &repo::ListingFields {
+            raw_name: Some("Cravendale Semi-Skimmed Milk"),
+            brand: Some("Cravendale"),
+            quantity_label: Some("400G"),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
     assert_eq!(measured.quantity_label.as_deref(), Some("400G"));
     assert_eq!(
         measured.pack,

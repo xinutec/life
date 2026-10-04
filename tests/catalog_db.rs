@@ -2,6 +2,7 @@
 //! catalog product resolves its display name/brand/image from the product; a
 //! barcode-less item stands alone on its own name.
 
+mod catalogue;
 mod common;
 
 use life::db;
@@ -49,7 +50,7 @@ async fn item_resolves_through_catalog_product() {
         .unwrap();
 
     // A catalog product (as the OFF lookup would cache it), with an image.
-    prod::upsert(
+    catalogue::looked_up(
         &pool,
         &barcode,
         Some("Catalog Yoghurt"),
@@ -57,8 +58,7 @@ async fn item_resolves_through_catalog_product() {
         Some("950g"),
         Some((vec![1, 2, 3], "image/png".into())),
     )
-    .await
-    .unwrap();
+    .await;
 
     // An item scanned to that barcode — its own name is a scribble that the
     // product name should override on read.

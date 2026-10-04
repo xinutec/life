@@ -1,10 +1,12 @@
 //! Persistence for the product catalog.
 
 mod facts;
+mod ingest;
 mod prices;
 mod reconcile;
 
 pub use facts::*;
+pub use ingest::ingest;
 pub use prices::*;
 pub use reconcile::*;
 
@@ -13,6 +15,7 @@ use sqlx::MySqlPool;
 
 use super::coverage::{AttachedListing, ListingPrice, RowPrice, Sighting};
 use super::ids::{Barcode, ExternalId, ListingId, ProductId};
+use super::ingest::{FactsUpdate, SourceAccount};
 use super::packsize;
 use super::prices::Currency;
 use super::source::Source;
@@ -140,13 +143,16 @@ pub struct Listing {
 }
 
 /// Every source that lists a canonical product, oldest first.
-pub async fn listings_for(pool: &MySqlPool, product_id: ProductId) -> Result<Vec<Listing>> {
+pub async fn listings_for(
+    conn: impl sqlx::Executor<'_, Database = sqlx::MySql>,
+    product_id: ProductId,
+) -> Result<Vec<Listing>> {
     let rows = sqlx::query_as::<_, Listing>(
         "SELECT source, external_id, url, raw_name, brand, quantity_label, image_url \
          FROM product_listings WHERE product_id = ? ORDER BY created_at, id",
     )
     .bind(product_id)
-    .fetch_all(pool)
+    .fetch_all(conn)
     .await?;
     Ok(rows)
 }
@@ -158,7 +164,7 @@ pub async fn listings_for(pool: &MySqlPool, product_id: ProductId) -> Result<Vec
 #[derive(Debug, Default, Clone)]
 pub struct ListingFields<'a> {
     /// The source's title, verbatim (the canonical display name is chosen among
-    /// sources separately; see `refresh_canonical_name`).
+    /// sources separately; see `crate::products::ingest::best_name`).
     pub raw_name: Option<&'a str>,
     pub brand: Option<&'a str>,
     pub quantity_label: Option<&'a str>,
@@ -178,7 +184,7 @@ pub struct ListingFields<'a> {
 /// line is its own — never shared with another source — so a re-pull overwrites
 /// this source's fields wholesale rather than COALESCE-ing them.
 pub async fn upsert_listing(
-    pool: &MySqlPool,
+    conn: impl sqlx::Executor<'_, Database = sqlx::MySql>,
     product_id: ProductId,
     source: Source,
     external_id: &ExternalId,
@@ -202,64 +208,9 @@ pub async fn upsert_listing(
     .bind(fields.quantity_label)
     .bind(fields.image_url)
     .bind(fields.raw_json)
-    .execute(pool)
+    .execute(conn)
     .await?;
     Ok(())
-}
-
-/// Seed an empty (or blank) canonical name from the listings: the best source
-/// by `source::name_rank` with a non-blank name, oldest listing on a tie. Never
-/// overwrites; a later disagreeing title surfaces as a divergence to approve.
-/// Run it last on a listing-touching path, so a new product gets the best name.
-pub async fn refresh_canonical_name(pool: &MySqlPool, product_id: ProductId) -> Result<()> {
-    let current: Option<(Option<String>,)> =
-        sqlx::query_as("SELECT name FROM products WHERE id = ?")
-            .bind(product_id)
-            .fetch_optional(pool)
-            .await?;
-    let has_name = current
-        .and_then(|(n,)| n)
-        .is_some_and(|n| !n.trim().is_empty());
-    if has_name {
-        return Ok(());
-    }
-    let listings = listings_for(pool, product_id).await?;
-    let best = listings
-        .iter()
-        .filter_map(|l| {
-            let name = l
-                .raw_name
-                .as_deref()
-                .map(str::trim)
-                .filter(|n| !n.is_empty())?;
-            Some((l.source.name_rank()?, name, l.source))
-        })
-        .min_by_key(|(rank, ..)| *rank);
-    if let Some((_, name, name_source)) = best {
-        sqlx::query("UPDATE products SET name = ?, name_source = ? WHERE id = ?")
-            .bind(name)
-            .bind(name_source)
-            .bind(product_id)
-            .execute(pool)
-            .await?;
-    }
-    Ok(())
-}
-
-/// The canonical product id an existing listing points at, if any.
-async fn listing_product_id(
-    pool: &MySqlPool,
-    source: Source,
-    external_id: &ExternalId,
-) -> Result<Option<ProductId>> {
-    let row: Option<(ProductId,)> = sqlx::query_as(
-        "SELECT product_id FROM product_listings WHERE source = ? AND external_id = ?",
-    )
-    .bind(source)
-    .bind(external_id)
-    .fetch_optional(pool)
-    .await?;
-    Ok(row.map(|(id,)| id))
 }
 
 /// The listing id for (source, external_id) — the FK target a price observation
@@ -368,41 +319,14 @@ pub async fn shops_seen_carrying(pool: &MySqlPool, barcodes: &[Barcode]) -> Resu
         .collect())
 }
 
-/// Find the canonical product for `barcode`, creating a bare one if absent. On a
-/// hit the existing canonical fields are left untouched (see
-/// `refresh_canonical_name`); on create they're seeded from the calling source.
-/// Returns the canonical id.
-async fn find_or_create_by_barcode(
-    pool: &MySqlPool,
-    barcode: &Barcode,
-    name: Option<&str>,
-    brand: Option<&str>,
-    source: Source,
-) -> Result<ProductId> {
-    sqlx::query(
-        "INSERT INTO products (barcode, name, brand, source, name_source) \
-         VALUES (?, ?, ?, ?, ?) \
-         ON DUPLICATE KEY UPDATE barcode = barcode",
-    )
-    .bind(barcode)
-    .bind(name)
-    .bind(brand)
-    .bind(source)
-    .bind(source)
-    .execute(pool)
-    .await?;
-    let (id,): (ProductId,) = sqlx::query_as("SELECT id FROM products WHERE barcode = ?")
-        .bind(barcode)
-        .fetch_one(pool)
-        .await?;
-    Ok(id)
-}
-
 /// Import (or refresh) a catalog product from an external source, reconciled by
 /// barcode: the canonical `products` row is keyed by EAN, so Asda and Open Food
 /// Facts describing the same barcode land on ONE product with two listings. A
 /// barcodeless source (Waitrose, by lineNumber) gets/keeps its own canonical
 /// row, found via its existing listing. Returns the canonical product.
+///
+/// A listing alone, with no price, facts or picture: [`ingest`] with nothing
+/// else to say.
 pub async fn upsert_external(
     pool: &MySqlPool,
     source: Source,
@@ -410,74 +334,21 @@ pub async fn upsert_external(
     barcode: Option<&Barcode>,
     fields: &ListingFields<'_>,
 ) -> Result<Product> {
-    // The source's own name/brand seed the canonical row (fill-if-empty for the
-    // barcoded case; the sole authority for a barcodeless one) and are also kept
-    // verbatim on the listing.
-    let name = fields.raw_name;
-    let brand = fields.brand;
-    let product_id = if let Some(bc) = barcode {
-        find_or_create_by_barcode(pool, bc, name, brand, source).await?
-    } else if let Some(id) = listing_product_id(pool, source, external_id).await? {
-        // A barcodeless product has a single owning source, so a re-import may
-        // refresh its canonical name/brand (nothing else lists it to diverge) —
-        // EXCEPT a value we've made our own, which a source refresh must never
-        // clobber. Name and brand are guarded independently by their provenance.
-        // `<=>` (null-safe equality) so an unset provenance reads as 0, not NULL.
-        let (name_user, brand_user): (i64, i64) = sqlx::query_as(
-            "SELECT (name_source <=> 'user'), (brand_source <=> 'user') FROM products WHERE id = ?",
-        )
-        .bind(id)
-        .fetch_one(pool)
-        .await?;
-        match (name_user != 0, brand_user != 0) {
-            (true, true) => {}
-            (true, false) => {
-                sqlx::query("UPDATE products SET brand = ? WHERE id = ?")
-                    .bind(brand)
-                    .bind(id)
-                    .execute(pool)
-                    .await?;
-            }
-            (false, true) => {
-                sqlx::query("UPDATE products SET name = ? WHERE id = ?")
-                    .bind(name)
-                    .bind(id)
-                    .execute(pool)
-                    .await?;
-            }
-            (false, false) => {
-                sqlx::query("UPDATE products SET name = ?, brand = ? WHERE id = ?")
-                    .bind(name)
-                    .bind(brand)
-                    .bind(id)
-                    .execute(pool)
-                    .await?;
-            }
-        }
-        id
-    } else {
-        // First sighting of a barcodeless product → a fresh canonical row. The
-        // origin source/external_id are kept on the row too (vestigial, for the
-        // single-source case) so `Product` still reports them.
-        sqlx::query(
-            "INSERT INTO products (name, brand, source, name_source, external_id) \
-             VALUES (?, ?, ?, ?, ?)",
-        )
-        .bind(name)
-        .bind(brand)
-        .bind(source)
-        .bind(source)
-        .bind(external_id)
-        .execute(pool)
-        .await?
-        .last_insert_id()
-        .into()
+    let owned = |v: Option<&str>| v.map(str::to_string);
+    let account = SourceAccount {
+        source,
+        external_id: external_id.clone(),
+        barcode: barcode.cloned(),
+        name: owned(fields.raw_name),
+        brand: owned(fields.brand),
+        quantity_label: owned(fields.quantity_label),
+        url: owned(fields.url),
+        image_url: owned(fields.image_url),
+        raw_json: owned(fields.raw_json),
+        price: None,
+        facts: FactsUpdate::None,
     };
-    upsert_listing(pool, product_id, source, external_id, fields).await?;
-    refresh_canonical_name(pool, product_id).await?;
-    get_by_id(pool, product_id)
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("row vanished immediately after upsert"))
+    ingest(pool, &account, None).await
 }
 
 /// Cached image bytes + mime for a catalog id, if present.
@@ -542,50 +413,6 @@ pub async fn set_image(
     .bind(barcode)
     .bind(bytes)
     .bind(mime)
-    .execute(pool)
-    .await?;
-    Ok(())
-}
-
-/// Cache a product from an Open Food Facts lookup: insert it, or FILL THE GAPS
-/// on a row that already exists. Never an overwrite.
-///
-/// The policy of every write here: fill-if-empty, and a disagreement becomes a
-/// divergence to approve.
-pub async fn upsert(
-    pool: &MySqlPool,
-    barcode: &Barcode,
-    name: Option<&str>,
-    brand: Option<&str>,
-    quantity_label: Option<&str>,
-    image: Option<(Vec<u8>, String)>,
-) -> Result<()> {
-    let (bytes, mime) = match image {
-        Some((b, m)) => (Some(b), Some(m)),
-        None => (None, None),
-    };
-    sqlx::query(
-        // `COALESCE(NULLIF(col, ''), VALUES(col))` = keep what's there unless it's
-        // absent or blank. `image_mime` is assigned BEFORE `image` on purpose:
-        // ON DUPLICATE KEY assignments evaluate left to right, so this is the one
-        // ordering in which `image IS NULL` still describes the OLD image and the
-        // mime can't be left describing bytes we didn't take.
-        "INSERT INTO products \
-         (barcode, name, brand, quantity_label, image, image_mime, source, name_source) \
-         VALUES (?, ?, ?, ?, ?, ?, 'off', 'off') \
-         ON DUPLICATE KEY UPDATE name = COALESCE(NULLIF(name, ''), VALUES(name)), \
-         brand = COALESCE(NULLIF(brand, ''), VALUES(brand)), \
-         quantity_label = COALESCE(NULLIF(quantity_label, ''), VALUES(quantity_label)), \
-         image_mime = IF(image IS NULL, VALUES(image_mime), image_mime), \
-         image = COALESCE(image, VALUES(image)), \
-         fetched_at = CURRENT_TIMESTAMP",
-    )
-    .bind(barcode)
-    .bind(name)
-    .bind(brand)
-    .bind(quantity_label)
-    .bind(&bytes)
-    .bind(&mime)
     .execute(pool)
     .await?;
     Ok(())

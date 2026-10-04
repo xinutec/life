@@ -4,6 +4,7 @@
 
 mod test_config;
 
+mod catalogue;
 mod common;
 
 use axum::body::Body;
@@ -93,7 +94,7 @@ async fn attaching_a_shop_keeps_the_picture_the_product_already_has() {
     let pool = pool().await;
     let bc: Barcode = "9990000000957".parse().unwrap();
     fresh(&pool, &bc).await;
-    repo::upsert(
+    catalogue::looked_up(
         &pool,
         &bc,
         Some("Basmati rice"),
@@ -101,8 +102,7 @@ async fn attaching_a_shop_keeps_the_picture_the_product_already_has() {
         None,
         Some((vec![1, 2, 3], "image/jpeg".into())),
     )
-    .await
-    .unwrap();
+    .await;
     let before = repo::get(&pool, &bc).await.unwrap().unwrap();
     repo::set_image_provenance(&pool, before.id, Source::Off)
         .await
@@ -188,7 +188,7 @@ async fn a_changed_picture_is_served_at_once_and_an_unchanged_one_is_a_304() {
     let pool = pool().await;
     let bc: Barcode = "9990000000971".parse().unwrap();
     fresh(&pool, &bc).await;
-    repo::upsert(
+    catalogue::looked_up(
         &pool,
         &bc,
         Some("Rice"),
@@ -196,8 +196,7 @@ async fn a_changed_picture_is_served_at_once_and_an_unchanged_one_is_a_304() {
         None,
         Some((vec![1, 2, 3], "image/jpeg".into())),
     )
-    .await
-    .unwrap();
+    .await;
     let id = repo::get(&pool, &bc).await.unwrap().unwrap().id;
 
     let (status, etag, cache) = image(&pool, id.0, None).await;
@@ -343,9 +342,7 @@ async fn call(
 async fn catalogued(pool: &MySqlPool, barcode: &str, name: &str) -> u64 {
     let bc: Barcode = barcode.parse().unwrap();
     fresh(pool, &bc).await;
-    repo::upsert(pool, &bc, Some(name), None, None, None)
-        .await
-        .unwrap();
+    catalogue::looked_up(pool, &bc, Some(name), None, None, None).await;
     repo::get(pool, &bc).await.unwrap().unwrap().id.0
 }
 
@@ -844,7 +841,9 @@ async fn a_shop_import_fills_a_missing_pack_size_but_never_overrules_one() {
     };
 
     let held = catalogued(&pool, "9990000001046", "Porridge Oats").await;
-    repo::set_quantity_label(&pool, life::products::ids::ProductId(held), "500g")
+    sqlx::query("UPDATE products SET quantity_label = '500g' WHERE id = ?")
+        .bind(held)
+        .execute(&pool)
         .await
         .unwrap();
     let (status, product) = call(

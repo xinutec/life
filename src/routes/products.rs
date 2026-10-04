@@ -10,6 +10,7 @@ use serde::Deserialize;
 
 use crate::error::AppError;
 use crate::products::ids::{Barcode, ExternalId, ProductId};
+use crate::products::ingest::{self, FactsUpdate, SourceAccount};
 use crate::products::prices::PriceInput;
 use crate::products::source::Source;
 use crate::products::types::{Choice, DocKind, FieldChoice, ReconcileField};
@@ -87,58 +88,38 @@ pub async fn lookup(
         return Err(AppError::NotFound);
     };
     tracing::debug!(%barcode, name = ?found.name, has_image = found.image_url.is_some(), "product fetched from Open Food Facts");
-    // Image fetch failure is non-fatal (the product still caches) but must be
-    // visible — guard rejections inside fetch_image already log; so does this.
-    let image = match &found.image_url {
-        Some(url) => off::fetch_image(url).await.unwrap_or_else(|e| {
-            tracing::warn!(%barcode, %url, error = %e, "product image fetch failed");
-            None
-        }),
-        None => None,
+    // Open Food Facts keys its own listing by the barcode, and its whole response
+    // rides along verbatim, so nothing it sent is dropped.
+    let account = SourceAccount {
+        source: Source::Off,
+        external_id: ExternalId::from(&barcode),
+        barcode: Some(barcode.clone()),
+        name: found.name,
+        brand: found.brand,
+        quantity_label: found.quantity,
+        url: None,
+        image_url: found.image_url,
+        raw_json: Some(found.raw),
+        price: None,
+        facts: FactsUpdate::Full(Box::new(found.facts)),
     };
-    repo::upsert(
-        &app.pool,
-        &barcode,
-        found.name.as_deref(),
-        found.brand.as_deref(),
-        found.quantity.as_deref(),
-        image,
-    )
-    .await?;
-    let product = repo::get(&app.pool, &barcode)
-        .await?
-        .ok_or(AppError::NotFound)?;
-    // Record the 'off' listing so this product joins the source model (its
-    // barcode is Open Food Facts' own id for it), carrying OFF's own account of
-    // the product so it stands as a candidate in any later reconciliation.
-    repo::upsert_listing(
-        &app.pool,
-        product.id,
-        Source::Off,
-        &ExternalId::from(&barcode),
-        &repo::ListingFields {
-            raw_name: found.name.as_deref(),
-            brand: found.brand.as_deref(),
-            quantity_label: found.quantity.as_deref(),
-            image_url: found.image_url.as_deref(),
-            // OFF's whole response verbatim — the same lossless capture the Asda
-            // search hit gets, so nothing OFF sent is dropped.
-            raw_json: Some(&found.raw),
-            ..Default::default()
-        },
-    )
-    .await?;
-    // Store the nutrition/ingredients/allergens/dietary facts from the same OFF
-    // response, attached to the canonical product.
-    repo::store_facts(&app.pool, product.id, &found.facts, Source::Off).await?;
-    // Seed the canonical name from the best-ranked source if the product had
-    // none yet (fill-if-empty). It never switches an existing name: a source
-    // that disagrees is surfaced as a divergence to approve, not applied here.
-    repo::refresh_canonical_name(&app.pool, product.id).await?;
-    repo::get_by_id(&app.pool, product.id)
-        .await?
-        .map(Json)
-        .ok_or(AppError::NotFound)
+    let picture = fetch_picture(None, &account).await;
+    Ok(Json(repo::ingest(&app.pool, &account, picture).await?))
+}
+
+/// The picture to store with an ingest, fetched before it so no network call
+/// happens inside its transaction. Best-effort: a picture that cannot be fetched
+/// is logged, and the product is stored without one.
+async fn fetch_picture(
+    current: Option<&Product>,
+    account: &SourceAccount,
+) -> Option<(Vec<u8>, String)> {
+    let url = ingest::picture_to_fetch(current, account)?;
+    off::fetch_image_from(url, account.source.image_hosts())
+        .await
+        .inspect_err(|e| tracing::warn!(%url, "product picture not fetched: {e:#}"))
+        .ok()
+        .flatten()
 }
 
 /// PUT /api/products/{barcode}/image → replace the cached image with the raw
@@ -251,74 +232,30 @@ pub async fn import(
         .as_deref()
         .map(str::trim)
         .filter(|v| !v.is_empty());
-    let mut product = repo::upsert_external(
-        &app.pool,
-        body.source,
-        ext,
-        barcode.as_ref(),
-        &repo::ListingFields {
-            raw_name: Some(name),
-            brand,
-            quantity_label: pack,
-            image_url: body.image_url.as_deref().filter(|s| !s.is_empty()),
-            ..Default::default()
-        },
-    )
-    .await?;
+    let account = SourceAccount {
+        source: body.source,
+        external_id: ext.clone(),
+        barcode: barcode.clone(),
+        name: Some(name.to_string()),
+        brand: brand.map(str::to_string),
+        quantity_label: pack.map(str::to_string),
+        url: None,
+        image_url: body.image_url.clone().filter(|s| !s.trim().is_empty()),
+        raw_json: None,
+        price: body.price.clone(),
+        facts: FactsUpdate::None,
+    };
+    // What the product holds now decides whether its picture is worth fetching.
+    let current = match &barcode {
+        Some(bc) => repo::get(&app.pool, bc).await?,
+        None => repo::get_by_source_external(&app.pool, body.source, ext).await?,
+    };
+    let picture = fetch_picture(current.as_ref(), &account).await;
+    // The answer carries the pack read FROM the label (`pack`), which the caller
+    // fills a new stock row from the moment this returns.
+    let product = repo::ingest(&app.pool, &account, picture).await?;
     tracing::info!(source = %body.source, external_id = %ext, ?barcode, name, "product imported");
-
-    // Pack size only if we have none, the same rule as attaching a listing from
-    // the product page: OFF's quantity is the product's own, while a shop's is
-    // the pack it sells. Re-read rather than patch the value in, so what we hand
-    // back carries the amount parsed FROM the label and not just the label — the
-    // caller fills a new stock row from it the moment this returns.
-    if product.quantity_label.is_none()
-        && let Some(q) = pack
-    {
-        repo::set_quantity_label(&app.pool, product.id, q).await?;
-        product = repo::get_by_id(&app.pool, product.id)
-            .await?
-            .ok_or(AppError::NotFound)?;
-    }
-
-    // Optional price: append an observation to this listing's history. Best-effort
-    // relative to the import — a missing listing id (shouldn't happen) just skips it.
-    if let Some(price) = &body.price
-        && let Some(lid) = repo::listing_id(&app.pool, body.source, ext).await?
-    {
-        repo::record_price(&app.pool, lid, price).await?;
-        tracing::info!(source = %body.source, external_id = %ext, amount_minor = price.amount_minor, "price recorded");
-    }
-
-    // SSRF-gated to the source's hosts; a failed fetch is logged, since the
-    // listing is already stored.
-    if let Some(url) = shop_picture_to_fetch(&product, body.source, body.image_url.as_deref())
-        && let Some((bytes, mime)) = off::fetch_image_from(url, body.source.image_hosts())
-            .await
-            .inspect_err(|e| tracing::warn!(%url, "shop picture not fetched: {e:#}"))
-            .ok()
-            .flatten()
-    {
-        repo::set_image_by_id(&app.pool, product.id, &bytes, &mime).await?;
-        repo::set_image_provenance(&app.pool, product.id, body.source).await?;
-        return repo::get_by_id(&app.pool, product.id)
-            .await?
-            .map(Json)
-            .ok_or(AppError::NotFound);
-    }
     Ok(Json(product))
-}
-
-/// The shop picture an import should fetch: only for a product with none, since
-/// a held picture is replaced through the picture reconcile, which the listing's
-/// `image_url` feeds.
-pub fn shop_picture_to_fetch<'a>(
-    product: &Product,
-    source: Source,
-    image_url: Option<&'a str>,
-) -> Option<&'a str> {
-    let url = image_url.map(str::trim).filter(|s| !s.is_empty())?;
-    (!product.has_image && !source.image_hosts().is_empty()).then_some(url)
 }
 
 /// GET /api/products/id/{id} → everything the product page shows in one fetch:
@@ -664,55 +601,29 @@ pub async fn sync_listing(
             "that listing's barcode doesn't match this product".into(),
         ));
     }
-    // Store Asda's whole account of the product on its own listing line: the
-    // structured fields plus the untouched record (`raw_json`), so nothing Asda
-    // sent is lost and every field can stand as a candidate in reconciliation.
-    let raw_json = hit.raw.as_ref().and_then(|v| serde_json::to_string(v).ok());
-    let updated = repo::upsert_external(
-        &app.pool,
-        Source::Asda,
-        &hit.external_id,
-        hit.barcode.as_ref(),
-        &repo::ListingFields {
-            raw_name: Some(&hit.name),
-            brand: hit.brand.as_deref(),
-            quantity_label: hit.quantity_label.as_deref(),
-            image_url: hit.image_url.as_deref(),
-            raw_json: raw_json.as_deref(),
-            ..Default::default()
-        },
-    )
-    .await?;
-    // Pack size only if we have none: OFF's quantity is the product's own, while
-    // Asda's PACK_SIZE describes the pack it sells.
-    if product.quantity_label.is_none()
-        && let Some(q) = hit.quantity_label.as_deref()
-    {
-        repo::set_quantity_label(&app.pool, updated.id, q).await?;
-    }
-    // The shop's own lifestyle tags, kept apart from OFF's claims (migration
-    // 0028) and merged on read.
-    repo::replace_dietary(&app.pool, updated.id, &hit.dietary, Source::Asda).await?;
-    if let Some(price) = &hit.price
-        && let Some(lid) = repo::listing_id(&app.pool, Source::Asda, &hit.external_id).await?
-    {
-        repo::record_price(&app.pool, lid, price).await?;
-    }
-    // The picture is identity, not a rotting figure, so it comes onto the product
-    // now through the same SSRF-gated fetch, but only if it has none (like pack
-    // size above). Best-effort: a failed fetch never fails the attach.
-    if !updated.has_image
-        && let Some(url) = hit.image_url.as_deref().filter(|s| !s.is_empty())
-        && let Some((bytes, mime)) = off::fetch_image_from(url, Source::Asda.image_hosts()).await?
-    {
-        repo::set_image_by_id(&app.pool, updated.id, &bytes, &mime).await?;
-        repo::set_image_provenance(&app.pool, updated.id, Source::Asda).await?;
-    }
+    // Asda's whole account: the structured fields plus the untouched record
+    // (`raw_json`) on its own listing line, so nothing Asda sent is lost and every
+    // field can stand as a candidate in reconciliation; its lifestyle tags, kept
+    // apart from OFF's claims (migration 0028) and merged on read; its price.
+    let account = SourceAccount {
+        source: Source::Asda,
+        external_id: hit.external_id.clone(),
+        barcode: hit.barcode.clone(),
+        name: Some(hit.name.clone()),
+        brand: hit.brand.clone(),
+        quantity_label: hit.quantity_label.clone(),
+        url: None,
+        image_url: hit.image_url.clone(),
+        raw_json: hit.raw.as_ref().and_then(|v| serde_json::to_string(v).ok()),
+        price: hit.price.clone(),
+        facts: FactsUpdate::Dietary(hit.dietary.clone()),
+    };
+    // The picture is identity, not a rotting figure, so it comes onto a product
+    // that has none now. Best-effort: a failed fetch never fails the attach.
+    let picture = fetch_picture(Some(&product), &account).await;
+    let updated = repo::ingest(&app.pool, &account, picture).await?;
     tracing::info!(product = %updated.id, cin = %hit.external_id, flags = hit.dietary.len(), "asda listing pulled");
-    repo::get_by_id(&app.pool, updated.id)
-        .await?
-        .map(Json)
-        .ok_or(AppError::NotFound)
+    Ok(Json(updated))
 }
 
 #[derive(serde::Deserialize)]
