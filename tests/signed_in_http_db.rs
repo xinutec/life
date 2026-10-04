@@ -736,6 +736,27 @@ async fn an_attachment_is_downloaded_never_rendered() {
     assert_eq!(disposition, "attachment; filename=\"manual; x=y.png\"");
 }
 
+/// Put a row on the Buy list the way the app does, by a sync push, and return
+/// the id the buy route takes.
+async fn on_the_list(pool: &MySqlPool, name: &str) -> u64 {
+    let ulid = ulid::Ulid::new().to_string();
+    let doc = serde_json::json!({
+        "ulid": ulid, "name": name, "quantity": 2.0, "unit": "pots",
+        "barcode": null, "category": "food", "done": false,
+    });
+    let push = serde_json::json!([{ "newDocumentState": doc }]);
+    let (status, conflicts) = call(pool, "POST", "/api/sync/shopping", Some(push)).await;
+    assert_eq!((status, conflicts), (StatusCode::OK, serde_json::json!([])));
+    let (_, pulled) = call(pool, "GET", "/api/sync/shopping?since=0&limit=1000", None).await;
+    pulled["documents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["ulid"] == ulid.as_str())
+        .and_then(|d| d["id"].as_u64())
+        .expect("the pushed row is pulled with its id")
+}
+
 #[tokio::test]
 async fn buying_a_row_brings_it_home_once_and_a_bad_price_never_stops_it() {
     let pool = pool().await;
@@ -750,23 +771,13 @@ async fn buying_a_row_brings_it_home_once_and_a_bad_price_never_stops_it() {
             .await
             .unwrap();
     }
-    let row = |name: &str| life::shopping::types::NewShoppingItem {
-        name: name.into(),
-        quantity: Some(2.0),
-        unit: Some("pots".into()),
-        barcode: None,
-        category: life::inventory::types::ItemCategory::Food,
-        product_id: None,
-    };
-    let yoghurt = life::shopping::repo::create(&pool, SIGNED_IN_USER, row("Yoghurt"))
-        .await
-        .unwrap();
+    let yoghurt = on_the_list(&pool, "Yoghurt").await;
     let paid = |amount_minor: i64| serde_json::json!({ "purchase": { "shop": "Waitrose", "amount_minor": amount_minor, "currency": "GBP" } });
 
     let (status, item) = call(
         &pool,
         "POST",
-        &format!("/api/shopping/{}/buy", yoghurt.id),
+        &format!("/api/shopping/{}/buy", yoghurt),
         Some(paid(330)),
     )
     .await;
@@ -780,7 +791,7 @@ async fn buying_a_row_brings_it_home_once_and_a_bad_price_never_stops_it() {
     assert_eq!(bought.len(), 1);
     assert_eq!(bought[0].amount_minor, 330);
     assert!(
-        life::shopping::repo::get(&pool, SIGNED_IN_USER, yoghurt.id)
+        life::shopping::repo::get(&pool, SIGNED_IN_USER, yoghurt)
             .await
             .unwrap()
             .is_none(),
@@ -791,20 +802,18 @@ async fn buying_a_row_brings_it_home_once_and_a_bad_price_never_stops_it() {
     let (status, _) = call(
         &pool,
         "POST",
-        &format!("/api/shopping/{}/buy", yoghurt.id),
+        &format!("/api/shopping/{}/buy", yoghurt),
         Some(paid(330)),
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 
     // A price the server refuses is dropped, and the buy still stands.
-    let milk = life::shopping::repo::create(&pool, SIGNED_IN_USER, row("Milk"))
-        .await
-        .unwrap();
+    let milk = on_the_list(&pool, "Milk").await;
     let (status, item) = call(
         &pool,
         "POST",
-        &format!("/api/shopping/{}/buy", milk.id),
+        &format!("/api/shopping/{}/buy", milk),
         Some(paid(-1)),
     )
     .await;

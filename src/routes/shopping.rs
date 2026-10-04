@@ -2,11 +2,10 @@
 
 use axum::Json;
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
 use serde::Deserialize;
 use ts_rs::TS;
 
-use crate::error::{AppError, found_or_404};
+use crate::error::AppError;
 use crate::inventory::repo as inventory_repo;
 use crate::inventory::types::{Item, NewItem};
 use crate::products::coverage;
@@ -15,7 +14,7 @@ use crate::purchases::repo as purchases_repo;
 use crate::purchases::types::NewPurchase;
 use crate::session::AuthUser;
 use crate::shopping::repo;
-use crate::shopping::types::{NewShoppingItem, ShoppingItem, UpdateShoppingItem};
+use crate::shopping::types::ShoppingItem;
 use crate::state::AppState;
 
 pub async fn list(
@@ -23,34 +22,6 @@ pub async fn list(
     AuthUser(user): AuthUser,
 ) -> Result<Json<Vec<ShoppingItem>>, AppError> {
     Ok(Json(repo::list(&app.pool, &user.user_id).await?))
-}
-
-pub async fn create(
-    State(app): State<AppState>,
-    AuthUser(user): AuthUser,
-    Json(body): Json<NewShoppingItem>,
-) -> Result<Json<ShoppingItem>, AppError> {
-    Ok(Json(repo::create(&app.pool, &user.user_id, body).await?))
-}
-
-pub async fn update(
-    State(app): State<AppState>,
-    AuthUser(user): AuthUser,
-    Path(id): Path<u64>,
-    Json(body): Json<UpdateShoppingItem>,
-) -> Result<Json<ShoppingItem>, AppError> {
-    repo::update(&app.pool, &user.user_id, id, body)
-        .await?
-        .map(Json)
-        .ok_or(AppError::NotFound)
-}
-
-pub async fn delete(
-    State(app): State<AppState>,
-    AuthUser(user): AuthUser,
-    Path(id): Path<u64>,
-) -> Result<StatusCode, AppError> {
-    found_or_404(repo::delete(&app.pool, &user.user_id, id).await?)
 }
 
 /// What may ride along with a buy: the price, if it was noted.

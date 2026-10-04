@@ -58,7 +58,6 @@ export type { Todo } from './generated/Todo';
 export type { TodoType } from './generated/TodoType';
 export type { TodoStatus } from './generated/TodoStatus';
 export type { TodoPriority } from './generated/TodoPriority';
-export type { TodoLink } from './generated/TodoLink';
 export type { LinkKind } from './generated/LinkKind';
 export type { TargetKind } from './generated/TargetKind';
 export type { ConflictEntry } from './generated/ConflictEntry';

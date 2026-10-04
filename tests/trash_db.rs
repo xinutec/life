@@ -10,9 +10,8 @@ use life::inventory::types::{ItemCategory, LocationKind, NewItem, NewLocation};
 use life::recipes::repo as recipes_repo;
 use life::recipes::types::NewRecipe;
 use life::shopping::repo as shopping_repo;
-use life::shopping::types::NewShoppingItem;
 use life::sync::repo as sync_repo;
-use life::sync::types::PushEntry;
+use life::sync::types::{PushEntry, ShoppingDoc};
 use life::todo::repo as todo_repo;
 use life::todo::types::{NewTodo, TodoType};
 use life::trash::{TrashKind, repo as trash_repo};
@@ -256,25 +255,35 @@ async fn sync_push_cannot_resurrect_a_tombstone_but_restore_can() {
     let user = "test-user-trash-sync";
     wipe(&pool, user).await;
 
-    let created = shopping_repo::create(
+    sync_repo::push_shopping(
         &pool,
         user,
-        NewShoppingItem {
-            name: "Zombie milk".into(),
-            quantity: None,
-            unit: None,
-            barcode: None,
-            category: ItemCategory::Food,
-            product_id: None,
-        },
+        vec![PushEntry {
+            new_document_state: ShoppingDoc {
+                ulid: "01TRASHZOMBIEAAAAAAAAAAAAA".into(),
+                id: None,
+                name: "Zombie milk".into(),
+                quantity: None,
+                unit: None,
+                barcode: None,
+                category: "food".into(),
+                product_id: None,
+                done: false,
+                deleted: false,
+                rev: 0,
+            },
+            assumed_master_state: None,
+        }],
     )
     .await
     .unwrap();
-    assert!(
-        shopping_repo::delete(&pool, user, created.id)
-            .await
-            .unwrap()
-    );
+    let created = sync_repo::pull_shopping(&pool, user, 0, 100)
+        .await
+        .unwrap()
+        .documents[0]
+        .id
+        .expect("pulled with its id");
+    assert!(shopping_repo::delete(&pool, user, created).await.unwrap());
 
     // Read the tombstoned doc (with its current rev) straight off the sync pull.
     let pulled = sync_repo::pull_shopping(&pool, user, 0, 100).await.unwrap();
@@ -357,16 +366,28 @@ async fn todo_delete_lists_in_trash_and_restores() {
     .await
     .unwrap();
     // Restore is keyed by ulid (the synced identity), not the row id.
-    let ulid = sync_repo::pull_todo(&pool, user, 0, 100)
+    let cur = sync_repo::pull_todo(&pool, user, 0, 100)
         .await
         .unwrap()
         .documents
         .into_iter()
         .find(|d| d.title == "Binned errand")
-        .expect("created to-do is pullable")
-        .ulid;
+        .expect("created to-do is pullable");
+    let ulid = cur.ulid.clone();
 
-    assert!(todo_repo::delete(&pool, user, todo.id).await.unwrap());
+    // Binned the way the app bins it: a tombstone pushed by sync.
+    let mut gone = cur.clone();
+    gone.deleted = true;
+    sync_repo::push_todo(
+        &pool,
+        user,
+        vec![PushEntry {
+            new_document_state: gone,
+            assumed_master_state: Some(cur),
+        }],
+    )
+    .await
+    .unwrap();
     assert!(
         todo_repo::get(&pool, user, todo.id)
             .await

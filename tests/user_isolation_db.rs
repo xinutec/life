@@ -10,7 +10,6 @@ use life::db;
 use life::shopping::repo as shopping_repo;
 use life::sync::repo as sync_repo;
 use life::sync::types::{PushEntry, ShoppingDoc, TodoDoc, TodoLinkDoc, WellbeingDoc};
-use life::todo::links;
 use life::todo::repo as todo_repo;
 use life::trash::TrashKind;
 use life::trash::repo as trash_repo;
@@ -180,11 +179,6 @@ async fn two_users_cannot_see_or_touch_each_others_data() {
     assert!(list.iter().all(|i| i.name != "B's milk"));
     let list = todo_repo::list(&pool, A).await.unwrap();
     assert!(list.iter().all(|t| t.title != "B's task"));
-    let list = links::list(&pool, A).await.unwrap();
-    assert!(
-        list.iter().all(|l| l.from != tb),
-        "A must not see B's links"
-    );
 
     // Trash is scoped: B tombstones an item; A neither sees it in trash nor
     // can restore it. B can.

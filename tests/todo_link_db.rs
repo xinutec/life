@@ -1,16 +1,45 @@
-//! To-do connections against a real MariaDB. Covers link CRUD (kinds + soft
-//! refs) and a sync pull/push round-trip.
+//! To-do connections against a real MariaDB, through sync: the only way the
+//! app writes or reads them.
 
 mod common;
 
 use life::db;
 use life::sync::repo as sync_repo;
 use life::sync::types::{PushEntry, TodoLinkDoc};
-use life::todo::links;
-use life::todo::types::{LinkKind, NewTodoLink, TargetKind};
+
+fn link(ulid: &str, from: &str, kind: &str, target_kind: &str, target_ref: &str) -> TodoLinkDoc {
+    TodoLinkDoc {
+        ulid: ulid.into(),
+        id: None,
+        from: from.into(),
+        kind: kind.into(),
+        target_kind: target_kind.into(),
+        target_ref: target_ref.into(),
+        deleted: false,
+        rev: 0,
+    }
+}
+
+fn fresh(doc: TodoLinkDoc) -> PushEntry<TodoLinkDoc> {
+    PushEntry {
+        new_document_state: doc,
+        assumed_master_state: None,
+    }
+}
+
+/// The links a device pulling from scratch would show.
+async fn live(pool: &sqlx::MySqlPool, user: &str) -> Vec<TodoLinkDoc> {
+    sync_repo::pull_todo_link(pool, user, 0, 100)
+        .await
+        .unwrap()
+        .documents
+        .into_iter()
+        .filter(|d| !d.deleted)
+        .collect()
+}
 
 #[tokio::test]
-async fn todo_link_crud_and_sync_against_real_db() {
+async fn links_are_added_removed_and_pulled_with_their_tombstones() {
     let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
@@ -23,70 +52,54 @@ async fn todo_link_crud_and_sync_against_real_db() {
         .unwrap();
 
     let from = "01TODOAAAAAAAAAAAAAAAAAAAA";
-
     // A depends-on link to another to-do, and a related link to an inventory item.
-    let dep = links::create(
-        &pool,
-        user,
-        NewTodoLink {
-            from: from.into(),
-            kind: LinkKind::DependsOn,
-            target_kind: TargetKind::Todo,
-            target_ref: "01TODOBBBBBBBBBBBBBBBBBBBB".into(),
-        },
-    )
-    .await
-    .unwrap();
-    links::create(
-        &pool,
-        user,
-        NewTodoLink {
-            from: from.into(),
-            kind: LinkKind::Related,
-            target_kind: TargetKind::Item,
-            target_ref: "42".into(),
-        },
-    )
-    .await
-    .unwrap();
-
-    let all = links::list(&pool, user).await.unwrap();
-    assert_eq!(all.len(), 2);
-    assert_eq!(dep.kind, LinkKind::DependsOn);
-    assert_eq!(dep.target_kind, TargetKind::Todo);
-    assert_eq!(dep.from, from);
-
-    // Delete one (soft).
-    assert!(links::delete(&pool, user, dep.id).await.unwrap());
-    assert_eq!(links::list(&pool, user).await.unwrap().len(), 1);
-
-    // Sync pull includes the tombstone; push lands an offline-created link.
-    let pulled = sync_repo::pull_todo_link(&pool, user, 0, 100)
-        .await
-        .unwrap();
-    assert!(pulled.documents.iter().any(|d| d.deleted));
-
-    let entry = PushEntry {
-        new_document_state: TodoLinkDoc {
-            ulid: "01LINKCCCCCCCCCCCCCCCCCCCC".into(),
-            id: None,
-            from: from.into(),
-            kind: "subtask".into(),
-            target_kind: "room".into(),
-            target_ref: "kitchen".into(),
-            deleted: false,
-            rev: 0,
-        },
-        assumed_master_state: None,
-    };
-    let conflicts = sync_repo::push_todo_link(&pool, user, vec![entry])
+    let dep = link(
+        "01LINKAAAAAAAAAAAAAAAAAAAA",
+        from,
+        "depends_on",
+        "todo",
+        "01TODOBBBBBBBBBBBBBBBBBBBB",
+    );
+    let rel = link("01LINKBBBBBBBBBBBBBBBBBBBB", from, "related", "item", "42");
+    let conflicts = sync_repo::push_todo_link(&pool, user, vec![fresh(dep.clone()), fresh(rel)])
         .await
         .unwrap();
     assert!(conflicts.is_empty());
-    let after = links::list(&pool, user).await.unwrap();
-    assert!(after.iter().any(|l| l.target_kind == TargetKind::Room
-        && l.target_ref == "kitchen"
-        && l.kind == LinkKind::Subtask));
+    assert_eq!(live(&pool, user).await.len(), 2);
+
+    // Remove one: a tombstone, which the pull still carries.
+    let cur = live(&pool, user)
+        .await
+        .into_iter()
+        .find(|d| d.ulid == dep.ulid)
+        .unwrap();
+    let mut gone = cur.clone();
+    gone.deleted = true;
+    sync_repo::push_todo_link(
+        &pool,
+        user,
+        vec![PushEntry {
+            new_document_state: gone,
+            assumed_master_state: Some(cur),
+        }],
+    )
+    .await
+    .unwrap();
+    let pulled = sync_repo::pull_todo_link(&pool, user, 0, 100)
+        .await
+        .unwrap();
+    assert!(
+        pulled
+            .documents
+            .iter()
+            .any(|d| d.ulid == dep.ulid && d.deleted)
+    );
+    let left = live(&pool, user).await;
+    assert_eq!(left.len(), 1);
+    assert_eq!(
+        (left[0].kind.as_str(), left[0].target_ref.as_str()),
+        ("related", "42")
+    );
 }
 
 /// Two offline devices adding the SAME connection (different ulids) must not
@@ -128,11 +141,15 @@ async fn duplicate_edges_from_two_devices_are_deduped_on_push() {
         .unwrap();
 
     // Exactly one live edge remains; the later ulid is the tombstoned one.
-    let live = links::list(&pool, user).await.unwrap();
-    assert_eq!(live.len(), 1, "duplicate edge should be tombstoned on push");
+    let edges = live(&pool, user).await;
+    assert_eq!(
+        edges.len(),
+        1,
+        "duplicate edge should be tombstoned on push"
+    );
 
     // A boot-time dedupe pass leaves this user's single edge untouched (it runs
     // table-wide, so don't assert its global count under parallel tests).
     sync_repo::dedupe_todo_links(&pool).await.unwrap();
-    assert_eq!(links::list(&pool, user).await.unwrap().len(), 1);
+    assert_eq!(live(&pool, user).await.len(), 1);
 }

@@ -1,16 +1,16 @@
-//! To-do list HTTP surface. Thin — delegates to `todo::repo`. The list is also
-//! served offline via the RxDB sync endpoints (`/api/sync/todo`); these REST
-//! routes are the online CRUD surface.
+//! To-do list HTTP surface. Thin — delegates to `todo::repo`. The app itself
+//! reads and writes to-dos through the RxDB sync endpoints (`/api/sync/todo`);
+//! these REST routes serve the case-file scripts (`dicom-scan`'s
+//! `push_life_todo.py`), which list, create and patch but never delete.
 
 use axum::Json;
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
 
-use crate::error::{AppError, found_or_404};
+use crate::error::AppError;
 use crate::session::AuthUser;
 use crate::state::AppState;
-use crate::todo::types::{NewTodo, NewTodoLink, Todo, TodoLink, UpdateTodo};
-use crate::todo::{links, repo};
+use crate::todo::repo;
+use crate::todo::types::{NewTodo, Todo, UpdateTodo};
 
 pub async fn list(
     State(app): State<AppState>,
@@ -37,37 +37,4 @@ pub async fn update(
         .await?
         .map(Json)
         .ok_or(AppError::NotFound)
-}
-
-pub async fn delete(
-    State(app): State<AppState>,
-    AuthUser(user): AuthUser,
-    Path(id): Path<u64>,
-) -> Result<StatusCode, AppError> {
-    found_or_404(repo::delete(&app.pool, &user.user_id, id).await?)
-}
-
-// --- connections (todo_link) ---
-
-pub async fn list_links(
-    State(app): State<AppState>,
-    AuthUser(user): AuthUser,
-) -> Result<Json<Vec<TodoLink>>, AppError> {
-    Ok(Json(links::list(&app.pool, &user.user_id).await?))
-}
-
-pub async fn create_link(
-    State(app): State<AppState>,
-    AuthUser(user): AuthUser,
-    Json(body): Json<NewTodoLink>,
-) -> Result<Json<TodoLink>, AppError> {
-    Ok(Json(links::create(&app.pool, &user.user_id, body).await?))
-}
-
-pub async fn delete_link(
-    State(app): State<AppState>,
-    AuthUser(user): AuthUser,
-    Path(id): Path<u64>,
-) -> Result<StatusCode, AppError> {
-    found_or_404(links::delete(&app.pool, &user.user_id, id).await?)
 }

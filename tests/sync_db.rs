@@ -3,9 +3,7 @@
 mod common;
 
 use life::db;
-use life::inventory::types::ItemCategory;
 use life::shopping::repo as shop;
-use life::shopping::types::NewShoppingItem;
 use life::sync::repo as sync;
 use life::sync::types::{PushEntry, ShoppingDoc};
 use ulid::Ulid;
@@ -39,18 +37,14 @@ async fn shopping_sync_pull_push_conflict_tombstone() {
         .await
         .unwrap();
 
-    // A REST create is rev-aware → it shows up in a full pull (since 0).
-    let milk = shop::create(
+    // A pushed row is stamped with a rev, so it shows up in a full pull (since 0).
+    sync::push_shopping(
         &pool,
         user,
-        NewShoppingItem {
-            name: "Milk".into(),
-            quantity: Some(2.0),
-            unit: Some("L".into()),
-            barcode: None,
-            category: ItemCategory::Food,
-            product_id: None,
-        },
+        vec![PushEntry {
+            new_document_state: doc(&Ulid::new().to_string(), "Milk", 0),
+            assumed_master_state: None,
+        }],
     )
     .await
     .unwrap();
@@ -62,6 +56,7 @@ async fn shopping_sync_pull_push_conflict_tombstone() {
     assert!(!m.deleted);
     assert!(m.rev > 0);
     assert_eq!(p1.checkpoint.rev, m.rev);
+    let milk_id = m.id.expect("a pulled row carries its id");
 
     // Pulling from the checkpoint yields nothing new.
     let p2 = sync::pull_shopping(&pool, user, p1.checkpoint.rev, 100)
@@ -122,8 +117,8 @@ async fn shopping_sync_pull_push_conflict_tombstone() {
     assert_eq!(m2.name, "Milk 2%");
     assert!(m2.rev > m.rev); // a new revision was assigned
 
-    // A REST soft-delete surfaces as a tombstone in pull, and hides from list.
-    assert!(shop::delete(&pool, user, milk.id).await.unwrap());
+    // The buy's soft-delete surfaces as a tombstone in pull, and hides from list.
+    assert!(shop::delete(&pool, user, milk_id).await.unwrap());
     let final_pull = sync::pull_shopping(&pool, user, 0, 100).await.unwrap();
     let tomb = final_pull
         .documents
@@ -136,7 +131,7 @@ async fn shopping_sync_pull_push_conflict_tombstone() {
             .await
             .unwrap()
             .iter()
-            .all(|s| s.id != milk.id)
+            .all(|s| s.id != milk_id)
     );
 }
 

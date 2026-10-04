@@ -140,20 +140,6 @@ pub async fn update(
     get(pool, user_id, id).await.context("reload after update")
 }
 
-/// Soft delete: set the tombstone + a fresh `rev` so the delete syncs.
-pub async fn delete(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
-    stamp(pool, |rev| {
-        sqlx::query(
-            "UPDATE todos SET deleted_at = NOW(), rev = ?, updated_at = NOW() \
-             WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
-        )
-        .bind(rev)
-        .bind(id)
-        .bind(user_id)
-    })
-    .await
-}
-
 /// Restore a tombstoned to-do (trash/undo). The ONE deliberate undelete path —
 /// sync pushes can never clear a tombstone. The fresh `rev` propagates the
 /// resurrected row to every device through the normal pull. (Links that were

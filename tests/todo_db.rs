@@ -98,8 +98,27 @@ async fn todo_crud_and_sync_against_real_db() {
     assert_eq!(done.due, Some(date(2026, 7, 20)));
     assert!(done.shared, "update flips shared on");
 
-    // Soft delete hides it from reads.
-    assert!(repo::delete(&pool, user, milk.id).await.unwrap());
+    // A tombstone pushed by sync (the app's only delete) hides it from reads.
+    let cur = sync_repo::pull_todo(&pool, user, 0, 100)
+        .await
+        .unwrap()
+        .documents
+        .into_iter()
+        .find(|d| d.title == "Buy milk")
+        .expect("pulled");
+    let mut gone = cur.clone();
+    gone.deleted = true;
+    let conflicts = sync_repo::push_todo(
+        &pool,
+        user,
+        vec![PushEntry {
+            new_document_state: gone,
+            assumed_master_state: Some(cur),
+        }],
+    )
+    .await
+    .unwrap();
+    assert!(conflicts.is_empty());
     let after = repo::list(&pool, user).await.unwrap();
     assert_eq!(after.len(), 1);
     assert_eq!(after[0].title, "Call dentist");

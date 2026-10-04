@@ -153,29 +153,3 @@ str_enum! {
         Place => "place",
     }
 }
-/// A typed, directional connection as returned by the API.
-#[derive(Debug, Clone, PartialEq, Serialize, TS)]
-#[ts(export)]
-pub struct TodoLink {
-    #[ts(type = "number")]
-    pub id: u64,
-    /// `ulid` of the source to-do.
-    pub from: String,
-    pub kind: LinkKind,
-    #[serde(rename = "targetKind")]
-    pub target_kind: TargetKind,
-    /// The target's ulid / id-string / room name (per `target_kind`).
-    #[serde(rename = "targetRef")]
-    pub target_ref: String,
-}
-
-/// Request body for creating a connection.
-#[derive(Debug, Deserialize)]
-pub struct NewTodoLink {
-    pub from: String,
-    pub kind: LinkKind,
-    #[serde(rename = "targetKind")]
-    pub target_kind: TargetKind,
-    #[serde(rename = "targetRef")]
-    pub target_ref: String,
-}
