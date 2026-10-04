@@ -1,8 +1,9 @@
 //! Reconciling the product picture. The canonical image is bytes we hold and a
 //! listing offers a URL, so the divergence is by *provenance* (which source our
 //! picture came from), not by value. The rule is pure; the settle round-trip runs
-//! against a real MariaDB. Adopting re-fetches through the SSRF gate and is
-//! tested at the route layer.
+//! against a real MariaDB. Adopting re-fetches through the SSRF gate: its
+//! refusals are tested in signed_in_http_db.rs, the gate in products_off.rs, and
+//! a successful adoption needs the network, so nothing here runs one.
 
 mod common;
 

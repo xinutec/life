@@ -186,12 +186,12 @@ async fn barcodeless_sources_stay_separate_products() {
     assert_eq!(p1b.name.as_deref(), Some("Thing A v2"));
 }
 
-/// The pack-size label a shop supplies. `sync_listing` writes it only when the
-/// product has none — Open Food Facts' `quantity` is the product's own ("500g"),
-/// while Asda's `PACK_SIZE` describes the pack it happens to sell ("22x27G"), so
-/// a shop may fill the gap but never overrule what we already hold.
+/// The pack-size label lives on the canonical row, so a re-pull of a listing,
+/// which rewrites only that source's line, cannot wipe it. (That a shop fills it
+/// only when the product has none is the import route's rule, tested through it
+/// in signed_in_http_db.rs.)
 #[tokio::test]
-async fn a_shop_pack_size_fills_the_gap_and_survives_a_reread() {
+async fn a_pack_size_survives_a_re_pull_of_the_listing() {
     let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");

@@ -735,3 +735,140 @@ async fn an_attachment_is_downloaded_never_rendered() {
     let disposition = res.headers()[header::CONTENT_DISPOSITION].to_str().unwrap();
     assert_eq!(disposition, "attachment; filename=\"manual; x=y.png\"");
 }
+
+#[tokio::test]
+async fn buying_a_row_brings_it_home_once_and_a_bad_price_never_stops_it() {
+    let pool = pool().await;
+    for sql in [
+        "DELETE FROM shopping_items WHERE user_id = ?",
+        "DELETE FROM purchases WHERE user_id = ?",
+        "DELETE FROM items WHERE user_id = ?",
+    ] {
+        sqlx::query(sql)
+            .bind(SIGNED_IN_USER)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    let row = |name: &str| life::shopping::types::NewShoppingItem {
+        name: name.into(),
+        quantity: Some(2.0),
+        unit: Some("pots".into()),
+        barcode: None,
+        category: life::inventory::types::ItemCategory::Food,
+        product_id: None,
+    };
+    let yoghurt = life::shopping::repo::create(&pool, SIGNED_IN_USER, row("Yoghurt"))
+        .await
+        .unwrap();
+    let paid = |amount_minor: i64| serde_json::json!({ "purchase": { "shop": "Waitrose", "amount_minor": amount_minor, "currency": "GBP" } });
+
+    let (status, item) = call(
+        &pool,
+        "POST",
+        &format!("/api/shopping/{}/buy", yoghurt.id),
+        Some(paid(330)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(item["name"], "Yoghurt");
+    assert_eq!(item["quantity"], 2.0, "the row's amount comes home with it");
+    let item_id = item["id"].as_u64().unwrap();
+    let bought = life::purchases::repo::for_item(&pool, SIGNED_IN_USER, item_id)
+        .await
+        .unwrap();
+    assert_eq!(bought.len(), 1);
+    assert_eq!(bought[0].amount_minor, 330);
+    assert!(
+        life::shopping::repo::get(&pool, SIGNED_IN_USER, yoghurt.id)
+            .await
+            .unwrap()
+            .is_none(),
+        "it left the list"
+    );
+
+    // A second buy of the same row finds nothing, rather than a second item.
+    let (status, _) = call(
+        &pool,
+        "POST",
+        &format!("/api/shopping/{}/buy", yoghurt.id),
+        Some(paid(330)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // A price the server refuses is dropped, and the buy still stands.
+    let milk = life::shopping::repo::create(&pool, SIGNED_IN_USER, row("Milk"))
+        .await
+        .unwrap();
+    let (status, item) = call(
+        &pool,
+        "POST",
+        &format!("/api/shopping/{}/buy", milk.id),
+        Some(paid(-1)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let item_id = item["id"].as_u64().unwrap();
+    assert!(
+        life::purchases::repo::for_item(&pool, SIGNED_IN_USER, item_id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        life::inventory::repo::list_items(&pool, SIGNED_IN_USER)
+            .await
+            .unwrap()
+            .len(),
+        2,
+        "two rows bought, two items, no duplicate"
+    );
+}
+
+#[tokio::test]
+async fn a_shop_import_fills_a_missing_pack_size_but_never_overrules_one() {
+    // Open Food Facts' quantity is the product's own ("500g"); a shop's is the
+    // pack it happens to sell ("22x27G"). The shop may fill the gap, not replace.
+    let pool = pool().await;
+    let import = |barcode: &str, external_id: &str| {
+        serde_json::json!({
+            "source": "waitrose",
+            "external_id": external_id,
+            "name": "Porridge Oats",
+            "barcode": barcode,
+            "quantity_label": "22x27G",
+        })
+    };
+
+    let held = catalogued(&pool, "9990000001046", "Porridge Oats").await;
+    repo::set_quantity_label(&pool, life::products::ids::ProductId(held), "500g")
+        .await
+        .unwrap();
+    let (status, product) = call(
+        &pool,
+        "POST",
+        "/api/products/import",
+        Some(import("9990000001046", "T-PACK-1")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        product["quantity_label"], "500g",
+        "the product's own stands"
+    );
+
+    catalogued(&pool, "9990000001053", "Porridge Oats").await;
+    let (_, product) = call(
+        &pool,
+        "POST",
+        "/api/products/import",
+        Some(import("9990000001053", "T-PACK-2")),
+    )
+    .await;
+    assert_eq!(
+        product["quantity_label"], "22x27G",
+        "an empty one is filled"
+    );
+    assert_eq!(product["pack"]["value"], 594.0, "and read as an amount");
+}

@@ -3,13 +3,12 @@
 mod common;
 
 use life::db;
-use life::inventory::repo as inv_repo;
-use life::inventory::types::{ItemCategory, NewItem};
+use life::inventory::types::ItemCategory;
 use life::shopping::repo;
 use life::shopping::types::{NewShoppingItem, UpdateShoppingItem};
 
 #[tokio::test]
-async fn shopping_crud_and_buy_against_real_db() {
+async fn shopping_crud_against_real_db() {
     let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
@@ -80,32 +79,9 @@ async fn shopping_crud_and_buy_against_real_db() {
     .expect("exists");
     assert!(toggled.done);
 
-    // Buy it → becomes an inventory item, leaves the list (mirrors the route:
-    // the row's own category/product_id carry onto the item).
-    let got = repo::get(&pool, user, yog.id).await.unwrap().unwrap();
-    let item = inv_repo::create_item(
-        &pool,
-        user,
-        NewItem {
-            name: got.name,
-            category: got.category,
-            quantity: got.quantity,
-            unit: got.unit,
-            expiry: None,
-            expiry_precision: None,
-            location_id: None,
-            barcode: got.barcode,
-            product_id: got.product_id,
-            name_source: None,
-        },
-    )
-    .await
-    .unwrap();
+    // Delete leaves the other row alone. Buying is the route's (it deletes and
+    // creates in one request), tested through it in signed_in_http_db.rs.
     assert!(repo::delete(&pool, user, yog.id).await.unwrap());
-
-    assert_eq!(item.name, "Yoghurt");
-    assert_eq!(item.category, ItemCategory::Food);
     assert!(repo::get(&pool, user, yog.id).await.unwrap().is_none());
-    assert_eq!(repo::list(&pool, user).await.unwrap().len(), 1); // Batteries remain
-    assert_eq!(inv_repo::list_items(&pool, user).await.unwrap().len(), 1); // Yoghurt now owned
+    assert_eq!(repo::list(&pool, user).await.unwrap().len(), 1);
 }

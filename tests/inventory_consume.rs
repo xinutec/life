@@ -33,21 +33,11 @@ fn taking_some_leaves_the_rest() {
 #[test]
 fn taking_exactly_what_is_there_empties_it_without_a_shortfall() {
     // `Left(0.0)`, not `Emptied` — using the last of something is not the same
-    // event as running out mid-recipe, and the UI says different things.
+    // event as running out mid-recipe, and the UI says different things. Nor a
+    // removal: "we have none" is what makes it worth rebuying, so the rule can
+    // only say zero (the row surviving is pinned in inventory_use_db.rs).
     assert_eq!(
         take(&stock(Some(200.0), Some("g")), 200.0, Some("g")),
-        Taken::Left(0.0)
-    );
-}
-
-#[test]
-fn a_row_that_reaches_zero_reports_a_zero_not_a_removal() {
-    // "We have none" is knowledge — it is what makes the thing worth rebuying —
-    // so the rule has no way to say "delete this row", only to say zero. That
-    // the row really does survive in the database is pinned separately, in
-    // tests/inventory_use_db.rs.
-    assert_eq!(
-        take(&stock(Some(1.0), Some("jar")), 1.0, Some("jar")),
         Taken::Left(0.0)
     );
 }

@@ -156,11 +156,8 @@ fn sniff_identifies_raster_types_and_rejects_everything_else() {
         off::sniff_image_mime(b"\x00\x00\x00\x20ftypavis...."),
         Some("image/avif")
     );
-    // Major brand mif1/msf1 with avif among the compatible brands (common).
-    assert_eq!(
-        off::sniff_image_mime(b"\x00\x00\x00\x1cftypmif1\x00\x00\x00\x00mif1avif"),
-        Some("image/avif")
-    );
+    // (An AVIF whose major brand is mif1 is pinned in mime_sniff.rs, for both
+    // readers.)
 
     // Rejected: SVG (script-capable) and arbitrary bytes under any label —
     // the sniff is what's stored, so a lying Content-Type buys nothing.
