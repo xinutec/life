@@ -97,11 +97,14 @@ macro_rules! item_select {
 /// The catalog link for a new/updated item: an explicit `product_id` wins (it's
 /// the only route to a barcodeless shop product), else fall back to matching the
 /// barcode against the cached catalog.
-async fn resolve_product_id(pool: &MySqlPool, new: &NewItem) -> Result<Option<ProductId>> {
+async fn resolve_product_id(
+    conn: impl sqlx::Executor<'_, Database = sqlx::MySql>,
+    new: &NewItem,
+) -> Result<Option<ProductId>> {
     if new.product_id.is_some() {
         return Ok(new.product_id);
     }
-    product_id_for_barcode(pool, new.barcode.as_deref()).await
+    product_id_for_barcode(conn, new.barcode.as_deref()).await
 }
 
 /// Resolve the catalog product id for a barcode, if one is cached.
@@ -110,7 +113,7 @@ async fn resolve_product_id(pool: &MySqlPool, new: &NewItem) -> Result<Option<Pr
 /// than queried directly: something that isn't a barcode matches no product, and
 /// a blank one would otherwise match every barcodeless row in the catalog.
 async fn product_id_for_barcode(
-    pool: &MySqlPool,
+    conn: impl sqlx::Executor<'_, Database = sqlx::MySql>,
     barcode: Option<&str>,
 ) -> Result<Option<ProductId>> {
     let Some(bc) = barcode.and_then(|b| b.parse::<Barcode>().ok()) else {
@@ -118,7 +121,7 @@ async fn product_id_for_barcode(
     };
     let row: Option<(ProductId,)> = sqlx::query_as("SELECT id FROM products WHERE barcode = ?")
         .bind(bc)
-        .fetch_optional(pool)
+        .fetch_optional(conn)
         .await?;
     Ok(row.map(|r| r.0))
 }
@@ -189,9 +192,25 @@ pub async fn get_item(pool: &MySqlPool, user_id: &str, id: u64) -> Result<Option
 }
 
 pub async fn create_item(pool: &MySqlPool, user_id: &str, new: NewItem) -> Result<Item> {
+    // The row and its `added` history commit together, as every write here does.
+    let mut tx = pool.begin().await?;
+    let id = insert_item(&mut tx, user_id, &new).await?;
+    tx.commit().await?;
+    get_item(pool, user_id, id)
+        .await?
+        .ok_or_else(|| anyhow!("created item {id} not found"))
+}
+
+/// Insert an item and its `added` history row on the caller's connection, so a
+/// caller with more to do (the Buy list's buy) commits it all as one.
+pub(crate) async fn insert_item(
+    conn: &mut sqlx::MySqlConnection,
+    user_id: &str,
+    new: &NewItem,
+) -> Result<u64> {
     // Prefer an explicit catalog link (the only way to reach a barcodeless shop
     // product); otherwise link by barcode when it's already known (scanned/looked up).
-    let product_id = resolve_product_id(pool, &new).await?;
+    let product_id = resolve_product_id(&mut *conn, new).await?;
     // A name typed while ADDING is a scribble — you type "cheese" and then scan,
     // and the form fills the product's name in only if the box is still empty. So
     // the catalogue wins unless the client explicitly says the name is the
@@ -200,8 +219,6 @@ pub async fn create_item(pool: &MySqlPool, user_id: &str, new: NewItem) -> Resul
         .name_source
         .unwrap_or(ItemNameSource::Product)
         .to_string();
-    // The row and its `added` history commit together, as every write here does.
-    let mut tx = pool.begin().await?;
     let res = sqlx::query(
         "INSERT INTO items \
          (user_id, product_id, name, name_source, category, quantity, unit, expiry, \
@@ -223,11 +240,11 @@ pub async fn create_item(pool: &MySqlPool, user_id: &str, new: NewItem) -> Resul
     )
     .bind(new.location_id)
     .bind(new.barcode.as_deref().map(barcode_hint))
-    .execute(&mut *tx)
+    .execute(&mut *conn)
     .await?;
     let id = res.last_insert_id();
     record_history(
-        &mut *tx,
+        &mut *conn,
         id,
         user_id,
         new.location_id,
@@ -235,10 +252,7 @@ pub async fn create_item(pool: &MySqlPool, user_id: &str, new: NewItem) -> Resul
         new.quantity,
     )
     .await?;
-    tx.commit().await?;
-    get_item(pool, user_id, id)
-        .await?
-        .ok_or_else(|| anyhow!("created item {id} not found"))
+    Ok(id)
 }
 
 /// Move an item to a new location (or `None` to detach). Returns the updated

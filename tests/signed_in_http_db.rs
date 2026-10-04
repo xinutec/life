@@ -279,13 +279,8 @@ async fn a_receipt_can_only_prove_a_live_purchase_of_its_own_item() {
     // tied to another user's purchase, another item's, or one in the trash.
     let pool = pool().await;
     let other = "products-http-test-other";
-    for user in [SIGNED_IN_USER, other] {
-        sqlx::query("DELETE FROM purchases WHERE user_id = ?")
-            .bind(user)
-            .execute(&pool)
-            .await
-            .expect("clean");
-    }
+    // No wipe: the tests in this file share a user and run in parallel, and every
+    // purchase here hangs off an item made just now.
     let kettle = item_for(&pool, SIGNED_IN_USER, "Kettle").await;
     let toaster = item_for(&pool, SIGNED_IN_USER, "Toaster").await;
     let theirs = item_for(&pool, other, "Their kettle").await;
@@ -530,13 +525,12 @@ async fn an_uploaded_picture_must_be_an_image_whatever_it_claims() {
 async fn a_product_page_shows_my_purchases_and_nobody_elses() {
     let pool = pool().await;
     let other = "products-http-test-stranger";
-    for user in [SIGNED_IN_USER, other] {
-        sqlx::query("DELETE FROM purchases WHERE user_id = ?")
-            .bind(user)
-            .execute(&pool)
-            .await
-            .unwrap();
-    }
+    // Scoped to this test's barcode: a user-wide wipe would delete the
+    // purchases of the tests running beside it.
+    sqlx::query("DELETE FROM purchases WHERE barcode = '9990000001039'")
+        .execute(&pool)
+        .await
+        .unwrap();
     let id = catalogued(&pool, "9990000001039", "Kettle").await;
     let paid = |amount_minor| life::purchases::types::NewPurchase {
         shop: "Argos".into(),
@@ -760,18 +754,15 @@ async fn on_the_list(pool: &MySqlPool, name: &str) -> u64 {
 #[tokio::test]
 async fn buying_a_row_brings_it_home_once_and_a_bad_price_never_stops_it() {
     let pool = pool().await;
-    for sql in [
-        "DELETE FROM shopping_items WHERE user_id = ?",
-        "DELETE FROM purchases WHERE user_id = ?",
-        "DELETE FROM items WHERE user_id = ?",
-    ] {
-        sqlx::query(sql)
-            .bind(SIGNED_IN_USER)
-            .execute(&pool)
-            .await
-            .unwrap();
-    }
-    let yoghurt = on_the_list(&pool, "Yoghurt").await;
+    sqlx::query("DELETE FROM shopping_items WHERE user_id = ?")
+        .bind(SIGNED_IN_USER)
+        .execute(&pool)
+        .await
+        .unwrap();
+    // Named for this run: the user is shared with tests running beside this one.
+    let run = ulid::Ulid::new();
+    let yoghurt_name = format!("Yoghurt {run}");
+    let yoghurt = on_the_list(&pool, &yoghurt_name).await;
     let paid = |amount_minor: i64| serde_json::json!({ "purchase": { "shop": "Waitrose", "amount_minor": amount_minor, "currency": "GBP" } });
 
     let (status, item) = call(
@@ -782,7 +773,7 @@ async fn buying_a_row_brings_it_home_once_and_a_bad_price_never_stops_it() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(item["name"], "Yoghurt");
+    assert_eq!(item["name"], yoghurt_name.as_str());
     assert_eq!(item["quantity"], 2.0, "the row's amount comes home with it");
     let item_id = item["id"].as_u64().unwrap();
     let bought = life::purchases::repo::for_item(&pool, SIGNED_IN_USER, item_id)
@@ -809,7 +800,7 @@ async fn buying_a_row_brings_it_home_once_and_a_bad_price_never_stops_it() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 
     // A price the server refuses is dropped, and the buy still stands.
-    let milk = on_the_list(&pool, "Milk").await;
+    let milk = on_the_list(&pool, &format!("Milk {run}")).await;
     let (status, item) = call(
         &pool,
         "POST",
@@ -829,7 +820,9 @@ async fn buying_a_row_brings_it_home_once_and_a_bad_price_never_stops_it() {
         life::inventory::repo::list_items(&pool, SIGNED_IN_USER)
             .await
             .unwrap()
-            .len(),
+            .iter()
+            .filter(|i| i.name.ends_with(&run.to_string()))
+            .count(),
         2,
         "two rows bought, two items, no duplicate"
     );

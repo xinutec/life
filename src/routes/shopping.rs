@@ -6,8 +6,7 @@ use serde::Deserialize;
 use ts_rs::TS;
 
 use crate::error::AppError;
-use crate::inventory::repo as inventory_repo;
-use crate::inventory::types::{Item, NewItem};
+use crate::inventory::types::Item;
 use crate::products::coverage;
 use crate::products::repo as product_repo;
 use crate::purchases::repo as purchases_repo;
@@ -39,42 +38,17 @@ pub struct BuyRequest {
 /// POST /api/shopping/{id}/buy → turn a bought row into an unplaced inventory
 /// item, carrying its `category` and `product_id`, and remove it from the list.
 ///
-/// The `rows_affected`-guarded soft-delete is the claim, so a double tap 404s
-/// instead of minting two items; a crash between the writes leaves only a
-/// tombstone.
+/// The row leaves the list and the item arrives in one transaction (see
+/// `shopping::repo::buy`), so a double tap 404s instead of minting two items.
 pub async fn buy(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
     Path(id): Path<u64>,
     body: Option<Json<BuyRequest>>,
 ) -> Result<Json<Item>, AppError> {
-    let s = repo::get(&app.pool, &user.user_id, id)
+    let item = repo::buy(&app.pool, &user.user_id, id)
         .await?
         .ok_or(AppError::NotFound)?;
-    if !repo::delete(&app.pool, &user.user_id, id).await? {
-        return Err(AppError::NotFound); // already bought/deleted concurrently
-    }
-    let item = inventory_repo::create_item(
-        &app.pool,
-        &user.user_id,
-        NewItem {
-            name: s.name,
-            category: s.category,
-            quantity: s.quantity,
-            unit: s.unit,
-            expiry: None,
-            // No expiry, so nothing to be precise about.
-            expiry_precision: None,
-            location_id: None,
-            barcode: s.barcode,
-            product_id: s.product_id,
-            // A buy-list row's name is a note to self ("cheese"), not a naming
-            // of the thing that comes home. The catalogue outranks it, which is
-            // what `None` asks for.
-            name_source: None,
-        },
-    )
-    .await?;
 
     // After the item exists, and never in a way that can fail the buy. The
     // purchase is a note about money; the item is the thing you are holding.
