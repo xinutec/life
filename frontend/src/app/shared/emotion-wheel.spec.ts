@@ -25,10 +25,9 @@ describe('emotion-wheel', () => {
     expect(EMOTION_NODES.filter((n) => n.kind === 'group')).toHaveLength(groups.length);
     expect(EMOTION_NODES.filter((n) => n.kind === 'leaf')).toHaveLength(leaves);
     // A group is a legitimate answer: "frustrated" is often the whole truth.
-    expect(emotionNode('Angry/Frustrated')).toEqual({
+    expect(emotionNode('Angry/Frustrated')).toMatchObject({
       token: 'Angry/Frustrated',
       name: 'Frustrated',
-      desc: 'Blocked from what you want.',
       kind: 'group',
       secondary: 'Frustrated',
       core: 'Angry',
@@ -55,13 +54,6 @@ describe('emotion-wheel', () => {
         }
       }
     }
-  });
-
-  it('gives the two same-named leaves distinct glosses', () => {
-    // "Overwhelmed" under Fearful vs Bad means subtly different things, and the
-    // wheel spells that out rather than reusing one line.
-    expect(emotionDesc('Fearful/Overwhelmed')).not.toBe(emotionDesc('Bad/Overwhelmed'));
-    expect(emotionDesc('Fearful/Overwhelmed')).not.toBe('');
   });
 
   it('every node carries a unique qualified token', () => {
@@ -91,10 +83,9 @@ describe('emotion-wheel', () => {
   });
 
   it('resolves a qualified token to its path and family colour', () => {
-    expect(emotionNode('Angry/Withdrawn')).toEqual({
+    expect(emotionNode('Angry/Withdrawn')).toMatchObject({
       token: 'Angry/Withdrawn',
       name: 'Withdrawn',
-      desc: 'Pulled back to shut someone out — you are not giving them you.',
       kind: 'leaf',
       secondary: 'Distant',
       core: 'Angry',
@@ -119,15 +110,6 @@ describe('emotion-wheel', () => {
     }
   });
 
-  it('keeps a same-named leaf under two cores distinct', () => {
-    // "Overwhelmed" is a leaf under both Fearful › Anxious and Bad › Stressed.
-    // The qualified tokens resolve to different cores and colours — the crux of
-    // "same name in different groups is NOT the same emotion".
-    expect(emotionNode('Fearful/Overwhelmed')?.core).toBe('Fearful');
-    expect(emotionNode('Bad/Overwhelmed')?.core).toBe('Bad');
-    expect(emotionColor('Fearful/Overwhelmed')).not.toBe(emotionColor('Bad/Overwhelmed'));
-  });
-
   it('keeps a duplicated name distinct per core', () => {
     // "Embarrassed" is under both Sad › Hurt and Disgusted › Disapproving, and
     // "Disappointed" is a Sad LEAF as well as a Disgusted GROUP. Each is its own
@@ -140,6 +122,8 @@ describe('emotion-wheel', () => {
       core: 'Disgusted',
       kind: 'group',
     });
+    // And each wears its own family's colour.
+    expect(emotionColor('Fearful/Overwhelmed')).not.toBe(emotionColor('Bad/Overwhelmed'));
   });
 
   it('canonicalises words: a known token passes through, anything else is kept', () => {

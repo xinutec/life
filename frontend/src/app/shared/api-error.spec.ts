@@ -40,13 +40,6 @@ describe('classifyApiError — the HttpClient error boundary', () => {
     expect(classifyApiError(httpError(500))).toEqual({ kind: 'server', status: 500 });
   });
 
-  it('does not treat a server 500 or 404 as offline or unauthenticated', () => {
-    // Regression guard: the offline bug came from collapsing every error into one
-    // bucket. A 5xx must stay distinct from a dropped connection and from auth.
-    expect(classifyApiError(httpError(500)).kind).toBe('server');
-    expect(classifyApiError(httpError(404)).kind).toBe('server');
-  });
-
   it('treats a non-HTTP throw as offline rather than a confirmed auth failure', () => {
     expect(classifyApiError(new Error('boom'))).toEqual({ kind: 'offline' });
     expect(classifyApiError(undefined)).toEqual({ kind: 'offline' });

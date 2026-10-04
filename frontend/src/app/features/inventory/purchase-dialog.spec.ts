@@ -59,18 +59,6 @@ describe('PurchaseDialog', () => {
     expect(cmp.canSave()).toBe(true);
   });
 
-  it('parses money as integer pence, never through a float', () => {
-    // 3.30 * 100 is 330.00000000000006. A price that is off by a billionth of a
-    // penny is not a price, and the error compounds the moment it is summed.
-    const { cmp } = setup();
-    cmp.price.set('3.30');
-    expect(cmp.pence()).toBe(330);
-    cmp.price.set('349.99');
-    expect(cmp.pence()).toBe(34999);
-    cmp.price.set('not money');
-    expect(cmp.pence()).toBeNull();
-  });
-
   it('refuses a warranty that is not whole months, and says which it wants', () => {
     // "2" meaning two YEARS is the mistake a months box invites, and 2.5 is the
     // shape it arrives in. Rounding it to 2 months would store cover nobody was

@@ -74,12 +74,9 @@ describe('matchesIdentity', () => {
   });
 
   it('two barcodeless, unlinked rows with different names are different things', () => {
+    // A missing link or barcode on both sides is NOT evidence of sameness: the
+    // name has to say so.
     expect(matchesIdentity(doc({ name: 'Milk' }), identity({ name: 'Oat milk' }))).toBe(false);
-  });
-
-  it('a null product_id never matches a null product_id', () => {
-    // Both unlinked is NOT evidence of sameness — the name has to say so.
-    expect(matchesIdentity(doc({ name: 'Milk' }), identity({ name: 'Beans' }))).toBe(false);
   });
 
   it('different catalog links fall through to the name, not to false', () => {
@@ -110,7 +107,7 @@ describe('planAdditions', () => {
     expect(already).toEqual([]);
   });
 
-  it('skips what the list already has un-done', () => {
+  it('skips what the list already has', () => {
     const { fresh, already } = planAdditions(
       [doc({ name: 'rice' })],
       [input({ name: 'Cumin' }), input({ name: 'Rice' })],

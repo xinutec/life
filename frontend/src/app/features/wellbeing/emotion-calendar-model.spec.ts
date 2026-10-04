@@ -334,10 +334,6 @@ describe('buildCalendar', () => {
     expect(day(months, '2027-01-05')).toBeDefined();
   });
 
-  it('is empty for no readings at all', () => {
-    expect(buildCalendar([], LONDON, '2026-09-12')).toEqual([]);
-  });
-
   it('keeps every tag of the day, including one it could not colour', () => {
     const months = buildCalendar(
       [

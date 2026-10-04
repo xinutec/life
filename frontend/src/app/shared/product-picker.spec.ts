@@ -224,10 +224,9 @@ describe('ProductPicker', () => {
   });
 
   it('an imported shop product hands its pack size straight to the form', async () => {
-    // The round trip the shop tier depends on: the hit's label goes up, the
-    // server stores it and reads it back as an amount, and the pick carries the
-    // amount. Asserted through the import so a server that stopped promoting
-    // the label would show up here rather than as a quietly empty form field.
+    // The amount comes from the imported row (the server's parse of the label),
+    // never from the hit's raw "400G". The server half is a mock here; that it
+    // parses the label is tested on the server.
     const hit: AsdaHit = {
       external_id: '7690049',
       name: 'Lurpak Spreadable 400g',

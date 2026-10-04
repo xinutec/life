@@ -59,9 +59,9 @@ describe('Items — complete list', () => {
     expect(text).toContain('Leftover soup'); // freeform
   });
 
-  function mount() {
+  function mount(items: Item[] = ITEMS) {
     const api = {
-      items: () => of(ITEMS),
+      items: () => of(items),
       locations: () => of([]),
       productImageUrl: (b: string) => b,
     };
@@ -85,11 +85,21 @@ describe('Items — complete list', () => {
   });
 
   it('sorts by expiry (soonest first, undated last)', async () => {
-    const fixture = mount();
+    // Listed in neither name nor expiry order, so a sort that did nothing fails.
+    const dated = (id: number, name: string, expiry: string | null): Item => ({
+      ...ITEMS[1],
+      id,
+      name,
+      expiry,
+    });
+    const fixture = mount([
+      dated(1, 'Apples', null),
+      dated(2, 'Bread', '2026-09-01'),
+      dated(3, 'Cheese', '2026-07-01'),
+    ]);
     await fixture.whenStable();
     fixture.componentInstance.sort.set('expiry');
-    // Item 1 has an expiry; item 2 (undated) sinks to the bottom.
-    expect(fixture.componentInstance.visible().map((i) => i.id)).toEqual([1, 2]);
+    expect(fixture.componentInstance.visible().map((i) => i.id)).toEqual([3, 2, 1]);
   });
 
   it('editItem opens the edit sheet and reloads on save', async () => {

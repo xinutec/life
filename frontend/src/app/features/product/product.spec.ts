@@ -952,7 +952,8 @@ describe('ProductPage', () => {
     const file = new File(['x'], 'p.jpg', { type: 'image/jpeg' });
     const input = document.createElement('input');
     Object.defineProperty(input, 'files', { value: [file] });
-    input.value = '';
+    // A text input, so it can hold a value for pickImage() to clear.
+    input.value = 'p.jpg';
     page.pickImage({ target: input } as unknown as Event);
     expect(input.value).toBe('');
   });

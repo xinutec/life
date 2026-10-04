@@ -102,7 +102,10 @@ describe('FilesDialog', () => {
     const f = new File(['x'], 'receipt.pdf');
     Object.defineProperty(f, 'size', { value: 1024 });
     const { event, input } = pickEvent(f);
-    input.value = '';
+    // A file input's value cannot be set from script, so it would read '' either
+    // way. As a text input it holds one, and only pick() can empty it.
+    input.type = 'text';
+    input.value = 'receipt.pdf';
     cmp.pick(event);
     expect(input.value).toBe('');
     expect(cmp.uploading()).toBe(false);

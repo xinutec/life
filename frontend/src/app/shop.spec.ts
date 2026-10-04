@@ -121,41 +121,13 @@ describe('Shops bridge service', () => {
 });
 
 describe('Waitrose provider', () => {
-  it('builds a search url + extractor that targets waitrose.com', () => {
-    const { url, js } = WAITROSE.search('cheddar');
+  it('searches waitrose.com for the term', () => {
+    const { url } = WAITROSE.search('cheddar');
     expect(url).toContain('waitrose.com/ecom/shop/search?searchTerm=cheddar');
-    expect(js).toContain('AndroidShop.result');
   });
 
-  it('product() guards the lineNumber and targets the SUMMARY API', () => {
-    const { js } = WAITROSE.product('062593');
-    expect(js).toContain('products-prod/v1/products/062593?view=SUMMARY');
-    expect(js).toContain('window.__authToken');
+  it('refuses a lineNumber that is not one, since it is spliced into the script', () => {
     expect(() => WAITROSE.product('not-a-number')).toThrow(/invalid/);
-  });
-
-  it('a missing token names the login, not just the symptom', () => {
-    // Signed out, Waitrose mints no Authorization header at all, so the bare
-    // "no token" reads as a broken extractor and sends the reader to the JS.
-    const { js } = WAITROSE.product('062593');
-    expect(js).toContain('signed out of waitrose.com');
-    expect(js).toContain("reason: 'signed_out'");
-  });
-
-  it('the extractor reads the pack size off the weights block', () => {
-    // Waitrose puts it on `weights.sizeDescription` ("42g", "100g"), not beside
-    // the name.
-    const { js } = WAITROSE.product('062593');
-    expect(js).toContain('w.sizeDescription');
-    expect(js).toContain('quantity_label');
-  });
-
-  it('the extractor carries the formatted price, not just the number', () => {
-    // Without it there is nothing to check the amount's unit against, and
-    // shopPrice would (rightly) refuse to record anything at all.
-    const { js } = WAITROSE.product('062593');
-    expect(js).toContain('display_price_label');
-    expect(js).toContain('pr.displayPrice');
   });
 });
 
@@ -180,30 +152,87 @@ const REGULAR = {
   currentSaleUnitRetailPrice: { price: { amount: 1.85, currencyCode: 'GBP' } },
 };
 
-/** Run the real product extractor against one SUMMARY response. */
-async function extract(pricing: unknown): Promise<ShopProduct> {
+interface Run {
+  /** What the extractor reported, parsed. */
+  report: { ok: boolean; reason?: string; error?: string; product?: ShopProduct };
+  /** The URL and authorization it fetched with, if it fetched at all. */
+  fetched?: { url: string; authorization: string | undefined };
+}
+
+/** Run the real product extractor as the WebView would, against one SUMMARY
+ *  response. `token: null` is a signed-out page, which mints none. */
+async function runProduct(
+  product: Record<string, unknown>,
+  token: string | null = 'Bearer t',
+): Promise<Run> {
   const button = document.createElement('button');
   button.className = 'acceptAll';
   document.body.appendChild(button);
   const w = window as unknown as Record<string, unknown>;
-  w['__authToken'] = 'Bearer t';
+  if (token === null) delete w['__authToken'];
+  else w['__authToken'] = token;
   let reported = '';
+  let fetched: Run['fetched'];
   vi.stubGlobal('AndroidShop', { result: (json: string) => (reported = json) });
-  const summary = {
-    products: [{ lineNumber: '504251', name: 'Rice', barCodes: [], pricing, weights: {} }],
-  };
-  vi.stubGlobal('fetch', () =>
-    Promise.resolve({ status: 200, json: () => Promise.resolve(summary) }),
-  );
+  vi.stubGlobal('fetch', (url: string, init: { headers: Record<string, string> }) => {
+    fetched = { url, authorization: init.headers['authorization'] };
+    return Promise.resolve({
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          products: [{ lineNumber: '504251', name: 'Rice', barCodes: [], weights: {}, ...product }],
+        }),
+    });
+  });
+  vi.useFakeTimers();
   try {
+    const source = `return ${WAITROSE.product('504251').js.trim()}`;
     // eslint-disable-next-line @typescript-eslint/no-implied-eval -- the extractor is JS text, run as the WebView runs it
-    await (new Function(`return ${WAITROSE.product('504251').js.trim()}`) as () => Promise<void>)();
+    const run = new Function(source) as () => Promise<void>;
+    const done = run();
+    await vi.runAllTimersAsync();
+    await done;
   } finally {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     button.remove();
   }
-  return (JSON.parse(reported) as { product: ShopProduct }).product;
+  return { report: JSON.parse(reported) as Run['report'], fetched };
 }
+
+/** The product the extractor reported for one pricing block. */
+async function extract(pricing: unknown): Promise<ShopProduct> {
+  const { report } = await runProduct({ pricing });
+  return report.product!;
+}
+
+describe('Waitrose product extractor', () => {
+  it('asks the SUMMARY API for that line, with the page’s token', async () => {
+    const { fetched } = await runProduct({ pricing: REGULAR });
+    expect(fetched?.url).toContain('/products-prod/v1/products/504251?view=SUMMARY');
+    expect(fetched?.authorization).toBe('Bearer t');
+  });
+
+  it('reads the pack size off the weights block', async () => {
+    // Waitrose states it on `weights.sizeDescription` ("42g"), not beside the name.
+    const { report } = await runProduct({ pricing: REGULAR, weights: { sizeDescription: '42g' } });
+    expect(report.product?.quantity_label).toBe('42g');
+  });
+
+  it('carries the formatted price, which is what the amount is checked against', async () => {
+    const { report } = await runProduct({ pricing: REGULAR });
+    expect(report.product?.display_price_label).toBe('£1.85');
+  });
+
+  it('names the sign-in when the page minted no token', async () => {
+    // Signed out, Waitrose mints no Authorization header at all, so a bare
+    // failure would read as a broken extractor and send the reader to the JS.
+    const { report, fetched } = await runProduct({ pricing: REGULAR }, null);
+    expect(report).toMatchObject({ ok: false, reason: 'signed_out' });
+    expect(report.error).toContain('signed out of waitrose.com');
+    expect(fetched).toBeUndefined();
+  });
+});
 
 describe('Waitrose product price', () => {
   it('is the offer price when one item is on offer', async () => {

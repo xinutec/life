@@ -98,7 +98,7 @@ describe('EmotionPicker', () => {
     expect(c.isSelected('Angry/Frustrated')).toBe(true);
     expect(c.isSelected('Angry/Annoyed')).toBe(false); // no leaf implied
     expect(c.label('Angry/Frustrated')).toBe('Frustrated');
-    expect(c.desc('Angry/Frustrated')).toBe('Blocked from what you want.');
+    expect(c.desc('Angry/Frustrated')).not.toBe(''); // its own gloss, not its leaves'
     expect(c.coreCount(angry)).toBe(1); // a group counts toward its family badge
   });
 

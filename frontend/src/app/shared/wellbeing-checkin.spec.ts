@@ -5,26 +5,26 @@ import { Feedback } from './feedback';
 import { WellbeingCheckin } from './wellbeing-checkin';
 import { WellbeingStore } from '../sync/wellbeing-store';
 
-describe('WellbeingCheckin', () => {
-  function setup() {
-    const store = {
-      add: vi.fn<
-        (input: { recordedAt: string; scoreTenths: number; note: string | null }) => Promise<string>
-      >(() => Promise.resolve('u1')),
-      patch: vi.fn().mockResolvedValue(undefined),
-      remove: vi.fn(),
-    };
-    const feedback = { undo: vi.fn<(msg: string, onUndo: () => void) => void>() };
-    TestBed.configureTestingModule({
-      imports: [WellbeingCheckin],
-      providers: [
-        { provide: WellbeingStore, useValue: store },
-        { provide: Feedback, useValue: feedback },
-      ],
-    });
-    return { fixture: TestBed.createComponent(WellbeingCheckin), store, feedback };
-  }
+function setup() {
+  const store = {
+    add: vi.fn<
+      (input: { recordedAt: string; scoreTenths: number; note: string | null }) => Promise<string>
+    >(() => Promise.resolve('u1')),
+    patch: vi.fn().mockResolvedValue(undefined),
+    remove: vi.fn(),
+  };
+  const feedback = { undo: vi.fn<(msg: string, onUndo: () => void) => void>() };
+  TestBed.configureTestingModule({
+    imports: [WellbeingCheckin],
+    providers: [
+      { provide: WellbeingStore, useValue: store },
+      { provide: Feedback, useValue: feedback },
+    ],
+  });
+  return { fixture: TestBed.createComponent(WellbeingCheckin), store, feedback };
+}
 
+describe('WellbeingCheckin', () => {
   it('logs a check-in at "now" with the tapped score and offers Undo', async () => {
     const { fixture, store, feedback } = setup();
     await fixture.componentInstance.log(4);
@@ -102,25 +102,6 @@ describe('WellbeingCheckin', () => {
 });
 
 describe('WellbeingCheckin — saying more than a score', () => {
-  function setup() {
-    const store = {
-      add: vi.fn<
-        (input: { recordedAt: string; scoreTenths: number; note: string | null }) => Promise<string>
-      >(() => Promise.resolve('u1')),
-      patch: vi.fn().mockResolvedValue(undefined),
-      remove: vi.fn(),
-    };
-    const feedback = { undo: vi.fn<(msg: string, onUndo: () => void) => void>() };
-    TestBed.configureTestingModule({
-      imports: [WellbeingCheckin],
-      providers: [
-        { provide: WellbeingStore, useValue: store },
-        { provide: Feedback, useValue: feedback },
-      ],
-    });
-    return { fixture: TestBed.createComponent(WellbeingCheckin), store, feedback };
-  }
-
   it('offers a way into the entry it just logged', async () => {
     // Logging a bare score is the rare case; the way back in must not be the
     // timeline's Edit.

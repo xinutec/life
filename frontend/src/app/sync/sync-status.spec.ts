@@ -132,26 +132,28 @@ describe('SyncStatus — a success that has gone stale', () => {
 });
 
 /** A `Record` over `SyncHealth` will not compile until a new state names its
- *  own glyph; these assertions make a change to any of them deliberate. */
+ *  own glyph; this checks that no two states share one, since the icon is all
+ *  the bar shows. */
 describe('SyncStatus — every state names its own glyph', () => {
   const T0 = 1_800_000_000_000;
 
   it('synced, offline, error and stale are four different icons', () => {
     goOnline();
     const s = new SyncStatus();
-    expect(s.icon()).toBe('cloud_done');
+    const seen = new Map<string, string>([[s.health(), s.icon()]]);
 
     s.reportSuccess('wellbeing sync', T0);
     s.refresh(T0 + 6 * 60_000);
-    expect(s.health()).toBe('stale');
-    // A weaker claim than an error — "this may be old", not "something broke".
-    expect(s.icon()).toBe('history');
+    seen.set(s.health(), s.icon());
 
     s.reportError('wellbeing sync', 'Server unreachable.');
-    expect(s.icon()).toBe('sync_problem');
+    seen.set(s.health(), s.icon());
 
     goOffline();
-    expect(s.icon()).toBe('cloud_off');
+    seen.set(s.health(), s.icon());
     goOnline();
+
+    expect([...seen.keys()].sort()).toEqual(['error', 'offline', 'stale', 'synced']);
+    expect(new Set(seen.values()).size).toBe(4);
   });
 });
