@@ -266,7 +266,7 @@ async fn sync_push_cannot_resurrect_a_tombstone_but_restore_can() {
                 quantity: None,
                 unit: None,
                 barcode: None,
-                category: "food".into(),
+                category: "food".parse().unwrap(),
                 product_id: None,
                 done: false,
                 deleted: false,

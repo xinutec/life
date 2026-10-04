@@ -16,7 +16,7 @@ fn doc(ulid: &str, name: &str, rev: u64) -> ShoppingDoc {
         quantity: None,
         unit: None,
         barcode: None,
-        category: "food".into(),
+        category: "food".parse().unwrap(),
         product_id: None,
         done: false,
         deleted: false,
@@ -214,7 +214,7 @@ async fn boot_backfill_tombstones_duplicate_todo_links() {
         sqlx::query(
             "INSERT INTO todo_links \
              (user_id, from_ulid, kind, target_kind, target_ref, ulid, rev, created_at) \
-             VALUES (?, ?, 'blocks', 'todo', 'target-ulid', ?, 1, NOW())",
+             VALUES (?, ?, 'depends_on', 'todo', 'target-ulid', ?, 1, NOW())",
         )
         .bind(user)
         .bind(&from)

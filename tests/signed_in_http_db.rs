@@ -963,3 +963,98 @@ async fn somebody_elses_location_is_not_a_place_to_put_things() {
         "your own place still works: {moved}"
     );
 }
+
+/// A pushed doc whose enum the server does not know is refused as it is
+/// decoded: a 400 in the API's own JSON, and nothing stored, so it can never be
+/// written and then fail every later read of the list.
+#[tokio::test]
+async fn a_push_naming_an_unknown_kind_of_anything_is_refused_whole() {
+    let pool = pool().await;
+    let todo = |ulid: &str, kind: &str, status: &str, priority: Option<&str>| {
+        serde_json::json!({ "newDocumentState": {
+            "ulid": ulid, "title": "validate me", "type": kind, "status": status,
+            "priority": priority, "notes": null,
+        } })
+    };
+    let link = |ulid: &str, kind: &str, target: &str| {
+        serde_json::json!({ "newDocumentState": {
+            "ulid": ulid, "from": "01ISOVALFROMAAAAAAAAAAAAAA", "kind": kind,
+            "targetKind": target, "targetRef": "x",
+        } })
+    };
+    let shop = |ulid: &str, category: &str| {
+        serde_json::json!({ "newDocumentState": {
+            "ulid": ulid, "name": "validate me", "quantity": null, "unit": null,
+            "barcode": null, "category": category, "done": false,
+        } })
+    };
+    for (path, push, what) in [
+        (
+            "todo",
+            vec![todo("01REFUSEDTODOA00000000000A", "task", "banana", None)],
+            "status",
+        ),
+        (
+            "todo",
+            vec![todo("01REFUSEDTODOB00000000000B", "chore", "open", None)],
+            "type",
+        ),
+        (
+            "todo",
+            vec![todo(
+                "01REFUSEDTODOC00000000000C",
+                "task",
+                "open",
+                Some("urgent"),
+            )],
+            "priority",
+        ),
+        // One good doc first: the whole batch is refused, not just the bad one.
+        (
+            "todo",
+            vec![
+                todo("01REFUSEDTODOD00000000000D", "task", "open", None),
+                todo("01REFUSEDTODOE00000000000E", "task", "banana", None),
+            ],
+            "mixed batch",
+        ),
+        (
+            "todo-link",
+            vec![link("01REFUSEDLINKA00000000000A", "sibling", "todo")],
+            "link kind",
+        ),
+        (
+            "todo-link",
+            vec![link("01REFUSEDLINKB00000000000B", "related", "person")],
+            "target kind",
+        ),
+        (
+            "shopping",
+            vec![shop("01REFUSEDSHOPA00000000000A", "groceries")],
+            "category",
+        ),
+    ] {
+        let (status, body) = call(
+            &pool,
+            "POST",
+            &format!("/api/sync/{path}"),
+            Some(serde_json::Value::Array(push)),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{what}: {body}");
+        assert!(body["error"].is_string(), "{what}: {body}");
+    }
+    for path in ["todo", "todo-link", "shopping"] {
+        let (_, pulled) = call(
+            &pool,
+            "GET",
+            &format!("/api/sync/{path}?since=0&limit=1000"),
+            None,
+        )
+        .await;
+        assert!(
+            !pulled.to_string().contains("01REFUSED"),
+            "nothing refused was stored: {pulled}"
+        );
+    }
+}

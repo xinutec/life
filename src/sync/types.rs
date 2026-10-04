@@ -6,7 +6,9 @@
 //! envelopes are generic over the document type so each collection reuses them.
 //! See `docs/design/sync.md`.
 
+use crate::inventory::types::ItemCategory;
 use crate::products::ids::ProductId;
+use crate::todo::types::{LinkKind, TargetKind, TodoPriority, TodoStatus, TodoType};
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -25,11 +27,11 @@ pub struct ShoppingDoc {
     pub quantity: Option<f64>,
     pub unit: Option<String>,
     pub barcode: Option<String>,
-    /// Inventory category the buy→inventory conversion will use (an
-    /// `ItemCategory` string; validated at push). Defaults to `food` so docs
-    /// from pre-0024 clients stay pushable.
+    /// Inventory category the buy→inventory conversion will use. An unknown one
+    /// is refused when the push is decoded. Defaults to `food` so docs from
+    /// pre-0024 clients stay pushable.
     #[serde(default = "default_shopping_category")]
-    pub category: String,
+    pub category: ItemCategory,
     /// Optional link to the products catalog (mirrors `items.product_id`).
     #[serde(default)]
     pub product_id: Option<ProductId>,
@@ -42,13 +44,13 @@ pub struct ShoppingDoc {
     pub rev: u64,
 }
 
-fn default_shopping_category() -> String {
-    "food".into()
+fn default_shopping_category() -> ItemCategory {
+    ItemCategory::Food
 }
 
-/// One to-do row as it travels over sync. The type/status enums ride as their
-/// snake_case strings (the raw row shape), parsed to enums only at the typed API
-/// boundary — exactly as the DB stores them.
+/// One to-do row as it travels over sync. The enums travel as their snake_case
+/// strings, the same text the DB stores; an unknown one is refused when the push
+/// is decoded, so it can never be stored and then fail every read.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TodoDoc {
     pub ulid: String,
@@ -56,10 +58,10 @@ pub struct TodoDoc {
     pub id: Option<u64>,
     pub title: String,
     #[serde(rename = "type")]
-    pub todo_type: String,
-    pub status: String,
+    pub todo_type: TodoType,
+    pub status: TodoStatus,
     #[serde(default)]
-    pub priority: Option<String>,
+    pub priority: Option<TodoPriority>,
     pub notes: Option<String>,
     #[serde(rename = "notBefore", default)]
     pub not_before: Option<NaiveDate>,
@@ -104,17 +106,17 @@ pub struct WellbeingDoc {
     pub rev: u64,
 }
 
-/// One to-do connection as it travels over sync. The kind/target_kind enums ride
-/// as their snake_case strings; the endpoints are soft refs.
+/// One to-do connection as it travels over sync. The kinds are typed as on a
+/// to-do; the endpoints are soft refs.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TodoLinkDoc {
     pub ulid: String,
     #[serde(default)]
     pub id: Option<u64>,
     pub from: String,
-    pub kind: String,
+    pub kind: LinkKind,
     #[serde(rename = "targetKind")]
-    pub target_kind: String,
+    pub target_kind: TargetKind,
     #[serde(rename = "targetRef")]
     pub target_ref: String,
     #[serde(rename = "_deleted", default)]

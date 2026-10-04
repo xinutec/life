@@ -148,7 +148,7 @@ async fn a_buy_that_cannot_record_its_item_leaves_the_row_on_the_list() {
                 quantity: None,
                 unit: None,
                 barcode: None,
-                category: "food".into(),
+                category: "food".parse().unwrap(),
                 product_id: None,
                 done: false,
                 deleted: false,

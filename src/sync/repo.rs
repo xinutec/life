@@ -90,10 +90,12 @@ trait SyncSpec {
     fn rev(doc: &Self::Doc) -> u64;
     fn deleted(doc: &Self::Doc) -> bool;
 
-    /// Reject values the typed REST boundary could not read back (unknown enum
-    /// strings, out-of-range scores). Reject, not clamp — a clamp would be a
-    /// masking fallback.
-    fn validate(doc: &Self::Doc) -> Result<(), String>;
+    /// Reject values the types cannot rule out (an out-of-range score); an unknown
+    /// enum string never gets this far, refused when the push is decoded. Reject,
+    /// not clamp — a clamp would be a masking fallback.
+    fn validate(_doc: &Self::Doc) -> Result<(), String> {
+        Ok(())
+    }
 
     /// Bind the `DATA_COLS` values, in that order.
     fn bind_data<'q>(q: DataQuery<'q>, doc: &'q Self::Doc) -> DataQuery<'q>;
@@ -247,7 +249,7 @@ struct ShoppingDocRow {
     quantity: Option<f64>,
     unit: Option<String>,
     barcode: Option<String>,
-    category: String,
+    category: ItemCategory,
     product_id: Option<ProductId>,
     done: bool,
     deleted: i64,
@@ -303,19 +305,12 @@ impl SyncSpec for Shopping {
         doc.deleted
     }
 
-    /// `category` must be a readable [`ItemCategory`] — the buy→inventory
-    /// conversion re-parses it.
-    fn validate(doc: &ShoppingDoc) -> Result<(), String> {
-        doc.category.parse::<ItemCategory>()?;
-        Ok(())
-    }
-
     fn bind_data<'q>(q: DataQuery<'q>, doc: &'q ShoppingDoc) -> DataQuery<'q> {
         q.bind(&doc.name)
             .bind(doc.quantity)
             .bind(&doc.unit)
             .bind(&doc.barcode)
-            .bind(&doc.category)
+            .bind(doc.category)
             .bind(doc.product_id)
             .bind(doc.done)
     }
@@ -377,9 +372,9 @@ struct TodoDocRow {
     id: u64,
     ulid: String,
     title: String,
-    todo_type: String,
-    status: String,
-    priority: Option<String>,
+    todo_type: TodoType,
+    status: TodoStatus,
+    priority: Option<TodoPriority>,
     notes: Option<String>,
     not_before: Option<NaiveDate>,
     due: Option<NaiveDate>,
@@ -439,23 +434,11 @@ impl SyncSpec for Todo {
         doc.deleted
     }
 
-    /// The enums ride as raw strings (the row shape); anything the typed REST read
-    /// could not decode back is rejected here instead of 500ing the whole list on
-    /// a later read.
-    fn validate(doc: &TodoDoc) -> Result<(), String> {
-        doc.todo_type.parse::<TodoType>()?;
-        doc.status.parse::<TodoStatus>()?;
-        if let Some(p) = &doc.priority {
-            p.parse::<TodoPriority>()?;
-        }
-        Ok(())
-    }
-
     fn bind_data<'q>(q: DataQuery<'q>, doc: &'q TodoDoc) -> DataQuery<'q> {
         q.bind(&doc.title)
-            .bind(&doc.todo_type)
-            .bind(&doc.status)
-            .bind(&doc.priority)
+            .bind(doc.todo_type)
+            .bind(doc.status)
+            .bind(doc.priority)
             .bind(&doc.notes)
             .bind(doc.not_before)
             .bind(doc.due)
@@ -487,8 +470,8 @@ struct TodoLinkDocRow {
     id: u64,
     ulid: String,
     from_ulid: String,
-    kind: String,
-    target_kind: String,
+    kind: LinkKind,
+    target_kind: TargetKind,
     target_ref: String,
     deleted: i64,
     rev: u64,
@@ -532,16 +515,10 @@ impl SyncSpec for TodoLink {
         doc.deleted
     }
 
-    fn validate(doc: &TodoLinkDoc) -> Result<(), String> {
-        doc.kind.parse::<LinkKind>()?;
-        doc.target_kind.parse::<TargetKind>()?;
-        Ok(())
-    }
-
     fn bind_data<'q>(q: DataQuery<'q>, doc: &'q TodoLinkDoc) -> DataQuery<'q> {
         q.bind(&doc.from)
-            .bind(&doc.kind)
-            .bind(&doc.target_kind)
+            .bind(doc.kind)
+            .bind(doc.target_kind)
             .bind(&doc.target_ref)
     }
 
@@ -562,8 +539,8 @@ impl SyncSpec for TodoLink {
         )
         .bind(user_id)
         .bind(&doc.from)
-        .bind(&doc.kind)
-        .bind(&doc.target_kind)
+        .bind(doc.kind)
+        .bind(doc.target_kind)
         .bind(&doc.target_ref)
         .fetch_optional(&mut *tx)
         .await?;

@@ -17,7 +17,7 @@ fn row(ulid: &str, name: &str, done: bool) -> PushEntry<ShoppingDoc> {
             quantity: None,
             unit: None,
             barcode: None,
-            category: "food".into(),
+            category: "food".parse().unwrap(),
             product_id: None,
             done,
             deleted: false,

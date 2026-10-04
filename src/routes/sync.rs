@@ -2,6 +2,7 @@
 //! pull/push pair per collection, sharing the generic envelope.
 
 use axum::Json;
+use axum::extract::rejection::JsonRejection;
 use axum::extract::{Query, State};
 use serde::Deserialize;
 
@@ -12,6 +13,12 @@ use crate::sync::repo;
 use crate::sync::types::{
     PullResponse, PushEntry, ShoppingDoc, TodoDoc, TodoLinkDoc, WellbeingDoc,
 };
+
+/// A push that does not decode — an unknown enum string, a missing field — is the
+/// client's mistake: a 400 naming it, in the API's own JSON, with nothing stored.
+fn refused(e: JsonRejection) -> AppError {
+    AppError::BadRequest(e.body_text())
+}
 
 #[derive(Debug, Deserialize)]
 pub struct PullQuery {
@@ -49,8 +56,9 @@ pub async fn pull_shopping(
 pub async fn push_shopping(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
-    Json(entries): Json<Vec<PushEntry<ShoppingDoc>>>,
+    payload: Result<Json<Vec<PushEntry<ShoppingDoc>>>, JsonRejection>,
 ) -> Result<Json<Vec<ShoppingDoc>>, AppError> {
+    let Json(entries) = payload.map_err(refused)?;
     let pushed = entries.len();
     let conflicts = repo::push_shopping(&app.pool, &user.user_id, entries).await?;
     tracing::debug!(user = %user.user_id, pushed, conflicts = conflicts.len(), "sync push shopping");
@@ -79,8 +87,9 @@ pub async fn pull_todo(
 pub async fn push_todo(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
-    Json(entries): Json<Vec<PushEntry<TodoDoc>>>,
+    payload: Result<Json<Vec<PushEntry<TodoDoc>>>, JsonRejection>,
 ) -> Result<Json<Vec<TodoDoc>>, AppError> {
+    let Json(entries) = payload.map_err(refused)?;
     let pushed = entries.len();
     let conflicts = repo::push_todo(&app.pool, &user.user_id, entries).await?;
     tracing::debug!(user = %user.user_id, pushed, conflicts = conflicts.len(), "sync push todo");
@@ -109,8 +118,9 @@ pub async fn pull_todo_link(
 pub async fn push_todo_link(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
-    Json(entries): Json<Vec<PushEntry<TodoLinkDoc>>>,
+    payload: Result<Json<Vec<PushEntry<TodoLinkDoc>>>, JsonRejection>,
 ) -> Result<Json<Vec<TodoLinkDoc>>, AppError> {
+    let Json(entries) = payload.map_err(refused)?;
     let pushed = entries.len();
     let conflicts = repo::push_todo_link(&app.pool, &user.user_id, entries).await?;
     tracing::debug!(user = %user.user_id, pushed, conflicts = conflicts.len(), "sync push todo-link");
@@ -139,8 +149,9 @@ pub async fn pull_wellbeing(
 pub async fn push_wellbeing(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
-    Json(entries): Json<Vec<PushEntry<WellbeingDoc>>>,
+    payload: Result<Json<Vec<PushEntry<WellbeingDoc>>>, JsonRejection>,
 ) -> Result<Json<Vec<WellbeingDoc>>, AppError> {
+    let Json(entries) = payload.map_err(refused)?;
     let pushed = entries.len();
     let conflicts = repo::push_wellbeing(&app.pool, &user.user_id, entries).await?;
     tracing::debug!(user = %user.user_id, pushed, conflicts = conflicts.len(), "sync push wellbeing");
