@@ -147,7 +147,8 @@ async fn wellbeing_sync_and_restore_against_real_db() {
     );
 }
 
-/// A half-step survives the round-trip intact: 35 tenths in, 35 tenths out.
+/// A half-step survives the round-trip intact: 35 tenths in, 35 tenths out. So
+/// do the two ends of the scale.
 #[tokio::test]
 async fn half_steps_round_trip_through_the_db() {
     let url = common::test_db_url();
@@ -185,6 +186,31 @@ async fn half_steps_round_trip_through_the_db() {
         .expect("present");
     assert_eq!(got.score_tenths, 35, "a 3.5 stays a 3.5");
     assert_eq!(got.energy_tenths, Some(45), "a 4.5 stays a 4.5");
+
+    // Both ends of the scale are readings too, and the only ones a range can
+    // refuse by one step.
+    let ends = "0123456789ABCDEFGHJKMNPQRE";
+    let mut d = doc(ends, 10, 0, false);
+    d.energy_tenths = Some(50);
+    sync_repo::push_wellbeing(
+        &pool,
+        user,
+        vec![PushEntry {
+            new_document_state: d,
+            assumed_master_state: None,
+        }],
+    )
+    .await
+    .expect("a 1 and a 5 are accepted");
+    let pulled = sync_repo::pull_wellbeing(&pool, user, 0, 100)
+        .await
+        .unwrap();
+    let got = pulled
+        .documents
+        .iter()
+        .find(|d| d.ulid == ends)
+        .expect("present");
+    assert_eq!((got.score_tenths, got.energy_tenths), (10, Some(50)));
 
     sqlx::query("DELETE FROM wellbeing WHERE user_id = ?")
         .bind(user)

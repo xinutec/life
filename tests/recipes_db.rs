@@ -95,7 +95,7 @@ async fn recipe_create_and_shopping_list_against_real_db() {
             name: "Kitchari".into(),
             instructions: Some("Simmer longer.".into()),
             servings: Some(3),
-            ingredients: vec![ing("rice", Some(1.0), Some("cup")), ing("salt", None, None)],
+            ingredients: vec![ing("salt", None, None), ing("rice", Some(1.0), Some("cup"))],
         },
     )
     .await
@@ -113,7 +113,7 @@ async fn recipe_create_and_shopping_list_against_real_db() {
         .iter()
         .map(|i| i.name.as_str())
         .collect();
-    assert_eq!(names, vec!["rice", "salt"]); // cumin gone, order preserved
+    assert_eq!(names, vec!["salt", "rice"]); // cumin gone, the cook's order kept
 
     // Editing an unknown / not-owned recipe is a no-op None, not a phantom write.
     assert!(

@@ -203,10 +203,10 @@ async fn a_nonsense_price_is_refused_rather_than_stored() {
         "currency must be ISO 4217, or amounts cannot be compared at all"
     );
 
-    let none = repo::history(&pool, user, None, None)
+    let none = repo::for_item(&pool, user, item.id)
         .await
-        .expect("history");
-    assert!(none.is_empty(), "nothing was stored");
+        .expect("for item");
+    assert!(none.is_empty(), "nothing was stored: {none:?}");
 }
 
 #[tokio::test]
@@ -365,14 +365,6 @@ async fn a_hand_typed_row_is_reachable_by_its_item_and_by_nothing_else() {
         .await
         .expect("record");
 
-    assert!(
-        repo::history(&pool, user, None, None)
-            .await
-            .expect("history")
-            .is_empty(),
-        "with no product and no barcode there is nothing for history to match on"
-    );
-
     let by_item = repo::for_item(&pool, user, id).await.expect("for_item");
     assert_eq!(by_item.len(), 1, "the item must find its own purchase");
     assert_eq!(by_item[0].amount_minor, 250);
@@ -435,6 +427,14 @@ async fn a_purchase_is_only_its_owners() {
         .await
         .expect("record");
 
+    assert_eq!(
+        repo::history(&pool, mine, None, Some("T-BUY-3"))
+            .await
+            .expect("history")
+            .len(),
+        1,
+        "the barcode finds it for its owner"
+    );
     let theirs = repo::history(&pool, yours, None, Some("T-BUY-3"))
         .await
         .expect("history");

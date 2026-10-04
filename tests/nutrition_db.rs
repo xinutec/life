@@ -69,12 +69,12 @@ async fn store_and_read_facts_then_replace_on_relookup() {
         ingredients: Some("Wholegrain oats (95%), sugar".into()),
         allergens: vec![
             Allergen {
-                allergen: "gluten".into(),
-                presence: Presence::Contains,
-            },
-            Allergen {
                 allergen: "nuts".into(),
                 presence: Presence::MayContain,
+            },
+            Allergen {
+                allergen: "gluten".into(),
+                presence: Presence::Contains,
             },
         ],
         dietary: vec![
@@ -147,19 +147,33 @@ async fn store_and_read_facts_then_replace_on_relookup() {
     assert!(read.allergens.is_empty(), "allergens replaced, not merged");
     assert_eq!(read.dietary.len(), 1, "flags replaced");
 
-    // Deleting the product cascades the nutrition/allergen/dietary rows.
+    // Deleting the product cascades every facts row it still has.
+    let tables = [
+        "SELECT COUNT(*) FROM product_nutrition WHERE product_id = ?",
+        "SELECT COUNT(*) FROM product_ingredients WHERE product_id = ?",
+        "SELECT COUNT(*) FROM product_dietary_flags WHERE product_id = ?",
+    ];
+    for sql in tables {
+        let (count,): (i64,) = sqlx::query_as(sql)
+            .bind(product.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert!(count > 0, "nothing to cascade: {sql}");
+    }
     sqlx::query("DELETE FROM products WHERE id = ?")
         .bind(product.id)
         .execute(&pool)
         .await
         .unwrap();
-    let (count,): (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM product_nutrition WHERE product_id = ?")
+    for sql in tables {
+        let (count,): (i64,) = sqlx::query_as(sql)
             .bind(product.id)
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(count, 0, "nutrition cascades on product delete");
+        assert_eq!(count, 0, "{sql}");
+    }
 }
 
 #[tokio::test]
