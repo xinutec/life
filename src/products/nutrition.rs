@@ -12,13 +12,26 @@ use ts_rs::TS;
 use super::source::Source;
 use crate::str_enum;
 
+str_enum! {
+    /// What a nutrition panel's figures are per.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[ts(export)]
+    pub enum Basis: "nutrition basis" {
+        /// Solids.
+        #[serde(rename = "100g")]
+        Per100g => "100g",
+        /// Liquids.
+        #[serde(rename = "100ml")]
+        Per100ml => "100ml",
+    }
+}
+
 /// The nutrition panel, per `basis`. Every figure is optional — a source declares
 /// whatever it has. `None` throughout + empty `extra` means "no panel".
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct Nutrition {
-    /// What the figures are per: "100g" (solids) or "100ml" (liquids).
-    pub basis: String,
+    pub basis: Basis,
     /// The manufacturer's serving description, verbatim (e.g. "40g").
     pub serving_size: Option<String>,
     pub energy_kj: Option<f64>,
@@ -75,12 +88,38 @@ str_enum! {
         Maybe => "maybe",
     }
 }
+str_enum! {
+    /// A dietary or free-from claim a source can make about a product. Every
+    /// source's own vocabulary (OFF's tags, Asda's and Brandbank's booleans) maps
+    /// onto this one set, so their claims merge rather than sit side by side.
+    ///
+    /// **Variants are in slug order, and that is load-bearing**: the derived `Ord`
+    /// sorts merged flags, and the API has always listed them by slug.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
+    #[serde(rename_all = "snake_case")]
+    #[ts(export)]
+    pub enum Diet: "dietary flag" {
+        EggFree => "egg_free",
+        FairTrade => "fair_trade",
+        GlutenFree => "gluten_free",
+        Halal => "halal",
+        Kosher => "kosher",
+        LactoseFree => "lactose_free",
+        MilkFree => "milk_free",
+        NutFree => "nut_free",
+        Organic => "organic",
+        PalmOilFree => "palm_oil_free",
+        SoyaFree => "soya_free",
+        Vegan => "vegan",
+        Vegetarian => "vegetarian",
+    }
+}
+
 /// One dietary flag and its assertion.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct DietaryFlag {
-    /// Stable slug: "vegan", "vegetarian", "gluten_free", "organic", ….
-    pub flag: String,
+    pub flag: Diet,
     pub value: Claim,
 }
 
@@ -135,16 +174,16 @@ const PROMOTED: &[&str] = &[
 
 /// The label tags we recognise as dietary claims, mapped to our flag slug. A
 /// label is a manufacturer assertion → always "yes".
-const LABEL_FLAGS: &[(&str, &str)] = &[
-    ("gluten-free", "gluten_free"),
-    ("lactose-free", "lactose_free"),
-    ("organic", "organic"),
-    ("kosher", "kosher"),
-    ("halal", "halal"),
-    ("vegan", "vegan"),
-    ("vegetarian", "vegetarian"),
-    ("fair-trade", "fair_trade"),
-    ("palm-oil-free", "palm_oil_free"),
+const LABEL_FLAGS: &[(&str, Diet)] = &[
+    ("gluten-free", Diet::GlutenFree),
+    ("lactose-free", Diet::LactoseFree),
+    ("organic", Diet::Organic),
+    ("kosher", Diet::Kosher),
+    ("halal", Diet::Halal),
+    ("vegan", Diet::Vegan),
+    ("vegetarian", Diet::Vegetarian),
+    ("fair-trade", Diet::FairTrade),
+    ("palm-oil-free", Diet::PalmOilFree),
 ];
 
 impl Nutrition {
@@ -178,7 +217,7 @@ impl Nutrition {
 /// Claims come in any order, several per flag; the result has one per flag,
 /// sorted.
 pub fn merge_dietary(claims: Vec<DietaryFlag>) -> Vec<DietaryFlag> {
-    let mut by_flag: BTreeMap<String, Vec<Claim>> = BTreeMap::new();
+    let mut by_flag: BTreeMap<Diet, Vec<Claim>> = BTreeMap::new();
     for c in claims {
         by_flag.entry(c.flag).or_default().push(c.value);
     }
@@ -320,10 +359,9 @@ impl RawFacts {
         // historical misnomer — the value is per 100 ml there); `basis` records
         // which unit it really is for display.
         let basis = match self.nutrition_data_per.as_deref() {
-            Some("100ml") => "100ml",
-            _ => "100g",
-        }
-        .to_string();
+            Some("100ml") => Basis::Per100ml,
+            _ => Basis::Per100g,
+        };
         // The tail: every other per-100 nutriment, suffix stripped, promoted keys
         // excluded. Deterministic order via BTreeMap.
         let mut extra = BTreeMap::new();
@@ -379,12 +417,12 @@ impl RawFacts {
     }
 
     fn dietary(&self) -> Vec<DietaryFlag> {
-        let mut flags: BTreeMap<String, Claim> = BTreeMap::new();
+        let mut flags: BTreeMap<Diet, Claim> = BTreeMap::new();
         // OFF's ingredient analysis is tri-state (vegan / non-vegan / maybe-vegan;
         // same for vegetarian; palm oil has its own vocabulary).
         for tag in &self.ingredients_analysis_tags {
             if let Some((flag, value)) = analysis_flag(strip_lang(tag)) {
-                flags.insert(flag.to_string(), value);
+                flags.insert(flag, value);
             }
         }
         // A manufacturer label is a firm claim: it asserts "yes" and overrides a
@@ -392,7 +430,7 @@ impl RawFacts {
         for tag in &self.labels_tags {
             let stripped = strip_lang(tag);
             if let Some((_, flag)) = LABEL_FLAGS.iter().find(|(label, _)| *label == stripped) {
-                flags.insert(flag.to_string(), Claim::Yes);
+                flags.insert(*flag, Claim::Yes);
             }
         }
         flags
@@ -404,17 +442,17 @@ impl RawFacts {
 
 /// Map one OFF ingredient-analysis tag (prefix already stripped) to a
 /// (flag, value) pair, or `None` when it asserts nothing (e.g. content unknown).
-fn analysis_flag(tag: &str) -> Option<(&'static str, Claim)> {
+fn analysis_flag(tag: &str) -> Option<(Diet, Claim)> {
     Some(match tag {
-        "vegan" => ("vegan", Claim::Yes),
-        "non-vegan" => ("vegan", Claim::No),
-        "maybe-vegan" => ("vegan", Claim::Maybe),
-        "vegetarian" => ("vegetarian", Claim::Yes),
-        "non-vegetarian" => ("vegetarian", Claim::No),
-        "maybe-vegetarian" => ("vegetarian", Claim::Maybe),
-        "palm-oil-free" => ("palm_oil_free", Claim::Yes),
-        "palm-oil" => ("palm_oil_free", Claim::No),
-        "may-contain-palm-oil" => ("palm_oil_free", Claim::Maybe),
+        "vegan" => (Diet::Vegan, Claim::Yes),
+        "non-vegan" => (Diet::Vegan, Claim::No),
+        "maybe-vegan" => (Diet::Vegan, Claim::Maybe),
+        "vegetarian" => (Diet::Vegetarian, Claim::Yes),
+        "non-vegetarian" => (Diet::Vegetarian, Claim::No),
+        "maybe-vegetarian" => (Diet::Vegetarian, Claim::Maybe),
+        "palm-oil-free" => (Diet::PalmOilFree, Claim::Yes),
+        "palm-oil" => (Diet::PalmOilFree, Claim::No),
+        "may-contain-palm-oil" => (Diet::PalmOilFree, Claim::Maybe),
         _ => return None,
     })
 }

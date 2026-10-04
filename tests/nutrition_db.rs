@@ -16,7 +16,7 @@ const OALTY_BRANDBANK: &str = include_str!("fixtures/asda_brandbank_oalty.json")
 
 fn nutrition() -> Nutrition {
     Nutrition {
-        basis: "100g".into(),
+        basis: "100g".parse().unwrap(),
         serving_size: Some("40g".into()),
         energy_kj: Some(1500.0),
         energy_kcal: Some(356.0),
@@ -79,11 +79,11 @@ async fn store_and_read_facts_then_replace_on_relookup() {
         ],
         dietary: vec![
             DietaryFlag {
-                flag: "vegan".into(),
+                flag: "vegan".parse().unwrap(),
                 value: Claim::Yes,
             },
             DietaryFlag {
-                flag: "palm_oil_free".into(),
+                flag: "palm_oil_free".parse().unwrap(),
                 value: Claim::Maybe,
             },
         ],
@@ -95,7 +95,7 @@ async fn store_and_read_facts_then_replace_on_relookup() {
     let read = repo::facts_for(&pool, product.id).await.unwrap();
     // Nutrition round-trips, extra JSON included.
     let n = read.nutrition.expect("nutrition");
-    assert_eq!(n.basis, "100g");
+    assert_eq!(n.basis.as_str(), "100g");
     assert_eq!(n.serving_size.as_deref(), Some("40g"));
     assert_eq!(n.energy_kcal, Some(356.0));
     assert_eq!(n.salt_g, Some(0.1));
@@ -133,7 +133,7 @@ async fn store_and_read_facts_then_replace_on_relookup() {
         ingredients: Some("Wholegrain oats (100%)".into()),
         allergens: vec![],
         dietary: vec![DietaryFlag {
-            flag: "vegan".into(),
+            flag: "vegan".parse().unwrap(),
             value: Claim::Yes,
         }],
     };
@@ -207,15 +207,15 @@ async fn two_sources_dietary_claims_coexist_and_merge() {
         product.id,
         &[
             DietaryFlag {
-                flag: "vegan".into(),
+                flag: "vegan".parse().unwrap(),
                 value: Claim::Maybe,
             },
             DietaryFlag {
-                flag: "palm_oil_free".into(),
+                flag: "palm_oil_free".parse().unwrap(),
                 value: Claim::Yes,
             },
             DietaryFlag {
-                flag: "vegetarian".into(),
+                flag: "vegetarian".parse().unwrap(),
                 value: Claim::No,
             },
         ],
@@ -230,11 +230,11 @@ async fn two_sources_dietary_claims_coexist_and_merge() {
         product.id,
         &[
             DietaryFlag {
-                flag: "vegan".into(),
+                flag: "vegan".parse().unwrap(),
                 value: Claim::Yes,
             },
             DietaryFlag {
-                flag: "vegetarian".into(),
+                flag: "vegetarian".parse().unwrap(),
                 value: Claim::Yes,
             },
         ],
@@ -247,7 +247,7 @@ async fn two_sources_dietary_claims_coexist_and_merge() {
         facts
             .dietary
             .iter()
-            .find(|d| d.flag == flag)
+            .find(|d| d.flag.as_str() == flag)
             .map(|d| d.value)
     };
     let facts = repo::facts_for(&pool, product.id).await.unwrap();
@@ -273,7 +273,7 @@ async fn two_sources_dietary_claims_coexist_and_merge() {
         &pool,
         product.id,
         &[DietaryFlag {
-            flag: "vegan".into(),
+            flag: "vegan".parse().unwrap(),
             value: Claim::Maybe,
         }],
         Source::Off,
@@ -448,7 +448,7 @@ async fn real_brandbank_facts_parse_store_and_read_back() {
 
     let read = repo::facts_for(&pool, product.id).await.unwrap();
     let n = read.nutrition.expect("panel");
-    assert_eq!(n.basis, "100ml");
+    assert_eq!(n.basis.as_str(), "100ml");
     assert_eq!(n.energy_kj, Some(257.0));
     assert_eq!(n.salt_g, Some(0.1));
     assert!(
@@ -461,10 +461,10 @@ async fn real_brandbank_facts_parse_store_and_read_back() {
         read.allergens.iter().any(|a| a.allergen == "oats"),
         "Oats declared"
     );
-    let vegan = read.dietary.iter().find(|d| d.flag == "vegan");
+    let vegan = read.dietary.iter().find(|d| d.flag.as_str() == "vegan");
     assert_eq!(vegan.map(|d| d.value), Some(Claim::Yes));
     assert!(
-        read.dietary.iter().any(|d| d.flag == "milk_free"),
+        read.dietary.iter().any(|d| d.flag.as_str() == "milk_free"),
         "free-from booleans became dietary flags"
     );
 }

@@ -44,7 +44,7 @@ fn full_panel_ingredients_allergens_and_flags() {
     }));
 
     let n = facts.nutrition.expect("a panel");
-    assert_eq!(n.basis, "100g");
+    assert_eq!(n.basis.as_str(), "100g");
     assert_eq!(n.serving_size.as_deref(), Some("40 g"));
     assert_eq!(n.energy_kj, Some(1500.0));
     assert_eq!(n.energy_kcal, Some(356.0));
@@ -135,7 +135,7 @@ fn liquid_basis_and_prefixless_ingredients_fallback() {
         "nutriments": { "carbohydrates_100g": 10.5 }
     }));
     let n = facts.nutrition.expect("a panel");
-    assert_eq!(n.basis, "100ml");
+    assert_eq!(n.basis.as_str(), "100ml");
     assert_eq!(n.carbohydrate_g, Some(10.5));
     assert!(n.extra.is_empty());
     assert_eq!(
@@ -173,7 +173,7 @@ fn a_product_with_no_facts_parses_to_nothing() {
 
 fn claim(flag: &str, value: Claim) -> DietaryFlag {
     DietaryFlag {
-        flag: flag.to_string(),
+        flag: flag.parse().unwrap(),
         value,
     }
 }
@@ -181,7 +181,7 @@ fn claim(flag: &str, value: Claim) -> DietaryFlag {
 fn merged(claims: &[(&str, Claim)]) -> Vec<(String, Claim)> {
     merge_dietary(claims.iter().map(|(f, v)| claim(f, *v)).collect())
         .into_iter()
-        .map(|d| (d.flag, d.value))
+        .map(|d| (d.flag.to_string(), d.value))
         .collect()
 }
 
@@ -255,7 +255,7 @@ fn a_single_source_passes_straight_through() {
 /// panel was chosen.
 fn panel(salt: f64) -> Nutrition {
     Nutrition {
-        basis: "100g".to_string(),
+        basis: "100g".parse().unwrap(),
         serving_size: None,
         energy_kj: None,
         energy_kcal: None,

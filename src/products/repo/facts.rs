@@ -13,8 +13,8 @@ use sqlx::{MySqlConnection, MySqlPool};
 
 use crate::products::ids::ProductId;
 use crate::products::nutrition::{
-    Allergen, Claim, DietaryFlag, Nutrition, Presence, ProductFacts, fact_rank, merge_allergens,
-    merge_dietary, merge_ingredients, merge_nutrition, summarize_nutrition,
+    Allergen, Basis, Claim, Diet, DietaryFlag, Nutrition, Presence, ProductFacts, fact_rank,
+    merge_allergens, merge_dietary, merge_ingredients, merge_nutrition, summarize_nutrition,
 };
 use crate::products::source::Source;
 use crate::products::types::{
@@ -24,7 +24,7 @@ use crate::products::types::{
 #[derive(sqlx::FromRow)]
 struct NutritionRow {
     source: Source,
-    basis: String,
+    basis: Basis,
     serving_size: Option<String>,
     energy_kj: Option<f64>,
     energy_kcal: Option<f64>,
@@ -68,7 +68,7 @@ async fn upsert_nutrition_in(
           salt_g = VALUES(salt_g), extra = VALUES(extra)",
     )
     .bind(product_id)
-    .bind(&n.basis)
+    .bind(n.basis)
     .bind(&n.serving_size)
     .bind(n.energy_kj)
     .bind(n.energy_kcal)
@@ -191,7 +191,7 @@ pub(super) async fn replace_dietary_in(
              VALUES (?, ?, ?, ?)",
         )
         .bind(product_id)
-        .bind(&f.flag)
+        .bind(f.flag)
         .bind(f.value)
         .bind(source)
         .execute(&mut *conn)
@@ -324,7 +324,7 @@ pub async fn facts_by_source(pool: &MySqlPool, product_id: ProductId) -> Result<
     .bind(product_id)
     .fetch_all(pool)
     .await?;
-    let dietary_rows: Vec<(Source, String, Claim)> = sqlx::query_as(
+    let dietary_rows: Vec<(Source, Diet, Claim)> = sqlx::query_as(
         "SELECT source, flag, value FROM product_dietary_flags WHERE product_id = ? \
          ORDER BY flag",
     )

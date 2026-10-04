@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::ids::{Barcode, ExternalId};
-use super::nutrition::{Claim, DietaryFlag};
+use super::nutrition::{Claim, Diet, DietaryFlag};
 use super::prices::{Currency, PriceInput, UnitMeasure, UnitPrice};
 
 /// Algolia application id — also the request host (`{app}-dsn.algolia.net`).
@@ -101,18 +101,18 @@ struct RawHit {
 /// instead of sitting beside them as near-duplicates. Only diet/lifestyle and
 /// free-from tags: the rest (LowSalt, HighFibre, …) are marketing about quantity,
 /// not a yes/no, and stay in the stored `raw_json`.
-const LIFESTYLE_FLAGS: &[(&str, &str)] = &[
-    ("Vegan", "vegan"),
-    ("Vegetarian", "vegetarian"),
-    ("Halal", "halal"),
-    ("Kosher", "kosher"),
-    ("NoGluten", "gluten_free"),
-    ("NoLactose", "lactose_free"),
-    ("NoNuts", "nut_free"),
-    ("NoMilk", "milk_free"),
-    ("NoEgg", "egg_free"),
-    ("NoSoya", "soya_free"),
-    ("Organic", "organic"),
+const LIFESTYLE_FLAGS: &[(&str, Diet)] = &[
+    ("Vegan", Diet::Vegan),
+    ("Vegetarian", Diet::Vegetarian),
+    ("Halal", Diet::Halal),
+    ("Kosher", Diet::Kosher),
+    ("NoGluten", Diet::GlutenFree),
+    ("NoLactose", Diet::LactoseFree),
+    ("NoNuts", Diet::NutFree),
+    ("NoMilk", Diet::MilkFree),
+    ("NoEgg", Diet::EggFree),
+    ("NoSoya", Diet::SoyaFree),
+    ("Organic", Diet::Organic),
 ];
 
 /// Asda's lifestyle tags as dietary flags, every one 'yes'.
@@ -125,7 +125,7 @@ fn lifestyle_flags(info: &std::collections::BTreeMap<String, i64>) -> Vec<Dietar
         .iter()
         .filter(|(tag, _)| info.get(*tag).is_some_and(|v| *v == 1))
         .map(|(_, flag)| DietaryFlag {
-            flag: (*flag).to_string(),
+            flag: *flag,
             value: Claim::Yes,
         })
         .collect()

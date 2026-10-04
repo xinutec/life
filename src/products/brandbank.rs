@@ -10,7 +10,9 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::nutrition::{Allergen, Claim, DietaryFlag, Nutrition, Presence, ProductFacts, as_f64};
+use super::nutrition::{
+    Allergen, Basis, Claim, Diet, DietaryFlag, Nutrition, Presence, ProductFacts, as_f64,
+};
 
 /// The Brandbank fields we consume. Unknown fields (the bulk of the blob —
 /// company address, marketing copy, packaging, …) are ignored by serde.
@@ -150,10 +152,9 @@ fn extra_key(name: &str) -> String {
 impl Brandbank {
     fn nutrition(&self) -> Option<Nutrition> {
         let basis = match self.calculated_nutrition_per100.as_deref() {
-            Some(s) if s.to_lowercase().contains("ml") => "100ml",
-            _ => "100g",
-        }
-        .to_string();
+            Some(s) if s.to_lowercase().contains("ml") => Basis::Per100ml,
+            _ => Basis::Per100g,
+        };
         let mut n = Nutrition {
             basis,
             serving_size: None,
@@ -251,29 +252,29 @@ impl Brandbank {
             })
         };
         let mapped = [
-            (self.vegan || says("Suitable for Vegans"), "vegan"),
+            (self.vegan || says("Suitable for Vegans"), Diet::Vegan),
             (
                 self.vegetarian || says("Suitable for Vegetarians"),
-                "vegetarian",
+                Diet::Vegetarian,
             ),
-            (self.halal, "halal"),
-            (self.kosher, "kosher"),
-            (self.no_gluten, "gluten_free"),
-            (self.no_lactose, "lactose_free"),
-            (self.no_milk, "milk_free"),
-            (self.no_nuts, "nut_free"),
-            (self.no_egg, "egg_free"),
-            (self.no_soya, "soya_free"),
+            (self.halal, Diet::Halal),
+            (self.kosher, Diet::Kosher),
+            (self.no_gluten, Diet::GlutenFree),
+            (self.no_lactose, Diet::LactoseFree),
+            (self.no_milk, Diet::MilkFree),
+            (self.no_nuts, Diet::NutFree),
+            (self.no_egg, Diet::EggFree),
+            (self.no_soya, Diet::SoyaFree),
         ];
         let mut flags: Vec<DietaryFlag> = mapped
             .iter()
             .filter(|(claimed, _)| *claimed)
-            .map(|(_, slug)| DietaryFlag {
-                flag: slug.to_string(),
+            .map(|(_, flag)| DietaryFlag {
+                flag: *flag,
                 value: Claim::Yes,
             })
             .collect();
-        flags.sort_by(|a, b| a.flag.cmp(&b.flag));
+        flags.sort_by_key(|f| f.flag);
         flags
     }
 }

@@ -17,7 +17,7 @@ use life::products::types::{Choice, FieldChoice, ReconcileField, SourceFacts};
 /// A minimal panel carrying just an energy figure — enough to differ.
 fn panel(kcal: f64) -> Nutrition {
     Nutrition {
-        basis: "100ml".into(),
+        basis: "100ml".parse().unwrap(),
         serving_size: None,
         energy_kj: None,
         energy_kcal: Some(kcal),

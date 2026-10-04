@@ -13,7 +13,7 @@ fn parses_the_real_oalty_blob() {
 
     // Nutrition: liquid basis, big-8 mapped, "of which" rows kept distinct.
     let n = facts.nutrition.expect("a panel");
-    assert_eq!(n.basis, "100ml");
+    assert_eq!(n.basis.as_str(), "100ml");
     assert_eq!(n.energy_kj, Some(257.0));
     assert_eq!(n.energy_kcal, Some(61.0));
     assert_eq!(n.fat_g, Some(3.0));
@@ -73,7 +73,10 @@ fn parses_the_real_oalty_blob() {
         ]
     );
     assert!(
-        !facts.dietary.iter().any(|d| d.flag == "gluten_free"),
+        !facts
+            .dietary
+            .iter()
+            .any(|d| d.flag.as_str() == "gluten_free"),
         "noGluten:false must not assert gluten_free — oats contain gluten"
     );
 }
@@ -112,7 +115,7 @@ fn a_solid_basis_and_numeric_strings_are_tolerated() {
         .expect("parse")
         .nutrition
         .expect("panel");
-    assert_eq!(n.basis, "100g");
+    assert_eq!(n.basis.as_str(), "100g");
     assert_eq!(n.energy_kcal, Some(534.0), "numeric string coerced");
     assert_eq!(n.fat_g, Some(31.5));
 }
@@ -172,6 +175,6 @@ fn a_lifestyle_claim_is_a_dietary_yes() {
     ] }"#;
     let dietary = brandbank::parse(json).expect("parse").dietary;
     assert_eq!(dietary.len(), 1);
-    assert_eq!(dietary[0].flag, "vegetarian");
+    assert_eq!(dietary[0].flag.as_str(), "vegetarian");
     assert_eq!(dietary[0].value, Claim::Yes);
 }
