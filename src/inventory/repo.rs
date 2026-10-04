@@ -5,7 +5,7 @@ use anyhow::{Context, Result, anyhow};
 use chrono::NaiveDate;
 use sqlx::MySqlPool;
 
-use super::consume::{self, Taken};
+use super::consume::{self, Held, Taken};
 use super::types::{
     ExpiryPrecision, Item, ItemCategory, ItemEvent, ItemHistoryEntry, ItemNameSource, Location,
     LocationKind, NewItem, NewLocation,
@@ -200,6 +200,8 @@ pub async fn create_item(pool: &MySqlPool, user_id: &str, new: NewItem) -> Resul
         .name_source
         .unwrap_or(ItemNameSource::Product)
         .to_string();
+    // The row and its `added` history commit together, as every write here does.
+    let mut tx = pool.begin().await?;
     let res = sqlx::query(
         "INSERT INTO items \
          (user_id, product_id, name, name_source, category, quantity, unit, expiry, \
@@ -221,11 +223,11 @@ pub async fn create_item(pool: &MySqlPool, user_id: &str, new: NewItem) -> Resul
     )
     .bind(new.location_id)
     .bind(new.barcode.as_deref().map(barcode_hint))
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
     let id = res.last_insert_id();
     record_history(
-        pool,
+        &mut *tx,
         id,
         user_id,
         new.location_id,
@@ -233,6 +235,7 @@ pub async fn create_item(pool: &MySqlPool, user_id: &str, new: NewItem) -> Resul
         new.quantity,
     )
     .await?;
+    tx.commit().await?;
     get_item(pool, user_id, id)
         .await?
         .ok_or_else(|| anyhow!("created item {id} not found"))
@@ -246,17 +249,22 @@ pub async fn move_item(
     item_id: u64,
     new_location_id: Option<u64>,
 ) -> Result<Option<Item>> {
-    if get_item(pool, user_id, item_id).await?.is_none() {
+    let mut tx = pool.begin().await?;
+    // sqlx connects with CLIENT_FOUND_ROWS, so a move to where the thing already
+    // is still counts its row: zero means no such live item.
+    let moved = sqlx::query(
+        "UPDATE items SET location_id = ? WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
+    )
+    .bind(new_location_id)
+    .bind(item_id)
+    .bind(user_id)
+    .execute(&mut *tx)
+    .await?;
+    if moved.rows_affected() == 0 {
         return Ok(None);
     }
-    sqlx::query("UPDATE items SET location_id = ? WHERE id = ? AND user_id = ?")
-        .bind(new_location_id)
-        .bind(item_id)
-        .bind(user_id)
-        .execute(pool)
-        .await?;
     record_history(
-        pool,
+        &mut *tx,
         item_id,
         user_id,
         new_location_id,
@@ -264,6 +272,7 @@ pub async fn move_item(
         None,
     )
     .await?;
+    tx.commit().await?;
     get_item(pool, user_id, item_id).await
 }
 
@@ -378,30 +387,19 @@ pub async fn mark_low_matching(
 /// item for this user.
 pub async fn mark_low(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
     // The location rides along so the history reads the same as every other
-    // event, and so "ran out of the one in the fridge" stays answerable.
-    // ⚠ A 1-tuple `query_as`, not `query_scalar`: DL-SQLX-ROW-TYPES peels every
-    // leading Option of `Option<Option<u64>>` and would miss the NULLable column.
-    let row: Option<(Option<u64>,)> = sqlx::query_as(
-        "SELECT location_id FROM items WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
-    )
-    .bind(id)
-    .bind(user_id)
-    .fetch_optional(pool)
-    .await?;
-    let Some((location_id,)) = row else {
-        return Ok(false);
-    };
-    sqlx::query(
+    // event, and so "ran out of the one in the fridge" stays answerable. One
+    // statement: the row it reads is the row it records.
+    let res = sqlx::query(
         "INSERT INTO item_history (item_id, user_id, location_id, event, quantity) \
-         VALUES (?, ?, ?, ?, NULL)",
+         SELECT id, user_id, location_id, ?, NULL FROM items \
+         WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
     )
+    .bind(ItemEvent::Low)
     .bind(id)
     .bind(user_id)
-    .bind(location_id)
-    .bind(ItemEvent::Low)
     .execute(pool)
     .await?;
-    Ok(true)
+    Ok(res.rows_affected() > 0)
 }
 
 /// Take an amount out of a stock row ("I used 200g of flour"), reading and
@@ -430,24 +428,11 @@ pub async fn use_item(
         return Ok(None);
     };
 
-    // `take` reads an Item; only these three fields matter to it, so build the
-    // smallest honest one rather than re-reading the resolved row inside the
-    // lock.
-    let held = Item {
-        id,
-        product_id: None,
-        name: String::new(),
-        brand: None,
-        category: ItemCategory::Other,
+    let held = Held {
         quantity,
-        unit,
-        expiry: None,
-        expiry_precision: ExpiryPrecision::Day,
-        location_id,
-        barcode: None,
-        has_image: false,
+        unit: unit.as_deref(),
     };
-    let outcome = consume::take(&held, want, want_unit);
+    let outcome = consume::take(held, want, want_unit);
     let left = match outcome {
         Taken::Left(n) => n,
         Taken::Emptied { .. } => 0.0,
@@ -488,35 +473,39 @@ pub async fn use_item(
 /// Delete an item — a tombstone, restorable from the trash; history is kept.
 /// Returns whether a row was tombstoned.
 pub async fn delete_item(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
+    let mut tx = pool.begin().await?;
     let res = sqlx::query(
         "UPDATE items SET deleted_at = NOW() \
          WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
     )
     .bind(id)
     .bind(user_id)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
     let deleted = res.rows_affected() > 0;
     if deleted {
-        record_history(pool, id, user_id, None, ItemEvent::Removed, None).await?;
+        record_history(&mut *tx, id, user_id, None, ItemEvent::Removed, None).await?;
     }
+    tx.commit().await?;
     Ok(deleted)
 }
 
 /// Restore a deleted item. Returns whether a tombstone was cleared.
 pub async fn restore_item(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
+    let mut tx = pool.begin().await?;
     let res = sqlx::query(
         "UPDATE items SET deleted_at = NULL \
          WHERE id = ? AND user_id = ? AND deleted_at IS NOT NULL",
     )
     .bind(id)
     .bind(user_id)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
     let restored = res.rows_affected() > 0;
     if restored {
-        record_history(pool, id, user_id, None, ItemEvent::Restored, None).await?;
+        record_history(&mut *tx, id, user_id, None, ItemEvent::Restored, None).await?;
     }
+    tx.commit().await?;
     Ok(restored)
 }
 
@@ -539,30 +528,17 @@ pub async fn is_own_location(pool: &MySqlPool, user_id: &str, id: Option<u64>) -
 /// Every location id in the subtree rooted at `root` (inclusive), computed from
 /// ALL of the user's rows (deleted or not — parent links stay intact under
 /// tombstoning). Empty if `root` isn't the user's.
-async fn subtree_ids(pool: &MySqlPool, user_id: &str, root: u64) -> Result<Vec<u64>> {
+async fn subtree_ids(
+    conn: impl sqlx::Executor<'_, Database = sqlx::MySql>,
+    user_id: &str,
+    root: u64,
+) -> Result<Vec<u64>> {
     let rows: Vec<(u64, Option<u64>)> =
         sqlx::query_as("SELECT id, parent_id FROM locations WHERE user_id = ?")
             .bind(user_id)
-            .fetch_all(pool)
+            .fetch_all(conn)
             .await?;
-    if !rows.iter().any(|(id, _)| *id == root) {
-        return Ok(Vec::new());
-    }
-    let mut children: std::collections::HashMap<u64, Vec<u64>> = std::collections::HashMap::new();
-    for (id, parent) in &rows {
-        if let Some(p) = parent {
-            children.entry(*p).or_default().push(*id);
-        }
-    }
-    let mut ids = vec![root];
-    let mut i = 0;
-    while i < ids.len() {
-        if let Some(kids) = children.get(&ids[i]) {
-            ids.extend(kids);
-        }
-        i += 1;
-    }
-    Ok(ids)
+    Ok(super::tree::subtree(&rows, root))
 }
 
 /// Delete a location and its whole subtree — tombstones, restorable as one unit
@@ -593,16 +569,19 @@ pub async fn delete_location(pool: &MySqlPool, user_id: &str, id: u64) -> Result
 /// separately earlier stay in the trash as their own entries). Returns whether
 /// anything was restored.
 pub async fn restore_location(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
+    // The stamp, the tree and the restore in one transaction, the root locked, so
+    // the stamp cannot change between being read and being matched.
+    let mut tx = pool.begin().await?;
     let stamp: Option<(Option<chrono::NaiveDateTime>,)> =
-        sqlx::query_as("SELECT deleted_at FROM locations WHERE id = ? AND user_id = ?")
+        sqlx::query_as("SELECT deleted_at FROM locations WHERE id = ? AND user_id = ? FOR UPDATE")
             .bind(id)
             .bind(user_id)
-            .fetch_optional(pool)
+            .fetch_optional(&mut *tx)
             .await?;
     let Some((Some(stamp),)) = stamp else {
         return Ok(false); // unknown, someone else's, or not deleted
     };
-    let ids = subtree_ids(pool, user_id, id).await?;
+    let ids = subtree_ids(&mut *tx, user_id, id).await?;
     let mut qb = sqlx::QueryBuilder::new("UPDATE locations SET deleted_at = NULL WHERE user_id = ");
     qb.push_bind(user_id);
     qb.push(" AND deleted_at = ");
@@ -613,7 +592,8 @@ pub async fn restore_location(pool: &MySqlPool, user_id: &str, id: u64) -> Resul
         sep.push_bind(i);
     }
     qb.push(")");
-    let res = qb.build().execute(pool).await?;
+    let res = qb.build().execute(&mut *tx).await?;
+    tx.commit().await?;
     Ok(res.rows_affected() > 0)
 }
 

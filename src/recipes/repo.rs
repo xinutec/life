@@ -169,8 +169,8 @@ pub async fn update_recipe(
     new: NewRecipe,
 ) -> Result<Option<Recipe>> {
     let mut tx = pool.begin().await?;
-    // Lock + confirm the row exists for this user (an UPDATE's rows_affected is
-    // 0 for an unchanged row too, so it can't stand in for existence).
+    // Lock the recipe for the whole edit, so two edits each replacing the
+    // ingredient list cannot interleave their deletes and inserts.
     let exists: Option<(u64,)> = sqlx::query_as(
         "SELECT id FROM recipes WHERE id = ? AND user_id = ? AND deleted_at IS NULL FOR UPDATE",
     )

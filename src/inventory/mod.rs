@@ -3,4 +3,5 @@
 
 pub mod consume;
 pub mod repo;
+pub mod tree;
 pub mod types;

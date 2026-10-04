@@ -5,7 +5,12 @@
 //! `jar` takes nothing and says so, rather than inventing grams per jar. `g`
 //! versus `kg` too: conversion is its own feature (is `oz` mass or fluid?).
 
-use super::types::Item;
+/// What a stock row holds, as far as taking from it goes.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Held<'a> {
+    pub quantity: Option<f64>,
+    pub unit: Option<&'a str>,
+}
 
 /// What happened when we tried to take `want` out of a row.
 #[derive(Debug, Clone, PartialEq)]
@@ -38,16 +43,16 @@ fn same_unit(a: Option<&str>, b: Option<&str>) -> bool {
     }
 }
 
-/// Take `want` (measured in `want_unit`) out of `item`.
+/// Take `want` (measured in `want_unit`) out of what a row holds.
 ///
 /// `want` must be positive; zero or negative takes nothing and reports
 /// [`Taken::Left`] unchanged, because "use none of it" is a no-op rather than a
 /// way to add stock back.
-pub fn take(item: &Item, want: f64, want_unit: Option<&str>) -> Taken {
-    let Some(have) = item.quantity else {
+pub fn take(held: Held<'_>, want: f64, want_unit: Option<&str>) -> Taken {
+    let Some(have) = held.quantity else {
         return Taken::Untracked;
     };
-    if !same_unit(item.unit.as_deref(), want_unit) {
+    if !same_unit(held.unit, want_unit) {
         return Taken::UnitMismatch;
     }
     // Spelled out rather than negating a comparison: a NaN must fall in here
