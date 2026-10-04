@@ -94,53 +94,6 @@ macro_rules! item_select {
     };
 }
 
-/// The `name_source` an UPDATE should write.
-///
-/// `None` from the client is not "product" — it is "no statement", and it must
-/// leave an existing choice alone. Every caller that is not the item form sends
-/// nothing here (sync, scripts, the Android app), and any of them re-saving an
-/// item would otherwise silently strip a name its owner had chosen to keep.
-async fn name_source_for_update(
-    pool: &MySqlPool,
-    user_id: &str,
-    id: u64,
-    stated: Option<ItemNameSource>,
-) -> Result<String> {
-    if let Some(s) = stated {
-        return Ok(s.to_string());
-    }
-    let existing: Option<(String,)> =
-        sqlx::query_as("SELECT name_source FROM items WHERE id = ? AND user_id = ?")
-            .bind(id)
-            .bind(user_id)
-            .fetch_optional(pool)
-            .await?;
-    Ok(existing.map_or_else(|| ItemNameSource::Product.to_string(), |(v,)| v))
-}
-
-/// The `expiry_precision` an UPDATE should write.
-///
-/// `None` is "no statement", not "day": an update that wrote `day` would re-print
-/// the invented month-end of a month-precision box as real, the fault migration
-/// 0045 exists to stop. Only the item form knows which a person picked.
-async fn expiry_precision_for_update(
-    pool: &MySqlPool,
-    user_id: &str,
-    id: u64,
-    stated: Option<ExpiryPrecision>,
-) -> Result<String> {
-    if let Some(p) = stated {
-        return Ok(p.to_string());
-    }
-    let existing: Option<(String,)> =
-        sqlx::query_as("SELECT expiry_precision FROM items WHERE id = ? AND user_id = ?")
-            .bind(id)
-            .bind(user_id)
-            .fetch_optional(pool)
-            .await?;
-    Ok(existing.map_or_else(|| ExpiryPrecision::Day.to_string(), |(v,)| v))
-}
-
 /// The catalog link for a new/updated item: an explicit `product_id` wins (it's
 /// the only route to a barcodeless shop product), else fall back to matching the
 /// barcode against the cached catalog.
@@ -317,41 +270,55 @@ pub async fn move_item(
 /// Update every field of an item. Returns the updated item, or `None` if no
 /// such item belongs to the user. Records a `moved` history row if the location
 /// changed.
+///
+/// One transaction with the row locked: the update keeps fields the caller did
+/// not state, so a value read outside the lock would be written back over a
+/// concurrent change.
 pub async fn update_item(
     pool: &MySqlPool,
     user_id: &str,
     id: u64,
     new: NewItem,
 ) -> Result<Option<Item>> {
-    let Some(existing) = get_item(pool, user_id, id).await? else {
+    let product_id = resolve_product_id(pool, &new).await?;
+    let mut tx = pool.begin().await?;
+    let held: Option<(Option<u64>,)> = sqlx::query_as(
+        "SELECT location_id FROM items \
+         WHERE id = ? AND user_id = ? AND deleted_at IS NULL FOR UPDATE",
+    )
+    .bind(id)
+    .bind(user_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some((was_at,)) = held else {
         return Ok(None);
     };
-    let product_id = resolve_product_id(pool, &new).await?;
-    let name_source = name_source_for_update(pool, user_id, id, new.name_source).await?;
-    let expiry_precision =
-        expiry_precision_for_update(pool, user_id, id, new.expiry_precision).await?;
+    // `None` for name_source or expiry_precision is "no statement", not a value:
+    // every caller but the item form sends nothing, and must leave a chosen name
+    // or a month-only expiry (migration 0045) as it is.
     sqlx::query(
-        "UPDATE items SET product_id = ?, name = ?, name_source = ?, category = ?, quantity = ?, unit = ?, \
-         expiry = ?, expiry_precision = ?, location_id = ?, barcode = ? \
+        "UPDATE items SET product_id = ?, name = ?, name_source = COALESCE(?, name_source), \
+         category = ?, quantity = ?, unit = ?, expiry = ?, \
+         expiry_precision = COALESCE(?, expiry_precision), location_id = ?, barcode = ? \
          WHERE id = ? AND user_id = ?",
     )
     .bind(product_id)
     .bind(&new.name)
-    .bind(name_source)
+    .bind(new.name_source)
     .bind(new.category)
     .bind(new.quantity)
     .bind(&new.unit)
     .bind(new.expiry)
-    .bind(expiry_precision)
+    .bind(new.expiry_precision)
     .bind(new.location_id)
     .bind(new.barcode.as_deref().map(barcode_hint))
     .bind(id)
     .bind(user_id)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
-    if existing.location_id != new.location_id {
+    if was_at != new.location_id {
         record_history(
-            pool,
+            &mut *tx,
             id,
             user_id,
             new.location_id,
@@ -360,6 +327,7 @@ pub async fn update_item(
         )
         .await?;
     }
+    tx.commit().await?;
     get_item(pool, user_id, id).await
 }
 
@@ -552,6 +520,22 @@ pub async fn restore_item(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bo
     Ok(restored)
 }
 
+/// Whether `id` names one of this user's live locations. `None`, "nowhere",
+/// always does.
+pub async fn is_own_location(pool: &MySqlPool, user_id: &str, id: Option<u64>) -> Result<bool> {
+    let Some(id) = id else {
+        return Ok(true);
+    };
+    let row: Option<(u64,)> = sqlx::query_as(
+        "SELECT id FROM locations WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
+    )
+    .bind(id)
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.is_some())
+}
+
 /// Every location id in the subtree rooted at `root` (inclusive), computed from
 /// ALL of the user's rows (deleted or not — parent links stay intact under
 /// tombstoning). Empty if `root` isn't the user's.
@@ -650,7 +634,7 @@ pub async fn item_history(
         "SELECT h.id, h.event, h.quantity, l.name AS location, \
          CAST(UNIX_TIMESTAMP(h.at) * 1000 AS SIGNED) AS at \
          FROM item_history h \
-         LEFT JOIN locations l ON l.id = h.location_id \
+         LEFT JOIN locations l ON l.id = h.location_id AND l.user_id = h.user_id \
          WHERE h.item_id = ? AND h.user_id = ? \
          ORDER BY h.at DESC, h.id DESC",
     )
@@ -661,7 +645,7 @@ pub async fn item_history(
 }
 
 async fn record_history(
-    pool: &MySqlPool,
+    conn: impl sqlx::Executor<'_, Database = sqlx::MySql>,
     item_id: u64,
     user_id: &str,
     location_id: Option<u64>,
@@ -677,7 +661,7 @@ async fn record_history(
     .bind(location_id)
     .bind(event)
     .bind(quantity)
-    .execute(pool)
+    .execute(conn)
     .await?;
     Ok(())
 }

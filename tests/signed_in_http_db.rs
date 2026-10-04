@@ -884,3 +884,81 @@ async fn restoring_an_unknown_kind_is_a_400_and_an_unknown_ref_a_404() {
     let (status, body) = call(&pool, "POST", "/api/trash/item/0/restore", None).await;
     assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
 }
+
+/// A location id arrives from the client. One that is someone else's must not
+/// become a place your things live, nor leak its name back through history.
+#[tokio::test]
+async fn somebody_elses_location_is_not_a_place_to_put_things() {
+    let pool = pool().await;
+    let other = "products-http-test-loc-other";
+    let insert_loc = |user: &'static str, name: &'static str| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query("INSERT INTO locations (user_id, kind, name) VALUES (?, 'room', ?)")
+                .bind(user)
+                .bind(name)
+                .execute(&pool)
+                .await
+                .unwrap()
+                .last_insert_id()
+        }
+    };
+    let theirs = insert_loc(other, "Their secret room").await;
+    let mine = insert_loc(SIGNED_IN_USER, "My kitchen").await;
+    let item = |loc: u64| serde_json::json!({ "name": "Jar", "location_id": loc });
+
+    let (status, body) = call(&pool, "POST", "/api/items", Some(item(theirs))).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "create: {body}");
+
+    let (status, created) = call(&pool, "POST", "/api/items", Some(item(mine))).await;
+    assert_eq!(status, StatusCode::OK, "{created}");
+    let id = created["id"].as_u64().unwrap();
+    let (status, body) = call(
+        &pool,
+        "PATCH",
+        &format!("/api/items/{id}"),
+        Some(item(theirs)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "update: {body}");
+    let move_to = serde_json::json!({ "location_id": theirs });
+    let (status, body) = call(
+        &pool,
+        "POST",
+        &format!("/api/items/{id}/move"),
+        Some(move_to),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "move: {body}");
+    let child = serde_json::json!({ "kind": "cupboard", "name": "Mine", "parent_id": theirs });
+    let (status, body) = call(&pool, "POST", "/api/locations", Some(child)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "parent: {body}");
+
+    // A history row pointing there (written before the guard) names nothing.
+    sqlx::query(
+        "INSERT INTO item_history (item_id, user_id, location_id, event) VALUES (?, ?, ?, 'moved')",
+    )
+    .bind(id)
+    .bind(SIGNED_IN_USER)
+    .bind(theirs)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (_, history) = call(&pool, "GET", &format!("/api/items/{id}/history"), None).await;
+    assert!(
+        !history.to_string().contains("Their secret room"),
+        "{history}"
+    );
+    let (status, moved) = call(
+        &pool,
+        "POST",
+        &format!("/api/items/{id}/move"),
+        Some(serde_json::json!({ "location_id": mine })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "your own place still works: {moved}"
+    );
+}

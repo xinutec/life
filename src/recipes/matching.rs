@@ -28,31 +28,29 @@ pub(crate) fn stock_for<'a>(ingredient: &RecipeIngredient, inventory: &'a [Item]
         .collect()
 }
 
-/// Whether the inventory satisfies one ingredient. When the ingredient gives a
-/// quantity AND some stock of the same unit also gives quantities, the summed
-/// stock must meet the amount; otherwise presence of a match is enough.
+/// Whether the inventory satisfies one ingredient. A row used down to zero is
+/// "we have none", not a match. When the ingredient gives a quantity and some
+/// stock in the same unit (no unit on both sides counts) gives one too, the
+/// summed stock must meet it; otherwise presence of a match is enough.
 fn is_satisfied(ingredient: &RecipeIngredient, inventory: &[Item]) -> bool {
-    let matches = stock_for(ingredient, inventory);
+    let matches: Vec<&Item> = stock_for(ingredient, inventory)
+        .into_iter()
+        .filter(|it| it.quantity.is_none_or(|q| q > 0.0))
+        .collect();
     if matches.is_empty() {
         return false;
     }
-    match (ingredient.quantity, ingredient.unit.as_deref()) {
-        (Some(needed), Some(unit)) => {
-            let want_unit = norm(unit);
-            let available: f64 = matches
-                .iter()
-                .filter(|it| it.unit.as_deref().map(norm).as_deref() == Some(want_unit.as_str()))
-                .filter_map(|it| it.quantity)
-                .sum();
-            // No comparable-unit quantities on hand → fall back to presence.
-            if available == 0.0 {
-                true
-            } else {
-                available >= needed
-            }
-        }
-        _ => true,
-    }
+    let Some(needed) = ingredient.quantity else {
+        return true;
+    };
+    let want_unit = ingredient.unit.as_deref().map(norm);
+    let comparable: Vec<f64> = matches
+        .iter()
+        .filter(|it| it.unit.as_deref().map(norm) == want_unit)
+        .filter_map(|it| it.quantity)
+        .collect();
+    // Nothing measured in the recipe's unit: presence is all we can judge.
+    comparable.is_empty() || comparable.iter().sum::<f64>() >= needed
 }
 
 /// The ingredients NOT covered by current inventory — i.e. the shopping list.

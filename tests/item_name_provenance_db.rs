@@ -280,3 +280,51 @@ async fn the_trash_shows_an_item_under_the_name_it_was_last_seen_under() {
         .await
         .expect("clean up");
 }
+
+/// A save that says nothing about the name must not restore a provenance it read
+/// before a concurrent write landed. A second transaction holds the row, so a
+/// read outside the update's own lock deterministically sees the old value.
+#[tokio::test]
+async fn a_save_does_not_revert_a_concurrent_rename() {
+    let pool = db::connect(&common::test_db_url()).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+    const USER: &str = "test-user-item-race";
+    sqlx::query("DELETE FROM items WHERE user_id = ?")
+        .bind(USER)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let it = repo::create_item(&pool, USER, item("Oregano", None))
+        .await
+        .unwrap();
+
+    // Another device is mid-way through making the name the person's own.
+    let mut writer = pool.begin().await.unwrap();
+    sqlx::query("SELECT id FROM items WHERE id = ? FOR UPDATE")
+        .bind(it.id)
+        .fetch_one(&mut *writer)
+        .await
+        .unwrap();
+    let saving = tokio::spawn({
+        let pool = pool.clone();
+        async move { repo::update_item(&pool, USER, it.id, item("Oregano", None)).await }
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    sqlx::query("UPDATE items SET name_source = 'user' WHERE id = ?")
+        .bind(it.id)
+        .execute(&mut *writer)
+        .await
+        .unwrap();
+    writer.commit().await.unwrap();
+    saving.await.unwrap().unwrap().expect("exists");
+
+    let (source,): (String,) = sqlx::query_as("SELECT name_source FROM items WHERE id = ?")
+        .bind(it.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        source, "user",
+        "the save wrote back a provenance read before the lock"
+    );
+}

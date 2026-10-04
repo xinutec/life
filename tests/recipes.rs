@@ -127,3 +127,35 @@ fn a_link_to_a_different_product_is_not_a_match() {
     jar.product_id = Some(ProductId(99));
     assert!(!can_cook(&recipe, &[jar]));
 }
+
+#[test]
+fn an_emptied_row_is_none_not_some() {
+    // A row used down to 0 is kept on purpose: it is how the cupboard says "we
+    // have none", so it must put the thing back on the list, whatever the unit.
+    for (recipe, stock) in [
+        (
+            ing("flour", Some(200.0), Some("g")),
+            item("flour", Some(0.0), Some("g")),
+        ),
+        (
+            ing("paprika", Some(20.0), Some("g")),
+            item("paprika", Some(0.0), Some("jar")),
+        ),
+        (ing("salt", None, None), item("salt", Some(0.0), None)),
+    ] {
+        let recipe = [recipe];
+        assert!(
+            !can_cook(&recipe, std::slice::from_ref(&stock)),
+            "{stock:?}"
+        );
+        assert_eq!(shopping_list(&recipe, &[stock]).len(), 1);
+    }
+}
+
+#[test]
+fn a_count_is_compared_like_any_unit() {
+    // Two eggs against one: no unit on either side is the same unit.
+    let recipe = [ing("eggs", Some(2.0), None)];
+    assert!(!can_cook(&recipe, &[item("eggs", Some(1.0), None)]));
+    assert!(can_cook(&recipe, &[item("eggs", Some(6.0), None)]));
+}

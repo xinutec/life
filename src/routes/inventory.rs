@@ -31,6 +31,7 @@ pub async fn create_location(
     AuthUser(user): AuthUser,
     Json(body): Json<NewLocation>,
 ) -> Result<Json<Location>, AppError> {
+    own_location(&app, &user.user_id, body.parent_id).await?;
     Ok(Json(
         repo::create_location(&app.pool, &user.user_id, body).await?,
     ))
@@ -48,9 +49,20 @@ pub async fn create_item(
     AuthUser(user): AuthUser,
     Json(body): Json<NewItem>,
 ) -> Result<Json<Item>, AppError> {
+    own_location(&app, &user.user_id, body.location_id).await?;
     Ok(Json(
         repo::create_item(&app.pool, &user.user_id, body).await?,
     ))
+}
+
+/// A location id comes from the client, so it must be one of this user's live
+/// locations: anything else would file your things under somebody else's room.
+async fn own_location(app: &AppState, user_id: &str, id: Option<u64>) -> Result<(), AppError> {
+    if repo::is_own_location(&app.pool, user_id, id).await? {
+        Ok(())
+    } else {
+        Err(AppError::BadRequest("no such location".into()))
+    }
 }
 
 #[derive(Deserialize)]
@@ -64,6 +76,7 @@ pub async fn update_item(
     Path(id): Path<u64>,
     Json(body): Json<NewItem>,
 ) -> Result<Json<Item>, AppError> {
+    own_location(&app, &user.user_id, body.location_id).await?;
     repo::update_item(&app.pool, &user.user_id, id, body)
         .await?
         .map(Json)
@@ -284,6 +297,7 @@ pub async fn move_item(
     Path(id): Path<u64>,
     Json(body): Json<MoveBody>,
 ) -> Result<Json<Item>, AppError> {
+    own_location(&app, &user.user_id, body.location_id).await?;
     repo::move_item(&app.pool, &user.user_id, id, body.location_id)
         .await?
         .map(Json)
