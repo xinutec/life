@@ -7,7 +7,7 @@ mod common;
 
 use life::db;
 use life::inventory::repo;
-use life::inventory::types::{ItemCategory, NewItem};
+use life::inventory::types::{ItemCategory, ItemId, LocationId, NewItem};
 
 const USER: &str = "test-user-history-refused";
 
@@ -17,7 +17,7 @@ const USER: &str = "test-user-history-refused";
 /// each test for its whole run.
 static DDL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-fn jar(location_id: Option<u64>) -> NewItem {
+fn jar(location_id: Option<LocationId>) -> NewItem {
     NewItem {
         name: "Jar".into(),
         category: ItemCategory::Food,
@@ -32,7 +32,7 @@ fn jar(location_id: Option<u64>) -> NewItem {
     }
 }
 
-async fn location(pool: &sqlx::MySqlPool, name: &str) -> u64 {
+async fn location(pool: &sqlx::MySqlPool, name: &str) -> LocationId {
     sqlx::query("INSERT INTO locations (user_id, kind, name) VALUES (?, 'room', ?)")
         .bind(USER)
         .bind(name)
@@ -40,6 +40,7 @@ async fn location(pool: &sqlx::MySqlPool, name: &str) -> u64 {
         .await
         .unwrap()
         .last_insert_id()
+        .into()
 }
 
 async fn refuse_history(pool: &sqlx::MySqlPool, on: bool) {
@@ -60,7 +61,7 @@ async fn refuse_history(pool: &sqlx::MySqlPool, on: bool) {
     }
 }
 
-async fn live_items(pool: &sqlx::MySqlPool) -> Vec<(u64, Option<u64>)> {
+async fn live_items(pool: &sqlx::MySqlPool) -> Vec<(ItemId, Option<LocationId>)> {
     sqlx::query_as("SELECT id, location_id FROM items WHERE user_id = ? AND deleted_at IS NULL")
         .bind(USER)
         .fetch_all(pool)

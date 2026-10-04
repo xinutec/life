@@ -10,7 +10,11 @@ use life::db;
 use life::inventory::repo;
 use life::inventory::types::{ItemCategory, ItemEvent, LocationKind, NewItem, NewLocation};
 
-fn loc(kind: LocationKind, name: &str, parent: Option<u64>) -> NewLocation {
+fn loc(
+    kind: LocationKind,
+    name: &str,
+    parent: Option<life::inventory::types::LocationId>,
+) -> NewLocation {
     NewLocation {
         kind,
         name: name.into(),
@@ -164,7 +168,7 @@ async fn a_history_is_only_ever_its_owners() {
             .is_empty()
     );
     assert!(
-        repo::item_history(&pool, owner, 9_999_999)
+        repo::item_history(&pool, owner, life::inventory::types::ItemId(9_999_999))
             .await
             .unwrap()
             .is_empty(),

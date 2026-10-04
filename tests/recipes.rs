@@ -23,7 +23,7 @@ fn linked(mut ing: RecipeIngredient, product_id: u64) -> RecipeIngredient {
 
 fn item(name: &str, qty: Option<f64>, unit: Option<&str>) -> Item {
     Item {
-        id: 0,
+        id: life::inventory::types::ItemId(0),
         product_id: None,
         name: name.into(),
         brand: None,

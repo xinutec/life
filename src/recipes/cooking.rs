@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use super::matching::{norm, stock_for};
 use super::types::{Recipe, RecipeIngredient};
-use crate::inventory::types::Item;
+use crate::inventory::types::{Item, ItemId};
 use serde::Serialize;
 use ts_rs::TS;
 
@@ -19,7 +19,7 @@ use ts_rs::TS;
 #[ts(export)]
 pub struct Take {
     #[ts(type = "number")]
-    pub item_id: u64,
+    pub item_id: ItemId,
     /// What the row is called, so the report can name it without a second read.
     pub name: String,
     pub amount: f64,
@@ -84,7 +84,7 @@ pub struct CookedLine {
 fn drain_order<'a>(
     matches: &[&'a Item],
     unit: Option<&str>,
-    remaining: &HashMap<u64, f64>,
+    remaining: &HashMap<ItemId, f64>,
 ) -> Vec<&'a Item> {
     let want = unit.map(norm);
     let mut usable: Vec<&Item> = matches
@@ -106,7 +106,7 @@ fn drain_order<'a>(
 }
 
 /// What a row holds at this point in the plan.
-fn left_of(item: &Item, remaining: &HashMap<u64, f64>) -> f64 {
+fn left_of(item: &Item, remaining: &HashMap<ItemId, f64>) -> f64 {
     remaining
         .get(&item.id)
         .copied()
@@ -117,7 +117,7 @@ fn left_of(item: &Item, remaining: &HashMap<u64, f64>) -> f64 {
 fn plan_line(
     ingredient: &RecipeIngredient,
     inventory: &[Item],
-    remaining: &mut HashMap<u64, f64>,
+    remaining: &mut HashMap<ItemId, f64>,
 ) -> LineOutcome {
     let matches = stock_for(ingredient, inventory);
     if matches.is_empty() {
@@ -169,7 +169,7 @@ fn plan_line(
 pub fn plan(recipe: &Recipe, inventory: &[Item]) -> Vec<CookedLine> {
     // Threaded across lines so two ingredients naming the same thing drain it
     // once between them rather than twice each from the original amount.
-    let mut remaining: HashMap<u64, f64> = HashMap::new();
+    let mut remaining: HashMap<ItemId, f64> = HashMap::new();
     recipe
         .ingredients
         .iter()
@@ -200,8 +200,8 @@ fn takes(lines: &[CookedLine]) -> impl Iterator<Item = &Take> {
 
 /// Every row the plan touches and what it should hold afterwards, one entry per
 /// row — the last word wins, which is the running total `plan` already threaded.
-pub fn settled(lines: &[CookedLine]) -> Vec<(u64, f64)> {
-    let mut out: Vec<(u64, f64)> = Vec::new();
+pub fn settled(lines: &[CookedLine]) -> Vec<(ItemId, f64)> {
+    let mut out: Vec<(ItemId, f64)> = Vec::new();
     for take in takes(lines) {
         match out.iter_mut().find(|(id, _)| *id == take.item_id) {
             Some(entry) => entry.1 = take.left,
@@ -212,8 +212,8 @@ pub fn settled(lines: &[CookedLine]) -> Vec<(u64, f64)> {
 }
 
 /// How much came off each row in total — what the history rows record.
-pub fn taken_per_row(lines: &[CookedLine]) -> Vec<(u64, f64)> {
-    let mut out: Vec<(u64, f64)> = Vec::new();
+pub fn taken_per_row(lines: &[CookedLine]) -> Vec<(ItemId, f64)> {
+    let mut out: Vec<(ItemId, f64)> = Vec::new();
     for take in takes(lines) {
         match out.iter_mut().find(|(id, _)| *id == take.item_id) {
             Some(entry) => entry.1 += take.amount,

@@ -4,7 +4,8 @@ use anyhow::{Result, bail};
 use chrono::{DateTime, Months, NaiveTime, TimeZone, Utc};
 use sqlx::MySqlPool;
 
-use super::types::{NewPurchase, Purchase};
+use super::types::{NewPurchase, Purchase, PurchaseId};
+use crate::inventory::types::ItemId;
 use crate::products::ids::ProductId;
 use crate::products::prices::{UnitMeasure, UnitPrice};
 
@@ -14,7 +15,7 @@ use crate::products::prices::{UnitMeasure, UnitPrice};
 pub struct BoughtItem<'a> {
     /// The item the buy created. Always known at the call site, and the only
     /// identifier that is — see `Purchase::item_id`.
-    pub id: u64,
+    pub id: ItemId,
     pub product_id: Option<ProductId>,
     pub barcode: Option<&'a str>,
     pub name: &'a str,
@@ -32,7 +33,7 @@ pub async fn record(
     user_id: &str,
     item: &BoughtItem<'_>,
     p: &NewPurchase,
-) -> Result<u64> {
+) -> Result<PurchaseId> {
     let shop = p.shop.trim();
     if shop.is_empty() {
         bail!("a purchase needs a shop");
@@ -66,7 +67,7 @@ pub async fn record(
     .bind(p.warranty_months)
     .execute(pool)
     .await?;
-    Ok(res.last_insert_id())
+    Ok(res.last_insert_id().into())
 }
 
 /// Fifty years. Not a technical limit — the point past which a "warranty" is
@@ -98,7 +99,7 @@ fn bought_at_from(on: Option<chrono::NaiveDate>) -> Result<DateTime<Utc>> {
 /// Unlike [`history`] ("this THING, ever", keyed on the catalogue), keyed on the
 /// item: the only way to reach a purchase from a hand-typed buy-list row, which
 /// has no barcode and no product (migration 0044).
-pub async fn for_item(pool: &MySqlPool, user_id: &str, item_id: u64) -> Result<Vec<Purchase>> {
+pub async fn for_item(pool: &MySqlPool, user_id: &str, item_id: ItemId) -> Result<Vec<Purchase>> {
     let rows = sqlx::query_as::<_, Purchase>(
         "SELECT id, item_id, product_id, barcode, name, shop, amount_minor, currency, \
          quantity, unit, bought_at, warranty_months FROM purchases \
@@ -115,7 +116,12 @@ pub async fn for_item(pool: &MySqlPool, user_id: &str, item_id: u64) -> Result<V
 /// Move one purchase to the trash; see migration 0048 for why it is soft.
 /// Returns whether a live row of this user's, on this item, was removed. Scoped
 /// on `item_id` too, so a purchase id from a different item 404s.
-pub async fn remove(pool: &MySqlPool, user_id: &str, item_id: u64, id: u64) -> Result<bool> {
+pub async fn remove(
+    pool: &MySqlPool,
+    user_id: &str,
+    item_id: ItemId,
+    id: PurchaseId,
+) -> Result<bool> {
     let res = sqlx::query(
         "UPDATE purchases SET deleted_at = NOW() \
          WHERE id = ? AND user_id = ? AND item_id = ? AND deleted_at IS NULL",
@@ -129,7 +135,7 @@ pub async fn remove(pool: &MySqlPool, user_id: &str, item_id: u64, id: u64) -> R
 }
 
 /// Bring a removed purchase back from the trash.
-pub async fn restore(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
+pub async fn restore(pool: &MySqlPool, user_id: &str, id: PurchaseId) -> Result<bool> {
     let res = sqlx::query(
         "UPDATE purchases SET deleted_at = NULL \
          WHERE id = ? AND user_id = ? AND deleted_at IS NOT NULL",

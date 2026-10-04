@@ -6,6 +6,11 @@ use crate::media::{self, Media};
 use serde::Serialize;
 use ts_rs::TS;
 
+crate::row_id! {
+    /// `item_files.id` — one attached file.
+    FileId
+}
+
 /// An attachment's metadata, WITHOUT its bytes.
 ///
 /// Listing and downloading are separate routes for this reason: a list of five
@@ -15,14 +20,14 @@ use ts_rs::TS;
 #[ts(export)]
 pub struct ItemFile {
     #[ts(type = "number")]
-    pub id: u64,
+    pub id: FileId,
     #[ts(type = "number")]
-    pub item_id: u64,
+    pub item_id: crate::inventory::types::ItemId,
     /// Set when this file is evidence of a particular purchase — a receipt.
     /// `None` for a manual, which belongs to the thing rather than to any one
     /// time you bought it.
     #[ts(type = "number | null")]
-    pub purchase_id: Option<u64>,
+    pub purchase_id: Option<crate::purchases::types::PurchaseId>,
     pub name: String,
     pub mime: String,
     #[ts(type = "number")]

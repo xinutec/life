@@ -35,17 +35,22 @@ pub struct NewPurchase {
     pub warranty_months: Option<i32>,
 }
 
+crate::row_id! {
+    /// `purchases.id` — one time something was paid for.
+    PurchaseId
+}
+
 /// A recorded purchase, as it reads back.
 #[derive(Debug, Clone, PartialEq, Serialize, TS, sqlx::FromRow)]
 #[ts(export)]
 pub struct Purchase {
     #[ts(type = "number")]
-    pub id: u64,
+    pub id: PurchaseId,
     pub product_id: Option<ProductId>,
     /// The cupboard item this bought — the one key that always exists, since a
     /// hand-typed buy-list row has no barcode and no product.
     #[ts(type = "number | null")]
-    pub item_id: Option<u64>,
+    pub item_id: Option<crate::inventory::types::ItemId>,
     pub barcode: Option<String>,
     /// What it was called when it was bought — the one field no later
     /// correction to the catalogue can invalidate.

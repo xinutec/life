@@ -41,7 +41,7 @@ async fn fresh(pool: &sqlx::MySqlPool, user: &str) {
         .expect("clean");
 }
 
-async fn lows(pool: &sqlx::MySqlPool, item_id: u64) -> i64 {
+async fn lows(pool: &sqlx::MySqlPool, item_id: life::inventory::types::ItemId) -> i64 {
     sqlx::query_scalar("SELECT COUNT(*) FROM item_history WHERE item_id = ? AND event = 'low'")
         .bind(item_id)
         .fetch_one(pool)
@@ -92,7 +92,9 @@ async fn an_unknown_item_says_so_rather_than_writing_a_row() {
     let pool = connect().await;
     let user = "test-user-low-missing";
     assert!(
-        !repo::mark_low(&pool, user, 9_999_999).await.expect("query"),
+        !repo::mark_low(&pool, user, life::inventory::types::ItemId(9_999_999))
+            .await
+            .expect("query"),
         "no such item"
     );
 }

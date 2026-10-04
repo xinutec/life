@@ -4,11 +4,13 @@
 use anyhow::Result;
 use sqlx::MySqlPool;
 
-use super::types::ItemFile;
+use super::types::{FileId, ItemFile};
+use crate::inventory::types::ItemId;
+use crate::purchases::types::PurchaseId;
 
 /// Metadata for everything attached to one item, newest first. No blobs — see
 /// [`ItemFile`] for why the list and the download are separate.
-pub async fn for_item(pool: &MySqlPool, user_id: &str, item_id: u64) -> Result<Vec<ItemFile>> {
+pub async fn for_item(pool: &MySqlPool, user_id: &str, item_id: ItemId) -> Result<Vec<ItemFile>> {
     let rows = sqlx::query_as::<_, ItemFile>(
         "SELECT id, item_id, purchase_id, name, mime, size_bytes, created_at \
          FROM item_files WHERE user_id = ? AND item_id = ? \
@@ -28,12 +30,12 @@ pub async fn for_item(pool: &MySqlPool, user_id: &str, item_id: u64) -> Result<V
 pub async fn add(
     pool: &MySqlPool,
     user_id: &str,
-    item_id: u64,
-    purchase_id: Option<u64>,
+    item_id: ItemId,
+    purchase_id: Option<PurchaseId>,
     name: &str,
     mime: &str,
     bytes: &[u8],
-) -> Result<u64> {
+) -> Result<FileId> {
     let res = sqlx::query(
         "INSERT INTO item_files (user_id, item_id, purchase_id, name, mime, size_bytes, bytes) \
          VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -47,7 +49,7 @@ pub async fn add(
     .bind(bytes)
     .execute(pool)
     .await?;
-    Ok(res.last_insert_id())
+    Ok(res.last_insert_id().into())
 }
 
 /// The bytes and their mime, for serving one file back.
@@ -58,8 +60,8 @@ pub async fn add(
 pub async fn read(
     pool: &MySqlPool,
     user_id: &str,
-    item_id: u64,
-    id: u64,
+    item_id: ItemId,
+    id: FileId,
 ) -> Result<Option<(String, String, Vec<u8>)>> {
     let row: Option<(String, String, Vec<u8>)> = sqlx::query_as(
         "SELECT name, mime, bytes FROM item_files \
@@ -74,7 +76,7 @@ pub async fn read(
 }
 
 /// Remove one attachment, hard. Returns whether a row was removed.
-pub async fn remove(pool: &MySqlPool, user_id: &str, item_id: u64, id: u64) -> Result<bool> {
+pub async fn remove(pool: &MySqlPool, user_id: &str, item_id: ItemId, id: FileId) -> Result<bool> {
     let res = sqlx::query("DELETE FROM item_files WHERE id = ? AND user_id = ? AND item_id = ?")
         .bind(id)
         .bind(user_id)

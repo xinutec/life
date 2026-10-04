@@ -4,7 +4,7 @@
 //! what it insists on telling you about.
 
 use chrono::NaiveDate;
-use life::inventory::types::{ExpiryPrecision, Item, ItemCategory};
+use life::inventory::types::{ExpiryPrecision, Item, ItemCategory, ItemId};
 use life::recipes::cooking::{
     CookedLine, LineOutcome, Take, Untouched, plan, settled, taken_per_row,
 };
@@ -12,7 +12,7 @@ use life::recipes::types::{Recipe, RecipeIngredient};
 
 fn item(id: u64, name: &str, quantity: Option<f64>, unit: Option<&str>) -> Item {
     Item {
-        id,
+        id: ItemId(id),
         product_id: None,
         name: name.into(),
         brand: None,
@@ -71,14 +71,14 @@ fn an_ingredient_comes_off_the_matching_row() {
         outcome(&lines, "flour"),
         LineOutcome::Took {
             from: vec![Take {
-                item_id: 1,
+                item_id: ItemId(1),
                 name: "flour".into(),
                 amount: 200.0,
                 left: 750.0
             }]
         }
     );
-    assert_eq!(settled(&lines), [(1, 750.0)]);
+    assert_eq!(settled(&lines), [(ItemId(1), 750.0)]);
 }
 
 #[test]
@@ -157,13 +157,13 @@ fn a_line_spreads_across_rows_until_it_is_satisfied() {
         LineOutcome::Took {
             from: vec![
                 Take {
-                    item_id: 2,
+                    item_id: ItemId(2),
                     name: "flour".into(),
                     amount: 300.0,
                     left: 0.0
                 },
                 Take {
-                    item_id: 1,
+                    item_id: ItemId(1),
                     name: "flour".into(),
                     amount: 400.0,
                     left: 100.0
@@ -190,7 +190,7 @@ fn the_soonest_to_expire_goes_first() {
         outcome(&lines, "cream"),
         LineOutcome::Took {
             from: vec![Take {
-                item_id: 2,
+                item_id: ItemId(2),
                 name: "cream".into(),
                 amount: 200.0,
                 left: 300.0
@@ -209,7 +209,7 @@ fn cooking_more_than_you_had_empties_the_rows_and_says_by_how_much() {
         outcome(&lines, "flour"),
         LineOutcome::Short {
             from: vec![Take {
-                item_id: 1,
+                item_id: ItemId(1),
                 name: "flour".into(),
                 amount: 950.0,
                 left: 0.0
@@ -219,7 +219,7 @@ fn cooking_more_than_you_had_empties_the_rows_and_says_by_how_much() {
     );
     assert_eq!(
         settled(&lines),
-        [(1, 0.0)],
+        [(ItemId(1), 0.0)],
         "the row is emptied, not skipped"
     );
 }
@@ -241,7 +241,7 @@ fn two_lines_naming_the_same_thing_drain_it_once_between_them() {
         takes[0].outcome,
         LineOutcome::Took {
             from: vec![Take {
-                item_id: 1,
+                item_id: ItemId(1),
                 name: "flour".into(),
                 amount: 400.0,
                 left: 100.0
@@ -252,7 +252,7 @@ fn two_lines_naming_the_same_thing_drain_it_once_between_them() {
         takes[1].outcome,
         LineOutcome::Short {
             from: vec![Take {
-                item_id: 1,
+                item_id: ItemId(1),
                 name: "flour".into(),
                 amount: 100.0,
                 left: 0.0
@@ -261,10 +261,14 @@ fn two_lines_naming_the_same_thing_drain_it_once_between_them() {
         },
         "the second line sees what the first already took"
     );
-    assert_eq!(settled(&lines), [(1, 0.0)], "one row, one final amount");
+    assert_eq!(
+        settled(&lines),
+        [(ItemId(1), 0.0)],
+        "one row, one final amount"
+    );
     assert_eq!(
         taken_per_row(&lines),
-        [(1, 500.0)],
+        [(ItemId(1), 500.0)],
         "the history records what came off the bag in total"
     );
 }
@@ -284,7 +288,7 @@ fn an_empty_row_is_not_drawn_from() {
         outcome(&lines, "flour"),
         LineOutcome::Took {
             from: vec![Take {
-                item_id: 2,
+                item_id: ItemId(2),
                 name: "flour".into(),
                 amount: 100.0,
                 left: 300.0

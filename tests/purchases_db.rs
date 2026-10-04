@@ -29,7 +29,11 @@ async fn product(pool: &sqlx::MySqlPool, barcode: &str, name: &str) -> ProductId
 
 /// A bare cupboard row to hang a purchase on. Real, because `purchases.item_id`
 /// is a foreign key — a made-up id would be rejected, which is the point of it.
-async fn item_row(pool: &sqlx::MySqlPool, user: &str, name: &str) -> u64 {
+async fn item_row(
+    pool: &sqlx::MySqlPool,
+    user: &str,
+    name: &str,
+) -> life::inventory::types::ItemId {
     sqlx::query("INSERT INTO items (user_id, name, category) VALUES (?, ?, 'food')")
         .bind(user)
         .bind(name)
@@ -37,6 +41,7 @@ async fn item_row(pool: &sqlx::MySqlPool, user: &str, name: &str) -> u64 {
         .await
         .expect("insert item")
         .last_insert_id()
+        .into()
 }
 
 fn paid(shop: &str, amount_minor: i64) -> NewPurchase {
@@ -522,7 +527,7 @@ async fn a_removed_purchase_is_in_the_trash_with_its_receipt_and_comes_back() {
     let back = repo::for_item(&pool, user, id).await.expect("for_item");
     assert_eq!(back.len(), 1);
     assert_eq!(back[0].amount_minor, 2999);
-    let (linked,): (Option<u64>,) =
+    let (linked,): (Option<life::purchases::types::PurchaseId>,) =
         sqlx::query_as("SELECT purchase_id FROM item_files WHERE id = ?")
             .bind(receipt)
             .fetch_one(&pool)

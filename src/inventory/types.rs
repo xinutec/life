@@ -83,17 +83,27 @@ str_enum! {
         Other => "other",
     }
 }
+crate::row_id! {
+    /// `locations.id` — a place in the house tree.
+    LocationId
+}
+
+crate::row_id! {
+    /// `items.id` — one stock row.
+    ItemId
+}
+
 /// A spatial node as returned by the API. (Exported to TS as `Loc`.)
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export, rename = "Loc")]
 pub struct Location {
     // ids are JSON numbers on the wire; ts-rs would otherwise emit `bigint`.
     #[ts(type = "number")]
-    pub id: u64,
+    pub id: LocationId,
     pub kind: LocationKind,
     pub name: String,
     #[ts(type = "number | null")]
-    pub parent_id: Option<u64>,
+    pub parent_id: Option<LocationId>,
     pub sort_order: i32,
     #[ts(type = "unknown | null")]
     pub position: Option<serde_json::Value>,
@@ -106,7 +116,7 @@ pub struct Location {
 #[ts(export)]
 pub struct Item {
     #[ts(type = "number")]
-    pub id: u64,
+    pub id: ItemId,
     pub product_id: Option<ProductId>,
     pub name: String,
     pub brand: Option<String>,
@@ -118,7 +128,7 @@ pub struct Item {
     /// Meaningless when `expiry` is `None`.
     pub expiry_precision: ExpiryPrecision,
     #[ts(type = "number | null")]
-    pub location_id: Option<u64>,
+    pub location_id: Option<LocationId>,
     pub barcode: Option<String>,
     /// True when the linked product has a cached image
     /// (served from /api/products/{barcode}/image).
@@ -194,7 +204,7 @@ pub struct UseItem {
 pub struct NewLocation {
     pub kind: LocationKind,
     pub name: String,
-    pub parent_id: Option<u64>,
+    pub parent_id: Option<LocationId>,
     #[serde(default)]
     pub sort_order: i32,
     pub position: Option<serde_json::Value>,
@@ -217,7 +227,7 @@ pub struct NewItem {
     /// nothing, and must not turn an invented month-end into a printed day.
     #[serde(default)]
     pub expiry_precision: Option<ExpiryPrecision>,
-    pub location_id: Option<u64>,
+    pub location_id: Option<LocationId>,
     #[serde(default)]
     pub barcode: Option<String>,
     /// Explicit catalog link. Takes precedence over barcode-based resolution and

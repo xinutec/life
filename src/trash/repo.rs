@@ -103,11 +103,11 @@ pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<TrashEntry>> {
 pub async fn restore(pool: &MySqlPool, user_id: &str, kind: TrashKind, r: &str) -> Result<bool> {
     match kind {
         TrashKind::Item => match r.parse::<u64>() {
-            Ok(id) => inventory_repo::restore_item(pool, user_id, id).await,
+            Ok(id) => inventory_repo::restore_item(pool, user_id, id.into()).await,
             Err(_) => Ok(false),
         },
         TrashKind::Location => match r.parse::<u64>() {
-            Ok(id) => inventory_repo::restore_location(pool, user_id, id).await,
+            Ok(id) => inventory_repo::restore_location(pool, user_id, id.into()).await,
             Err(_) => Ok(false),
         },
         TrashKind::Recipe => match r.parse::<u64>() {
@@ -118,7 +118,7 @@ pub async fn restore(pool: &MySqlPool, user_id: &str, kind: TrashKind, r: &str) 
         TrashKind::Todo => todo_repo::restore(pool, user_id, r).await,
         TrashKind::Wellbeing => wellbeing_repo::restore(pool, user_id, r).await,
         TrashKind::Purchase => match r.parse::<u64>() {
-            Ok(id) => purchases_repo::restore(pool, user_id, id).await,
+            Ok(id) => purchases_repo::restore(pool, user_id, id.into()).await,
             Err(_) => Ok(false),
         },
     }

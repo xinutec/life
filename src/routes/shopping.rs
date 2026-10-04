@@ -67,7 +67,7 @@ pub async fn buy(
             unit: item.unit.as_deref(),
         };
         if let Err(e) = purchases_repo::record(&app.pool, &user.user_id, &bought, p).await {
-            tracing::warn!(error = %e, item = item.id, "purchase not recorded; the buy stands");
+            tracing::warn!(error = %e, item = %item.id, "purchase not recorded; the buy stands");
         }
     }
     Ok(Json(item))

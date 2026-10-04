@@ -224,7 +224,7 @@ async fn a_changed_picture_is_served_at_once_and_an_unchanged_one_is_a_304() {
 
 const SIGNED_IN_USER: &str = "products-http-test";
 
-async fn item_for(pool: &MySqlPool, user: &str, name: &str) -> u64 {
+async fn item_for(pool: &MySqlPool, user: &str, name: &str) -> life::inventory::types::ItemId {
     sqlx::query("INSERT INTO items (user_id, name, category) VALUES (?, ?, 'appliance')")
         .bind(user)
         .bind(name)
@@ -232,9 +232,15 @@ async fn item_for(pool: &MySqlPool, user: &str, name: &str) -> u64 {
         .await
         .expect("insert item")
         .last_insert_id()
+        .into()
 }
 
-async fn purchase_on(pool: &MySqlPool, user: &str, item: u64, name: &str) -> u64 {
+async fn purchase_on(
+    pool: &MySqlPool,
+    user: &str,
+    item: life::inventory::types::ItemId,
+    name: &str,
+) -> life::purchases::types::PurchaseId {
     let bought = life::purchases::repo::BoughtItem {
         id: item,
         product_id: None,
@@ -255,7 +261,11 @@ async fn purchase_on(pool: &MySqlPool, user: &str, item: u64, name: &str) -> u64
         .expect("record purchase")
 }
 
-async fn attach(pool: &MySqlPool, item: u64, purchase: u64) -> StatusCode {
+async fn attach(
+    pool: &MySqlPool,
+    item: life::inventory::types::ItemId,
+    purchase: life::purchases::types::PurchaseId,
+) -> StatusCode {
     let req = Request::post(format!("/api/items/{item}/files"))
         .header(header::COOKIE, signed_in(pool).await)
         .header(header::CONTENT_TYPE, "application/pdf")
@@ -590,7 +600,13 @@ async fn a_scanned_upc_finds_the_product_stored_under_its_ean() {
 }
 
 /// A stock row holding `quantity` of `unit`, for `user`.
-async fn stock(pool: &MySqlPool, user: &str, name: &str, quantity: f64, unit: Option<&str>) -> u64 {
+async fn stock(
+    pool: &MySqlPool,
+    user: &str,
+    name: &str,
+    quantity: f64,
+    unit: Option<&str>,
+) -> life::inventory::types::ItemId {
     sqlx::query(
         "INSERT INTO items (user_id, name, category, quantity, unit) VALUES (?, ?, 'food', ?, ?)",
     )
@@ -602,6 +618,7 @@ async fn stock(pool: &MySqlPool, user: &str, name: &str, quantity: f64, unit: Op
     .await
     .expect("insert stock")
     .last_insert_id()
+    .into()
 }
 
 #[tokio::test]
@@ -619,7 +636,7 @@ async fn using_stock_never_quietly_leaves_the_number_wrong() {
         Some("g"),
     )
     .await;
-    let take = |id: u64, quantity: f64, unit: &str| {
+    let take = |id: life::inventory::types::ItemId, quantity: f64, unit: &str| {
         let pool = pool.clone();
         let body = serde_json::json!({ "quantity": quantity, "unit": unit });
         async move { call(&pool, "POST", &format!("/api/items/{id}/use"), Some(body)).await }
@@ -772,7 +789,7 @@ async fn buying_a_row_brings_it_home_once_and_a_bad_price_never_stops_it() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(item["name"], yoghurt_name.as_str());
     assert_eq!(item["quantity"], 2.0, "the row's amount comes home with it");
-    let item_id = item["id"].as_u64().unwrap();
+    let item_id = life::inventory::types::ItemId(item["id"].as_u64().unwrap());
     let bought = life::purchases::repo::for_item(&pool, SIGNED_IN_USER, item_id)
         .await
         .unwrap();
@@ -806,7 +823,7 @@ async fn buying_a_row_brings_it_home_once_and_a_bad_price_never_stops_it() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let item_id = item["id"].as_u64().unwrap();
+    let item_id = life::inventory::types::ItemId(item["id"].as_u64().unwrap());
     assert!(
         life::purchases::repo::for_item(&pool, SIGNED_IN_USER, item_id)
             .await

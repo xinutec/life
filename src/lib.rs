@@ -15,6 +15,7 @@ pub mod products;
 pub mod purchases;
 pub mod recipes;
 pub mod routes;
+pub mod row_id;
 pub mod session;
 pub mod shopping;
 pub mod state;

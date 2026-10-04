@@ -151,66 +151,13 @@ macro_rules! string_id_sql {
 string_id_sql!(Barcode);
 string_id_sql!(ExternalId);
 
-/// A surrogate key: a row number, distinct from every other kind of row number.
-///
-/// No validation — any `u64` the database hands back is valid — so the whole
-/// point is the *name*.
-macro_rules! row_id {
-    ($(#[$m:meta])* $t:ident) => {
-        $(#[$m])*
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
-        #[ts(type = "number")]
-        pub struct $t(pub u64);
-
-        impl sqlx::Type<sqlx::MySql> for $t {
-            fn type_info() -> <sqlx::MySql as sqlx::Database>::TypeInfo {
-                <u64 as sqlx::Type<sqlx::MySql>>::type_info()
-            }
-            fn compatible(ty: &<sqlx::MySql as sqlx::Database>::TypeInfo) -> bool {
-                <u64 as sqlx::Type<sqlx::MySql>>::compatible(ty)
-            }
-        }
-
-        impl<'q> sqlx::Encode<'q, sqlx::MySql> for $t {
-            fn encode_by_ref(
-                &self,
-                buf: &mut <sqlx::MySql as sqlx::Database>::ArgumentBuffer,
-            ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
-                <u64 as sqlx::Encode<'q, sqlx::MySql>>::encode_by_ref(&self.0, buf)
-            }
-        }
-
-        impl<'r> sqlx::Decode<'r, sqlx::MySql> for $t {
-            fn decode(
-                value: <sqlx::MySql as sqlx::Database>::ValueRef<'r>,
-            ) -> Result<Self, sqlx::error::BoxDynError> {
-                <u64 as sqlx::Decode<'r, sqlx::MySql>>::decode(value).map($t)
-            }
-        }
-
-        impl fmt::Display for $t {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                self.0.fmt(f)
-            }
-        }
-    };
-}
-
-row_id! {
+crate::row_id! {
     /// `products.id` — the canonical product every listing, price, fact and
     /// picture hangs off.
     ProductId
 }
 
-/// `last_insert_id()` hands back a bare `u64` — the one place a `ProductId` is
-/// minted rather than read back through a typed column.
-impl From<u64> for ProductId {
-    fn from(id: u64) -> Self {
-        ProductId(id)
-    }
-}
-
-row_id! {
+crate::row_id! {
     /// `product_listings.id` — one source's line for a product, and the FK a
     /// price observation is recorded against.
     ListingId

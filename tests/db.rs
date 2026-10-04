@@ -6,7 +6,12 @@ use life::db;
 use life::inventory::repo;
 use life::inventory::types::{ItemCategory, LocationKind, NewItem, NewLocation};
 
-fn loc(kind: LocationKind, name: &str, parent: Option<u64>, sort_order: i32) -> NewLocation {
+fn loc(
+    kind: LocationKind,
+    name: &str,
+    parent: Option<life::inventory::types::LocationId>,
+    sort_order: i32,
+) -> NewLocation {
     NewLocation {
         kind,
         name: name.into(),
@@ -93,10 +98,15 @@ async fn inventory_crud_against_real_db() {
 
     // Moving a non-existent item yields None, not an error.
     assert!(
-        repo::move_item(&pool, user, 99_999_999, None)
-            .await
-            .unwrap()
-            .is_none()
+        repo::move_item(
+            &pool,
+            user,
+            life::inventory::types::ItemId(99_999_999),
+            None
+        )
+        .await
+        .unwrap()
+        .is_none()
     );
 
     // History recorded both the add and the move.

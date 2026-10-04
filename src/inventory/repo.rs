@@ -7,17 +7,17 @@ use sqlx::MySqlPool;
 
 use super::consume::{self, Held, Taken};
 use super::types::{
-    ExpiryPrecision, Item, ItemCategory, ItemEvent, ItemHistoryEntry, ItemNameSource, Location,
-    LocationKind, NewItem, NewLocation,
+    ExpiryPrecision, Item, ItemCategory, ItemEvent, ItemHistoryEntry, ItemId, ItemNameSource,
+    Location, LocationId, LocationKind, NewItem, NewLocation,
 };
 use crate::products::ids::{Barcode, ProductId, barcode_hint};
 
 #[derive(sqlx::FromRow)]
 struct LocationRow {
-    id: u64,
+    id: LocationId,
     kind: LocationKind,
     name: String,
-    parent_id: Option<u64>,
+    parent_id: Option<LocationId>,
     sort_order: i32,
     position: Option<String>,
 }
@@ -41,7 +41,7 @@ impl LocationRow {
 
 #[derive(sqlx::FromRow)]
 struct ItemRow {
-    id: u64,
+    id: ItemId,
     product_id: Option<ProductId>,
     name: String,
     brand: Option<String>,
@@ -50,7 +50,7 @@ struct ItemRow {
     unit: Option<String>,
     expiry: Option<NaiveDate>,
     expiry_precision: ExpiryPrecision,
-    location_id: Option<u64>,
+    location_id: Option<LocationId>,
     barcode: Option<String>,
     // A boolean SQL expression decodes as an integer.
     has_image: i64,
@@ -159,7 +159,7 @@ pub async fn create_location(
     .execute(pool)
     .await?;
     Ok(Location {
-        id: res.last_insert_id(),
+        id: res.last_insert_id().into(),
         kind: new.kind,
         name: new.name,
         parent_id: new.parent_id,
@@ -179,7 +179,7 @@ pub async fn list_items(pool: &MySqlPool, user_id: &str) -> Result<Vec<Item>> {
     Ok(rows.into_iter().map(ItemRow::into_item).collect())
 }
 
-pub async fn get_item(pool: &MySqlPool, user_id: &str, id: u64) -> Result<Option<Item>> {
+pub async fn get_item(pool: &MySqlPool, user_id: &str, id: ItemId) -> Result<Option<Item>> {
     let row: Option<ItemRow> = sqlx::query_as(concat!(
         item_select!(),
         " WHERE i.id = ? AND i.user_id = ? AND i.deleted_at IS NULL"
@@ -207,7 +207,7 @@ pub(crate) async fn insert_item(
     conn: &mut sqlx::MySqlConnection,
     user_id: &str,
     new: &NewItem,
-) -> Result<u64> {
+) -> Result<ItemId> {
     // Prefer an explicit catalog link (the only way to reach a barcodeless shop
     // product); otherwise link by barcode when it's already known (scanned/looked up).
     let product_id = resolve_product_id(&mut *conn, new).await?;
@@ -242,7 +242,7 @@ pub(crate) async fn insert_item(
     .bind(new.barcode.as_deref().map(barcode_hint))
     .execute(&mut *conn)
     .await?;
-    let id = res.last_insert_id();
+    let id = ItemId::from(res.last_insert_id());
     record_history(
         &mut *conn,
         id,
@@ -260,8 +260,8 @@ pub(crate) async fn insert_item(
 pub async fn move_item(
     pool: &MySqlPool,
     user_id: &str,
-    item_id: u64,
-    new_location_id: Option<u64>,
+    item_id: ItemId,
+    new_location_id: Option<LocationId>,
 ) -> Result<Option<Item>> {
     let mut tx = pool.begin().await?;
     // sqlx connects with CLIENT_FOUND_ROWS, so a move to where the thing already
@@ -300,12 +300,12 @@ pub async fn move_item(
 pub async fn update_item(
     pool: &MySqlPool,
     user_id: &str,
-    id: u64,
+    id: ItemId,
     new: NewItem,
 ) -> Result<Option<Item>> {
     let product_id = resolve_product_id(pool, &new).await?;
     let mut tx = pool.begin().await?;
-    let held: Option<(Option<u64>,)> = sqlx::query_as(
+    let held: Option<(Option<LocationId>,)> = sqlx::query_as(
         "SELECT location_id FROM items \
          WHERE id = ? AND user_id = ? AND deleted_at IS NULL FOR UPDATE",
     )
@@ -365,11 +365,11 @@ pub async fn mark_low_matching(
     user_id: &str,
     name: &str,
     barcode: Option<&str>,
-    product_id: Option<u64>,
+    product_id: Option<ProductId>,
 ) -> Result<bool> {
     let barcode = barcode.map(barcode_hint);
     // Strongest key first, so a renamed row still resolves by barcode or link.
-    let row: Option<(u64,)> = sqlx::query_as(
+    let row: Option<(ItemId,)> = sqlx::query_as(
         "SELECT id FROM items \
          WHERE user_id = ? AND deleted_at IS NULL \
            AND (  (? IS NOT NULL AND product_id = ?) \
@@ -399,7 +399,7 @@ pub async fn mark_low_matching(
 /// A decision, not a measurement: nothing moves, so no transaction. Repeats are
 /// allowed — the rhythm is the gaps between them. `Ok(false)` = no such live
 /// item for this user.
-pub async fn mark_low(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
+pub async fn mark_low(pool: &MySqlPool, user_id: &str, id: ItemId) -> Result<bool> {
     // The location rides along so the history reads the same as every other
     // event, and so "ran out of the one in the fridge" stays answerable. One
     // statement: the row it reads is the row it records.
@@ -423,14 +423,14 @@ pub async fn mark_low(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> 
 pub async fn use_item(
     pool: &MySqlPool,
     user_id: &str,
-    id: u64,
+    id: ItemId,
     want: f64,
     want_unit: Option<&str>,
 ) -> Result<Option<(Taken, Option<Item>)>> {
     let mut tx = pool.begin().await?;
     // FOR UPDATE: the whole point of the transaction. Without it the subtraction
     // is a read-modify-write race and stock quietly drifts upward.
-    let row: Option<(Option<f64>, Option<String>, Option<u64>)> = sqlx::query_as(
+    let row: Option<(Option<f64>, Option<String>, Option<LocationId>)> = sqlx::query_as(
         "SELECT quantity, unit, location_id FROM items \
          WHERE id = ? AND user_id = ? AND deleted_at IS NULL FOR UPDATE",
     )
@@ -486,7 +486,7 @@ pub async fn use_item(
 
 /// Delete an item — a tombstone, restorable from the trash; history is kept.
 /// Returns whether a row was tombstoned.
-pub async fn delete_item(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
+pub async fn delete_item(pool: &MySqlPool, user_id: &str, id: ItemId) -> Result<bool> {
     let mut tx = pool.begin().await?;
     let res = sqlx::query(
         "UPDATE items SET deleted_at = NOW() \
@@ -505,7 +505,7 @@ pub async fn delete_item(pool: &MySqlPool, user_id: &str, id: u64) -> Result<boo
 }
 
 /// Restore a deleted item. Returns whether a tombstone was cleared.
-pub async fn restore_item(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
+pub async fn restore_item(pool: &MySqlPool, user_id: &str, id: ItemId) -> Result<bool> {
     let mut tx = pool.begin().await?;
     let res = sqlx::query(
         "UPDATE items SET deleted_at = NULL \
@@ -525,11 +525,15 @@ pub async fn restore_item(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bo
 
 /// Whether `id` names one of this user's live locations. `None`, "nowhere",
 /// always does.
-pub async fn is_own_location(pool: &MySqlPool, user_id: &str, id: Option<u64>) -> Result<bool> {
+pub async fn is_own_location(
+    pool: &MySqlPool,
+    user_id: &str,
+    id: Option<LocationId>,
+) -> Result<bool> {
     let Some(id) = id else {
         return Ok(true);
     };
-    let row: Option<(u64,)> = sqlx::query_as(
+    let row: Option<(LocationId,)> = sqlx::query_as(
         "SELECT id FROM locations WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
     )
     .bind(id)
@@ -545,9 +549,9 @@ pub async fn is_own_location(pool: &MySqlPool, user_id: &str, id: Option<u64>) -
 async fn subtree_ids(
     conn: impl sqlx::Executor<'_, Database = sqlx::MySql>,
     user_id: &str,
-    root: u64,
-) -> Result<Vec<u64>> {
-    let rows: Vec<(u64, Option<u64>)> =
+    root: LocationId,
+) -> Result<Vec<LocationId>> {
+    let rows: Vec<(LocationId, Option<LocationId>)> =
         sqlx::query_as("SELECT id, parent_id FROM locations WHERE user_id = ?")
             .bind(user_id)
             .fetch_all(conn)
@@ -560,7 +564,7 @@ async fn subtree_ids(
 /// their `location_id`: with the location hidden they read as unplaced, and a
 /// restore puts them right back where they were. Returns whether the root was
 /// tombstoned.
-pub async fn delete_location(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
+pub async fn delete_location(pool: &MySqlPool, user_id: &str, id: LocationId) -> Result<bool> {
     let ids = subtree_ids(pool, user_id, id).await?;
     if ids.is_empty() {
         return Ok(false);
@@ -582,7 +586,7 @@ pub async fn delete_location(pool: &MySqlPool, user_id: &str, id: u64) -> Result
 /// in the same operation (same `deleted_at` stamp — descendants deleted
 /// separately earlier stay in the trash as their own entries). Returns whether
 /// anything was restored.
-pub async fn restore_location(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
+pub async fn restore_location(pool: &MySqlPool, user_id: &str, id: LocationId) -> Result<bool> {
     // The stamp, the tree and the restore in one transaction, the root locked, so
     // the stamp cannot change between being read and being matched.
     let mut tx = pool.begin().await?;
@@ -620,7 +624,7 @@ pub async fn restore_location(pool: &MySqlPool, user_id: &str, id: u64) -> Resul
 pub async fn item_history(
     pool: &MySqlPool,
     user_id: &str,
-    item_id: u64,
+    item_id: ItemId,
 ) -> Result<Vec<ItemHistoryEntry>> {
     // A stored event outside the enum fails the query rather than being
     // dropped or shown blank, as `products::Source` is read.
@@ -640,9 +644,9 @@ pub async fn item_history(
 
 async fn record_history(
     conn: impl sqlx::Executor<'_, Database = sqlx::MySql>,
-    item_id: u64,
+    item_id: ItemId,
     user_id: &str,
-    location_id: Option<u64>,
+    location_id: Option<LocationId>,
     event: ItemEvent,
     quantity: Option<f64>,
 ) -> Result<()> {

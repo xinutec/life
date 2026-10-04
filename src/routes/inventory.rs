@@ -10,12 +10,15 @@ use axum::response::{IntoResponse, Response};
 
 use crate::error::{AppError, found_or_404};
 use crate::files::repo as files_repo;
-use crate::files::types::{ItemFile, MAX_FILE_BYTES, sniff_mime};
+use crate::files::types::{FileId, ItemFile, MAX_FILE_BYTES, sniff_mime};
 use crate::inventory::consume::Taken;
 use crate::inventory::repo;
-use crate::inventory::types::{Item, ItemHistory, Location, NewItem, NewLocation, UseItem};
+use crate::inventory::types::{
+    Item, ItemHistory, ItemId, Location, LocationId, NewItem, NewLocation, UseItem,
+};
+use crate::products::ids::ProductId;
 use crate::purchases::repo as purchases_repo;
-use crate::purchases::types::{NewPurchase, Purchase};
+use crate::purchases::types::{NewPurchase, Purchase, PurchaseId};
 use crate::session::AuthUser;
 use crate::state::AppState;
 
@@ -57,7 +60,11 @@ pub async fn create_item(
 
 /// A location id comes from the client, so it must be one of this user's live
 /// locations: anything else would file your things under somebody else's room.
-async fn own_location(app: &AppState, user_id: &str, id: Option<u64>) -> Result<(), AppError> {
+async fn own_location(
+    app: &AppState,
+    user_id: &str,
+    id: Option<LocationId>,
+) -> Result<(), AppError> {
     if repo::is_own_location(&app.pool, user_id, id).await? {
         Ok(())
     } else {
@@ -67,13 +74,13 @@ async fn own_location(app: &AppState, user_id: &str, id: Option<u64>) -> Result<
 
 #[derive(Deserialize)]
 pub struct MoveBody {
-    pub location_id: Option<u64>,
+    pub location_id: Option<LocationId>,
 }
 
 pub async fn update_item(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
-    Path(id): Path<u64>,
+    Path(id): Path<ItemId>,
     Json(body): Json<NewItem>,
 ) -> Result<Json<Item>, AppError> {
     own_location(&app, &user.user_id, body.location_id).await?;
@@ -86,7 +93,7 @@ pub async fn update_item(
 pub async fn delete_item(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
-    Path(id): Path<u64>,
+    Path(id): Path<ItemId>,
 ) -> Result<StatusCode, AppError> {
     found_or_404(repo::delete_item(&app.pool, &user.user_id, id).await?)
 }
@@ -94,7 +101,7 @@ pub async fn delete_item(
 pub async fn delete_location(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
-    Path(id): Path<u64>,
+    Path(id): Path<LocationId>,
 ) -> Result<StatusCode, AppError> {
     found_or_404(repo::delete_location(&app.pool, &user.user_id, id).await?)
 }
@@ -106,7 +113,7 @@ pub async fn delete_location(
 pub async fn item_history(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
-    Path(id): Path<u64>,
+    Path(id): Path<ItemId>,
 ) -> Result<Json<ItemHistory>, AppError> {
     let (entries, purchases) = tokio::try_join!(
         repo::item_history(&app.pool, &user.user_id, id),
@@ -124,7 +131,7 @@ pub async fn item_history(
 pub async fn record_purchase(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
-    Path(id): Path<u64>,
+    Path(id): Path<ItemId>,
     Json(body): Json<NewPurchase>,
 ) -> Result<Json<Purchase>, AppError> {
     // Scoped through the item read, so somebody else's id is a 404 rather than a
@@ -159,7 +166,7 @@ pub async fn record_purchase(
 pub async fn delete_purchase(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
-    Path((id, purchase_id)): Path<(u64, u64)>,
+    Path((id, purchase_id)): Path<(ItemId, PurchaseId)>,
 ) -> Result<StatusCode, AppError> {
     found_or_404(purchases_repo::remove(&app.pool, &user.user_id, id, purchase_id).await?)
 }
@@ -169,7 +176,7 @@ pub async fn delete_purchase(
 pub async fn list_files(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
-    Path(id): Path<u64>,
+    Path(id): Path<ItemId>,
 ) -> Result<Json<Vec<ItemFile>>, AppError> {
     Ok(Json(
         files_repo::for_item(&app.pool, &user.user_id, id).await?,
@@ -185,7 +192,7 @@ pub async fn list_files(
 pub async fn add_file(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
-    Path(id): Path<u64>,
+    Path(id): Path<ItemId>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Json<ItemFile>, AppError> {
@@ -212,7 +219,7 @@ pub async fn add_file(
     let purchase_id =
         match header_str(&headers, "x-purchase-id") {
             None => None,
-            Some(raw) => Some(raw.parse::<u64>().map_err(|_| {
+            Some(raw) => Some(raw.parse::<u64>().map(PurchaseId::from).map_err(|_| {
                 AppError::BadRequest(format!("X-Purchase-Id is not a number: {raw}"))
             })?),
         };
@@ -257,7 +264,7 @@ fn header_str<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
 pub async fn get_file(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
-    Path((id, file_id)): Path<(u64, u64)>,
+    Path((id, file_id)): Path<(ItemId, FileId)>,
 ) -> Result<Response, AppError> {
     let (name, mime, bytes) = files_repo::read(&app.pool, &user.user_id, id, file_id)
         .await?
@@ -286,7 +293,7 @@ pub async fn get_file(
 pub async fn delete_file(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
-    Path((id, file_id)): Path<(u64, u64)>,
+    Path((id, file_id)): Path<(ItemId, FileId)>,
 ) -> Result<StatusCode, AppError> {
     found_or_404(files_repo::remove(&app.pool, &user.user_id, id, file_id).await?)
 }
@@ -294,7 +301,7 @@ pub async fn delete_file(
 pub async fn move_item(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
-    Path(id): Path<u64>,
+    Path(id): Path<ItemId>,
     Json(body): Json<MoveBody>,
 ) -> Result<Json<Item>, AppError> {
     own_location(&app, &user.user_id, body.location_id).await?;
@@ -311,7 +318,7 @@ pub struct LowByIdentity {
     #[serde(default)]
     pub barcode: Option<String>,
     #[serde(default)]
-    pub product_id: Option<u64>,
+    pub product_id: Option<ProductId>,
 }
 
 /// POST /api/items/low → the same judgement, made from the Buy list.
@@ -342,7 +349,7 @@ pub async fn mark_low_by_identity(
 pub async fn mark_low(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
-    Path(id): Path<u64>,
+    Path(id): Path<ItemId>,
 ) -> Result<StatusCode, AppError> {
     found_or_404(repo::mark_low(&app.pool, &user.user_id, id).await?)
 }
@@ -354,7 +361,7 @@ pub async fn mark_low(
 pub async fn use_item(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
-    Path(id): Path<u64>,
+    Path(id): Path<ItemId>,
     Json(body): Json<UseItem>,
 ) -> Result<Json<Item>, AppError> {
     if !body.quantity.is_finite() || body.quantity <= 0.0 {
@@ -388,10 +395,10 @@ pub async fn use_item(
             ));
         }
         Taken::Emptied { short } => tracing::info!(
-            item = id, used = body.quantity, %short,
+            item = %id, used = body.quantity, %short,
             "used more than the cupboard knew about — emptied"
         ),
-        Taken::Left(left) => tracing::info!(item = id, used = body.quantity, left, "used"),
+        Taken::Left(left) => tracing::info!(item = %id, used = body.quantity, left, "used"),
     }
     Ok(Json(item))
 }

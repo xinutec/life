@@ -31,7 +31,10 @@ fn flour(quantity: Option<f64>, unit: Option<&str>) -> NewItem {
 }
 
 /// How much this item has been recorded as using, and over how many events.
-async fn used(pool: &sqlx::MySqlPool, item_id: u64) -> (i64, Option<f64>) {
+async fn used(
+    pool: &sqlx::MySqlPool,
+    item_id: life::inventory::types::ItemId,
+) -> (i64, Option<f64>) {
     sqlx::query_as(
         "SELECT COUNT(*), SUM(quantity) FROM item_history WHERE item_id = ? AND event = 'used'",
     )
