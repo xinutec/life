@@ -25,6 +25,11 @@ fn vocab() -> Vec<String> {
     VOCAB.iter().map(|s| s.to_string()).collect()
 }
 
+/// The job queue is global: `claim_next` hands out any user's job, and the shutdown
+/// test empties it. Every test that queues or claims holds this, so parallel
+/// tests cannot take or delete each other's jobs.
+static QUEUE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 /// Both tables are pure derived data, so a test owns its user's rows outright.
 async fn wipe(pool: &sqlx::MySqlPool, user: &str) {
     sqlx::query("DELETE FROM emotion_jobs WHERE user_id = ?")
@@ -41,6 +46,7 @@ async fn wipe(pool: &sqlx::MySqlPool, user: &str) {
 
 #[tokio::test]
 async fn suggestion_cache_and_queue_against_real_db() {
+    let _queue = QUEUE.lock().await;
     let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
@@ -248,6 +254,7 @@ async fn fetch_examples_excludes_today_to_keep_the_prefix_stable() {
 /// proof, and it is what keeps `pending` true past the poll-liveness window.
 #[tokio::test]
 async fn a_claimed_job_reads_as_being_worked_until_the_claim_goes_stale() {
+    let _queue = QUEUE.lock().await;
     let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
@@ -377,6 +384,7 @@ async fn a_held_poll_is_released_by_shutdown() {
     use axum::response::IntoResponse;
     use std::time::{Duration, Instant};
 
+    let _queue = QUEUE.lock().await;
     let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
