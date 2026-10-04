@@ -187,8 +187,7 @@ async fn half_steps_round_trip_through_the_db() {
     assert_eq!(got.score_tenths, 35, "a 3.5 stays a 3.5");
     assert_eq!(got.energy_tenths, Some(45), "a 4.5 stays a 4.5");
 
-    // Both ends of the scale are readings too, and the only ones a range can
-    // refuse by one step.
+    // The only values an off-by-one range would refuse.
     let ends = "0123456789ABCDEFGHJKMNPQRE";
     let mut d = doc(ends, 10, 0, false);
     d.energy_tenths = Some(50);

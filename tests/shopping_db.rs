@@ -79,8 +79,8 @@ async fn shopping_crud_against_real_db() {
     .expect("exists");
     assert!(toggled.done);
 
-    // Delete leaves the other row alone. Buying is the route's (it deletes and
-    // creates in one request), tested through it in signed_in_http_db.rs.
+    // Buying is the route's (it deletes and creates in one request), tested
+    // through it in signed_in_http_db.rs.
     assert!(repo::delete(&pool, user, yog.id).await.unwrap());
     assert!(repo::get(&pool, user, yog.id).await.unwrap().is_none());
     assert_eq!(repo::list(&pool, user).await.unwrap().len(), 1);

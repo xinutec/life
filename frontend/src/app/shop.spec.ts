@@ -153,9 +153,7 @@ const REGULAR = {
 };
 
 interface Run {
-  /** What the extractor reported, parsed. */
   report: { ok: boolean; reason?: string; error?: string; product?: ShopProduct };
-  /** The URL and authorization it fetched with, if it fetched at all. */
   fetched?: { url: string; authorization: string | undefined };
 }
 
