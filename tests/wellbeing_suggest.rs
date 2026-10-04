@@ -5,7 +5,7 @@
 
 use std::collections::HashSet;
 
-use life::wellbeing::suggest::{filter_suggestions, note_hash, parse_tokens};
+use life::wellbeing::suggest::{self, filter_suggestions, note_hash, parse_tokens};
 
 #[test]
 fn parses_the_ranked_tokens_it_was_asked_for() {
@@ -148,4 +148,66 @@ fn it_crosses_a_month_end() {
         until_rollover_warm(now).as_secs(),
         3600 + ROLLOVER_WARM_AFTER_MIDNIGHT.as_secs()
     );
+}
+
+// --- respond: what the picker is told ---
+
+fn cands(tokens: &[&str]) -> Vec<suggest::EmotionCandidate> {
+    tokens
+        .iter()
+        .map(|t| suggest::EmotionCandidate {
+            token: (*t).into(),
+            desc: String::new(),
+        })
+        .collect()
+}
+
+fn waiting(secs: i64, being_worked: bool, worker_alive: bool) -> suggest::Progress {
+    suggest::Progress::Waiting {
+        secs,
+        being_worked,
+        worker_alive,
+    }
+}
+
+#[test]
+fn an_answer_for_this_wording_is_neither_stale_nor_pending() {
+    let r = suggest::respond(
+        vec!["Sad/Low".into(), "Sad/Empty".into()],
+        suggest::Progress::Answered,
+        &cands(&["Sad/Low", "Sad/Empty"]),
+        &["Sad/Empty".into()],
+    );
+    assert_eq!(
+        r.suggestions,
+        ["Sad/Low"],
+        "what is already chosen is not offered"
+    );
+    assert!(!r.stale && !r.pending && r.thinking_secs.is_none());
+}
+
+#[test]
+fn an_earlier_wordings_answer_is_shown_as_stale_while_a_new_one_is_worked_on() {
+    let r = suggest::respond(
+        vec!["Sad/Low".into()],
+        waiting(12, true, false),
+        &cands(&["Sad/Low"]),
+        &[],
+    );
+    assert!(r.stale);
+    assert!(
+        r.pending,
+        "a claim proves a worker even when it has not polled"
+    );
+    assert_eq!(r.thinking_secs, Some(12));
+}
+
+#[test]
+fn nothing_is_promised_without_a_worker() {
+    let r = suggest::respond(vec![], waiting(40, false, false), &cands(&["Sad/Low"]), &[]);
+    assert!(!r.pending && r.thinking_secs.is_none());
+    assert!(!r.stale, "no suggestions are not stale ones");
+    let r = suggest::respond(vec![], waiting(3, false, true), &cands(&["Sad/Low"]), &[]);
+    assert!(r.pending, "a worker that polled recently will answer");
+    assert_eq!(r.thinking_secs, Some(3));
 }

@@ -12,6 +12,7 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
+use subtle::ConstantTimeEq;
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -66,7 +67,9 @@ fn authorized(app: &AppState, headers: &HeaderMap) -> Result<(), AppError> {
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
         .unwrap_or_default();
-    if given.is_empty() || given != expected {
+    // Constant-time, so how long a wrong token takes to refuse says nothing about
+    // how much of it was right.
+    if given.is_empty() || !bool::from(given.as_bytes().ct_eq(expected.as_bytes())) {
         return Err(AppError::Unauthorized);
     }
     Ok(())

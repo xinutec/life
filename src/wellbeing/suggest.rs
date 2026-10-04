@@ -265,3 +265,60 @@ pub fn filter_suggestions(
     }
     out
 }
+
+/// Where the answer for the current wording stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Progress {
+    /// The cached suggestions were computed from this very wording.
+    Answered,
+    /// They were not (or there are none): a job for this wording is queued.
+    Waiting {
+        /// Seconds since this wording was first queued.
+        secs: i64,
+        /// A worker holds a fresh claim on the job, so it is generating now.
+        being_worked: bool,
+        /// A worker polled recently, so it will take the job.
+        worker_alive: bool,
+    },
+}
+
+/// What the picker is told. Pure: the route gathers what is known (the cache,
+/// the queue, the worker's liveness) and this decides what it amounts to.
+///
+/// Suggestions from an earlier wording are shown but marked `stale`: notes
+/// drift, and close beats blank. `pending` promises a better answer only when a
+/// worker is there to produce it — claiming the job, which survives a long
+/// generation when the worker cannot poll, or polling recently.
+pub fn respond(
+    cached: Vec<String>,
+    progress: Progress,
+    candidates: &[EmotionCandidate],
+    already: &[String],
+) -> SuggestEmotionsResponse {
+    // Display-time filtering: the cache holds every valid token, and which of
+    // them are worth offering depends on what is selected right now.
+    let valid: HashSet<&str> = candidates.iter().map(|c| c.token.as_str()).collect();
+    let already: HashSet<&str> = already.iter().map(String::as_str).collect();
+    let suggestions = filter_suggestions(cached, &valid, &already, MAX_SUGGESTIONS);
+    match progress {
+        Progress::Answered => SuggestEmotionsResponse {
+            suggestions,
+            stale: false,
+            pending: false,
+            thinking_secs: None,
+        },
+        Progress::Waiting {
+            secs,
+            being_worked,
+            worker_alive,
+        } => {
+            let pending = being_worked || worker_alive;
+            SuggestEmotionsResponse {
+                stale: !suggestions.is_empty(),
+                suggestions,
+                pending,
+                thinking_secs: pending.then(|| u32::try_from(secs.max(0)).unwrap_or(u32::MAX)),
+            }
+        }
+    }
+}

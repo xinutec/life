@@ -2,8 +2,6 @@
 //! `/api/sync/wellbeing` (see `sync::repo`); this holds the one derived,
 //! online-only helper: emotion suggestions for the picker.
 
-use std::collections::HashSet;
-
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -12,7 +10,8 @@ use crate::error::AppError;
 use crate::session::AuthUser;
 use crate::state::AppState;
 use crate::wellbeing::suggest::{
-    self, EmotionCandidate, SuggestEmotionsRequest, SuggestEmotionsResponse, WarmEmotionsRequest,
+    self, EmotionCandidate, Progress, SuggestEmotionsRequest, SuggestEmotionsResponse,
+    WarmEmotionsRequest,
 };
 use crate::wellbeing::suggest_store;
 
@@ -28,18 +27,17 @@ pub async fn suggest_emotions(
     AuthUser(user): AuthUser,
     Json(body): Json<SuggestEmotionsRequest>,
 ) -> Result<Json<SuggestEmotionsResponse>, AppError> {
-    let nothing = || {
-        Ok(Json(SuggestEmotionsResponse {
-            suggestions: vec![],
-            stale: false,
-            pending: false,
-            thinking_secs: None,
-        }))
+    let answer = |cached, progress| {
+        Ok(Json(suggest::respond(
+            cached,
+            progress,
+            &body.candidates,
+            &body.already,
+        )))
     };
-
     let note = body.note.trim();
     if note.is_empty() || body.candidates.is_empty() || body.ulid.is_empty() {
-        return nothing();
+        return answer(Vec::new(), Progress::Answered);
     }
 
     remember_vocabulary(&app, &user.user_id, &body.candidates).await;
@@ -47,25 +45,9 @@ pub async fn suggest_emotions(
     let hash = suggest::note_hash(note);
     let cached = suggest_store::cached(&app.pool, &user.user_id, &body.ulid).await?;
     let fresh = cached.as_ref().is_some_and(|c| c.note_hash == hash);
-
-    // Display-time filtering: the cache holds every valid token, and which of them
-    // are worth offering depends on what is selected right now.
-    let valid: HashSet<&str> = body.candidates.iter().map(|c| c.token.as_str()).collect();
-    let already: HashSet<&str> = body.already.iter().map(|s| s.as_str()).collect();
-    let suggestions = suggest::filter_suggestions(
-        cached.map(|c| c.tokens).unwrap_or_default(),
-        &valid,
-        &already,
-        suggest::MAX_SUGGESTIONS,
-    );
-
+    let tokens = cached.map(|c| c.tokens).unwrap_or_default();
     if fresh {
-        return Ok(Json(SuggestEmotionsResponse {
-            suggestions,
-            stale: false,
-            pending: false,
-            thinking_secs: None,
-        }));
+        return answer(tokens, Progress::Answered);
     }
 
     // Queue the work even with no worker listening: the note is written now, and
@@ -79,18 +61,20 @@ pub async fn suggest_emotions(
     {
         Some(queued) => queued,
         None => {
-            let examples = suggest::fetch_examples(&app.pool, &user.user_id, suggest::MAX_EXAMPLES)
-                .await
-                .unwrap_or_default();
+            // A failed read fails the ask, which the picker repeats. Building on
+            // no examples instead would queue a prompt unlike the day's warmed
+            // one, and answer worse without saying so.
+            let examples =
+                suggest::fetch_examples(&app.pool, &user.user_id, suggest::MAX_EXAMPLES).await?;
             let prompt = suggest::build_prompt(&body.candidates, &examples, note);
-            let tokens: Vec<String> = body.candidates.iter().map(|c| c.token.clone()).collect();
+            let vocabulary: Vec<String> = body.candidates.iter().map(|c| c.token.clone()).collect();
             let queued = suggest_store::enqueue(
                 &app.pool,
                 &user.user_id,
                 &body.ulid,
                 &hash,
                 &prompt,
-                &tokens,
+                &vocabulary,
             )
             .await?;
             // Wake a worker already holding a poll open, so the note is picked up
@@ -99,17 +83,14 @@ pub async fn suggest_emotions(
             queued
         }
     };
-
-    // A better answer is coming if a worker has claimed this job — which survives
-    // a long generation, when the blocked worker cannot poll — or one polled
-    // recently and will.
-    let pending = queued.being_worked || app.worker_alive();
-    Ok(Json(SuggestEmotionsResponse {
-        stale: !suggestions.is_empty(),
-        suggestions,
-        pending,
-        thinking_secs: pending.then_some(u32::try_from(queued.thinking_secs).unwrap_or(u32::MAX)),
-    }))
+    answer(
+        tokens,
+        Progress::Waiting {
+            secs: queued.thinking_secs,
+            being_worked: queued.being_worked,
+            worker_alive: app.worker_alive(),
+        },
+    )
 }
 
 /// Preload the model for a suggestion that is about to be asked for — fired when a
@@ -127,11 +108,18 @@ pub async fn warm_emotions(
         return Ok(StatusCode::NO_CONTENT);
     }
     remember_vocabulary(&app, &user.user_id, &body.candidates).await;
-    let examples = suggest::fetch_examples(&app.pool, &user.user_id, suggest::MAX_EXAMPLES)
-        .await
-        .unwrap_or_default();
-    app.request_warm(suggest::build_system(&body.candidates, &examples));
-    Ok(StatusCode::ACCEPTED)
+    // Without the examples there is nothing worth warming: a prompt built from
+    // none is not the one the real ask will use, so its cached prefix would miss.
+    match suggest::fetch_examples(&app.pool, &user.user_id, suggest::MAX_EXAMPLES).await {
+        Ok(examples) => {
+            app.request_warm(suggest::build_system(&body.candidates, &examples));
+            Ok(StatusCode::ACCEPTED)
+        }
+        Err(e) => {
+            tracing::warn!("not warming the emotion model: {e:#}");
+            Ok(StatusCode::NO_CONTENT)
+        }
+    }
 }
 
 /// Keep the vocabulary the picker just sent, so the rollover timer can rebuild

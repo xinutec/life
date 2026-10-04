@@ -104,3 +104,52 @@ async fn a_poll_during_shutdown_answers_empty_without_waiting() {
         .expect("a response");
     assert_eq!(res.status(), StatusCode::NO_CONTENT);
 }
+
+/// Only the exact token is a worker: a near miss of any shape is refused. Asked
+/// during shutdown, so an admitted poll answers at once without a query.
+#[tokio::test]
+async fn only_the_exact_token_is_a_worker() {
+    use axum::extract::State;
+    use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
+    use axum::response::IntoResponse;
+
+    let app = state_with_token(Some("secret"));
+    app.begin_shutdown();
+    let poll = |auth: &'static str| {
+        let app = app.clone();
+        async move {
+            let mut headers = HeaderMap::new();
+            headers.insert(header::AUTHORIZATION, HeaderValue::from_static(auth));
+            life::routes::emotion_worker::next(State(app), headers)
+                .await
+                .map_or_else(IntoResponse::into_response, IntoResponse::into_response)
+                .status()
+        }
+    };
+    for near_miss in [
+        "Bearer secreT",
+        "Bearer secre",
+        "Bearer secrets",
+        "Bearer ",
+        "secret",
+    ] {
+        assert_eq!(
+            poll(near_miss).await,
+            StatusCode::UNAUTHORIZED,
+            "{near_miss:?}"
+        );
+    }
+    assert_eq!(poll("Bearer secret").await, StatusCode::NO_CONTENT);
+    // With no token configured there is no worker channel at all.
+    let closed = state_with_token(None);
+    closed.begin_shutdown();
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::AUTHORIZATION,
+        HeaderValue::from_static("Bearer secret"),
+    );
+    let res = life::routes::emotion_worker::next(State(closed), headers)
+        .await
+        .map_or_else(IntoResponse::into_response, IntoResponse::into_response);
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+}

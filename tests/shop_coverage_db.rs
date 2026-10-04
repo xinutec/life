@@ -18,7 +18,13 @@ fn ext(id: &str) -> ExternalId {
     id.parse().unwrap()
 }
 
-async fn fixture() -> (MySqlPool, ProductId) {
+/// Every test rebuilds the same product, deleting the last one first, so they
+/// take turns: run beside each other, one test's setup deleted the product
+/// another was asserting on. The guard is held for the whole test.
+static FIXTURE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+async fn fixture() -> (MySqlPool, ProductId, tokio::sync::MutexGuard<'static, ()>) {
+    let held = FIXTURE.lock().await;
     let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
@@ -61,12 +67,12 @@ async fn fixture() -> (MySqlPool, ProductId) {
     )
     .await
     .expect("seed sighting");
-    (pool, id)
+    (pool, id, held)
 }
 
 #[tokio::test]
 async fn a_held_listing_is_found_and_off_is_not_a_shop() {
-    let (pool, id) = fixture().await;
+    let (pool, id, _turn) = fixture().await;
     let held = repo::shops_holding(&pool, &[id]).await.unwrap();
     let sources: Vec<Source> = held.iter().map(|l| l.source).collect();
     assert!(sources.contains(&Source::Asda), "{sources:?}");
@@ -78,7 +84,7 @@ async fn a_held_listing_is_found_and_off_is_not_a_shop() {
 
 #[tokio::test]
 async fn a_sighting_is_found_by_barcode_without_any_listing_of_ours() {
-    let (pool, _) = fixture().await;
+    let (pool, _, _turn) = fixture().await;
     let seen = repo::shops_seen_carrying(&pool, &[barcode()])
         .await
         .unwrap();
@@ -91,7 +97,7 @@ async fn a_sighting_is_found_by_barcode_without_any_listing_of_ours() {
 
 #[tokio::test]
 async fn asking_about_nothing_queries_nothing() {
-    let (pool, _) = fixture().await;
+    let (pool, _, _turn) = fixture().await;
     // Guarded in the repo rather than the caller: an empty IN () is a SQL syntax
     // error, so the empty case has to be a real answer, not a crash.
     assert!(repo::shops_holding(&pool, &[]).await.unwrap().is_empty());
@@ -113,7 +119,7 @@ fn price(pence: i64) -> PriceInput {
 
 #[tokio::test]
 async fn a_shops_price_is_its_cheapest_listings_newest_observation() {
-    let (pool, id) = fixture().await;
+    let (pool, id, _turn) = fixture().await;
     // A second Asda listing for the same product (a relisted CIN), so the shop
     // has two prices and must answer with one.
     repo::upsert_external(

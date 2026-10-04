@@ -418,3 +418,33 @@ async fn a_held_poll_is_released_by_shutdown() {
     assert_eq!(res.status(), StatusCode::NO_CONTENT);
     assert!(started.elapsed() < Duration::from_secs(5));
 }
+
+/// The picker asks every couple of seconds, and two of its polls can both be the
+/// first for a new wording. Every one must succeed, and they share one job.
+#[tokio::test]
+async fn simultaneous_first_asks_share_one_job() {
+    let _queue = QUEUE.lock().await;
+    let url = common::test_db_url();
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+    let user = "test-user-emotion-race";
+    let ulid = "01J0000000000000000000RACE";
+    wipe(&pool, user).await;
+
+    let asks = (0..16).map(|_| {
+        let pool = pool.clone();
+        tokio::spawn(async move {
+            store::enqueue(&pool, user, ulid, "hash-a", &prompt("a"), &vocab()).await
+        })
+    });
+    for ask in asks.collect::<Vec<_>>() {
+        ask.await.unwrap().expect("every first ask succeeds");
+    }
+    let (jobs,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM emotion_jobs WHERE user_id = ?")
+        .bind(user)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(jobs, 1);
+    wipe(&pool, user).await;
+}

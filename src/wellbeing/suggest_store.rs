@@ -111,43 +111,26 @@ pub async fn enqueue(
     prompt: &serde_json::Value,
     candidates: &[String],
 ) -> sqlx::Result<Queued> {
-    let existing: Option<(String,)> =
-        sqlx::query_as("SELECT note_hash FROM emotion_jobs WHERE user_id = ? AND ulid = ?")
-            .bind(user_id)
-            .bind(ulid)
-            .fetch_optional(pool)
-            .await?;
-
-    match existing {
-        Some((hash,)) if hash == note_hash => {}
-        Some(_) => {
-            sqlx::query(
-                "UPDATE emotion_jobs \
-                 SET note_hash = ?, prompt = ?, candidates = ?, created_at = NOW(), taken_at = NULL \
-                 WHERE user_id = ? AND ulid = ?",
-            )
-            .bind(note_hash)
-            .bind(prompt)
-            .bind(serde_json::json!(candidates))
-            .bind(user_id)
-            .bind(ulid)
-            .execute(pool)
-            .await?;
-        }
-        None => {
-            sqlx::query(
-                "INSERT INTO emotion_jobs (user_id, ulid, note_hash, prompt, candidates) \
-                 VALUES (?, ?, ?, ?, ?)",
-            )
-            .bind(user_id)
-            .bind(ulid)
-            .bind(note_hash)
-            .bind(prompt)
-            .bind(serde_json::json!(candidates))
-            .execute(pool)
-            .await?;
-        }
-    }
+    // One statement, so two first asks cannot both insert. The assignments run
+    // left to right, so `note_hash` goes last: every comparison before it still
+    // sees the queued wording, and only a different one replaces the job.
+    sqlx::query(
+        "INSERT INTO emotion_jobs (user_id, ulid, note_hash, prompt, candidates) \
+         VALUES (?, ?, ?, ?, ?) \
+         ON DUPLICATE KEY UPDATE \
+         prompt = IF(note_hash = VALUES(note_hash), prompt, VALUES(prompt)), \
+         candidates = IF(note_hash = VALUES(note_hash), candidates, VALUES(candidates)), \
+         created_at = IF(note_hash = VALUES(note_hash), created_at, NOW()), \
+         taken_at = IF(note_hash = VALUES(note_hash), taken_at, NULL), \
+         note_hash = VALUES(note_hash)",
+    )
+    .bind(user_id)
+    .bind(ulid)
+    .bind(note_hash)
+    .bind(prompt)
+    .bind(serde_json::json!(candidates))
+    .execute(pool)
+    .await?;
 
     // Age is measured by the database's clock on both ends, so it can't be skewed
     // by the pod's and the caller's clocks disagreeing.
