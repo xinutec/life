@@ -118,6 +118,10 @@ async fn todo_crud_and_sync_against_real_db() {
             .iter()
             .any(|d| d.title == "Call dentist" && !d.deleted)
     );
+    // The milk was created first but changed last, so rev order is not id order.
+    let order: Vec<&str> = pulled.documents.iter().map(|d| d.title.as_str()).collect();
+    assert_eq!(order, ["Call dentist", "Buy milk"]);
+    assert!(pulled.documents.windows(2).all(|w| w[0].rev < w[1].rev));
 
     // Sync push: a to-do created offline (client-minted ulid) lands on the server.
     let entry = PushEntry {
@@ -170,7 +174,7 @@ async fn patch_leaves_absent_fields_alone_and_clears_on_null() {
             todo_type: TodoType::Task,
             priority: Some(TodoPriority::Medium),
             notes: Some("old wording".into()),
-            not_before: None,
+            not_before: Some(date(2026, 7, 1)),
             due: Some(date(2026, 7, 17)),
             shared: true,
         },
@@ -203,6 +207,10 @@ async fn patch_leaves_absent_fields_alone_and_clears_on_null() {
         "absent priority was overwritten"
     );
     assert_eq!(patched.due, orig.due, "absent due was overwritten");
+    assert_eq!(
+        patched.not_before, orig.not_before,
+        "absent not_before was overwritten"
+    );
     assert!(patched.shared, "absent shared silently flipped to private");
 
     // Explicit null clears — distinct from absent.

@@ -323,15 +323,3 @@ async fn an_unknown_non_api_path_still_falls_back_to_the_spa() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
-
-#[tokio::test]
-async fn conflict_restore_bad_kind_is_400_after_auth() {
-    // Unauthenticated first — proves the ordering — then the point stands that
-    // an unknown trash kind maps to 400 via BadRequest (exercised in the DB
-    // test for the authed path). Here we assert the auth gate wins.
-    let req = axum::http::Request::post("/api/trash/bogus/1/restore")
-        .body(Body::empty())
-        .unwrap();
-    let (status, _) = send(req).await;
-    assert_eq!(status, StatusCode::UNAUTHORIZED);
-}

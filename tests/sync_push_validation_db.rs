@@ -176,24 +176,25 @@ async fn invalid_docs_are_rejected_and_nothing_is_stored() {
         .await,
         "shopping category",
     );
-    // Documented 10..=50 tenths (1.0..=5.0) — reject, not clamp.
+    // Documented 10..=50 tenths (1.0..=5.0) — reject, not clamp. One half-step
+    // past each end, so only the range can refuse them.
     assert_invalid(
         sync_repo::push_wellbeing(
             &pool,
             user,
-            vec![entry(wellbeing("01VAL0000000000000000WELLA", 0, None))],
+            vec![entry(wellbeing("01VAL0000000000000000WELLA", 5, None))],
         )
         .await,
-        "wellbeing score 0 tenths",
+        "wellbeing score 0.5, one half-step under",
     );
     assert_invalid(
         sync_repo::push_wellbeing(
             &pool,
             user,
-            vec![entry(wellbeing("01VAL0000000000000000WELLB", 255, None))],
+            vec![entry(wellbeing("01VAL0000000000000000WELLB", 55, None))],
         )
         .await,
-        "wellbeing score 255 tenths",
+        "wellbeing score 5.5, one half-step over",
     );
     assert_invalid(
         sync_repo::push_wellbeing(

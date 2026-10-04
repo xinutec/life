@@ -118,8 +118,9 @@ async fn catalog_search_against_real_db() {
     // Names/brands carry a token no real catalog row would ('yoghurtzz'), so
     // the assertions hold whatever else the shared DB contains.
     for (bc, name, brand) in [
-        ("9991100000001", "Greek Style Yoghurtzz", "Fage"),
-        ("9991100000002", "Natural Yoghurtzz 950g", "Yeo Valley"),
+        // Inserted (and keyed) out of name order, so only ORDER BY name sorts them.
+        ("9991100000001", "Natural Yoghurtzz 950g", "Yeo Valley"),
+        ("9991100000002", "Greek Style Yoghurtzz", "Fage"),
         ("9991100000003", "Oat Milk", "Oatlyzz"),
     ] {
         let bc: Barcode = bc.parse().unwrap();
@@ -290,10 +291,13 @@ async fn a_stored_source_outside_the_enum_fails_the_read_loudly() {
         .await
         .unwrap();
 
-    let err = repo::get_by_source_external(&pool, Source::Waitrose, &ext).await;
+    let miss = repo::get_by_source_external(&pool, Source::Waitrose, &ext).await;
     // Reading it by its own (bogus) source isn't expressible — that is the
     // point — so read the row the way the catalogue does, by id.
-    assert!(err.is_ok(), "the miss on a real source is just a miss");
+    assert!(
+        matches!(miss, Ok(None)),
+        "the miss on a real source is just a miss"
+    );
     let id: (u64,) = sqlx::query_as("SELECT id FROM products WHERE external_id = ?")
         .bind(&ext)
         .fetch_one(&pool)

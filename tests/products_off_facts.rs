@@ -19,7 +19,8 @@ fn full_panel_ingredients_allergens_and_flags() {
     let facts = parse(serde_json::json!({
         "nutrition_data_per": "100g",
         "serving_size": "40 g",
-        "ingredients_text": "Wholegrain oats (95%), sugar",
+        // The generic text is whatever language the pack was entered in.
+        "ingredients_text": "Flocons d'avoine complets (95%), sucre",
         "ingredients_text_en": "Wholegrain oats (95%), sugar",
         "allergens_tags": ["en:gluten", "en:oats"],
         "traces_tags": ["en:nuts", "en:milk"],
@@ -191,6 +192,11 @@ fn a_firm_claim_settles_a_soft_guess() {
         merged(&[("vegan", Claim::Yes), ("vegan", Claim::Maybe)]),
         [("vegan".to_string(), Claim::Yes)]
     );
+    assert_eq!(
+        merged(&[("vegan", Claim::Maybe), ("vegan", Claim::Yes)]),
+        [("vegan".to_string(), Claim::Yes)],
+        "whichever source came first"
+    );
 }
 
 #[test]
@@ -271,6 +277,9 @@ fn nutrition_prefers_the_retailer_over_the_crowd() {
     let chosen =
         merge_nutrition(vec![(Source::Off, panel(1.0)), (Source::Asda, panel(2.0))]).unwrap();
     assert_eq!(chosen.salt_g, Some(2.0), "Asda's panel wins");
+    let chosen =
+        merge_nutrition(vec![(Source::Asda, panel(2.0)), (Source::Off, panel(1.0))]).unwrap();
+    assert_eq!(chosen.salt_g, Some(2.0), "whichever came first");
 }
 
 #[test]
@@ -292,6 +301,14 @@ fn ingredients_prefer_the_retailer_and_skip_empties() {
             (Source::Asda, "Water, Oats 10%".to_string()),
         ]),
         Some("Water, Oats 10%".to_string()),
+    );
+    assert_eq!(
+        merge_ingredients(vec![
+            (Source::Asda, "Water, Oats 10%".to_string()),
+            (Source::Off, "crowd text".to_string()),
+        ]),
+        Some("Water, Oats 10%".to_string()),
+        "whichever came first"
     );
     // A source that stored a blank contributes nothing.
     assert_eq!(

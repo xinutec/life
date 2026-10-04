@@ -3,7 +3,7 @@
 
 mod common;
 
-use chrono::{Datelike, Duration, Months, NaiveDate, Utc};
+use chrono::{Duration, NaiveDate, Utc};
 
 use life::db;
 use life::inventory::repo as inv_repo;
@@ -59,16 +59,6 @@ async fn a_warranty_runs_in_calendar_months_from_the_day_it_was_bought() {
     let item = inv_repo::create_item(&pool, user, appliance("Dishwasher"))
         .await
         .expect("create");
-
-    // Bought two years ago with two years of cover: the interesting case,
-    // because it is the one where the answer is "just ran out" rather than
-    // "obviously fine", and it cannot be answered without a real start date.
-    let bought = Utc::now().date_naive() - Duration::days(730);
-    let new = NewPurchase {
-        bought_on: Some(bought),
-        warranty_months: Some(24),
-        ..purchase("Currys", 34_999)
-    };
     let bought_item = BoughtItem {
         id: item.id,
         product_id: None,
@@ -77,33 +67,42 @@ async fn a_warranty_runs_in_calendar_months_from_the_day_it_was_bought() {
         quantity: None,
         unit: None,
     };
-    purchases_repo::record(&pool, user, &bought_item, &new)
-        .await
-        .expect("record");
 
-    let got = purchases_repo::for_item(&pool, user, item.id)
-        .await
-        .expect("read");
-    assert_eq!(got.len(), 1);
-    let p = &got[0];
-    assert_eq!(p.amount_minor, 34_999);
-    assert_eq!(p.warranty_months, Some(24));
-    assert_eq!(
-        p.bought_at.date_naive(),
-        bought,
-        "the stated day must survive the round trip — stored at midday so no \
-         zone offset can walk it into the day before"
-    );
-    // Calendar months, not 30-day blocks: two years from 3 March is 3 March.
-    let until = p.warranty_until.expect("a length gives an end");
-    let expected = bought
-        .checked_add_months(Months::new(24))
-        .expect("two years on is a real day");
-    assert_eq!(until.date_naive(), expected);
-    assert_eq!(
-        (until.year(), until.month(), until.day()),
-        (expected.year(), expected.month(), expected.day()),
-    );
+    // Calendar months, not 30-day blocks: two years from 3 March is 3 March
+    // (730 days would be the 2nd, as 2024 is a leap year). A month from 31
+    // January is the last day of February, not a day in March.
+    for (bought, months, until) in [
+        ((2024, 3, 3), 24, (2026, 3, 3)),
+        ((2024, 1, 31), 1, (2024, 2, 29)),
+    ] {
+        let day = |(y, m, d)| NaiveDate::from_ymd_opt(y, m, d).unwrap();
+        let new = NewPurchase {
+            bought_on: Some(day(bought)),
+            warranty_months: Some(months),
+            ..purchase("Currys", 34_999)
+        };
+        let id = purchases_repo::record(&pool, user, &bought_item, &new)
+            .await
+            .expect("record");
+        let got = purchases_repo::for_item(&pool, user, item.id)
+            .await
+            .expect("read");
+        let p = got.iter().find(|p| p.id == id).expect("present");
+        assert_eq!(p.amount_minor, 34_999);
+        assert_eq!(p.warranty_months, Some(months));
+        assert_eq!(
+            p.bought_at.date_naive(),
+            day(bought),
+            "the stated day must survive the round trip"
+        );
+        assert_eq!(
+            p.warranty_until
+                .expect("a length gives an end")
+                .date_naive(),
+            day(until),
+            "{months} months from {bought:?}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -173,18 +172,21 @@ async fn a_future_purchase_and_an_absurd_warranty_are_refused_not_stored() {
     // 24 typed into a box that means months is a warranty; 24 typed into it
     // meaning YEARS is the mistake this field invites, and 288 is not it —
     // 2400 is. The bound exists to catch the order-of-magnitude slip.
-    let err = purchases_repo::record(
-        &pool,
-        user,
-        &bought_item,
-        &NewPurchase {
-            warranty_months: Some(2400),
-            ..purchase("Currys", 100)
-        },
-    )
-    .await
-    .expect_err("an absurd warranty must be refused");
-    assert!(err.to_string().contains("2400"), "{err}");
+    // And a warranty of 0 months is no warranty: that is `None`, not a length.
+    for months in [2400, 0] {
+        let err = purchases_repo::record(
+            &pool,
+            user,
+            &bought_item,
+            &NewPurchase {
+                warranty_months: Some(months),
+                ..purchase("Currys", 100)
+            },
+        )
+        .await
+        .expect_err("an absurd warranty must be refused");
+        assert!(err.to_string().contains(&months.to_string()), "{err}");
+    }
 
     // Nothing was stored by either attempt.
     let got = purchases_repo::for_item(&pool, user, item.id)

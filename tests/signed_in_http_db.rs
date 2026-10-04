@@ -872,3 +872,17 @@ async fn a_shop_import_fills_a_missing_pack_size_but_never_overrules_one() {
     );
     assert_eq!(product["pack"]["value"], 594.0, "and read as an amount");
 }
+
+/// A restore names its kind in the path. One the trash does not hold is the
+/// client's mistake, a 400; a real kind with nothing binned under that ref is a
+/// 404, so the two never read as the same answer.
+#[tokio::test]
+async fn restoring_an_unknown_kind_is_a_400_and_an_unknown_ref_a_404() {
+    let pool = pool().await;
+    let (status, body) = call(&pool, "POST", "/api/trash/bogus/1/restore", None).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert!(body["error"].is_string(), "{body}");
+
+    let (status, body) = call(&pool, "POST", "/api/trash/item/0/restore", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+}

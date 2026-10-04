@@ -176,13 +176,14 @@ fn a_line_spreads_across_rows_until_it_is_satisfied() {
 #[test]
 fn the_soonest_to_expire_goes_first() {
     // Ahead of "smallest": using up the thing about to go off is the point of
-    // knowing its date at all. The 500g bag expires first, so it goes first
-    // even though the 300g one is smaller.
+    // knowing its date at all. The 500ml pot expires first, so it goes first
+    // even though the undated 300ml one and the later 100ml one are smaller.
     let lines = plan(
         &recipe(vec![ing("cream", Some(200.0), Some("ml"))]),
         &[
             item(1, "cream", Some(300.0), Some("ml")),
             expiring(item(2, "cream", Some(500.0), Some("ml")), "2026-08-02"),
+            expiring(item(3, "cream", Some(100.0), Some("ml")), "2026-08-09"),
         ],
     );
     assert_eq!(

@@ -137,6 +137,30 @@ async fn location_delete_takes_subtree_and_restores_it() {
     )
     .await
     .unwrap();
+    // A shelf binned on its own the day before: not part of this delete.
+    let old_shelf = inv_repo::create_location(
+        &pool,
+        user,
+        NewLocation {
+            kind: LocationKind::Layer,
+            name: "Binned before".into(),
+            parent_id: Some(cupboard.id),
+            sort_order: 1,
+            position: None,
+        },
+    )
+    .await
+    .unwrap();
+    assert!(
+        inv_repo::delete_location(&pool, user, old_shelf.id)
+            .await
+            .unwrap()
+    );
+    sqlx::query("UPDATE locations SET deleted_at = deleted_at - INTERVAL 1 DAY WHERE id = ?")
+        .bind(old_shelf.id)
+        .execute(&pool)
+        .await
+        .unwrap();
     let item = inv_repo::create_item(
         &pool,
         user,
@@ -179,6 +203,10 @@ async fn location_delete_takes_subtree_and_restores_it() {
     );
     let visible = inv_repo::list_locations(&pool, user).await.unwrap();
     assert_eq!(visible.len(), 2, "cupboard + shelf both restored");
+    assert!(
+        !visible.iter().any(|l| l.id == old_shelf.id),
+        "a shelf binned on another day stays binned"
+    );
 }
 
 #[tokio::test]
