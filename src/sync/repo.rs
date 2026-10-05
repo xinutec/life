@@ -20,7 +20,8 @@ use super::types::{
 
 /// The next revision, inside the caller's transaction: the counter's row lock is
 /// held until commit, so revisions follow commit order and a pull never passes an
-/// uncommitted one.
+/// uncommitted one. Take it before any row lock, so every sync write locks in one
+/// order and none can deadlock another.
 pub async fn next_rev(conn: &mut MySqlConnection) -> sqlx::Result<u64> {
     let res = sqlx::query("UPDATE sync_rev SET val = LAST_INSERT_ID(val + 1) WHERE id = 1")
         .execute(&mut *conn)
@@ -177,6 +178,8 @@ async fn push<C: SyncSpec>(
         let assumed_rev = entry.assumed_master_state.as_ref().map(C::rev);
 
         let mut tx = pool.begin().await?;
+        // A conflict rolls back, and the revision with it.
+        let rev = next_rev(&mut tx).await?;
         let current: Option<C::Row> = sqlx::query_as(AssertSqlSafe(select_sql.as_str()))
             .bind(C::ulid(&new))
             .bind(user_id)
@@ -188,7 +191,6 @@ async fn push<C: SyncSpec>(
                 conflicts.push(C::row_doc(cur)?);
                 continue;
             }
-            let rev = next_rev(&mut tx).await?;
             // Set-only tombstones: no push clears one, so a stale client cannot
             // resurrect a delete. The trash restore is the one way back.
             C::bind_data(sqlx::query(AssertSqlSafe(update_sql.as_str())), &new)
@@ -200,7 +202,6 @@ async fn push<C: SyncSpec>(
                 .await?;
         } else {
             let tombstoned = C::tombstone_on_insert(&mut tx, user_id, &new).await?;
-            let rev = next_rev(&mut tx).await?;
             C::bind_data(
                 sqlx::query(AssertSqlSafe(insert_sql.as_str()))
                     .bind(user_id)
@@ -493,8 +494,8 @@ impl SyncSpec for TodoLink {
     }
 
     /// Two devices can add the same connection under different ulids: the newer
-    /// lands tombstoned. No FOR UPDATE, which would reverse the REST path's lock
-    /// order; the boot-time dedupe catches the rare race.
+    /// lands tombstoned. The counter, already held, serialises this check against
+    /// every other sync write.
     async fn tombstone_on_insert(
         tx: &mut MySqlConnection,
         user_id: &str,

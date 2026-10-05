@@ -94,6 +94,7 @@ pub async fn update(
 ) -> Result<Option<Todo>> {
     // Merged onto the stored row, read under the lock (`get_for_update`).
     let mut tx = pool.begin().await?;
+    let rev = next_rev(&mut tx).await?;
     let Some(cur) = get_for_update(&mut tx, user_id, id).await? else {
         return Ok(None);
     };
@@ -106,7 +107,6 @@ pub async fn update(
     let due = upd.due.unwrap_or(cur.due);
     let shared = upd.shared.unwrap_or(cur.shared);
 
-    let rev = next_rev(&mut tx).await?;
     let res = sqlx::query(
         "UPDATE todos SET title = ?, todo_type = ?, status = ?, priority = ?, notes = ?, \
          not_before = ?, due = ?, shared = ?, rev = ?, updated_at = NOW() \

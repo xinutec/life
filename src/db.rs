@@ -7,11 +7,17 @@ use sqlx::mysql::MySqlPoolOptions;
 pub async fn connect(database_url: &str) -> Result<MySqlPool> {
     let pool = MySqlPoolOptions::new()
         .max_connections(8)
-        // UTC, as `.and_utc()` assumes when reading `NOW()` columns back.
         .after_connect(|conn, _meta| {
             Box::pin(async move {
+                // UTC, as `.and_utc()` assumes when reading `NOW()` columns back.
                 sqlx::query("SET time_zone = '+00:00'")
-                    .execute(conn)
+                    .execute(&mut *conn)
+                    .await?;
+                // No gap locks: under REPEATABLE READ a delete of absent rows
+                // locks a gap another product's insert needs, and deadlocks.
+                // Correctness rests on row locks and the revision counter.
+                sqlx::query("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED")
+                    .execute(&mut *conn)
                     .await?;
                 Ok(())
             })

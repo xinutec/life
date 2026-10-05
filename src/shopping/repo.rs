@@ -66,6 +66,7 @@ pub async fn restore(pool: &MySqlPool, user_id: &str, ulid: &str) -> Result<bool
 /// `Ok(None)`: no such row.
 pub async fn buy(pool: &MySqlPool, user_id: &str, id: u64) -> Result<Option<Item>> {
     let mut tx = pool.begin().await?;
+    let rev = next_rev(&mut tx).await?;
     let row: Option<ShoppingItem> = sqlx::query_as(
         "SELECT id, name, quantity, unit, barcode, category, product_id, done \
          FROM shopping_items \
@@ -78,7 +79,6 @@ pub async fn buy(pool: &MySqlPool, user_id: &str, id: u64) -> Result<Option<Item
     let Some(s) = row else {
         return Ok(None);
     };
-    let rev = next_rev(&mut tx).await?;
     sqlx::query(
         "UPDATE shopping_items SET deleted_at = NOW(), rev = ?, updated_at = NOW() \
          WHERE id = ? AND user_id = ?",
