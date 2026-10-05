@@ -37,6 +37,7 @@ import os
 import time
 import urllib.error
 import urllib.request
+from http import HTTPStatus
 from typing import Any
 
 LOG = logging.getLogger("emotion-worker")
@@ -69,29 +70,37 @@ class HolderDown(Exception):
     """
 
 
-def _request(url: str, token: str, *, method: str = "GET", body: dict[str, Any] | None = None):
+def _request(
+    url: str, token: str, *, method: str = "GET", body: dict[str, Any] | None = None
+) -> tuple[int, bytes]:
+    """The status and body of one authenticated call."""
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method)
     req.add_header("Authorization", f"Bearer {token}")
     if data is not None:
         req.add_header("Content-Type", "application/json")
-    return urllib.request.urlopen(req, timeout=POLL_TIMEOUT)
+    with urllib.request.urlopen(req, timeout=POLL_TIMEOUT) as resp:
+        return resp.status, resp.read()
 
 
 def next_job(base: str, token: str) -> dict[str, Any] | None:
     """Long-poll for work. The server holds the request open, so this blocks."""
-    with _request(f"{base}/api/emotion-worker/next", token) as resp:
-        if resp.status == 204:
-            return None
-        return json.loads(resp.read())
+    status, data = _request(f"{base}/api/emotion-worker/next", token)
+    if status == HTTPStatus.NO_CONTENT:
+        return None
+    job = json.loads(data)
+    if not isinstance(job, dict):
+        raise ValueError(f"a job is an object, got {type(job).__name__}")
+    return job
 
 
-def post_result(base: str, token: str, job_id: int, *, content: str | None, error: str | None):
+def post_result(
+    base: str, token: str, job_id: int, *, content: str | None, error: str | None
+) -> None:
     body = {"content": content} if error is None else {"error": error}
-    with _request(
+    _request(
         f"{base}/api/emotion-worker/{job_id}/result", token, method="POST", body=body
-    ) as resp:
-        resp.read()
+    )
 
 
 class Model:
@@ -127,7 +136,11 @@ class Model:
         if not model:
             return None
         secs = health.get("loading_secs")
-        return f"{model} ({secs:.0f}s so far)" if isinstance(secs, (int, float)) else str(model)
+        return (
+            f"{model} ({secs:.0f}s so far)"
+            if isinstance(secs, (int, float))
+            else str(model)
+        )
 
     def generate(self, system: str, user: str) -> str:
         body = json.dumps(
@@ -152,7 +165,7 @@ class Model:
             # reporting it would cache a real note as having no feelings in it.
             # Defer, and retry once the holder is fixed. Only a 4xx says
             # something about the request itself.
-            if e.code >= 500:
+            if e.code >= HTTPStatus.INTERNAL_SERVER_ERROR:
                 raise HolderDown(f"llm-host is failing: HTTP {e.code}") from e
             raise RuntimeError(f"llm-host refused the job: HTTP {e.code}") from e
         except (urllib.error.URLError, TimeoutError, OSError) as e:
@@ -176,7 +189,8 @@ def run(base: str, token: str, model: Model) -> None:
         except urllib.error.HTTPError as e:
             # 401 is a configuration problem, not a blip: say so plainly rather
             # than retrying a wrong token forever in silence.
-            LOG.error("poll failed: HTTP %s%s", e.code, " (check the token)" if e.code == 401 else "")
+            hint = " (check the token)" if e.code == HTTPStatus.UNAUTHORIZED else ""
+            LOG.error("poll failed: HTTP %s%s", e.code, hint)
             time.sleep(RETRY_SECS)
             continue
         except (urllib.error.URLError, TimeoutError, OSError) as e:
@@ -197,7 +211,7 @@ def run(base: str, token: str, model: Model) -> None:
         if busy is not None:
             if not announced_wait:
                 announced_wait = True
-                LOG.info("waiting: llm-host is loading %s", busy)  # once per load, not per poll
+                LOG.info("waiting: llm-host is loading %s", busy)
             time.sleep(RETRY_SECS)
             continue
         if announced_wait:
@@ -208,18 +222,7 @@ def run(base: str, token: str, model: Model) -> None:
             announced_wait = False
 
         if job.get("warm"):
-            # A preload, not a job: run the model on the day's system prompt to
-            # load the weights and build its prefix cache, then drop the output.
-            # Nothing to post — the point is only that the real request landing a
-            # moment later is warm instead of paying the cold load then.
-            try:
-                model.generate(prompt.get("system", ""), prompt.get("user", ""))
-                LOG.info("preloaded the model for today's emotion prompt")
-            except HolderDown as e:
-                LOG.warning("preload deferred: %s", e)
-                time.sleep(RETRY_SECS)
-            except Exception:  # a failed preload must never take the worker down
-                LOG.exception("preload failed")
+            _preload(model, prompt)
             continue
 
         job_id = job["id"]
@@ -241,7 +244,24 @@ def run(base: str, token: str, model: Model) -> None:
         _post_quietly(base, token, job_id, content=content, error=None)
 
 
-def _post_quietly(base: str, token: str, job_id: int, *, content: str | None, error: str | None):
+def _preload(model: Model, prompt: dict[str, Any]) -> None:
+    """A preload, not a job: run the model on the day's system prompt to load the
+    weights and build its prefix cache, then drop the output. Nothing to post —
+    the point is only that the real request landing a moment later is warm
+    instead of paying the cold load then."""
+    try:
+        model.generate(prompt.get("system", ""), prompt.get("user", ""))
+        LOG.info("preloaded the model for today's emotion prompt")
+    except HolderDown as e:
+        LOG.warning("preload deferred: %s", e)
+        time.sleep(RETRY_SECS)
+    except Exception:  # a failed preload must never take the worker down
+        LOG.exception("preload failed")
+
+
+def _post_quietly(
+    base: str, token: str, job_id: int, *, content: str | None, error: str | None
+) -> None:
     """Report an answer, tolerating a server that blinked. The work is lost, the
     note is not: it is queued again the next time the picker is opened."""
     try:
@@ -251,7 +271,9 @@ def _post_quietly(base: str, token: str, job_id: int, *, content: str | None, er
 
 
 def main() -> int:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
+    )
     token = os.environ.get("EMOTION_WORKER_TOKEN", "")
     if not token:
         LOG.error("EMOTION_WORKER_TOKEN is not set")

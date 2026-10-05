@@ -311,6 +311,42 @@
     {
       "argv": [
         "nix",
+        "develop",
+        "--no-warn-dirty",
+        ".#llm-host",
+        "--command",
+        "bash",
+        "-c",
+        "ruff check llm-host tools && ruff format --check llm-host tools"
+      ],
+      "artifacts": [],
+      "cwd": ".",
+      "env": {},
+      "name": "python: ruff",
+      "timeout_s": 600
+    },
+    {
+      "argv": [
+        "nix",
+        "develop",
+        "--no-warn-dirty",
+        ".#llm-host",
+        "--command",
+        "mypy",
+        "--strict",
+        "llm-host/src",
+        "llm-host/tests",
+        "tools"
+      ],
+      "artifacts": [],
+      "cwd": ".",
+      "env": {},
+      "name": "python: mypy",
+      "timeout_s": 600
+    },
+    {
+      "argv": [
+        "nix",
         "run",
         "git+file:../dev-lint?ref=HEAD",
         "--",

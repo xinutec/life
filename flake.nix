@@ -130,9 +130,20 @@
         android = androidShell system;
       } // darwinOnly nixpkgs.legacyPackages.${system} {
         # The LLM host's tests: nix develop .#llm-host --command pytest llm-host/tests
-        llm-host = nixpkgs.legacyPackages.${system}.mkShell {
-          packages = [ self.packages.${system}.llm-host-dev ];
-        };
+        # Also lints and type-checks the worker, which is stdlib-only.
+        llm-host =
+          let
+            pkgs = nixpkgs.legacyPackages.${system};
+            venv = self.packages.${system}.llm-host-dev;
+            # mypy reads third-party types from the venv's site-packages; without
+            # its interpreter every import is a silent Any.
+            mypy = pkgs.writeShellScriptBin "mypy" ''
+              exec ${pkgs.mypy}/bin/mypy --python-executable ${venv}/bin/python "$@"
+            '';
+          in
+          pkgs.mkShell {
+            packages = [ venv pkgs.ruff mypy ];
+          };
       });
     };
 }

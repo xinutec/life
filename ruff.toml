@@ -1,0 +1,22 @@
+# Life's Python: the LLM host (llm-host/) and the emotion worker (tools/).
+# The rule set is recall's, so the fleet's Python reads alike.
+line-length = 88
+target-version = "py312"
+src = ["llm-host/src", "llm-host/tests", "tools"]
+
+[lint]
+select = [
+  "E", "F",      # pycodestyle / pyflakes
+  "I",           # import sorting
+  "UP",          # pyupgrade
+  "B",           # bugbear
+  "SIM",         # simplify
+  "ANN",         # require annotations (pairs with strict mypy)
+  "RUF",         # ruff-specific
+  "PL",          # pylint subset
+  "TID",         # tidy imports
+]
+
+[lint.per-file-ignores]
+# Asserting against literal expected values is the point of a test.
+"llm-host/tests/**" = ["PLR2004"]

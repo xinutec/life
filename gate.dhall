@@ -176,6 +176,36 @@ in  { name = "life"
             ]
         , timeout_s = 1800
         }
+      , G.Check::{
+        , name = "python: ruff"
+        , argv =
+            [ "nix"
+            , "develop"
+            , "--no-warn-dirty"
+            , ".#llm-host"
+            , "--command"
+            , "bash"
+            , "-c"
+            , "ruff check llm-host tools && ruff format --check llm-host tools"
+            ]
+        , timeout_s = 600
+        }
+      , G.Check::{
+        , name = "python: mypy"
+        , argv =
+            [ "nix"
+            , "develop"
+            , "--no-warn-dirty"
+            , ".#llm-host"
+            , "--command"
+            , "mypy"
+            , "--strict"
+            , "llm-host/src"
+            , "llm-host/tests"
+            , "tools"
+            ]
+        , timeout_s = 600
+        }
       , G.devLint "../"
       , G.checkTable "../dev-lint"
       ]

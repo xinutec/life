@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import life_llm_host.host
+from life_llm_host.host import ModelHolder, build_app, main
 from life_llm_host.model import (
     DEFAULT_IDLE_UNLOAD,
     DEFAULT_LLM,
@@ -16,7 +17,6 @@ from life_llm_host.model import (
     LLM_HOST_PORT,
     ChatModel,
 )
-from life_llm_host.host import ModelHolder, build_app, main
 
 
 class FakeClock:
