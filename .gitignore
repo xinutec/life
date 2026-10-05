@@ -5,3 +5,4 @@
 /.direnv/
 /test-results/
 /logs/
+__pycache__/
