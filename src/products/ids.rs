@@ -101,6 +101,36 @@ impl FromStr for ExternalId {
     }
 }
 
+/// An allergen as Open Food Facts names it: "gluten", "sesame-seeds". Parsing
+/// is the only way to make one, and maps any source's name to OFF's id, so
+/// "Wheat" and "en:gluten" are one value. A name OFF doesn't list is kept,
+/// lowercased: dropping it would read as "free from".
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS)]
+#[ts(as = "String")]
+pub struct AllergenId(String);
+
+impl AllergenId {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl FromStr for AllergenId {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // OFF's tags carry a language: "en:milk".
+        let name = s.split_once(':').map_or(s, |(_, rest)| rest);
+        let name = name.trim().to_lowercase();
+        if name.is_empty() {
+            return Err("an allergen needs a name".to_string());
+        }
+        Ok(AllergenId(
+            super::allergens::off_id(&name).map_or(name, str::to_string),
+        ))
+    }
+}
+
 /// Deserialising validates, so a malformed id is refused by the request body's
 /// own decoding — before a handler runs, and without the handler restating the
 /// rule.
@@ -118,6 +148,7 @@ macro_rules! validating_deserialize {
 
 validating_deserialize!(Barcode);
 validating_deserialize!(ExternalId);
+validating_deserialize!(AllergenId);
 
 /// Database mapping ([`varchar_sql!`](crate::varchar_sql)), `Display`, and
 /// comparison with literals for the string ids.
@@ -150,6 +181,7 @@ macro_rules! string_id_sql {
 
 string_id_sql!(Barcode);
 string_id_sql!(ExternalId);
+string_id_sql!(AllergenId);
 
 crate::row_id! {
     /// `products.id` — the canonical product every listing, price, fact and

@@ -107,12 +107,12 @@ fn a_single_source_is_not_a_divergence() {
 fn merge_prefers_the_picked_source_else_precedence() {
     let mut asda = source_facts(Source::Asda, Some(panel(61.0)), None);
     asda.facts.allergens = vec![Allergen {
-        allergen: "oats".into(),
+        allergen: "oats".parse().unwrap(),
         presence: Presence::Contains,
     }];
     let mut off = source_facts(Source::Off, Some(panel(59.0)), None);
     off.facts.allergens = vec![Allergen {
-        allergen: "soya".into(),
+        allergen: "soya".parse().unwrap(),
         presence: Presence::MayContain,
     }];
     let by_source = vec![asda, off];

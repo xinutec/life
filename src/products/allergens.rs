@@ -1,0 +1,169 @@
+//! Allergen names, one vocabulary across sources: Open Food Facts' ids. A
+//! retailer names the cereal ("Wheat") where OFF names the allergen
+//! ("en:gluten"); both mean `gluten`.
+
+/// OFF's English allergen taxonomy (`taxonomies/allergens.txt` at b90bcf61bf):
+/// each id and the names it files under it. `none` is left out: it is the
+/// absence of an allergen, and its names include "no" and "0".
+const SYNONYMS: &[(&str, &[&str])] = &[
+    (
+        "gluten",
+        &[
+            "cereals containing gluten",
+            "other cereals containing gluten",
+            "barley",
+            "barley malt flour",
+            "malted barley",
+            "malted barley extract",
+            "malted barley flour",
+            "kamut",
+            "rye",
+            "rye flour",
+            "spelt",
+            "speltflour",
+            "wheat",
+            "wheat flour",
+            "wheatflour",
+            "wheat semolina",
+            "oats",
+            "oat fiber",
+        ],
+    ),
+    (
+        "crustaceans",
+        &["crab", "lobster", "crayfish", "prawn", "shrimp"],
+    ),
+    (
+        "eggs",
+        &[
+            "egg",
+            "barn egg",
+            "egg whites",
+            "egg white",
+            "egg yolks",
+            "egg yolk",
+            "whole eggs",
+            "whole egg",
+        ],
+    ),
+    (
+        "fish",
+        &[
+            "fishes", "cod", "mackerel", "flounder", "halibut", "turbot", "haddock", "salmon",
+            "sole", "trout", "tuna", "sardine", "sardines",
+        ],
+    ),
+    ("red-caviar", &[]),
+    ("orange", &[]),
+    ("kiwi", &[]),
+    ("banana", &[]),
+    ("peach", &[]),
+    ("apple", &[]),
+    ("beef", &[]),
+    ("pork", &[]),
+    ("chicken", &[]),
+    ("yamaimo", &[]),
+    ("gelatin", &[]),
+    ("matsutake", &[]),
+    (
+        "peanuts",
+        &["peanut", "arachis hypogaea", "groundnut", "groundnuts"],
+    ),
+    (
+        "soybeans",
+        &[
+            "soya",
+            "soja",
+            "soia",
+            "soy",
+            "soya bean",
+            "soy flour",
+            "soya flour",
+            "soy lecithin",
+            "soy lecithins",
+            "soya lecithin",
+            "soya lecithins",
+            "soy lecithines",
+            "soy protein isolate",
+            "soya products",
+            "black soy bean",
+            "soy bean oil",
+        ],
+    ),
+    (
+        "milk",
+        &[
+            "lactose",
+            "whey",
+            "dairy",
+            "butter",
+            "buttermilk",
+            "cream",
+            "yogurt",
+            "cheese",
+            "yoghurt",
+            "parmigiano reggiano",
+            "grana padano",
+            "milk chocolate coating",
+            "milk powder",
+            "milk protein",
+        ],
+    ),
+    (
+        "nuts",
+        &[
+            "almonds",
+            "hazelnuts",
+            "walnuts",
+            "cashews",
+            "cashew",
+            "pecan nuts",
+            "pecan",
+            "brazil nuts",
+            "pistachio nuts",
+            "pistachio",
+            "macadamia",
+            "macadamia nuts",
+            "queensland nuts",
+            "tree nuts",
+            "treenuts",
+            "other nuts",
+            "other tree nuts",
+        ],
+    ),
+    ("celery", &["celeriac"]),
+    ("mustard", &["brassica"]),
+    ("sesame-seeds", &["sesame"]),
+    (
+        "sulphur-dioxide-and-sulphites",
+        &["sulphur dioxide", "sulphites", "sulfites"],
+    ),
+    ("lupin", &["lupine"]),
+    (
+        "molluscs",
+        &[
+            "mollusc",
+            "mollusks",
+            "mollusk",
+            "squid",
+            "cuttlefish",
+            "oysters",
+            "oyster",
+            "mussels",
+            "mussel",
+            "clams",
+            "clam",
+            "scallops",
+            "scallop",
+        ],
+    ),
+];
+
+/// The OFF id a lowercased name means, if OFF lists it.
+pub(crate) fn off_id(name: &str) -> Option<&'static str> {
+    let spaced = name.replace('-', " ");
+    SYNONYMS
+        .iter()
+        .find(|(id, names)| id.replace('-', " ") == spaced || names.contains(&spaced.as_str()))
+        .map(|(id, _)| *id)
+}

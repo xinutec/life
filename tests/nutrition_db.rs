@@ -69,11 +69,11 @@ async fn store_and_read_facts_then_replace_on_relookup() {
         ingredients: Some("Wholegrain oats (95%), sugar".into()),
         allergens: vec![
             Allergen {
-                allergen: "nuts".into(),
+                allergen: "nuts".parse().unwrap(),
                 presence: Presence::MayContain,
             },
             Allergen {
-                allergen: "gluten".into(),
+                allergen: "gluten".parse().unwrap(),
                 presence: Presence::Contains,
             },
         ],
@@ -329,7 +329,7 @@ async fn two_sources_nutrition_allergens_ingredients_coexist_and_merge() {
             }),
             ingredients: Some("crowd-entered ingredients".into()),
             allergens: vec![Allergen {
-                allergen: "milk".into(),
+                allergen: "milk".parse().unwrap(),
                 presence: Presence::MayContain,
             }],
             dietary: vec![],
@@ -351,11 +351,11 @@ async fn two_sources_nutrition_allergens_ingredients_coexist_and_merge() {
             ingredients: Some("Water, Oats 10%".into()),
             allergens: vec![
                 Allergen {
-                    allergen: "milk".into(),
+                    allergen: "milk".parse().unwrap(),
                     presence: Presence::Contains,
                 },
                 Allergen {
-                    allergen: "soya".into(),
+                    allergen: "soya".parse().unwrap(),
                     presence: Presence::Contains,
                 },
             ],
@@ -381,7 +381,10 @@ async fn two_sources_nutrition_allergens_ingredients_coexist_and_merge() {
             .iter()
             .map(|a| (a.allergen.as_str(), a.presence))
             .collect::<Vec<_>>(),
-        vec![("milk", Presence::Contains), ("soya", Presence::Contains)],
+        vec![
+            ("milk", Presence::Contains),
+            ("soybeans", Presence::Contains)
+        ],
         "milk upgraded to 'contains'; soya kept though OFF was silent"
     );
 
@@ -410,7 +413,7 @@ async fn two_sources_nutrition_allergens_ingredients_coexist_and_merge() {
     );
     assert_eq!(facts.ingredients.as_deref(), Some("Water, Oats 10%"));
     assert!(
-        facts.allergens.iter().any(|a| a.allergen == "soya"),
+        facts.allergens.iter().any(|a| a.allergen == "soybeans"),
         "Asda's soya allergen survives OFF clearing its own"
     );
 }
@@ -458,8 +461,8 @@ async fn real_brandbank_facts_parse_store_and_read_back() {
             .starts_with("Water, Oats 10%")
     );
     assert!(
-        read.allergens.iter().any(|a| a.allergen == "oats"),
-        "Oats declared"
+        read.allergens.iter().any(|a| a.allergen == "gluten"),
+        "Oats declared, as the gluten OFF files them under"
     );
     let vegan = read.dietary.iter().find(|d| d.flag.as_str() == "vegan");
     assert_eq!(vegan.map(|d| d.value), Some(Claim::Yes));
@@ -499,7 +502,7 @@ async fn a_failed_allergen_replace_keeps_the_previous_set() {
     .unwrap();
 
     let declared = |a: &str| Allergen {
-        allergen: a.into(),
+        allergen: a.parse().unwrap(),
         presence: Presence::Contains,
     };
     repo::replace_allergens(
@@ -534,4 +537,69 @@ async fn a_failed_allergen_replace_keeps_the_previous_set() {
         ["milk", "nuts"],
         "the rejected replace must roll back whole — not drop the declared allergens"
     );
+}
+
+#[tokio::test]
+async fn allergens_stored_under_a_retailers_names_read_as_off_ids() {
+    let url = common::test_db_url();
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    let barcode: Barcode = "5000000000466".parse().unwrap();
+    sqlx::query("DELETE FROM products WHERE barcode = ?")
+        .bind(&barcode)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let product = repo::upsert_external(
+        &pool,
+        Source::Off,
+        &ExternalId::from(&barcode),
+        Some(&barcode),
+        &repo::ListingFields {
+            raw_name: Some("Malt Loaf"),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    // Rows written before the names were mapped, as Brandbank words.
+    for (allergen, presence) in [("wheat", "may_contain"), ("barley", "contains")] {
+        sqlx::query(
+            "INSERT INTO product_allergens (product_id, allergen, presence, source) \
+             VALUES (?, ?, ?, 'asda')",
+        )
+        .bind(product.id)
+        .bind(allergen)
+        .bind(presence)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    let by_source = repo::facts_by_source(&pool, product.id).await.unwrap();
+    let asda: Vec<(&str, Presence)> = by_source[0]
+        .facts
+        .allergens
+        .iter()
+        .map(|a| (a.allergen.as_str(), a.presence))
+        .collect();
+    assert_eq!(asda, [("gluten", Presence::Contains)]);
+
+    // Writing both names again stores the one id, not two rows for one key.
+    let named = |a: &str| Allergen {
+        allergen: a.parse().unwrap(),
+        presence: Presence::Contains,
+    };
+    repo::replace_allergens(
+        &pool,
+        product.id,
+        &[named("Wheat"), named("Barley")],
+        Source::Asda,
+    )
+    .await
+    .unwrap();
+    let facts = repo::facts_for(&pool, product.id).await.unwrap();
+    assert_eq!(facts.allergens, [named("gluten")]);
 }

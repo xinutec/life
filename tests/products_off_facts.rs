@@ -2,6 +2,7 @@
 //! `RawFacts::parse` half of the OFF lookup, exercised without any network by
 //! deserializing captured-shape OFF product JSON.
 
+use life::products::ids::AllergenId;
 use life::products::nutrition::{
     Allergen, Claim, DietaryFlag, Nutrition, Presence, RawFacts, merge_allergens, merge_dietary,
     merge_ingredients, merge_nutrition,
@@ -64,7 +65,8 @@ fn full_panel_ingredients_allergens_and_flags() {
         Some("Wholegrain oats (95%), sugar")
     );
 
-    // Allergens: contains from allergens_tags, may_contain from traces, sorted.
+    // Allergens: contains from allergens_tags, may_contain from traces, sorted;
+    // en:oats is the gluten already declared.
     let allergens: Vec<(&str, Presence)> = facts
         .allergens
         .iter()
@@ -76,7 +78,6 @@ fn full_panel_ingredients_allergens_and_flags() {
             ("gluten", Presence::Contains),
             ("milk", Presence::MayContain),
             ("nuts", Presence::MayContain),
-            ("oats", Presence::Contains),
         ]
     );
 
@@ -325,7 +326,7 @@ fn ingredients_prefer_the_retailer_and_skip_empties() {
 
 fn allergen(name: &str, presence: Presence) -> Allergen {
     Allergen {
-        allergen: name.to_string(),
+        allergen: name.parse().unwrap(),
         presence,
     }
 }
@@ -338,7 +339,7 @@ fn allergens_merged(claims: &[(Source, &str, Presence)]) -> Vec<(String, Presenc
             .collect(),
     )
     .into_iter()
-    .map(|a| (a.allergen, a.presence))
+    .map(|a| (a.allergen.to_string(), a.presence))
     .collect()
 }
 
@@ -353,7 +354,7 @@ fn allergens_union_every_source_never_dropping_one() {
         ]),
         [
             ("milk".to_string(), Presence::Contains),
-            ("soya".to_string(), Presence::Contains),
+            ("soybeans".to_string(), Presence::Contains),
         ]
     );
 }
@@ -382,4 +383,30 @@ fn a_declared_allergen_beats_a_mere_trace() {
 #[test]
 fn allergens_empty_is_empty() {
     assert!(allergens_merged(&[]).is_empty());
+}
+
+#[test]
+fn every_source_names_an_allergen_by_its_off_id() {
+    let id = |s: &str| s.parse::<AllergenId>().unwrap().to_string();
+    assert_eq!(id("Wheat"), "gluten");
+    assert_eq!(id("Cereals containing Gluten"), "gluten");
+    assert_eq!(id("en:gluten"), "gluten");
+    assert_eq!(id("Soya"), "soybeans");
+    assert_eq!(id("Sesame"), "sesame-seeds");
+    assert_eq!(id("sesame seeds"), "sesame-seeds");
+    assert_eq!(id("en:sesame-seeds"), "sesame-seeds");
+    // A name OFF doesn't list is kept: dropping it would read as "free from".
+    assert_eq!(id("Sulphur Dioxide/Sulphites"), "sulphur dioxide/sulphites");
+    assert!(" ".parse::<AllergenId>().is_err());
+}
+
+#[test]
+fn two_names_for_one_allergen_are_one_entry_the_severer_winning() {
+    assert_eq!(
+        allergens_merged(&[
+            (Source::Asda, "Wheat", Presence::MayContain),
+            (Source::Off, "en:barley", Presence::Contains),
+        ]),
+        [("gluten".to_string(), Presence::Contains)]
+    );
 }

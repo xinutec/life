@@ -42,15 +42,15 @@ fn parses_the_real_oalty_blob() {
         )
     );
 
-    // Allergens: only positive presences. Oats "Contains" is kept; Milk and Soya
-    // are "Free From" — negatives, not allergens.
+    // Allergens: only positive presences. Oats "Contains" is kept, as the
+    // gluten OFF files oats under; Milk and Soya are "Free From" — negatives.
     assert_eq!(
         facts
             .allergens
             .iter()
             .map(|a| (a.allergen.as_str(), a.presence))
             .collect::<Vec<_>>(),
-        vec![("oats", Presence::Contains)]
+        vec![("gluten", Presence::Contains)]
     );
 
     // Dietary: only asserted (true) flags become 'yes'. halal/kosher/noGluten are

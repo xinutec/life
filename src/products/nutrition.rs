@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use ts_rs::TS;
 
+use super::ids::AllergenId;
 use super::source::Source;
 use crate::str_enum;
 
@@ -69,8 +70,7 @@ str_enum! {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct Allergen {
-    /// OFF's canonical allergen id, language prefix stripped ("en:milk" → "milk").
-    pub allergen: String,
+    pub allergen: AllergenId,
     pub presence: Presence,
 }
 
@@ -259,19 +259,23 @@ pub fn merge_ingredients(texts: Vec<(Source, String)>) -> Option<String> {
 }
 
 /// Merge sources' allergen claims as a UNION: silence is not "free from".
-/// `contains` beats `may_contain`. One entry per allergen, sorted.
 pub fn merge_allergens(claims: Vec<(Source, Allergen)>) -> Vec<Allergen> {
-    let mut by_name: BTreeMap<String, Presence> = BTreeMap::new();
-    for (_, a) in &claims {
+    allergen_list(claims.into_iter().map(|(_, a)| (a.allergen, a.presence)))
+}
+
+/// One entry per allergen, sorted, `contains` beating `may_contain`: two names
+/// can mean one allergen ("Wheat" and "Barley" are both gluten).
+pub fn allergen_list(claims: impl IntoIterator<Item = (AllergenId, Presence)>) -> Vec<Allergen> {
+    let mut by_id: BTreeMap<AllergenId, Presence> = BTreeMap::new();
+    for (id, presence) in claims {
         // `Presence` is ordered by severity, so "the more severe wins" is a max.
-        by_name
-            .entry(a.allergen.clone())
-            .and_modify(|p| *p = (*p).max(a.presence))
-            .or_insert(a.presence);
+        by_id
+            .entry(id)
+            .and_modify(|p| *p = (*p).max(presence))
+            .or_insert(presence);
     }
-    by_name
+    by_id
         .into_iter()
-        .filter(|(name, _)| !name.is_empty())
         .map(|(allergen, presence)| Allergen { allergen, presence })
         .collect()
 }
@@ -401,19 +405,16 @@ impl RawFacts {
     }
 
     fn allergens(&self) -> Vec<Allergen> {
-        // "contains" wins over a "may_contain" trace of the same allergen.
-        let mut by_name: BTreeMap<String, Presence> = BTreeMap::new();
-        for tag in &self.traces_tags {
-            by_name.insert(strip_lang(tag).to_string(), Presence::MayContain);
-        }
-        for tag in &self.allergens_tags {
-            by_name.insert(strip_lang(tag).to_string(), Presence::Contains);
-        }
-        by_name
-            .into_iter()
-            .filter(|(name, _)| !name.is_empty())
-            .map(|(allergen, presence)| Allergen { allergen, presence })
-            .collect()
+        let tagged = |tags: &[String], presence| {
+            tags.iter()
+                .filter_map(move |t| Some((t.parse::<AllergenId>().ok()?, presence)))
+                .collect::<Vec<_>>()
+        };
+        allergen_list(
+            tagged(&self.traces_tags, Presence::MayContain)
+                .into_iter()
+                .chain(tagged(&self.allergens_tags, Presence::Contains)),
+        )
     }
 
     fn dietary(&self) -> Vec<DietaryFlag> {

@@ -11,10 +11,11 @@ use anyhow::Result;
 use sqlx::types::Json;
 use sqlx::{MySqlConnection, MySqlPool};
 
-use crate::products::ids::ProductId;
+use crate::products::ids::{AllergenId, ProductId};
 use crate::products::nutrition::{
-    Allergen, Basis, Claim, Diet, DietaryFlag, Nutrition, Presence, ProductFacts, fact_rank,
-    merge_allergens, merge_dietary, merge_ingredients, merge_nutrition, summarize_nutrition,
+    Allergen, Basis, Claim, Diet, DietaryFlag, Nutrition, Presence, ProductFacts, allergen_list,
+    fact_rank, merge_allergens, merge_dietary, merge_ingredients, merge_nutrition,
+    summarize_nutrition,
 };
 use crate::products::source::Source;
 use crate::products::types::{
@@ -143,6 +144,8 @@ async fn replace_allergens_in(
         .bind(source)
         .execute(&mut *conn)
         .await?;
+    // One row per allergen id: the key is (product, source, allergen).
+    let allergens = allergen_list(allergens.iter().map(|a| (a.allergen.clone(), a.presence)));
     for a in allergens {
         sqlx::query(
             "INSERT INTO product_allergens (product_id, allergen, presence, source) \
@@ -325,7 +328,7 @@ pub(super) async fn facts_by_source_in(
             .bind(product_id)
             .fetch_all(&mut *conn)
             .await?;
-    let allergen_rows: Vec<(Source, String, Presence)> = sqlx::query_as(
+    let allergen_rows: Vec<(Source, AllergenId, Presence)> = sqlx::query_as(
         "SELECT source, allergen, presence FROM product_allergens WHERE product_id = ? \
          ORDER BY allergen",
     )
@@ -369,12 +372,17 @@ pub(super) async fn facts_by_source_in(
     }
     // A stored value outside the taxonomy fails the query itself (the columns
     // decode as their enums), rather than being papered over with a default.
+    // A row stored under an older name reads as its OFF id, so a source that
+    // said "wheat" and "barley" holds one `gluten`.
+    let mut allergens: BTreeMap<Source, Vec<(AllergenId, Presence)>> = BTreeMap::new();
     for (source, allergen, presence) in allergen_rows {
-        by_source
+        allergens
             .entry(source)
-            .or_insert_with(blank)
-            .allergens
-            .push(Allergen { allergen, presence });
+            .or_default()
+            .push((allergen, presence));
+    }
+    for (source, claims) in allergens {
+        by_source.entry(source).or_insert_with(blank).allergens = allergen_list(claims);
     }
     for (source, flag, value) in dietary_rows {
         by_source

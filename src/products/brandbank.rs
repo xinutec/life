@@ -11,7 +11,8 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::nutrition::{
-    Allergen, Basis, Claim, Diet, DietaryFlag, Nutrition, Presence, ProductFacts, as_f64,
+    Allergen, Basis, Claim, Diet, DietaryFlag, Nutrition, Presence, ProductFacts, allergen_list,
+    as_f64,
 };
 
 /// The Brandbank fields we consume. Unknown fields (the bulk of the blob —
@@ -218,24 +219,14 @@ impl Brandbank {
         // Only positive presences become allergens: "Contains" / "May Contain".
         // A "Free From" entry is a negative — it's not an allergen (the matching
         // free-from *dietary* flag comes from the booleans instead).
-        let mut out: Vec<Allergen> = self
-            .allergy_advice
-            .iter()
-            .filter_map(|a| {
-                let name = a.name_value.as_deref()?.trim();
-                let presence = match a.lookup_value.as_deref()?.to_lowercase().as_str() {
-                    "contains" => Presence::Contains,
-                    "may contain" => Presence::MayContain,
-                    _ => return None,
-                };
-                (!name.is_empty()).then(|| Allergen {
-                    allergen: name.to_lowercase(),
-                    presence,
-                })
-            })
-            .collect();
-        out.sort_by(|a, b| a.allergen.cmp(&b.allergen));
-        out
+        allergen_list(self.allergy_advice.iter().filter_map(|a| {
+            let presence = match a.lookup_value.as_deref()?.to_lowercase().as_str() {
+                "contains" => Presence::Contains,
+                "may contain" => Presence::MayContain,
+                _ => return None,
+            };
+            Some((a.name_value.as_deref()?.parse().ok()?, presence))
+        }))
     }
 
     fn dietary(&self) -> Vec<DietaryFlag> {

@@ -50,7 +50,7 @@ fn off(barcode: &Barcode) -> SourceAccount {
             nutrition: None,
             ingredients: Some("Oats".into()),
             allergens: vec![Allergen {
-                allergen: "gluten".into(),
+                allergen: "gluten".parse().unwrap(),
                 presence: Presence::Contains,
             }],
             dietary: vec![],

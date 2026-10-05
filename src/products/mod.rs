@@ -2,6 +2,7 @@
 //! prices, and the shop and Open Food Facts clients that feed them. See
 //! docs/design/catalog-and-holdings.md.
 
+pub mod allergens;
 pub mod asda;
 pub mod brandbank;
 pub mod coverage;
