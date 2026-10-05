@@ -172,10 +172,7 @@ async fn a_picture_is_kept_or_adopted_but_never_over_an_upload() {
     .unwrap();
 
     // Pretend we hold OFF's picture (bypassing the SSRF fetch): 1 byte + provenance.
-    repo::set_image_by_id(&pool, p.id, &[0x42], "image/jpeg")
-        .await
-        .unwrap();
-    sqlx::query("UPDATE products SET image_source = 'off' WHERE id = ?")
+    sqlx::query("UPDATE products SET image = x'42', image_source = 'off' WHERE id = ?")
         .bind(p.id)
         .execute(&pool)
         .await
@@ -243,4 +240,41 @@ async fn a_picture_is_kept_or_adopted_but_never_over_an_upload() {
     );
     let (bytes, _) = repo::get_image_by_id(&pool, p.id).await.unwrap().unwrap();
     assert_eq!(bytes, vec![0x09]);
+}
+
+#[tokio::test]
+async fn a_picture_cannot_be_stored_without_its_source() {
+    let url = common::test_db_url();
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    let barcode: Barcode = "5000000000833".parse().unwrap();
+    sqlx::query("DELETE FROM products WHERE barcode = ?")
+        .bind(&barcode)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let p = repo::upsert_external(
+        &pool,
+        Source::Off,
+        &ExternalId::from(&barcode),
+        Some(&barcode),
+        &repo::ListingFields::default(),
+    )
+    .await
+    .unwrap();
+
+    for (sql, what) in [
+        (
+            "UPDATE products SET image = x'42' WHERE id = ?",
+            "bytes without a source",
+        ),
+        (
+            "UPDATE products SET image_source = 'off' WHERE id = ?",
+            "a source without bytes",
+        ),
+    ] {
+        let refused = sqlx::query(sql).bind(p.id).execute(&pool).await;
+        assert!(refused.is_err(), "{what} must be refused");
+    }
 }

@@ -241,9 +241,18 @@ async fn external_import_against_real_db() {
 
     // Image is stored/served by id (there's no barcode to key it on).
     assert!(repo::get_image_by_id(&pool, p.id).await.unwrap().is_none());
-    repo::set_image_by_id(&pool, p.id, &[7, 7, 7], "image/jpeg")
-        .await
-        .unwrap();
+    repo::reconcile(
+        &pool,
+        p.id,
+        Some(repo::PictureChoice::Adopt {
+            source: Source::Waitrose,
+            bytes: vec![7, 7, 7],
+            mime: "image/jpeg".into(),
+        }),
+        &[],
+    )
+    .await
+    .unwrap();
     let (bytes, mime) = repo::get_image_by_id(&pool, p.id).await.unwrap().unwrap();
     assert_eq!(bytes, vec![7, 7, 7]);
     assert_eq!(mime, "image/jpeg");

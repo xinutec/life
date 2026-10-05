@@ -104,11 +104,7 @@ async fn attaching_a_shop_keeps_the_picture_the_product_already_has() {
     )
     .await;
     let before = repo::get(&pool, &bc).await.unwrap().unwrap();
-    sqlx::query("UPDATE products SET image_source = 'off' WHERE id = ?")
-        .bind(before.id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    assert_eq!(before.image_source, Some(Source::Off));
 
     assert_eq!(
         import(&pool, "9990000000957", "900957").await,
@@ -212,9 +208,18 @@ async fn a_changed_picture_is_served_at_once_and_an_unchanged_one_is_a_304() {
     let (status, _, _) = image(&pool, id.0, Some(&etag)).await;
     assert_eq!(status, StatusCode::NOT_MODIFIED);
 
-    repo::set_image_by_id(&pool, id, &[4, 5, 6], "image/jpeg")
-        .await
-        .unwrap();
+    repo::reconcile(
+        &pool,
+        id,
+        Some(repo::PictureChoice::Adopt {
+            source: Source::Off,
+            bytes: vec![4, 5, 6],
+            mime: "image/jpeg".into(),
+        }),
+        &[],
+    )
+    .await
+    .unwrap();
     let (status, new_tag, _) = image(&pool, id.0, Some(&etag)).await;
     assert_eq!(
         status,

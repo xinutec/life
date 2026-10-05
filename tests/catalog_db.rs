@@ -125,9 +125,18 @@ async fn item_links_to_barcodeless_shop_product_by_id() {
     )
     .await
     .unwrap();
-    prod::set_image_by_id(&pool, product.id, &[9, 8, 7], "image/jpeg")
-        .await
-        .unwrap();
+    prod::reconcile(
+        &pool,
+        product.id,
+        Some(prod::PictureChoice::Adopt {
+            source: Source::Waitrose,
+            bytes: vec![9, 8, 7],
+            mime: "image/jpeg".into(),
+        }),
+        &[],
+    )
+    .await
+    .unwrap();
 
     // Linking is only reachable via an explicit product_id — there's no barcode.
     let mut req = new_item("my scribble", None);

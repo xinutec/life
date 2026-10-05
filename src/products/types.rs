@@ -39,7 +39,7 @@ pub struct Product {
     /// refresh) — provenance for display, never hand-assigned.
     pub name_source: Option<Source>,
     /// Which source the cached picture came from — provenance for picture
-    /// reconciliation. `None` when unknown.
+    /// reconciliation. `None` exactly when there is no picture.
     pub image_source: Option<Source>,
     /// True if we have a cached image. Served from /api/products/id/{id}/image
     /// (barcodeless shop products), or /api/products/{barcode}/image when barcoded.

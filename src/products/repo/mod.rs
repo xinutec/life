@@ -32,7 +32,6 @@ struct MetaRow {
     source: Option<Source>,
     name_source: Option<Source>,
     image_source: Option<Source>,
-    has_image: i64,
 }
 
 impl From<MetaRow> for Product {
@@ -50,8 +49,9 @@ impl From<MetaRow> for Product {
             source: r.source,
             external_id: r.external_id,
             name_source: r.name_source,
+            // The schema holds a picture and its source together (0051).
+            has_image: r.image_source.is_some(),
             image_source: r.image_source,
-            has_image: r.has_image != 0,
         }
     }
 }
@@ -64,7 +64,7 @@ impl From<MetaRow> for Product {
 macro_rules! product_select {
     () => {
         "SELECT id, barcode, external_id, name, brand, quantity_label, source, \
-         name_source, image_source, (image IS NOT NULL) AS has_image FROM products"
+         name_source, image_source FROM products"
     };
 }
 
@@ -120,7 +120,7 @@ pub async fn get_by_source_external(
 ) -> Result<Option<Product>> {
     let row: Option<MetaRow> = sqlx::query_as(
         "SELECT p.id, p.barcode, p.external_id, p.name, p.brand, p.quantity_label, p.source, \
-         p.name_source, p.image_source, (p.image IS NOT NULL) AS has_image \
+         p.name_source, p.image_source \
          FROM products p JOIN product_listings l ON l.product_id = p.id \
          WHERE l.source = ? AND l.external_id = ?",
     )
@@ -365,22 +365,6 @@ pub async fn get_image_by_id(pool: &MySqlPool, id: ProductId) -> Result<Option<(
         Some((Some(bytes), mime)) => Some((bytes, mime.unwrap_or_else(|| "image/jpeg".into()))),
         _ => None,
     })
-}
-
-/// Replace the image bytes for a catalog row by id (leaving metadata as-is).
-pub async fn set_image_by_id(
-    pool: &MySqlPool,
-    id: ProductId,
-    bytes: &[u8],
-    mime: &str,
-) -> Result<()> {
-    sqlx::query("UPDATE products SET image = ?, image_mime = ?, fetched_at = CURRENT_TIMESTAMP WHERE id = ?")
-        .bind(bytes)
-        .bind(mime)
-        .bind(id)
-        .execute(pool)
-        .await?;
-    Ok(())
 }
 
 /// Cached image bytes + mime for a barcode, if present.

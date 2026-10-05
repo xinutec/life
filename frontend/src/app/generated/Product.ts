@@ -33,7 +33,7 @@ external_id: ExternalId | null,
 name_source: Source | null, 
 /**
  * Which source the cached picture came from — provenance for picture
- * reconciliation. `None` when unknown.
+ * reconciliation. `None` exactly when there is no picture.
  */
 image_source: Source | null, 
 /**

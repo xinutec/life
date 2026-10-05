@@ -192,9 +192,7 @@ pub fn picture_divergence(
         label: ReconcileField::Picture.label().to_string(),
         // The source we currently hold a picture from (if any) — the frontend
         // shows the actual thumbnail; this is the provenance behind it.
-        current: product
-            .has_image
-            .then(|| current_src.map(|s| s.to_string()).unwrap_or_default()),
+        current: current_src.map(|s| s.to_string()),
         candidates,
     })
 }
