@@ -452,6 +452,14 @@ describe('ProductPage', () => {
     expect(api.rememberShopListings).toHaveBeenCalled();
   });
 
+  it('matches a barcode the shop pads differently, as the one GTIN it is', async () => {
+    // A 14-digit GTIN-14 with a leading zero is the same product as our 13.
+    const { page } = setupApp({ '271105': ['05063089281581'] });
+    page.finder.find('waitrose');
+    await flush();
+    expect(lookup(page, 'waitrose').state).toBe('found');
+  });
+
   it('reports every listing the hunt passed over, not just the one that matched', async () => {
     // The point of a hunt that costs a page load each: the pages we read are
     // worth keeping, so the next hunt — for this product or any other — is free.

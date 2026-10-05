@@ -3,6 +3,7 @@ import { Signal, computed, inject, signal } from '@angular/core';
 import { LifeApi } from '../../life-api';
 import { ProductDetail, SeenListing, Source } from '../../models';
 import { onlineHint } from '../../shared/api-error';
+import { canonicalBarcode } from '../../shared/barcode';
 import { Feedback } from '../../shared/feedback';
 import { formatMoney } from '../../shared/money';
 import { sourceLabel } from '../../shared/sources';
@@ -178,14 +179,16 @@ export class ProductShops {
           checked: i,
         });
         const product = await this.shops.fetchProduct(provider, candidate.external_id);
-        const matched = product.barcodes.includes(barcode);
+        // The shop's own padding, read as ours: one GTIN, whatever its length.
+        const codes = product.barcodes.map(canonicalBarcode);
+        const matched = codes.includes(barcode);
         this.remember(source, [
           {
             external_id: product.external_id,
             // A listing gets one row, so of several EANs we keep the one that
             // identifies it FOR US when there is one — otherwise the next
             // lookup for this barcode would miss a page we have already read.
-            barcode: matched ? barcode : (product.barcodes[0] ?? null),
+            barcode: matched ? barcode : (codes[0] ?? null),
             name: product.name,
             brand: product.brand,
             image_url: product.image_url,

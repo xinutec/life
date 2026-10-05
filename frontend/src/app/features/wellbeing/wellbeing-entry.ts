@@ -11,7 +11,7 @@ import { Dialogs } from '@xinutec/ui-scaffold';
 import { EMOTION_NODES, emotionColor, emotionDesc, emotionLabel } from '../../shared/emotion-wheel';
 import { LifeApi } from '../../life-api';
 import { Feedback } from '../../shared/feedback';
-import { toLocalInput } from '../../shared/local-time';
+import { fromLocalInput, toLocalInput } from '../../shared/local-time';
 import { SheetHeader } from '../../shared/sheet-header';
 import {
   ENERGY_LEVELS,
@@ -181,9 +181,12 @@ export class WellbeingEntry implements OnDestroy {
     void this.store.patch(this.ulid, { note: this.note().trim() || null });
   }
 
+  /** A half-typed or impossible time is ignored rather than stored: the field
+   *  still shows it, and the entry keeps the time it had. */
   setTime(local: string): void {
-    if (!local) return;
-    void this.store.patch(this.ulid, { recordedAt: new Date(local).toISOString() });
+    const recordedAt = fromLocalInput(local);
+    if (recordedAt === null) return;
+    void this.store.patch(this.ulid, { recordedAt });
   }
 
   remove(): void {

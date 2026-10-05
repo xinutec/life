@@ -1,5 +1,5 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { Component, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatBottomSheetModule } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -8,7 +8,7 @@ import { MatListModule } from '@angular/material/list';
 import { MatMenuModule } from '@angular/material/menu';
 import { Router } from '@angular/router';
 import { Sheets } from '@xinutec/ui-scaffold';
-import { catchError, forkJoin, map, of, tap } from 'rxjs';
+import { catchError, forkJoin, map, of, switchMap, tap } from 'rxjs';
 
 import { Feedback } from '../../shared/feedback';
 import { isNotFound } from '../../shared/api-error';
@@ -71,37 +71,42 @@ export class Shopping {
    *  nothing is known. Shown, so an offline blank doesn't read as "nowhere". */
   private readonly coverageUnavailable = signal(false);
 
-  constructor() {
-    // Re-ask only when the rows worth asking about change — not on every store
-    // emission (ticking one box would otherwise re-query the whole list).
-    effect(() => {
-      const rows = this.askable();
-      if (!rows.length) {
-        this.coverage.set(new Map());
-        this.prices.set(new Map());
-        return;
-      }
-      this.api.shopCoverage(rows).subscribe({
-        next: (answers) => {
-          this.coverageUnavailable.set(false);
-          this.coverage.set(new Map(answers.map((a) => [a.key, a.sources])));
-          this.prices.set(new Map(answers.map((a) => [a.key, a.prices])));
-        },
-        // Enrichment, not the list itself: a failure leaves the Buy list working
-        // and says the coverage line is unknown rather than empty.
-        error: () => this.coverageUnavailable.set(true),
-      });
-    });
-  }
-
   /** The un-done rows that carry something to look up. A ticked-off row is
    *  already in the trolley, and a free-text jotting has no identity to ask
-   *  about. */
-  private readonly askable = computed<CoverageQuery[]>(() =>
-    this.items()
-      .filter((it) => !it.done && (it.product_id != null || !!it.barcode?.trim()))
-      .map((it) => ({ key: it.ulid, barcode: it.barcode, product_id: it.product_id })),
+   *  about. Equal by content, so an edit that changes none of it (a rename, a
+   *  quantity) asks nothing. */
+  private readonly askable = computed<CoverageQuery[]>(
+    () =>
+      this.items()
+        .filter((it) => !it.done && (it.product_id != null || !!it.barcode?.trim()))
+        .map((it) => ({ key: it.ulid, barcode: it.barcode, product_id: it.product_id })),
+    { equal: sameQueries },
   );
+
+  constructor() {
+    // switchMap: a newer question cancels the older one, so a slow answer can
+    // never land after a fresh one and overwrite it.
+    toObservable(this.askable)
+      .pipe(
+        switchMap((rows) =>
+          rows.length
+            ? this.api.shopCoverage(rows).pipe(
+                map((answers) => ({ ok: true as const, answers })),
+                // Enrichment, not the list itself: a failure leaves the Buy list
+                // working and says the coverage line is unknown rather than empty.
+                catchError(() => of({ ok: false as const })),
+              )
+            : of({ ok: true as const, answers: [] }),
+        ),
+        takeUntilDestroyed(),
+      )
+      .subscribe((r) => {
+        this.coverageUnavailable.set(!r.ok);
+        if (!r.ok) return;
+        this.coverage.set(new Map(r.answers.map((a) => [a.key, a.sources])));
+        this.prices.set(new Map(r.answers.map((a) => [a.key, a.prices])));
+      });
+  }
 
   /** The shops known to sell this row, for its own line. */
   shopsFor(it: ShoppingDoc): Source[] {
@@ -244,8 +249,15 @@ export class Shopping {
    *  silent local removal for something the server never inventoried), and the
    *  outcome is summarised either way. */
   buyDone(): void {
-    const done = this.items().filter((i) => i.done && i.id != null);
-    if (done.length === 0) return;
+    const ticked = this.items().filter((i) => i.done);
+    const done = ticked.filter((i) => i.id != null);
+    // A row the server has never seen has no inventory to land in yet. Said, not
+    // skipped: the button counted it.
+    const unsynced = notSyncedYet(ticked.length - done.length);
+    if (done.length === 0) {
+      if (unsynced) this.feedback.notify(unsynced);
+      return;
+    }
     const rows: BuyRow[] = done.map((it) => ({ id: it.id!, name: it.name }));
     this.sheet
       .open<BuySheet, BuyRow[], BuyPrices | 'skip'>(BuySheet, { data: rows })
@@ -254,12 +266,12 @@ export class Shopping {
         // Dismissed without choosing: buy nothing. Closing a sheet you opened by
         // mistake must not empty the list.
         if (res === undefined) return;
-        this.completeBuy(done, res === 'skip' ? null : res);
+        this.completeBuy(done, res === 'skip' ? null : res, unsynced);
       });
   }
 
   /** The buy itself, once it is known whether prices were recorded. */
-  private completeBuy(done: ShoppingDoc[], priced: BuyPrices | null): void {
+  private completeBuy(done: ShoppingDoc[], priced: BuyPrices | null, unsynced: string): void {
     const buys = done.map((it) => {
       const minor = priced?.prices.get(it.id!);
       const purchase =
@@ -273,10 +285,15 @@ export class Shopping {
     forkJoin(buys).subscribe((flags) => {
       const ok = flags.filter(Boolean).length;
       const failed = flags.length - ok;
+      const tail = unsynced ? ` ${unsynced}` : '';
       if (failed > 0) {
-        this.feedback.error(`${ok} added to inventory; ${failed} failed and stayed on the list.`);
+        this.feedback.error(
+          `${ok} added to inventory; ${failed} failed and stayed on the list.${tail}`,
+        );
       } else {
-        this.feedback.notify(ok === 1 ? 'Added to inventory.' : `${ok} added to inventory.`);
+        this.feedback.notify(
+          `${ok === 1 ? 'Added to inventory.' : `${ok} added to inventory.`}${tail}`,
+        );
       }
     });
   }
@@ -303,4 +320,22 @@ function packsOf(it: ShoppingDoc): number {
   const q = it.quantity;
   const counted = !MEASURES.test(it.unit?.trim() ?? '');
   return counted && q != null && Number.isInteger(q) && q > 0 ? q : 1;
+}
+
+/** Two coverage questions are the same question: the same rows, by key and
+ *  identity, in the same order. */
+function sameQueries(a: readonly CoverageQuery[], b: readonly CoverageQuery[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (q, i) =>
+        q.key === b[i].key && q.barcode === b[i].barcode && q.product_id === b[i].product_id,
+    )
+  );
+}
+
+/** What to say about ticked rows that never reached the server, or ''. */
+function notSyncedYet(n: number): string {
+  if (n === 0) return '';
+  return `${n} not synced yet, so ${n === 1 ? 'it stays' : 'they stay'} ticked.`;
 }

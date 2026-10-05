@@ -110,6 +110,12 @@ describe('WellbeingEntry (edit sheet)', () => {
     });
   });
 
+  it('ignores an impossible time rather than rolling it into another day', () => {
+    const { c, store } = setup(doc({}));
+    c.setTime('2026-02-31T09:00');
+    expect(store.patch).not.toHaveBeenCalled();
+  });
+
   it('ignores a cleared time input', () => {
     const { c, store } = setup(doc({}));
     c.setTime('');

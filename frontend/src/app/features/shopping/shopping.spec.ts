@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { BehaviorSubject, Observable, Subject, of, throwError } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Feedback } from '../../shared/feedback';
@@ -27,12 +27,12 @@ const doc = (over: Partial<ShoppingDoc>): ShoppingDoc => ({
 });
 
 function setup(
-  items: ShoppingDoc[],
+  items: ShoppingDoc[] | Observable<ShoppingDoc[]>,
   failIds: number[] = [],
   coverage: { key: string; sources: string[]; prices?: RowPrice[] }[] = [],
 ) {
   const store = {
-    items$: of(items),
+    items$: Array.isArray(items) ? of(items) : items,
     syncError: signal<string | null>(null),
     setDone: vi.fn(() => Promise.resolve()),
     remove: vi.fn(() => Promise.resolve()),
@@ -160,12 +160,22 @@ describe('Shopping buyDone', () => {
     expect(api.buyShopping).not.toHaveBeenCalled();
   });
 
-  it('skips never-synced rows (no server id) and does nothing when none qualify', () => {
+  it('says a never-synced row stays ticked, rather than skipping it in silence', () => {
     const { c, api, feedback } = setup([doc({ id: null, done: true })]);
     c.buyDone();
     expect(api.buyShopping).not.toHaveBeenCalled();
-    expect(feedback.notify).not.toHaveBeenCalled();
-    expect(feedback.error).not.toHaveBeenCalled();
+    expect(feedback.notify).toHaveBeenCalledWith('1 not synced yet, so it stays ticked.');
+  });
+
+  it('counts the never-synced rows in the summary of the ones it bought', () => {
+    const { c, feedback } = setup([
+      doc({ ulid: 'a', id: 1, done: true }),
+      doc({ ulid: 'b', id: null, done: true }),
+    ]);
+    c.buyDone();
+    expect(feedback.notify).toHaveBeenCalledWith(
+      'Added to inventory. 1 not synced yet, so it stays ticked.',
+    );
   });
 });
 
@@ -297,5 +307,32 @@ describe('Shopping shop coverage', () => {
     TestBed.tick();
     expect(c.coverageOffline()).toBe(true);
     expect(c.tripSummary()).toBeNull();
+  });
+});
+
+describe('Shopping coverage questions', () => {
+  const linked = (over: Partial<ShoppingDoc>) => doc({ product_id: 42, ...over });
+
+  it('does not ask again when an edit leaves the question the same', () => {
+    const items = new BehaviorSubject([linked({ ulid: 'a', name: 'Milk' })]);
+    const { api } = setup(items);
+    TestBed.tick();
+    items.next([linked({ ulid: 'a', name: 'Semi-skimmed milk', quantity: 2 })]);
+    TestBed.tick();
+    expect(api.shopCoverage).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops an older answer that arrives after a newer question', () => {
+    const items = new BehaviorSubject([linked({ ulid: 'a' })]);
+    const { c, api } = setup(items);
+    const first = new Subject<{ key: string; sources: Source[]; prices: RowPrice[] }[]>();
+    const second = new Subject<{ key: string; sources: Source[]; prices: RowPrice[] }[]>();
+    api.shopCoverage.mockReturnValueOnce(first).mockReturnValueOnce(second);
+    TestBed.tick();
+    items.next([linked({ ulid: 'a' }), linked({ ulid: 'b' })]);
+    TestBed.tick();
+    second.next([{ key: 'a', sources: ['waitrose'], prices: [] }]);
+    first.next([{ key: 'a', sources: ['asda'], prices: [] }]);
+    expect(c.shopsFor(linked({ ulid: 'a' }))).toEqual(['waitrose']);
   });
 });
