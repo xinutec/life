@@ -6,10 +6,8 @@ import { ConflictReporter, FieldSpec, makeConflictHandler } from './conflict-mer
 import { SyncedCollectionConfig, SyncedStore } from './synced-store';
 import { keysOf } from '../shared/narrow';
 
-/** A wellbeing check-in as stored locally. `recordedAt` is an ISO-8601 UTC
- *  instant (the moment the feeling was — may be backdated). Readings are in TENTHS
- *  of a point (10..50), so a 3.5 — a mood between two faces — is a 35, and readings
- *  stay exact integers under averaging. Mirrors the backend `WellbeingDoc`. */
+/** A check-in as stored locally; mirrors the backend `WellbeingDoc`. Readings
+ *  are in tenths (10..50), so a 3.5 is an exact 35. */
 // dev-lint: allow-wire-mirror RxDB owns the _deleted tombstone dimension;
 // the wire type adds it in the replication layer, not in this local doc.
 export interface WellbeingDoc {
@@ -17,20 +15,16 @@ export interface WellbeingDoc {
   id: number | null;
   recordedAt: string;
   scoreTenths: number;
-  /** Optional energy reading (10..50 tenths, drained..energetic; higher = better,
-   *  like the score); null = mood-only. */
+  /** Null for a mood-only check-in. */
   energyTenths: number | null;
-  /** Fine-grained emotions from the feelings wheel (leaf words); independent of
-   *  mood/energy, any number, order preserved as added. */
+  /** Feelings-wheel tokens, in the order added. */
   emotions: string[];
   note: string | null;
   rev: number;
 }
 
 const schema: RxJsonSchema<WellbeingDoc> = {
-  // Bump the version + migrate on ANY schema change, else existing local DBs hit
-  // a hash mismatch. v1: optional `fatigue`. v2: `emotions` array. v3: `fatigue`
-  // → `energy` (unified polarity, higher = better). v4: score/energy → tenths.
+  // Any schema change needs a version bump and a migration.
   version: 4,
   primaryKey: 'ulid',
   type: 'object',
@@ -47,8 +41,7 @@ const schema: RxJsonSchema<WellbeingDoc> = {
   required: ['ulid', 'recordedAt', 'scoreTenths', 'rev'],
 };
 
-/** A prior-version doc handed to a migration strategy — loosely typed, since the
- *  fields differ across versions (RxDB passes the old shape). */
+/** A doc of some earlier version, as a migration receives it. */
 type PriorDoc = Record<string, unknown> & {
   fatigue?: number | null;
   score?: number;
@@ -56,21 +49,16 @@ type PriorDoc = Record<string, unknown> & {
   emotions?: string[];
 };
 
-// Exported for wellbeing-store.spec.ts — a stale local DB (an old browser
-// profile, the Android WebView) runs these once on next open, so pin them.
+// Exported so the spec can pin them: an old device runs them on next open.
 export const migrationStrategies = {
   1: (doc: PriorDoc): PriorDoc => ({ ...doc, fatigue: doc.fatigue ?? null }),
   2: (doc: PriorDoc): PriorDoc => ({ ...doc, emotions: doc.emotions ?? [] }),
-  // v3: fatigue (1=none..5=severe, higher=worse) → energy (its complement,
-  // higher=better) so nothing runs inverse in the data. `6 - fatigue`.
+  // fatigue (higher = worse) becomes energy (higher = better).
   3: ({ fatigue, ...rest }: PriorDoc): PriorDoc => ({
     ...rest,
     energy: fatigue == null ? null : 6 - fatigue,
   }),
-  // v4: 1..5 points → 10..50 tenths, so a mood can sit between two faces. The
-  // fields are RENAMED as well as rescaled: a leftover `score: 4` reaching code
-  // that now means tenths would read as a 0.4 — the worst day ever logged. Gone
-  // from the shape, it can't be read at all.
+  // Points to tenths, renamed so a leftover `score: 4` cannot be read as 0.4.
   4: ({ score, energy, ...rest }: PriorDoc): PriorDoc => ({
     ...rest,
     scoreTenths: (score ?? 3) * 10,
@@ -78,13 +66,8 @@ export const migrationStrategies = {
   }),
 };
 
-/** The synced content fields (everything but the identity/server fields). */
 type WellbeingContent = Omit<WellbeingDoc, 'ulid' | 'id' | 'rev'>;
 
-/** Type-directed 3-way-merge spec: every content field with a strategy valid for
- *  its type (see [[makeConflictHandler]]). Exhaustive by construction — a field
- *  added to WellbeingDoc won't compile until it's classified here, and `emotions`
- *  (an array) can only be `'array'`, never identity-compared. */
 const WELLBEING_FIELDS: FieldSpec<WellbeingContent> = {
   recordedAt: 'value',
   scoreTenths: 'value',
@@ -93,17 +76,15 @@ const WELLBEING_FIELDS: FieldSpec<WellbeingContent> = {
   note: 'value',
 };
 
-/** The field-name allowlist the Conflicts screen may patch on "use other",
- *  derived from the spec so the two can never drift apart. */
+/** The fields "use other" may patch on the Conflicts screen. */
 export const WELLBEING_MERGE_FIELDS = keysOf(WELLBEING_FIELDS);
 
-/** Local-first store for wellbeing check-ins — the machinery lives in
- *  {@link SyncedStore}; this declares only the collection and its content. */
+/** Wellbeing check-ins. */
 @Injectable({ providedIn: 'root' })
 export class WellbeingStore extends SyncedStore<WellbeingDoc> {
   private reporter = inject(ConflictReporter);
 
-  /** Live, non-deleted check-ins, newest first. */
+  /** Newest first. */
   readonly items$ = this.liveQuery([{ recordedAt: 'desc' }]);
 
   protected config(): SyncedCollectionConfig<WellbeingDoc> {
@@ -120,9 +101,6 @@ export class WellbeingStore extends SyncedStore<WellbeingDoc> {
             conflicts,
           ),
       }),
-      // '-v2': a fresh identifier made RxDB re-examine every doc, pushing edits
-      // an earlier isEqual bug had skipped. Local state wins — downstream
-      // defers to upstream for forks without meta (rxdb#7804).
       identifier: 'wellbeing-http-sync-v2',
       path: '/api/sync/wellbeing',
       label: 'wellbeing sync',
@@ -131,7 +109,7 @@ export class WellbeingStore extends SyncedStore<WellbeingDoc> {
     };
   }
 
-  /** Insert a check-in; returns its minted ulid (so a caller can offer Undo). */
+  /** Returns the new check-in's ulid. */
   async add(input: {
     recordedAt: string;
     scoreTenths: number;

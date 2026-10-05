@@ -2,32 +2,24 @@ import { Injectable } from '@angular/core';
 
 import { PriceInput, Source } from './models';
 
-/** Full detail for a shop product; maps onto LifeApi.importProduct. */
+/** A shop product as the WebView returns it. */
 export interface ShopProduct {
   source: Source;
   external_id: string;
   name: string | null;
   brand: string | null;
   barcodes: string[];
-  /** The pack the shop sells, as the shop writes it ("100g"). Read into an
-   *  amount server-side (products::packsize), which is what lets stock linked
-   *  from a shop pick start out knowing how much it holds. `null` when the
-   *  shop's payload carries no size. */
+  /** As the shop writes it ("100g"). */
   quantity_label: string | null;
   image_url: string | null;
   display_price: { amount: number; currencyCode: string } | null;
-  /** The shop's OWN formatted price for the same quote ("£2.50", "85p"), kept
-   *  beside the number so the number's unit can be checked rather than assumed —
-   *  see `shopPrice`. `null` when the shop didn't render one. */
+  /** The shop's own formatted price ("£2.50", "85p"), to check the number's
+   *  unit against (see `shopPrice`). */
   display_price_label: string | null;
   categories: string[];
 }
 
-/** Pence read out of a shop's formatted price. `null` if it isn't a shape we
- *  recognise — a refusal to guess, not a parse failure to paper over.
- *
- *  Both UK shapes are here because Waitrose renders both: "£2.50" at or above a
- *  pound, bare "85p" below it. */
+/** Pence from "£2.50" or "85p" (Waitrose writes both), or null. */
 export function penceFromLabel(label: string): number | null {
   const pounds = /^£\s*(\d+)(?:\.(\d{1,2}))?$/.exec(label.trim());
   if (pounds) {
@@ -38,21 +30,14 @@ export function penceFromLabel(label: string): number | null {
   return pence ? Number(pence[1]) : null;
 }
 
-/** A shop's quote as integer minor units, or `null` if it quoted nothing or its
- *  unit can't be confirmed.
- *
- *  `amount` doesn't say pounds or pence, and a 100× error still looks like a
- *  price, so the shop's formatted price must agree before anything is stored:
- *  a missing price shows, a wrong one doesn't. Both the picker and the product
- *  page's shop lookup record through this, so they can't disagree. */
+/** A shop's quote in minor units, or null unless its formatted price agrees:
+ *  `amount` does not say pounds or pence, and a 100x error looks like a price. */
 export function shopPrice(product: ShopProduct): PriceInput | null {
   const p = product.display_price;
   if (!p || !(p.amount > 0)) return null;
   const minor = Math.round(p.amount * 100);
   const label = product.display_price_label;
   const shown = label === null ? null : penceFromLabel(label);
-  // Dropped rather than stored, and logged rather than dropped silently — the
-  // same rule the shop-cache report follows for an image URL it won't trust.
   if (shown === null) {
     console.warn(
       `[shop:price] ${product.external_id}: no formatted price to check ${minor}p against; not recording`,
@@ -69,68 +54,47 @@ export function shopPrice(product: ShopProduct): PriceInput | null {
   return {
     amount_minor: minor,
     currency: p.currencyCode,
-    // The SUMMARY payload's per-unit price sits behind a different view; until
-    // we read it, saying nothing beats guessing a measure.
     unit_price: null,
-    // One price, no nations — unlike Asda, which quotes EN/NI/SC/WA separately.
   };
 }
 
-/** A lightweight search hit; fetchProduct() gets the rest. */
+/** A search hit; fetchProduct() gets the rest. */
 export interface ShopCandidate {
   external_id: string;
   name: string;
   image_url: string;
 }
 
-/** Raw product-page content a shop's WebView returns for the SERVER to parse:
- *  facts the shop's API doesn't carry (Asda's Brandbank nutrition/ingredients/
- *  allergens/dietary). The client never interprets it — it only ferries the blob
- *  past the bot-wall. */
+/** A product page's facts blob, carried past the bot wall for the server to
+ *  parse. */
 export interface ShopFacts {
-  /** The page's own barcode (Asda's c_EAN_GTIN) — the backend's identity guard. */
+  /** The page's own barcode, checked by the server. */
   ean: string;
-  /** The raw product-content blob (Asda's c_BRANDBANK_JSON), parsed server-side. */
   blob: string;
 }
 
-/** A shop whose product PAGE carries facts its search API doesn't, readable only
- *  through the hidden WebView (the page is behind a bot-wall). Kept separate from
- *  ShopProvider: Asda's search/import already run server-side (see products::asda),
- *  so its WebView role is facts alone. */
+/** A shop whose page has facts its API lacks. Asda's search runs server-side,
+ *  so this is its only WebView role. */
 export interface FactsProvider {
-  /** The source this provider speaks for — the same closed set the backend
-   *  stores, so a provider can't name a shop the server doesn't know. */
   readonly id: Source;
-  /** Load this product's page and return its raw facts blob for the server. */
   facts(externalId: string): { url: string; js: string };
 }
 
-/**
- * Everything shop-specific lives in a provider in the web app, so a new shop
- * needs no APK change. Each op returns a page URL and extractor JS for the hidden
- * WebView; the JS may read `window.__authToken` and reports through
- * `AndroidShop.result(…)`: `{ ok, candidates }`, `{ ok, product }` or `{ ok:false, error }`.
- */
+/** A shop's page URLs and extractor JS for the hidden WebView, kept in the web
+ *  app so a new shop needs no APK. */
 export interface ShopProvider {
-  /** The source this provider speaks for (see FactsProvider.id). */
   readonly id: Source;
   readonly displayName: string;
-  readonly loginUrl: string; // shown by connect()
+  readonly loginUrl: string;
   search(query: string): { url: string; js: string };
   product(externalId: string): { url: string; js: string };
 }
 
-/**
- * The Android wrapper's origin-scoped port (absent in a browser); it runs
- * caller-supplied JavaScript against a URL. Answers arrive later through
- * `window.__shopResolve` / `__shopConnected`.
- */
+/** The Android wrapper's port; answers come back through `window.__shopResolve`. */
 interface Bridge {
   postMessage(message: string): void;
 }
 
-/** What the native side will do for us. */
 type BridgeRequest =
   | { op: 'run'; url: string; extractorJs: string; requestId: string }
   | { op: 'connect'; loginUrl: string; requestId: string };
@@ -139,7 +103,7 @@ type BridgeResult =
   | { ok: true; product?: ShopProduct; candidates?: ShopCandidate[]; facts?: ShopFacts }
   | { ok: false; error: string; reason?: 'signed_out' };
 
-/** The shop's session is signed out, so it would not answer; `connect` fixes it. */
+/** The shop's session is signed out; `connect` fixes it. */
 export class ShopSignedOut extends Error {}
 
 export function isSignedOut(e: unknown): boolean {
@@ -152,12 +116,8 @@ interface BridgeWindow extends Window {
   __shopConnected?: (requestId: string | null) => void;
 }
 
-/**
- * Drives the native ShopBridge, turning its callback-based methods into Promises.
- * The bridge runs a hidden WebView on a shop site to fetch data past the shop's
- * bot-wall — only possible inside the Life Android app, so `available` is false
- * in a plain browser and callers must feature-detect before offering any shop UI.
- */
+/** The native ShopBridge as Promises. Only inside the Android app; check
+ *  `available` before offering shop UI. */
 @Injectable({ providedIn: 'root' })
 export class Shops {
   private readonly win = window as BridgeWindow;
@@ -171,14 +131,11 @@ export class Shops {
     };
   }
 
-  /** True only inside the Android app: the port is injected only for this
-   *  app's own origin. An older app injects a shape without `postMessage`,
-   *  which reads as absent rather than throwing. */
+  /** An older app's port lacks `postMessage` and reads as absent. */
   get available(): boolean {
     return typeof this.bridge?.postMessage === 'function';
   }
 
-  /** Show the shop's sign-in overlay; resolves when it closes. */
   connect(provider: ShopProvider): Promise<void> {
     if (!this.available) return Promise.reject(new Error(UNAVAILABLE));
     return this.request((requestId) =>
@@ -186,13 +143,11 @@ export class Shops {
     ).then(() => undefined);
   }
 
-  /** Search a shop by product name. */
   search(provider: ShopProvider, query: string): Promise<ShopCandidate[]> {
     const { url, js } = provider.search(query);
     return this.run(url, js).then((r) => r.candidates ?? []);
   }
 
-  /** Fetch full detail for a product by its shop external id. */
   fetchProduct(provider: ShopProvider, externalId: string): Promise<ShopProduct> {
     const { url, js } = provider.product(externalId);
     return this.run(url, js).then((r) => {
@@ -201,8 +156,6 @@ export class Shops {
     });
   }
 
-  /** Fetch a product page's raw facts blob through the WebView, for the server to
-   *  parse. Only meaningful for a shop whose page is bot-walled (Asda). */
   fetchFacts(provider: FactsProvider, externalId: string): Promise<ShopFacts> {
     const { url, js } = provider.facts(externalId);
     return this.run(url, js).then((r) => {
@@ -211,7 +164,6 @@ export class Shops {
     });
   }
 
-  /** Load `url` in the hidden WebView and run `extractorJs` there. */
   private run(url: string, extractorJs: string): Promise<Extract<BridgeResult, { ok: true }>> {
     return this.request((requestId) => this.send({ op: 'run', url, extractorJs, requestId }));
   }

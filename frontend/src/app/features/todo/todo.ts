@@ -41,36 +41,27 @@ export class Todo {
   readonly graph = inject(TodoGraph);
 
   constructor() {
-    // Entities added since the last visit become linkable/resolvable.
     this.graph.refreshCatalogs();
   }
 
-  // Local-first: the list is the live RxDB query — instant, offline, reactive.
   readonly items = toSignal(this.store.items$, { initialValue: [] as TodoDoc[] });
-  /** False until the local DB has produced its first result — cold start shows a
-   *  spinner, not a flash of "no to-dos". */
+  /** False until the local DB has produced its first result. */
   readonly loaded = toSignal(this.store.items$.pipe(map(() => true)), { initialValue: false });
   readonly syncError = this.store.syncError;
   readonly types = TODO_TYPES;
   readonly priorities = PRIORITIES;
 
-  /** The FAB's action: the quick-capture sheet. */
   openAdd(): void {
     this.sheet.open(TodoAddSheet);
   }
 
-  // Filters are signals: the app is zoneless, so a signal write is what
-  // schedules the view refresh.
-  /** null = show all types. */
+  /** null shows every type. */
   readonly filter = signal<TodoType | null>(null);
-  /** Show only to-dos the graph says are ready (unblocked, with dependencies). */
   readonly readyOnly = signal(false);
-  /** Whether the collapsed "Waiting" section is expanded. */
   readonly showWaiting = signal(false);
 
-  /** Actionable to-dos (waiting ones are split into their own section below).
-   *  Order: open-before-done → urgency (overdue→today→soon→later) → priority →
-   *  due date → title. */
+  /** Everything but waiting: open before done, then urgency, priority, due
+   *  date, title. */
   readonly visible = computed(() => {
     const f = this.filter();
     const ready = this.readyOnly();
@@ -82,8 +73,7 @@ export class Todo {
       .sort(this.compare);
   });
 
-  /** To-dos gated by a future start date — parked in a collapsed section so the
-   *  main list only shows what can be acted on. Hidden entirely under "Ready". */
+  /** Gated by a future start date; hidden under "Ready". */
   readonly waiting = computed(() => {
     if (this.readyOnly()) return [] as TodoDoc[];
     const f = this.filter();
@@ -109,12 +99,10 @@ export class Todo {
     (a.due ?? '9999-99-99').localeCompare(b.due ?? '9999-99-99') ||
     a.title.localeCompare(b.title);
 
-  /** The urgency chip for a row — see [[TodoGraph.dueChip]]. */
   dueChip(it: TodoDoc): DueChip | null {
     return this.graph.dueChip(it);
   }
 
-  /** "from Sat 5 Jul" — when a waiting to-do becomes actionable. */
   fromLabel(it: TodoDoc): string {
     if (!it.notBefore) return '';
     const d = new Date(it.notBefore + 'T00:00:00');
@@ -133,18 +121,13 @@ export class Todo {
   }
 
   toggle(it: TodoDoc): void {
-    // A blocked to-do (an unfinished dependency) can't be completed — the
-    // checkbox is disabled too, this guards the programmatic path. Un-completing
-    // a done item is always allowed (a done item is never "blocked").
+    // The disabled checkbox's programmatic twin.
     if (it.status !== 'done' && this.graph.statusOf(it) === 'blocked') return;
     void this.store.setStatus(it.ulid, it.status === 'done' ? 'open' : 'done');
   }
 
   remove(it: TodoDoc): void {
-    // Remove the to-do now (optimistic), but DEFER removing its connections
-    // until the Undo window closes — so an undo brings the to-do back with its
-    // links intact. The store's two-layer undo (local revive + server-side
-    // trash restore for synced rows) handles the resurrection.
+    // Links go only once the Undo window closes, so an undo brings them back too.
     void this.store.remove(it.ulid);
     this.feedback.undo(
       `Deleted “${it.title}”`,

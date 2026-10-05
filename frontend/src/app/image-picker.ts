@@ -8,10 +8,8 @@ function firstImage(files: Iterable<File> | undefined): File | undefined {
   return Array.from(files ?? []).find((f) => f.type.startsWith('image/'));
 }
 
-/** Turns its host into a one-tap image picker with button semantics: click,
- *  Enter or Space opens the file dialog (camera, photos or files on a phone);
- *  paste and drag-and-drop also work. Emits a `Blob` via `imagePicked`;
- *  non-images and oversized files go to `pickError`. */
+/** Makes its host an image picker: tap, Enter or Space opens the file dialog,
+ *  and paste and drop work too. */
 @Directive({
   selector: '[appImagePicker]',
   exportAs: 'imagePicker',
@@ -32,11 +30,8 @@ function firstImage(files: Iterable<File> | undefined): File | undefined {
 export class ImagePickerDirective {
   readonly imagePicked = output<Blob>();
   readonly pickError = output<string>();
-  /** True while a file is dragged over the host — drives a drop-zone outline. */
   readonly dragOver = signal(false);
-  /** When false, a tap/Enter doesn't open the file dialog — the host drives it
-   *  another way (e.g. a menu whose "Choose photo" item calls `openDialog()`).
-   *  Paste and drag-and-drop still work regardless. */
+  /** False when the host opens the dialog itself, e.g. from a menu. */
   readonly clickToOpen = input(true);
 
   onActivate(): void {

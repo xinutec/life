@@ -30,44 +30,30 @@ interface Day {
   entries: WellbeingDoc[];
 }
 
-// The whole chart lives in ONE coordinate system: axis words, dots, midnight
-// rules and weekday names are all placed in these viewBox units, so a word is
-// level with the dot it names by construction. padLeft is the strip the words
-// sit in; padBottom the strip the weekday names sit in.
+// One coordinate system for words, dots, rules and day names, so a word is level
+// with the dot it names by construction.
 const CHART = { w: 300, h: 96, padLeft: 48, padRight: 6, padTop: 8, padBottom: 18 };
 
-/** Where the axis words end (right-aligned against the plot). */
 const AXIS_X = CHART.padLeft - 6;
 
-/** How wide a day must render (SVG user units) before it gets a weekday name.
- *  A 3-letter word at the .day-name font is ~18 units, so this leaves clear air
- *  either side. At 14 days a day is ~20.6 units — deliberately below the bar, as
- *  fourteen names that nearly touch read as a smear rather than as labels. */
+/** A day narrower than this gets no weekday name; 14 days falls just below. */
 const MIN_DAY_LABEL_W = 30;
 
-/** Readings beyond each window edge that feed the trend line. With none the
- *  line stops at the last visible dot; with one, monotonePath's tangents (built
- *  from both sides of a point) change as points scroll in, and the edge wobbles.
- *  Two draws what the whole history draws (trend-chart.spec.ts). If wobble ever
- *  shows, widen this. */
+/** Readings past each edge that feed the line, so its ends do not wobble as
+ *  points scroll in (trend-chart.spec.ts). */
 const HALO = 2;
 
 const r1 = (n: number): number => Math.round(n * 10) / 10;
 
-/** The selectable trend windows, in days. */
 export type TrendWindow = 1 | 7 | 14;
 
-/** One metric's readings and instants, newest first, precomputed so a scroll
- *  frame is a binary search and a slice. Per metric because the halo counts
- *  that metric's readings; most check-ins record no energy. */
+/** One metric, newest first, so a scroll frame is a binary search. */
 interface Series {
   times: number[];
   tenths: number[];
 }
 
-/** In a newest-first list of instants, the first index at or below `ms` — or
- *  strictly below it, which is what the older edge of a half-open window wants.
- *  Returns `times.length` when every reading is newer. */
+/** The first index at or below `ms` (strictly below with `strict`). */
 function firstAtOrBefore(times: readonly number[], ms: number, strict = false): number {
   let lo = 0;
   let hi = times.length;
@@ -79,9 +65,7 @@ function firstAtOrBefore(times: readonly number[], ms: number, strict = false): 
   return lo;
 }
 
-/** Wellbeing history: a one-tap check-in strip, a trend chart (7 days by
- *  default, 24h/7d/14d selectable), and a day-by-day timeline of entries.
- *  Tapping an entry opens the edit sheet. */
+/** Check-in strip, mood and energy trends, and the entries by day. */
 @Component({
   selector: 'app-wellbeing',
   templateUrl: './wellbeing.html',
@@ -103,7 +87,6 @@ export class Wellbeing {
   readonly items = toSignal(this.store.items$, { initialValue: [] as WellbeingDoc[] });
   readonly loaded = toSignal(this.store.items$.pipe(map(() => true)), { initialValue: false });
 
-  /** Trend window (days) — the zoom. The charts recompute when this changes. */
   readonly window = signal<TrendWindow>(7);
   readonly windows: readonly { value: TrendWindow; label: string }[] = [
     { value: 1, label: '24h' },
@@ -111,40 +94,30 @@ export class Wellbeing {
     { value: 14, label: '14d' },
   ];
 
-  /** The visible span. */
   private readonly spanMs = computed(() => this.window() * 86_400_000);
 
-  /** "Now" — sampled once per data change rather than read live. The pan maps a
-   *  scroll position onto a time range, and a `now` that moved between two reads
-   *  would slide the chart under the finger. */
+  /** Sampled per data change, not live, or the chart would slide under a finger. */
   private readonly now = signal(Date.now());
 
-  /** Where the window's right edge has been dragged to, or null while pinned to
-   *  now. The null is the difference between "stay where I scrolled to" and
-   *  "follow the latest check-in", and both are wanted. */
+  /** The dragged-to right edge, or null to follow the latest check-in. */
   private readonly pannedEnd = signal<number | null>(null);
 
   private readonly panEl = viewChild<ElementRef<HTMLElement>>('pan');
 
   constructor() {
-    // Re-sample now whenever the data changes, so a check-in logged while the
-    // page is open extends the pannable range instead of falling off its end.
     effect(() => {
       this.items();
       this.now.set(Date.now());
     });
-    // Seat the scroller where the model says the window is, after render (the
-    // rail's width follows --pan-factor). Only on a resize or a pin flip, not on
-    // pans: after a zoom the window's end survives but scrollLeft refers to the
-    // old rail, and the next touch would teleport the window.
+    // Re-seat the scroller only on a resize or a pin flip: after a zoom,
+    // scrollLeft refers to the old rail.
     effect(() => {
       this.panFactor();
       untracked(() => this.reseating.set(true));
     });
     afterRenderEffect(() => {
       const el = this.panEl()?.nativeElement;
-      // Read BEFORE the element check, or an effect that runs once without a
-      // rail never tracks the width and stops re-seating for good.
+      // Read before the element check, or the effect never tracks the width.
       this.panFactor();
       const pinned = this.atNow();
       untracked(() => {
@@ -154,81 +127,54 @@ export class Wellbeing {
             pinned || max <= 0
               ? max
               : ((this.endMs() - this.earliestEnd()) / this.pannableMs()) * max;
-          // Only when genuinely out of step. Writing back a position we just
-          // derived FROM scrollLeft fires another scroll event, and the two
-          // chase each other's rounding.
+          // Only when out of step: writing back a derived position echoes forever.
           if (Math.abs(el.scrollLeft - want) > 1) el.scrollLeft = want;
-          // Read BACK, don't assume `want`: the rail rounds what it was given,
-          // and the rounded number is what the scroll event will report.
+          // Read back: the rail rounds what it was given.
           this.lastLeft = el.scrollLeft;
         }
-        // ⚠ On EVERY path, including the one with no rail, or the flag sticks
-        // and every pan is ignored.
+        // On every path, or the flag sticks and every pan is ignored.
         this.reseating.set(false);
       });
     });
   }
 
-  /** Any check-ins at all — gates the window toggle so it never vanishes just
-   *  because the *selected* window happens to be empty (which would strand the
-   *  user with no way back to a wider one). */
+  /** Any check-ins at all: an empty window must not hide the way back. */
   readonly hasAny = computed(() => this.items().length > 0);
 
-  /** The oldest check-in — where panning stops. "Infinite" scrolling here means
-   *  no fixed window, not endless empty space before the first entry. */
+  /** Where panning stops. */
   private readonly oldestMs = computed(() => {
     const items = this.items();
     return items.length ? new Date(items[items.length - 1].recordedAt).getTime() : this.now();
   });
 
-  /** How far back the window's right edge can travel. Zero when the whole history
-   *  already fits one window — the charts then don't scroll at all. */
+  /** Zero when the history fits one window. */
   readonly pannableMs = computed(() => Math.max(0, this.now() - this.spanMs() - this.oldestMs()));
 
-  /** The left-most position of the window's right edge. */
   private readonly earliestEnd = computed(() => this.now() - this.pannableMs());
 
-  /** The window's right edge, clamped: zooming out while panned far back would
-   *  otherwise leave the end before its own limit. */
+  /** Clamped, for zooming out while panned far back. */
   readonly endMs = computed(() => {
     const panned = this.pannedEnd();
     if (panned === null) return this.now();
     return Math.min(this.now(), Math.max(this.earliestEnd(), panned));
   });
 
-  /** Pinned to the latest check-in rather than parked in the past. */
   readonly atNow = computed(() => this.pannedEnd() === null);
 
-  /** The scroll rail's length as a multiple of the charts' own width: one screen
-   *  per window, plus however many more the history covers. Handed to CSS as a
-   *  multiplier, so nothing has to measure the chart to size it. */
+  /** The rail's length in chart widths, as a CSS multiplier. */
   readonly panFactor = computed(() => 1 + this.pannableMs() / this.spanMs());
 
-  /** True between a rail resize and the re-seat that answers it. */
   private readonly reseating = signal(false);
 
-  /** The rail position last read or written (NaN at first), to recognise our
-   *  own writes' echoes. A pixel is ~50 minutes, so re-deriving the window from
-   *  a position we wrote could move it a day near midnight; a tolerance would
-   *  swallow small real pans instead. */
+  /** The last position read or written, to recognise our own write's echo. */
   private lastLeft = Number.NaN;
 
-  /** Map the scroller's position onto the window's right edge.
-   *
-   *  Within a pixel of the end re-pins to now, so a flick to the right edge
-   *  starts following new check-ins again rather than freezing the window a few
-   *  seconds short of them. */
+  /** Within a pixel of the end re-pins to now. */
   onPan(el: HTMLElement): void {
-    // Mid-resize the scroller still refers to the old rail; reading this
-    // position against the new width drags the window a day sideways. The
-    // re-seat decides where it sits, not this.
+    // Mid-resize the position refers to the old rail.
     if (this.reseating()) return;
-    // Every measurement taken before the write, and one write: a signal write
-    // schedules change detection rather than performing it, so a scrollLeft read
-    // after one measures the DOM as it was before.
+    // Measure before writing: a signal write does not update the DOM at once.
     const { scrollLeft, scrollWidth, clientWidth } = el;
-    // The re-seat's own echo: the position is one we wrote, so nothing moved and
-    // nothing changes. See `lastLeft` for why re-deriving from it is not free.
     if (scrollLeft === this.lastLeft) return;
     this.lastLeft = scrollLeft;
     const max = scrollWidth - clientWidth;
@@ -236,15 +182,12 @@ export class Wellbeing {
     this.pannedEnd.set(pinned ? null : this.earliestEnd() + (scrollLeft / max) * this.pannableMs());
   }
 
-  /** Back to the latest check-in — without it, panning back a year is a one-way
-   *  trip. Jumps rather than smooth-scrolls: the intermediate scroll events of a
-   *  smooth scroll would each read as a fresh pan and unpin it again. */
+  /** Jumps rather than smooth-scrolls, whose events would each unpin it. */
   toNow(): void {
     this.pannedEnd.set(null);
   }
 
-  /** Human phrase for what is on screen. Once panned, "last 7 days" is a lie, so
-   *  the shown range is named instead. */
+  /** Once panned, "last 7 days" would be false; the range is named. */
   readonly windowLabel = computed(() => {
     const days = this.window();
     if (this.atNow()) return days === 1 ? 'last 24 hours' : `last ${days} days`;
@@ -254,7 +197,6 @@ export class Wellbeing {
     return `${day(end - this.spanMs())} – ${day(end)}`;
   });
 
-  /** Entries grouped by local day, newest day first (items$ is already desc). */
   readonly days = computed<Day[]>(() => {
     const groups = new Map<string, Day>();
     for (const e of this.items()) {
@@ -272,29 +214,18 @@ export class Wellbeing {
 
   private readonly moodSeries = computed(() => this.seriesOf((e) => e.scoreTenths));
 
-  /** The optional energy reading — like mood, higher (energetic) sits at the top
-   *  and a rising line reads as improving. */
   private readonly energySeries = computed(() => this.seriesOf((e) => e.energyTenths));
 
-  /** The mood trend over the visible window: a dot per reading, x = its position
-   *  in time across the window, y = score, joined by a smooth line. */
   readonly chart = computed(() => this.buildChart(this.moodSeries()));
   readonly energyChart = computed(() => this.buildChart(this.energySeries()));
 
-  /** Whether the metric was *ever* recorded — deliberately not "does this window
-   *  have dots". A chart that vanished when you panned past its data would take
-   *  the scroller with it and strand you there, with no way back. */
+  /** Ever recorded, not "has dots here": a chart vanishing mid-pan strands you. */
   readonly hasChart = computed(() => this.moodSeries().times.length > 0);
   readonly hasEnergyChart = computed(() => this.energySeries().times.length > 0);
 
-  /** The window is empty — worth saying, since the charts now stay on screen. */
   readonly emptyWindow = computed(() => this.hasAny() && this.chart().dots.length === 0);
 
-  /** Collect one metric's readings, newest first.
-   *
-   *  Sorted here, not trusted from the store's order: a binary search over a list
-   *  that isn't ordered doesn't fail, it quietly plots the window backwards. One
-   *  pass per data change, none per scroll frame. */
+  /** Sorted here: a binary search over an unsorted list plots backwards. */
   private seriesOf(value: (e: WellbeingDoc) => number | null | undefined): Series {
     const readings: { t: number; v: number }[] = [];
     for (const e of this.items()) {
@@ -306,29 +237,20 @@ export class Wellbeing {
     return { times: readings.map((r) => r.t), tenths: readings.map((r) => r.v) };
   }
 
-  /** Build a trend over the visible window: x is the reading's true time, and a
-   *  half-step plots between two lines with a colour to match.
-   *
-   *  Only the window's readings, plus the halo, become dots, so the SVG is the
-   *  same size for a fortnight's history as for a decade's. */
+  /** Only the window's readings and the halo become dots, so the SVG stays the
+   *  same size however long the history. */
   private buildChart(series: Series): TrendData {
     const { w, h, padLeft, padRight, padTop, padBottom } = CHART;
     const plotH = h - padTop - padBottom;
-    // The window is [end - span, end]. Pinned to now it is a true rolling window,
-    // so "24h" is literally the last 24 hours (last night's slump and this morning
-    // both show) rather than calendar-today; panned, it is wherever it was dragged.
     const spanMs = this.spanMs();
     const endMs = this.endMs();
     const startMs = endMs - spanMs;
     const x = (ms: number): number =>
       padLeft + ((ms - startMs) / spanMs) * (w - padLeft - padRight);
-    // The one rule that places a 1..5 reading on the y axis. The dots use it, and
-    // so do the three axis words — that's what keeps "awful" level with a 1.
+    // The one y rule, for the dots and the axis words alike.
     const y = (level: number): number => r1(padTop + ((5 - level) / 4) * plotH);
 
     const { times, tenths } = series;
-    // Newest-first, so the window is the index range [newest, oldest), and walking
-    // it backwards yields the dots x-ascending without a sort.
     const newest = firstAtOrBefore(times, endMs);
     const oldest = firstAtOrBefore(times, startMs, true);
     const dot = (i: number): TrendDot => ({
@@ -357,9 +279,7 @@ export class Wellbeing {
     };
   }
 
-  /** Local midnights inside the window. Walked with setDate rather than adding
-   *  86 400 000 ms so a DST change keeps each rule on the day boundary the
-   *  entries either side of it are actually stamped against. */
+  /** Walked with setDate, so a DST change keeps each rule on its day boundary. */
   private midnights(startMs: number, endMs: number): number[] {
     const out: number[] = [];
     const d = new Date(startMs);
@@ -372,11 +292,7 @@ export class Wellbeing {
     return out;
   }
 
-  /** A weekday name centred in each day, from the window's day boundaries.
-   *  Labelled only where the day is wide enough to hold the word — measured
-   *  against the day's own rendered width, so it's the chart that decides, not
-   *  the window setting: the part-days at either edge drop their label when the
-   *  window opens late in the day, and 14d stays clean while 7d and 24h label. */
+  /** A weekday name per day wide enough to hold it. */
   private dayLabels(bounds: number[], x: (ms: number) => number): DayLabel[] {
     const out: DayLabel[] = [];
     for (let i = 0; i < bounds.length - 1; i++) {
@@ -399,16 +315,11 @@ export class Wellbeing {
     return energyMeta(energy);
   }
 
-  /** "14:05" — the entry's local clock time. */
   time(iso: string): string {
     return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   }
 
-  /** Open the entry just logged from the strip.
-   *
-   *  Keyed by ulid, which is what the store hands back on add — the row may not
-   *  have reached the server yet, and waiting for a server id before a person
-   *  can say how they feel would put the network in the middle of a check-in. */
+  /** By ulid: the entry may not have reached the server yet. */
   editByKey(ulid: string): void {
     this.sheet.open(WellbeingEntry, { data: { ulid } });
   }
@@ -417,7 +328,6 @@ export class Wellbeing {
     this.sheet.open(WellbeingEntry, { data: { ulid: entry.ulid } });
   }
 
-  /** "Today" / "Yesterday" / "Sat 5 Jul". */
   private dayLabel(d: Date): string {
     const today = new Date();
     today.setHours(0, 0, 0, 0);

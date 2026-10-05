@@ -26,15 +26,12 @@ import { TodoGraph, URGENCY_RANK } from '../todo/todo-graph';
 
 const READY = { label: 'ready', cls: 'ready' };
 
-/** One to-do surfaced on Today, with a short reason chip. */
 interface Attention {
   todo: TodoDoc;
   chip: { label: string; cls: string };
 }
 
-/** The landing screen: "what needs me right now?" — a wellbeing check-in, the
- *  to-dos that are overdue/due/ready, food about to expire, and quick jumps.
- *  Pure composition over the existing stores/APIs; no new backend. */
+/** "What needs me now": a check-in, pressing to-dos, expiring food, bins. */
 @Component({
   selector: 'app-today',
   templateUrl: './today.html',
@@ -60,14 +57,12 @@ export class Today {
   private itemsStore = inject(ItemsStore);
   private binsStore = inject(BinsStore);
 
-  // Shared with Inventory / All-items — already warm when you land here.
   private readonly items = computed(() => this.itemsStore.value() ?? []);
   private readonly shoppingItems = toSignal(this.shopping.items$, {
     initialValue: [] as ShoppingDoc[],
   });
 
-  /** RxDB hydration gate: until the to-dos' first emission, "Needs you" shows
-   *  the shared loading state — not a false "Nothing pressing right now." */
+  /** Until the to-dos load, not a false "Nothing pressing". */
   readonly loaded = toSignal(this.todos.items$.pipe(map(() => true)), { initialValue: false });
 
   constructor() {
@@ -75,40 +70,31 @@ export class Today {
     this.binsStore.refresh();
   }
 
-  /** The to-dos worth surfacing: anything overdue / due / due-soon, or "ready"
-   *  (unblocked with met dependencies). Blocked and waiting ones are excluded —
-   *  you can't act on them now. Capped; the full list is one tap away. */
+  /** Overdue, due soon, or ready; never blocked or waiting. Capped at five. */
   readonly attention = computed<Attention[]>(() => {
-    return (
-      this.graph
-        .todoItems()
-        .filter((t) => t.status !== 'done')
-        .map((todo) => ({
-          todo,
-          state: this.graph.statusOf(todo),
-          urgency: this.graph.urgencyOf(todo),
-        }))
-        .filter((x) => x.state !== 'waiting' && x.state !== 'blocked')
-        .filter((x) => x.urgency !== 'none' || x.state === 'ready')
-        .sort(
-          (a, b) =>
-            URGENCY_RANK[a.urgency] - URGENCY_RANK[b.urgency] ||
-            prioRank(a.todo.priority) - prioRank(b.todo.priority) ||
-            (a.todo.due ?? '9999-99-99').localeCompare(b.todo.due ?? '9999-99-99'),
-        )
-        .slice(0, 5)
-        // Only ready to-dos have no deadline chip here (the filter above).
-        .map((x) => ({ todo: x.todo, chip: this.graph.dueChip(x.todo) ?? READY }))
-    );
+    return this.graph
+      .todoItems()
+      .filter((t) => t.status !== 'done')
+      .map((todo) => ({
+        todo,
+        state: this.graph.statusOf(todo),
+        urgency: this.graph.urgencyOf(todo),
+      }))
+      .filter((x) => x.state !== 'waiting' && x.state !== 'blocked')
+      .filter((x) => x.urgency !== 'none' || x.state === 'ready')
+      .sort(
+        (a, b) =>
+          URGENCY_RANK[a.urgency] - URGENCY_RANK[b.urgency] ||
+          prioRank(a.todo.priority) - prioRank(b.todo.priority) ||
+          (a.todo.due ?? '9999-99-99').localeCompare(b.todo.due ?? '9999-99-99'),
+      )
+      .slice(0, 5)
+      .map((x) => ({ todo: x.todo, chip: this.graph.dueChip(x.todo) ?? READY }));
   });
 
-  /** The next two bin mornings. Two rather than one because the useful
-   *  question is often "is it tonight, and if not when" — and rather than all
-   *  of them because the feed reaches three months out and Today is not a
-   *  calendar. */
+  /** Two: "is it tonight, and if not, when". */
   readonly bins = computed(() => nextCollections(this.binsStore.value() ?? []).slice(0, 2));
 
-  /** Food that's expired or expiring within 3 days, soonest first. */
   readonly expiring = computed(() => {
     return this.items()
       .flatMap((item) =>
@@ -129,19 +115,16 @@ export class Today {
 
   readonly buyCount = computed(() => this.shoppingItems().filter((i) => !i.done).length);
 
-  /** Tick a to-do off right from Today (rows here are never blocked — the
-   *  attention filter excludes those). Undo puts it back. */
+  /** Rows here are never blocked. */
   complete(todo: TodoDoc): void {
     void this.todos.setStatus(todo.ulid, 'done');
     this.feedback.undo(`Done: ${todo.title}`, () => void this.todos.setStatus(todo.ulid, 'open'));
   }
 
-  /** Tap the title: the full to-do editor, same as in the list. */
   open(todo: TodoDoc): void {
     this.sheet.open(TodoDetail, { data: { ulid: todo.ulid } });
   }
 
-  /** Say more about the check-in just logged here, as on Wellbeing. */
   addDetail(ulid: string): void {
     this.sheet.open(WellbeingEntry, { data: { ulid } });
   }

@@ -13,9 +13,7 @@ import { TodoPriority, TodoType } from '../../models';
 import { TodoStore } from '../../sync/todo-store';
 import { PRIORITIES, TODO_TYPES } from './todo-meta';
 
-/** Quick-capture sheet for a new to-do (the FAB's action). Stays open after
- *  each add — brain-dumps come in bursts — clear, notify, refocus. Everything
- *  beyond capture (links, timing presets, status) lives in the detail sheet. */
+/** Quick capture; stays open for the next one. */
 @Component({
   selector: 'app-todo-add-sheet',
   templateUrl: './todo-add-sheet.html',

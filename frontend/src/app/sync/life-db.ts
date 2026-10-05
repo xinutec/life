@@ -11,9 +11,8 @@ import {
 import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
 
-/** The one shared RxDB database; stores add their collections on demand.
- *  Creating `lifedb` twice throws in production, and one screen may use
- *  several stores, so `addCollections` calls are serialised here. */
+/** The one shared RxDB database. Collections are added one at a time, since
+ *  concurrent `addCollections` calls race. */
 @Injectable({ providedIn: 'root' })
 export class LifeDb {
   private dbPromise?: Promise<RxDatabase>;
@@ -22,19 +21,12 @@ export class LifeDb {
   private db(): Promise<RxDatabase> {
     this.dbPromise ??= (async () => {
       if (isDevMode()) {
-        // Imported statically it would SHIP: a dev-mode plugin in production is
-        // worse than the split it avoids.
         // dev-lint: allow-dynamic-import a dev-mode plugin must not reach production
         const { RxDBDevModePlugin } = await import('rxdb/plugins/dev-mode');
         addRxPlugin(RxDBDevModePlugin);
       }
-      // Schema migrations (e.g. the todo `type` enum widening) run at collection
-      // add-time, so the plugin must be registered in prod too, not just dev —
-      // which is why it is imported statically. It ships either way; loading it
-      // dynamically only moved it into a second request at first DB use.
+      // Migrations run in production too.
       addRxPlugin(RxDBMigrationSchemaPlugin);
-      // THE single place the shared 'lifedb' is created; every store goes
-      // through this service's collection(). Exempt from the singleton rule:
       // ast-grep-ignore: life-single-rxdb
       return createRxDatabase({
         name: 'lifedb',
@@ -46,8 +38,7 @@ export class LifeDb {
     return this.dbPromise;
   }
 
-  /** Add (once) and return a named collection on the shared database. Calls are
-   *  serialised so concurrent `collection()` calls can't race `addCollections`. */
+  /** Add (once) and return a named collection. */
   collection<T>(
     name: string,
     schema: RxJsonSchema<T>,
@@ -67,7 +58,7 @@ export class LifeDb {
       });
       return added[name] as RxCollection<T>;
     });
-    // Keep the chain alive even if this add fails, so later adds still run.
+    // A failed add must not block the ones after it.
     this.chain = result.catch(() => undefined);
     return result;
   }

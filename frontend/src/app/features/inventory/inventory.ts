@@ -42,15 +42,13 @@ export class Inventory {
   private placesStore = inject(LocationsStore);
   private shopping = inject(ShoppingStore);
 
-  /** Online-only writes must not fail into silence: announce and move on. */
   private failed(what: string) {
     return (e: unknown) => {
       this.feedback.error(`Could not ${what}${onlineHint(e)}`);
     };
   }
 
-  /** Deletes are tombstones (restorable from Recently deleted); offer an
-   *  immediate Undo so a fat-finger costs one tap, not a trip to the trash. */
+  /** Deletes are tombstones; Undo restores from the trash. */
   private undoable(what: string, kind: 'item' | 'location', ref: number, reload: () => void) {
     this.feedback.undo(`${what} deleted`, () => {
       this.api.restoreTrash(kind, String(ref)).subscribe({
@@ -60,8 +58,6 @@ export class Inventory {
     });
   }
 
-  // Views of the shared catalogs — retained across tab switches and shared with
-  // All-items / Today, so a revisit shows them instantly (see CachedResource).
   readonly items = computed(() => this.itemsStore.value() ?? []);
   readonly locations = computed(() => this.placesStore.value() ?? []);
   readonly itemsLoaded = this.itemsStore.loaded;
@@ -80,7 +76,6 @@ export class Inventory {
     this.reloadLocations();
   }
 
-  /** The FAB's action: the add-item sheet. */
   addItem(): void {
     this.openItemSheet({ locations: this.locationOptions() });
   }
@@ -98,9 +93,7 @@ export class Inventory {
       });
   }
 
-  /** "I used some of this" — decrement the row by what you actually took, and
-   *  leave an item_history row saying so. The amount is always in the item's own
-   *  unit; the server refuses a mismatch rather than converting. */
+  /** "I used some of this", in the item's own unit. */
   useItem(it: Item): void {
     const data: UseSheetData = { item: it };
     this.sheet
@@ -128,7 +121,6 @@ export class Inventory {
     this.placesStore.refresh();
   }
 
-  /** Root→leaf breadcrumb for a location id — the shared catalog walk. */
   pathOf(id: number | null): string {
     return locationPath(this.byId(), id);
   }
@@ -137,12 +129,11 @@ export class Inventory {
     return amount(item.quantity, item.unit);
   }
 
-  /** Urgency-aware expiry display (expired / soon / date). */
   expiryOf(item: Item): ExpiryInfo {
     return expiryInfo(item.expiry ?? '', item.expiry_precision);
   }
 
-  /** The actionable tail of the location path (e.g. "Spice cupboard › Top shelf"). */
+  /** The last two places of the path ("Spice cupboard › Top shelf"). */
   shortLoc(id: number | null): string {
     if (id == null) return '';
     return this.pathOf(id).split(' › ').slice(-2).join(' › ');
@@ -162,11 +153,8 @@ export class Inventory {
     });
   }
 
-  /** The Inventory→Buy bridge: put this item on the Buy list carrying its full
-   *  identity — category, barcode, catalog link, unit. Not quantity: the
-   *  inventory quantity is what's owned, not what to buy. Local-first (works
-   *  offline); deduped against the un-done rows so a double-tap or a
-   *  forgotten earlier add doesn't stack duplicates. */
+  /** Put this item on the Buy list unless it is already there. Not its
+   *  quantity: what is owned is not what to buy. */
   async addToBuy(it: Item): Promise<void> {
     const identity = { name: it.name, barcode: it.barcode, product_id: it.product_id };
     if (await this.shopping.findActive(identity)) {
@@ -182,11 +170,8 @@ export class Inventory {
       product_id: it.product_id,
     });
     this.feedback.notify(`Added ${it.name} to the Buy list.`);
-    // ⚠ After the add, failure swallowed: the list add is what was asked for,
-    // and a lost signal costs one data point where an error box costs trust.
-    if (it.id !== undefined) {
-      this.api.markLow(it.id).subscribe({ error: () => undefined });
-    }
+    // Best-effort: the list add is what was asked for.
+    this.api.markLow(it.id).subscribe({ error: () => undefined });
   }
 
   deleteItem(id: number): void {

@@ -17,8 +17,7 @@ import { MatInputModule } from '@angular/material/input';
 import { isRecord } from '../../shared/narrow';
 import { canonicalBarcode } from '../../shared/barcode';
 
-// BarcodeDetector is a browser global (Chromium) with no TS lib types, so give
-// it the minimal shape we use — typed, not `any`, so the call sites stay safe.
+// BarcodeDetector has no TS lib types.
 interface DetectedBarcode {
   readonly rawValue: string;
   readonly format: string;
@@ -28,20 +27,15 @@ interface BarcodeDetectorInstance {
 }
 declare const BarcodeDetector: new (options?: { formats?: string[] }) => BarcodeDetectorInstance;
 
-// Torch (flashlight) is a camera-track capability/constraint that TS's DOM lib
-// doesn't model — same minimal-shape treatment as BarcodeDetector above.
-// Only the constraint side is declared: the capability is READ back from the
-// browser, so it is checked at the callsite rather than described here.
+// Torch is a non-standard constraint; its capability is read back unchecked.
 interface TorchConstraints {
   advanced: { torch: boolean }[];
 }
 
 const FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'qr_code'];
 
-/** Full-bleed camera dialog. Closes with the detected barcode string, or null
- *  if cancelled / unsupported. Uses the native BarcodeDetector — no library.
- *  Extras for real-world cupboards: a torch toggle (barcodes live in the dark)
- *  and a "type it instead" fallback when detection struggles. */
+/** Camera barcode scanning with a torch and a type-it-in fallback. Closes with
+ *  the code, or null. */
 @Component({
   selector: 'app-scanner-dialog',
   templateUrl: './scanner-dialog.html',
@@ -69,8 +63,7 @@ export class ScannerDialog implements OnDestroy {
     afterNextRender(() => void this.start());
   }
 
-  // Traced with a stable prefix so it's greppable in logcat, where the shared
-  // shell (WebShellActivity) mirrors the page's console.
+  // A stable prefix, to grep logcat for.
   private log(...args: unknown[]): void {
     console.debug('[scan]', ...args);
   }
@@ -95,21 +88,14 @@ export class ScannerDialog implements OnDestroy {
       this.probeTorch();
       void this.scanLoop();
     } catch (e) {
-      // Narrowed, and the object kept when it is not an Error: `String(e)` on a
-      // plain object is "[object Object]", which is the one thing a diagnostic
-      // must not be. A DOMException's name is the useful half — NotAllowedError
-      // (refused) and NotReadableError (in use elsewhere) need different answers.
+      // A DOMException's name tells refused from in use.
       this.log('camera error', e instanceof Error ? `${e.name}: ${e.message}` : e);
       this.error.set('Couldn’t access the camera.');
     }
   }
 
-  /** Offer the torch button only when the camera actually supports one. */
   private probeTorch(): void {
     const track = this.stream?.getVideoTracks()[0];
-    // `torch` is not in the DOM lib's MediaTrackCapabilities (it is a
-    // non-standard extension), and the browsers that lack it also lack the
-    // key — so read it rather than declaring the shape.
     const caps: unknown = track?.getCapabilities?.();
     const torch = isRecord(caps) && caps['torch'] === true;
     this.torchAvailable.set(torch);
@@ -121,9 +107,7 @@ export class ScannerDialog implements OnDestroy {
     if (!track) return;
     const next = !this.torchOn();
     const constraints: TorchConstraints = { advanced: [{ torch: next }] };
-    // Same non-standard extension on the way in: the DOM lib has no `torch`
-    // constraint to widen to, so this one stays a declared claim.
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- non-standard torch constraint, see above
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- non-standard torch constraint
     track.applyConstraints(constraints as MediaTrackConstraints).then(
       () => {
         this.torchOn.set(next);
@@ -133,7 +117,6 @@ export class ScannerDialog implements OnDestroy {
     );
   }
 
-  /** Switch between camera and manual entry (camera keeps running behind). */
   toggleTyping(): void {
     this.typing.update((v) => !v);
     if (this.typing()) {
@@ -160,14 +143,12 @@ export class ScannerDialog implements OnDestroy {
           return;
         }
       } catch (e) {
-        // Detect can throw transiently; log only the first so it doesn't spam.
         if (!this.detectErrorLogged) {
           this.detectErrorLogged = true;
           this.log('detect error', e instanceof Error ? `${e.name}: ${e.message}` : e);
         }
       }
-      // Heartbeat (~1/s at 60fps) so a non-detecting camera is distinguishable
-      // from a stalled loop.
+      // About once a second, to tell a camera finding nothing from a stalled loop.
       if (this.frames % 60 === 0) this.log('scanning…', `${this.frames} frames, no code yet`);
     }
     this.raf = requestAnimationFrame(() => void this.scanLoop());

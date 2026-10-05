@@ -20,9 +20,7 @@ import { ScannerDialog } from '../scanner/scanner-dialog';
 import { ShoppingDoc, ShoppingStore } from '../../sync/shopping-store';
 import { canonicalBarcode } from '../../shared/barcode';
 
-/** Add/edit one shopping row — the FAB's bottom sheet. Add mode stays open
- *  after each add (groceries are entered in bursts): clear, notify, refocus.
- *  Edit mode (data.ulid set) pre-fills and closes on Save. */
+/** Add or edit a Buy row. Adding stays open for the next item. */
 @Component({
   selector: 'app-shopping-item-sheet',
   templateUrl: './shopping-item-sheet.html',
@@ -52,7 +50,6 @@ export class ShoppingItemSheet {
   readonly editing = this.ulid != null;
 
   readonly categories = ITEM_CATEGORIES;
-  /** Its display name — the picker shows what a category is called, not its key. */
   label(c: ItemCategory): string {
     return ITEM_CATEGORY_LABEL[c];
   }
@@ -61,9 +58,8 @@ export class ShoppingItemSheet {
   readonly quantity = signal<number | null>(null);
   readonly unit = signal<string | null>(null);
   readonly barcode = signal('');
-  /** Carried onto the inventory item at buy-time; a grocery list defaults to food. */
+  /** Carried onto the inventory item when bought. */
   readonly category = signal<ItemCategory>('food');
-  /** Catalog link (set by a successful product lookup); rides through to the item. */
   readonly productId = signal<number | null>(null);
   readonly lookingUp = signal(false);
 
@@ -75,10 +71,7 @@ export class ShoppingItemSheet {
         this.quantity.set(it.quantity);
         this.unit.set(it.unit);
         this.barcode.set(it.barcode ?? '');
-        // The stored row's category is a plain string: it came from a device
-        // that may predate a category being renamed or dropped. Asserting it
-        // into the union puts a value in the picker that has no option, and
-        // the sheet then saves it straight back.
+        // A category from an older device may have no option in the picker.
         const stored = ITEM_CATEGORIES.find((c) => c === it.category);
         if (stored !== undefined) this.category.set(stored);
         this.productId.set(it.product_id);
@@ -99,7 +92,7 @@ export class ShoppingItemSheet {
       category: this.category(),
       product_id: this.productId(),
     };
-    // Best-effort online: warm the product (image) cache for the thumbnail.
+    // Warms the product image cache; best-effort.
     if (barcode) this.api.lookupProduct(barcode).subscribe({ next: () => {}, error: () => {} });
 
     if (this.ulid) {
@@ -107,10 +100,8 @@ export class ShoppingItemSheet {
       this.ref.dismiss();
       return;
     }
-    // Optimistic, local — succeeds offline. Stay open for the next item.
     void this.store.add(fields);
-    // Putting a thing on the list IS "I am running out of it". The server works
-    // out whether the cupboard holds it; best-effort, never surfaced.
+    // Putting a thing on the list says it is running out. Best-effort.
     this.api
       .markLowByIdentity({ name, barcode, product_id: this.productId() })
       .subscribe({ error: () => undefined });
@@ -124,14 +115,12 @@ export class ShoppingItemSheet {
     document.querySelector<HTMLElement>('app-shopping-item-sheet input')?.focus();
   }
 
-  /** A hand-edited barcode invalidates any earlier lookup's catalog link — the
-   *  link is re-established by the next successful lookup, never assumed. */
+  /** A hand-edited barcode drops the earlier lookup's catalogue link. */
   barcodeChanged(code: string): void {
     this.barcode.set(code);
     this.productId.set(null);
   }
 
-  /** Name-first product search (the shared picker); a pick fills the form. */
   findProduct(): void {
     this.dialog
       .open<ProductPicker, ProductPickData, ProductPick | null>(ProductPicker, {
@@ -145,13 +134,11 @@ export class ShoppingItemSheet {
         this.barcode.set(pick.barcode ?? '');
         this.productId.set(pick.product_id);
         if (pick.unit != null && !this.unit()?.trim()) this.unit.set(pick.unit);
-        // `pick.quantity` is deliberately ignored: a Buy row's quantity is how
-        // many to bring home, and a 950g tub is one of them, not 950 of them.
+        // Not `pick.quantity`: a 950 g tub is one to buy, not 950.
         if (pick.category != null) this.category.set(pick.category);
       });
   }
 
-  /** Open the camera scanner; on a detected code, fill the field and look up. */
   scan(): void {
     this.dialog
       .open<ScannerDialog, unknown, string | null>(ScannerDialog, {
@@ -167,9 +154,7 @@ export class ShoppingItemSheet {
       });
   }
 
-  /** Look up the typed barcode on Open Food Facts; prefill the name if empty.
-   *  Every outcome is announced — a scan that ends in silence reads as "the
-   *  scanner is broken". */
+  /** Every outcome is announced: silence reads as a broken scanner. */
   lookup(): void {
     const code = this.barcode().trim();
     if (!code) return;
@@ -190,12 +175,9 @@ export class ShoppingItemSheet {
     });
   }
 
-  /** Whether "View product" has somewhere to go: a linked product, or a barcode
-   *  it can resolve to one. */
   readonly canViewProduct = computed(() => this.productId() != null || !!this.barcode().trim());
 
-  /** Leave the sheet for the linked product's page — the scan → payoff-screen
-   *  path. A barcode without an established link is looked up first. */
+  /** Open the product's page, looking a barcode up first. */
   viewProduct(): void {
     const pid = this.productId();
     if (pid != null) {

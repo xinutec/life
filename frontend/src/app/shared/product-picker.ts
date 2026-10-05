@@ -28,39 +28,27 @@ import { Feedback } from './feedback';
 import { sourceLabel } from './sources';
 
 export interface ProductPickData {
-  /** Prefill (usually what's typed in the Name field); searched immediately. */
   initialQuery: string;
 }
 
-/** What a pick hands back: enough to fill an add/edit form. `category` rides
- *  along only from an inventory hit (a catalog product has no such notion);
- *  `unit`/`quantity` come from an inventory hit's own measure or, for a catalog
- *  product, from its pack size — see `packPrefill`. */
+/** What a pick fills into a form. `category` comes only from an inventory hit. */
 export interface ProductPick {
   name: string;
   barcode: string | null;
   product_id: number | null;
-  /** How much one of these holds — a pack size, not a number to buy. Only the
-   *  inventory sheet takes it; see `packPrefill`. */
+  /** A pack size, not a number to buy; only the inventory sheet takes it. */
   quantity: number | null;
   unit: string | null;
   category: ItemCategory | null;
 }
 
-/** What a product's pack size fills into a form.
- *
- *  A `count` pack becomes a quantity with NO unit, deliberately: the item model
- *  spells "3 eggs" as a bare number, so a literal `"count"` in the unit box
- *  would fail to match every line that says the same thing by leaving it empty.
- *  An unparsed pack (`null`) fills nothing and leaves the label on display. */
+/** A `count` pack fills no unit: "3 eggs" is a bare number everywhere else. */
 export function packPrefill(pack: PackSize | null): Pick<ProductPick, 'quantity' | 'unit'> {
   if (!pack) return { quantity: null, unit: null };
   return { quantity: pack.value, unit: pack.unit === 'count' ? null : pack.unit };
 }
 
-/** Inventory items whose name or brand contains the query (case-insensitive):
- *  the instant, offline tier — things bought before are inventory items, so
- *  this IS the purchase history. Name-prefix hits sort first. */
+/** Inventory items matching the query, name-prefix hits first: the offline tier. */
 export function localHits(items: Item[], query: string): Item[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
@@ -71,16 +59,14 @@ export function localHits(items: Item[], query: string): Item[] {
     .slice(0, 8);
 }
 
-/** Catalog rows not already represented by a local hit (same catalog id or
- *  barcode) — a product shouldn't appear twice under two section headers. */
+/** Catalogue rows not already shown as a local hit. */
 export function withoutLocalDupes(catalog: Product[], locals: Item[]): Product[] {
   const ids = new Set(locals.map((it) => it.product_id).filter((v) => v != null));
   const codes = new Set(locals.map((it) => it.barcode).filter((v) => v != null));
   return catalog.filter((p) => !ids.has(p.id) && (p.barcode == null || !codes.has(p.barcode)));
 }
 
-/** A search that finds nothing usually means "not signed in" (the shop only
- *  returns results to a logged-in session), so nudge toward Connect. */
+/** A failed shop search usually means signed out. */
 function shopMessage(e: unknown, provider: ShopProvider): string {
   const raw = e instanceof Error ? e.message : String(e);
   return /only available in the app/i.test(raw)
@@ -88,16 +74,11 @@ function shopMessage(e: unknown, provider: ShopProvider): string {
     : `Search failed — try “Connect ${provider.displayName}” first.`;
 }
 
-/** Shops the app's WebView searches in the shop tier. Adding one is a single
- *  entry here plus its `shops/<shop>.ts` provider. */
+/** Shops the WebView searches in the shop tier. */
 const PROVIDERS: ShopProvider[] = [WAITROSE];
 
-/** Find-a-product dialog, shared by the Buy and Inventory sheets. One query,
- *  three tiers by cost: inventory items (instant, offline), the product
- *  catalog (one cheap API call, debounced), and — inside the Android app — an
- *  explicit shop search (a hidden WebView on the shop site; picking a shop hit
- *  imports it into the catalog first). Closes with a [[ProductPick]], or null
- *  if cancelled. */
+/** Find a product: inventory (offline), catalogue, Asda, and in the app a shop
+ *  search. Closes with a [[ProductPick]], or null. */
 @Component({
   selector: 'app-product-picker',
   templateUrl: './product-picker.html',
@@ -121,14 +102,12 @@ export class ProductPicker {
   private itemsStore = inject(ItemsStore);
   private feedback = inject(Feedback);
 
-  /** Shop tier only works inside the Android app (needs the native bridge). */
   readonly shopProviders = this.shops.available ? PROVIDERS : [];
 
   readonly query = signal(this.data.initialQuery.trim());
   private readonly query$ = new Subject<string>();
 
-  /** Catalog tier: debounced server search. A failure is just an empty tier —
-   *  the local tier still answers offline. */
+  /** A failed tier is an empty tier. */
   private readonly catalogRaw = toSignal(
     this.query$.pipe(
       debounceTime(250),
@@ -142,9 +121,6 @@ export class ProductPicker {
     { initialValue: [] as Product[] },
   );
 
-  /** Asda tier: same debounced query, but a live search against Asda's
-   *  storefront (backend → Algolia). Works everywhere (no app bridge). A failed
-   *  search is just an empty tier. */
   readonly asda = toSignal(
     this.query$.pipe(
       debounceTime(250),
@@ -174,14 +150,11 @@ export class ProductPicker {
   queryChanged(value: string): void {
     this.query.set(value);
     this.query$.next(value.trim());
-    // Shop hits answered an older query — stale results mislead; re-search.
     this.shopResults.set(null);
     this.shopError.set(null);
   }
 
-  /** The cached image for a row, or null → placeholder icon. Plain <img>, not
-   *  [[ProductThumb]]: the thumb is itself a tap-to-replace picker, which would
-   *  fight the row's own pick tap. */
+  /** A plain <img>: [[ProductThumb]] would take the row's tap for itself. */
   thumbUrl(barcode: string | null, productId: number | null, hasImage: boolean): string | null {
     if (!hasImage) return null;
     if (barcode != null) return this.api.productImageUrl(barcode);
@@ -189,7 +162,6 @@ export class ProductPicker {
     return null;
   }
 
-  /** Shared source naming (see shared/sources.ts), for the template. */
   protected readonly sourceLabel = sourceLabel;
 
   pickItem(it: Item): void {
@@ -197,8 +169,7 @@ export class ProductPicker {
       name: it.name,
       barcode: it.barcode,
       product_id: it.product_id,
-      // The unit an existing row measures itself in, but NOT its quantity: how
-      // much is left of the tub you already own says nothing about the new one.
+      // Not its quantity: what is left of your tub says nothing about a new one.
       quantity: null,
       unit: it.unit,
       category: it.category,
@@ -215,10 +186,7 @@ export class ProductPicker {
     });
   }
 
-  /** Import the Asda product into the catalog (server caches its scene7 image),
-   *  then close linked. The imported catalog row is barcodeless (keyed by CIN),
-   *  but the hit's EAN rides along so the shopping/inventory row still carries a
-   *  barcode. */
+  /** Import, then close linked to the imported product. */
   pickAsda(hit: AsdaHit): void {
     if (this.importing()) return;
     this.importing.set(true);
@@ -228,10 +196,10 @@ export class ProductPicker {
         external_id: hit.external_id,
         name: hit.name,
         brand: hit.brand,
-        quantity_label: hit.quantity_label, // the pack, so the pick can measure it
-        barcode: hit.barcode, // Asda's IMAGE_ID is the EAN — merge onto it
+        quantity_label: hit.quantity_label,
+        barcode: hit.barcode,
         image_url: hit.image_url,
-        price: hit.price, // record what Asda charges
+        price: hit.price,
       }),
     )
       .then((product) =>
@@ -259,7 +227,6 @@ export class ProductPicker {
       .finally(() => this.shopBusy.set(false));
   }
 
-  /** Sign in to a shop (one-time) so its search/detail calls return results. */
   connectShop(provider: ShopProvider): void {
     this.shops.connect(provider).then(
       () => this.feedback.notify(`Connected to ${provider.displayName}.`),
@@ -267,8 +234,7 @@ export class ProductPicker {
     );
   }
 
-  /** Fetch the shop product's detail, import it into the catalog (the server
-   *  caches the image), and close linked to the imported row. */
+  /** Fetch, import, then close linked to the imported product. */
   pickShop(provider: ShopProvider, candidate: ShopCandidate): void {
     if (this.importing()) return;
     this.importing.set(true);
@@ -282,11 +248,8 @@ export class ProductPicker {
             name: p.name ?? candidate.name,
             brand: p.brand,
             quantity_label: p.quantity_label,
-            barcode: p.barcodes[0] ?? null, // Waitrose SUMMARY carries barCodes[]
+            barcode: p.barcodes[0] ?? null,
             image_url: p.image_url,
-            // What the shop quoted, recorded like every other shop's price —
-            // linking a product here and finding it from the product page must
-            // not produce two different amounts of knowledge.
             price: shopPrice(p),
           }),
         ),

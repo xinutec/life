@@ -1,7 +1,4 @@
-// Wire types shared with the Rust backend.
-//
-// The API DTOs are GENERATED from the Rust types by ts-rs (scripts/gen-types.sh
-// → ./generated/) — do not hand-edit ./generated. The gate fails if they drift.
+// Wire types, generated from the Rust ones (scripts/gen-types.sh).
 export type { BinDay } from './generated/BinDay';
 export type { PlannedTrip } from './generated/PlannedTrip';
 export type { ConnectionStatus } from './generated/ConnectionStatus';
@@ -72,9 +69,8 @@ export type { WarmEmotionsRequest } from './generated/WarmEmotionsRequest';
 import type { ItemCategory as ItemCategoryT } from './generated/ItemCategory';
 import { keysOf } from './shared/narrow';
 
-/** Every ItemCategory, in the order pickers show them: the everyday ones first,
- *  `other` last, because a fallback offered early gets picked early. The `Record`
- *  keys make the compiler prove the list exhaustive and duplicate-free. */
+/** Every ItemCategory in picker order, `other` last. The Record proves the list
+ *  complete. */
 export const ITEM_CATEGORIES = keysOf({
   food: true,
   cookware: true,
@@ -88,8 +84,7 @@ export const ITEM_CATEGORIES = keysOf({
   other: true,
 } satisfies Record<ItemCategoryT, true>);
 
-/** Display name per category; a total Record, so a new category must be named
- *  rather than showing its slug. */
+/** A total Record, so a new category must be named. */
 export const ITEM_CATEGORY_LABEL: Record<ItemCategoryT, string> = {
   food: 'Food',
   cookware: 'Cookware (pans, trays)',
@@ -103,8 +98,7 @@ export const ITEM_CATEGORY_LABEL: Record<ItemCategoryT, string> = {
   other: 'Other',
 };
 
-// Scene-file types are frontend-owned: /api/house streams scenes/house.json
-// through as raw JSON (no Rust struct), so these aren't generated.
+// Not generated: /api/house passes scenes/house.json through as raw JSON.
 
 /** A furniture floor-box in the house scene. Centred at (cx,cz); w×d×h metres;
  *  y0 = base height off the floor. */

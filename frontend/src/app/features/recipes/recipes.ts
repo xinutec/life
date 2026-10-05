@@ -37,14 +37,12 @@ export class Recipes {
   private cookableStore = inject(CookableStore);
   private shopping = inject(ShoppingStore);
 
-  /** Online-only writes must not fail into silence: announce and move on. */
   private failed(what: string) {
     return (e: unknown) => {
       this.feedback.error(`Could not ${what}${onlineHint(e)}`);
     };
   }
 
-  // Shared catalogs, retained across tab switches (see CachedResource).
   readonly recipes = computed(() => this.recipesStore.value() ?? []);
   readonly loaded = this.recipesStore.loaded;
   readonly loadError = this.recipesStore.error;
@@ -52,21 +50,19 @@ export class Recipes {
   readonly cookableIds = computed(
     () => new Set((this.cookableStore.value() ?? []).map((r) => r.id)),
   );
-  /** Per-recipe "what you're short of", loaded on demand by [[loadShoppingList]]. */
+  /** Per recipe, what is short; loaded on demand. */
   private readonly missingByRecipe = signal<Map<number, RecipeIngredient[]>>(new Map());
 
-  /** The last cook's report, per recipe — shown until you leave the screen. */
+  /** The last cook's report per recipe, until you leave the screen. */
   private readonly cookedByRecipe = signal<Map<number, CookedLine[]>>(new Map());
   private readonly cooking = signal<number | null>(null);
 
   readonly cookableCount = computed(() => this.cookableIds().size);
 
-  /** The FAB's action: the new-recipe sheet; reload after a save. */
   addRecipe(): void {
     this.openSheet();
   }
 
-  /** Edit an existing recipe in the same sheet, seeded from it. */
   editRecipe(recipe: Recipe): void {
     this.openSheet({ recipe });
   }
@@ -93,8 +89,6 @@ export class Recipes {
     this.api.deleteRecipe(id).subscribe({
       next: () => {
         this.reload();
-        // Deletes are tombstones (restorable from Recently deleted); offer an
-        // immediate Undo so a fat-finger costs one tap.
         this.feedback.undo('Recipe deleted', () => {
           this.api.restoreTrash('recipe', String(id)).subscribe({
             next: () => this.reload(),
@@ -125,12 +119,8 @@ export class Recipes {
     return this.missingByRecipe().get(id);
   }
 
-  /** Cook it: take the recipe out of the cupboard.
-   *
-   *  The report is rendered in full rather than summarised away, because most
-   *  lines legitimately can't be settled ("salt", a jar against grams) and a
-   *  button that reported only its successes would leave you believing the
-   *  cupboard had been updated when much of it hadn't. */
+  /** Shown in full: most lines cannot be settled ("salt", a jar against grams),
+   *  and a report of successes only would overstate what changed. */
   cookIt(recipe: Recipe): void {
     if (this.cooking() !== null) return;
     this.cooking.set(recipe.id);
@@ -146,8 +136,6 @@ export class Recipes {
             ? `Took ${took} of ${lines.length} off the shelf.`
             : `Nothing came off the shelf — see why below.`,
         );
-        // The cupboard moved, so "can I cook this" is stale; refresh() re-fetches
-        // without blanking what's on screen.
         this.cookableStore.refresh();
       },
       error: (e: unknown) => {
@@ -165,9 +153,7 @@ export class Recipes {
     return this.cooking() === id;
   }
 
-  /** One line of the report, in words. Exhaustive over the union on purpose —
-   *  a new outcome from the backend becomes a compile error here rather than a
-   *  blank row on the screen. */
+  /** Exhaustive, so a new outcome is a compile error, not a blank row. */
   cookedLabel(line: CookedLine): string {
     switch (line.kind) {
       case 'took':
@@ -188,12 +174,7 @@ export class Recipes {
     }
   }
 
-  /** Everything this recipe needs and the cupboard hasn't got, onto the Buy
-   *  list in one tap. Local-first, so it works in the shop.
-   *
-   *  Carries the quantity — here it is what the recipe is short of, so what to
-   *  buy. Sends the line's name ("cumin", what you look for in a shop), with
-   *  `product_id` to say which jar if the line names one. */
+  /** What the cupboard lacks, onto the Buy list with the amount short. */
   async addMissingToBuy(recipe: Recipe): Promise<void> {
     const missing = this.shoppingFor(recipe.id);
     if (!missing?.length) return;
@@ -210,8 +191,7 @@ export class Recipes {
     this.feedback.notify(this.addedMessage(added.length, already.length));
   }
 
-  /** Says what actually happened, including the nothing-to-do case: a tap that
-   *  changed no rows must not read like it added them. */
+  /** A tap that added nothing must not read as if it had. */
   private addedMessage(added: number, already: number): string {
     const skipped = already > 0 ? ` (${already} already on it)` : '';
     if (added === 0) return `Already on the Buy list — nothing to add.`;

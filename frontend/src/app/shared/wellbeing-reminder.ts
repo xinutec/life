@@ -5,24 +5,20 @@ import { WellbeingStore } from '../sync/wellbeing-store';
 import { Reminders } from './reminders';
 import { isRecord } from './narrow';
 
-/** One daily wellbeing-reminder rule: fire at local `time`, but only if there's been
- *  no check-in within the last `quietHours` — so "if I haven't logged anything for
- *  3 hours and it's 9am, remind me" is `{ time: '09:00', quietHours: 3 }`. The `id`
- *  is stable across edits so it keys the native alarm (re-scheduling replaces it). */
+/** Remind at local `time` unless there was a check-in in the last `quietHours`.
+ *  `id` keys the native alarm. */
 export interface WellbeingReminderRule {
   id: string;
   time: string;
   quietHours: number;
 }
 
-/** Device-local reminder config: an unordered set of daily rules. Held in
- *  localStorage (not synced) because the alarms fire on THIS phone — it's a
- *  per-device preference. An empty list means no reminders. */
+/** Per device, not synced: the alarms fire on this phone. */
 export interface WellbeingReminderConfig {
   rules: WellbeingReminderRule[];
 }
 
-/** A tapped reminder lands on Today, which carries the one-tap check-in strip. */
+/** Today has the check-in strip. */
 const REMINDER_URL = '/today';
 const REMINDER_TITLE = 'Wellbeing check-in';
 const REMINDER_BODY = 'How are you feeling right now?';
@@ -30,7 +26,6 @@ const STORAGE_KEY = 'life.reminder.wellbeing';
 const ARMED_KEY = 'life.reminder.wellbeing.armed';
 const HOUR_MS = 3_600_000;
 
-/** Parse an 'HH:MM' local time to [hours, minutes], or null if malformed. */
 export function parseHhMm(time: string): [number, number] | null {
   const m = /^(\d{1,2}):(\d{2})$/.exec(time);
   if (!m) return null;
@@ -40,16 +35,12 @@ export function parseHhMm(time: string): [number, number] | null {
   return [h, min];
 }
 
-/** A new rule with a freshly minted id (used by the settings editor). */
 export function createRule(time = '09:00', quietHours = 3): WellbeingReminderRule {
   return { id: crypto.randomUUID(), time, quietHours };
 }
 
-/**
- * When a rule next fires (epoch ms), or null for a malformed time: the next
- * occurrence of its local time at least `quietHours` after the last check-in.
- * Checking in re-arms, so deciding at arm time matches fire time.
- */
+/** The next occurrence of the rule's time at least `quietHours` after the last
+ *  check-in, or null for a malformed rule. */
 export function nextFireForRule(
   rule: WellbeingReminderRule,
   now: Date,
@@ -60,9 +51,6 @@ export function nextFireForRule(
   const windowMs = rule.quietHours * HOUR_MS;
   const cand = new Date(now);
   cand.setHours(hm[0], hm[1], 0, 0);
-  // Walk forward a day at a time to the first firing that's in the future AND past
-  // the quiet window. The window is only ever unmet for the current day (the gap
-  // grows by 24h each step), so this settles within one or two iterations.
   for (let i = 0; i < 8; i++) {
     const t = cand.getTime();
     const quietElapsed = lastCheckinMs === null || t - lastCheckinMs >= windowMs;
@@ -72,7 +60,6 @@ export function nextFireForRule(
   return null;
 }
 
-/** The most recent check-in instant across all entries, or null if there are none. */
 function lastCheckin(items: readonly { recordedAt: string }[]): number | null {
   let latest: number | null = null;
   for (const i of items) {
@@ -86,12 +73,10 @@ function loadConfig(): WellbeingReminderConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { rules: [] };
-    // Parsed as `unknown`: this blob outlives every deploy that ran on this
-    // device, so no shape is guaranteed and each rule is checked below.
+    // The blob can be from any earlier build, so every rule is checked.
     const parsed: unknown = JSON.parse(raw);
     const rulesField = isRecord(parsed) ? parsed['rules'] : null;
     const rules: unknown[] = Array.isArray(rulesField) ? rulesField : [];
-    // Keep only well-formed rules; drop anything a hand-edit or old build left.
     const clean = rules.filter((r): r is WellbeingReminderRule => {
       if (!isRecord(r)) return false;
       const time = r['time'];
@@ -113,7 +98,7 @@ function saveConfig(config: WellbeingReminderConfig): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
   } catch {
-    /* private mode / quota — the reminders just won't survive a reload */
+    /* storage unavailable: the rules last until a reload */
   }
 }
 
@@ -135,21 +120,16 @@ function saveArmedIds(ids: string[]): void {
   }
 }
 
-/**
- * The daily check-in reminders: one wall-clock alarm per rule, keyed by its id.
- * The whole set is re-armed on every app open and check-in change, since an
- * alarm survives the app closing but not a reboot. A no-op outside the app.
- */
+/** One alarm per rule, re-armed on every open and check-in change: an alarm
+ *  survives the app closing but not a reboot. */
 @Injectable({ providedIn: 'root' })
 export class WellbeingReminder {
   private readonly reminders = inject(Reminders);
   private readonly store = inject(WellbeingStore);
   private cfg: WellbeingReminderConfig = loadConfig();
-  // Rule ids we last armed, so a rule the user removed gets its alarm cancelled even
-  // across a reload (localStorage-backed; reboots clear the alarms themselves).
+  // Stored, so a removed rule's alarm is cancelled even after a reload.
   private armedIds = new Set<string>(loadArmedIds());
 
-  /** Whether reminders can actually fire here (i.e. we're in the Android app). */
   get available(): boolean {
     return this.reminders.available;
   }
@@ -158,15 +138,13 @@ export class WellbeingReminder {
     return { rules: this.cfg.rules.map((r) => ({ ...r })) };
   }
 
-  /** Persist a new rule set and re-arm immediately from the current check-ins. */
   setConfig(config: WellbeingReminderConfig): void {
     this.cfg = { rules: config.rules.map((r) => ({ ...r })) };
     saveConfig(this.cfg);
     this.store.items$.pipe(take(1)).subscribe((items) => this.rearm(items));
   }
 
-  /** Subscribe to check-ins and re-arm on every change. The first emission is the
-   *  app open; later ones are a check-in added or removed. Called once at startup. */
+  /** Called once at startup. */
   init(): void {
     this.store.items$.subscribe((items) => this.rearm(items));
   }
@@ -176,7 +154,6 @@ export class WellbeingReminder {
     const now = new Date();
     const last = lastCheckin(items);
     const wanted = new Set(this.cfg.rules.map((r) => r.id));
-    // Cancel alarms for rules that no longer exist.
     for (const id of this.armedIds) {
       if (!wanted.has(id)) this.reminders.cancel(id);
     }

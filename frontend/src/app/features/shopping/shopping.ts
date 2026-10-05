@@ -46,36 +46,26 @@ export class Shopping {
   private feedback = inject(Feedback);
   private router = inject(Router);
 
-  // Local-first: the list is the live RxDB query — instant, offline, reactive.
   readonly items = toSignal(this.store.items$, {
     initialValue: [] as ShoppingDoc[],
   });
-  /** False until the local DB has produced its first result — so a cold start
-   *  shows a spinner, not a flash of "nothing on the list". */
+  /** False until the local DB has produced its first result. */
   readonly loaded = toSignal(this.store.items$.pipe(map(() => true)), {
     initialValue: false,
   });
   readonly doneCount = computed(() => this.items().filter((i) => i.done).length);
   readonly syncError = this.store.syncError;
 
-  // --- Where can I get this trip? ---
-  //
-  // Answered from what earlier shop lookups already taught us, so it costs the
-  // shops nothing and can run whenever the list changes. It says where a thing
-  // is SOLD, never whether it is on the shelf tonight — the copy has to keep
-  // that distinction, because a shopping list is exactly where a confident
-  // wrong answer would send you to the wrong shop.
+  // Where things are SOLD, from earlier lookups: never whether they are on the
+  // shelf, and it costs the shops nothing.
 
   private readonly coverage = signal<Map<string, Source[]>>(new Map());
   private readonly prices = signal<Map<string, RowPrice[]>>(new Map());
-  /** Whether the answer is missing because we couldn't ask, rather than because
-   *  nothing is known. Shown, so an offline blank doesn't read as "nowhere". */
+  /** Unknown because we could not ask, which must not read as "nowhere". */
   private readonly coverageUnavailable = signal(false);
 
-  /** The un-done rows that carry something to look up. A ticked-off row is
-   *  already in the trolley, and a free-text jotting has no identity to ask
-   *  about. Equal by content, so an edit that changes none of it (a rename, a
-   *  quantity) asks nothing. */
+  /** The un-done rows with an identity to look up. Equal by content, so an edit
+   *  that changes none of it asks nothing. */
   private readonly askable = computed<CoverageQuery[]>(
     () =>
       this.items()
@@ -85,16 +75,13 @@ export class Shopping {
   );
 
   constructor() {
-    // switchMap: a newer question cancels the older one, so a slow answer can
-    // never land after a fresh one and overwrite it.
+    // switchMap: a slow older answer can never overwrite a newer one.
     toObservable(this.askable)
       .pipe(
         switchMap((rows) =>
           rows.length
             ? this.api.shopCoverage(rows).pipe(
                 map((answers) => ({ ok: true as const, answers })),
-                // Enrichment, not the list itself: a failure leaves the Buy list
-                // working and says the coverage line is unknown rather than empty.
                 catchError(() => of({ ok: false as const })),
               )
             : of({ ok: true as const, answers: [] }),
@@ -109,19 +96,16 @@ export class Shopping {
       });
   }
 
-  /** The shops known to sell this row, for its own line. */
   shopsFor(it: ShoppingDoc): Source[] {
     return this.coverage().get(it.ulid) ?? [];
   }
 
-  /** "Asda · Waitrose" — the row's own shops, named as they are everywhere else. */
   shopLine(it: ShoppingDoc): string {
     return this.shopsFor(it).map(sourceLabel).join(' · ');
   }
 
-  /** "Asda 6/8 · Waitrose 4/8", best first — the one-shop-trip question. Rows we
-   *  can't ask about are counted separately rather than folded into the
-   *  denominator, so a list of hand-typed jottings doesn't read as bad coverage. */
+  /** "Asda 6/8 · Waitrose 4/8". Rows we cannot ask about are counted apart, not
+   *  as bad coverage. */
   readonly tripSummary = computed<{
     shops: { label: string; have: number }[];
     of: number;
@@ -147,9 +131,8 @@ export class Shopping {
     };
   });
 
-  /** "Asda £12.40 · 4 of 6 priced", per shop — each shop's latest shelf prices
-   *  over the rows it has priced. Not a "cheapest shop": two totals over
-   *  different rows do not compare, and the counts say so. GBP only. */
+  /** Each shop's shelf prices over the rows it has priced; the counts say the
+   *  totals do not compare. GBP only. */
   readonly estimates = computed<{ label: string; total: string; priced: number; of: number }[]>(
     () => {
       const wanted = this.items().filter((it) => !it.done);
@@ -175,37 +158,28 @@ export class Shopping {
     },
   );
 
-  /** True when the coverage line is blank because we couldn't ask. */
   readonly coverageOffline = computed(
     () => this.coverageUnavailable() && this.askable().length > 0,
   );
 
-  /** Whether there is a trip to plan. An empty list has nothing to go and get,
-   *  and the button would be offering to schedule a walk. */
   readonly canPlanTrip = computed(() => this.items().some((i) => !i.done));
 
-  /** Put the trip in the calendar. Pre-filled with the shop that covers most of
-   *  the list — the coverage line right above this button is what the answer
-   *  came from, so the sheet opens on the shop you just read about. */
+  /** Pre-filled with the shop covering most of the list. */
   planTrip(): void {
     const best = this.tripSummary()?.shops[0]?.label;
     this.sheet.open(TripSheet, { data: { shop: best } });
   }
 
-  /** The FAB's action: the add sheet (stays open for burst entry). */
   openAdd(): void {
     this.sheet.open(ShoppingItemSheet);
   }
 
-  /** Open the item's edit sheet, pre-filled (from the row's ⋮ menu). */
   edit(it: ShoppingDoc): void {
     this.sheet.open(ShoppingItemSheet, { data: { ulid: it.ulid } });
   }
 
-  /** Tap a row: open the product's detail page — the "bigger picture, all the
-   *  info" view. A linked row goes straight there; a barcode-only row is looked
-   *  up first; a row that's neither (a free-text jotting) has nothing to show,
-   *  so it falls back to editing the entry. */
+  /** Open the row's product, looking a barcode up first; a free-text row opens
+   *  its edit sheet instead. */
   view(it: ShoppingDoc): void {
     if (it.product_id != null) {
       void this.router.navigate(['/product', it.product_id]);
@@ -234,8 +208,6 @@ export class Shopping {
     this.undoableRemove([it]);
   }
 
-  /** Offer Undo for removed rows. The store's two-layer undo (revive locally +
-   *  server-side trash restore for synced rows) does the work per doc. */
   private undoableRemove(docs: ShoppingDoc[]): void {
     const what = docs.length === 1 ? `Removed “${docs[0].name}”` : `Removed ${docs.length} items`;
     this.feedback.undo(what, () => {
@@ -243,17 +215,12 @@ export class Shopping {
     });
   }
 
-  /** Convert ticked-off rows into inventory items. Online-only (needs the
-   *  inventory backend) and only for already-synced rows (those have a server
-   *  id); the server soft-deletes them, which syncs back as a tombstone — we also
-   *  remove locally for immediacy. Rows whose call fails STAY on the list (no
-   *  silent local removal for something the server never inventoried), and the
-   *  outcome is summarised either way. */
+  /** Turn synced ticked rows into inventory items. A row whose call fails stays
+   *  on the list. */
   buyDone(): void {
     const ticked = this.items().filter((i) => i.done);
     const done = ticked.filter((i) => i.id != null);
-    // A row the server has never seen has no inventory to land in yet. Said, not
-    // skipped: the button counted it.
+    // Said, not skipped: the button counted them.
     const unsynced = notSyncedYet(ticked.length - done.length);
     if (done.length === 0) {
       if (unsynced) this.feedback.notify(unsynced);
@@ -264,14 +231,12 @@ export class Shopping {
       .open<BuySheet, BuyRow[], BuyPrices | 'skip'>(BuySheet, { data: rows })
       .afterDismissed()
       .subscribe((res: BuyPrices | 'skip' | undefined) => {
-        // Dismissed without choosing: buy nothing. Closing a sheet you opened by
-        // mistake must not empty the list.
+        // Dismissed: buy nothing.
         if (res === undefined) return;
         this.completeBuy(done, res === 'skip' ? null : res, unsynced);
       });
   }
 
-  /** The buy itself, once it is known whether prices were recorded. */
   private completeBuy(done: ShoppingDoc[], priced: BuyPrices | null, unsynced: string): void {
     const buys = done.map((it) => {
       const minor = priced?.prices.get(it.id!);
@@ -310,20 +275,16 @@ export class Shopping {
   }
 }
 
-/** Units that measure an amount rather than count packs. */
 const MEASURES = /^(m?g|kg|grams?|kilos?|ml|cl|l|litres?|liters?|oz|lbs?)$/i;
 
-/** How many packs a row asks for. A count ("3", "2 tubs") multiplies the pack
- *  price; a measured amount ("500 g") is one pack's worth, since the price is
- *  per pack and the amount is not the pack's. */
+/** Packs a row asks for: a count multiplies the pack price, a measure ("500 g")
+ *  is one pack. */
 function packsOf(it: ShoppingDoc): number {
   const q = it.quantity;
   const counted = !MEASURES.test(it.unit?.trim() ?? '');
   return counted && q != null && Number.isInteger(q) && q > 0 ? q : 1;
 }
 
-/** Two coverage questions are the same question: the same rows, by key and
- *  identity, in the same order. */
 function sameQueries(a: readonly CoverageQuery[], b: readonly CoverageQuery[]): boolean {
   return (
     a.length === b.length &&
@@ -334,7 +295,6 @@ function sameQueries(a: readonly CoverageQuery[], b: readonly CoverageQuery[]): 
   );
 }
 
-/** What to say about ticked rows that never reached the server, or ''. */
 function notSyncedYet(n: number): string {
   if (n === 0) return '';
   return `${n} not synced yet, so ${n === 1 ? 'it stays' : 'they stay'} ticked.`;

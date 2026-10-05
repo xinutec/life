@@ -29,9 +29,8 @@ import { FilesDialog, FilesDialogData } from './files-dialog';
 import { PurchaseDialog, PurchaseDialogData } from './purchase-dialog';
 
 export interface ItemSheetData {
-  /** Present = edit; absent = add. */
+  /** Absent when adding. */
   item?: Item;
-  /** Location dropdown options, already resolved by the parent. */
   locations: { id: number; label: string }[];
 }
 
@@ -41,17 +40,13 @@ interface ItemForm {
   quantity: number | null;
   unit: string | null;
   expiry: string | null;
-  /** Which input the expiry is typed into, and what gets saved with it. */
   expiry_precision: ExpiryPrecision;
   location_id: number | null;
   barcode: string | null;
-  /** Set when linked to a catalog product (incl. a barcodeless shop product). */
   product_id: number | null;
 }
 
-/** Add/edit an inventory item — the FAB's bottom sheet. Online-only (the
- *  inventory is a server API, not a sync store); dismisses with `true` after a
- *  successful save so the parent reloads. */
+/** Add or edit an inventory item; dismisses with `true` after a save. */
 @Component({
   selector: 'app-item-sheet',
   templateUrl: './item-sheet.html',
@@ -76,7 +71,6 @@ export class ItemSheet {
   private feedback = inject(Feedback);
 
   readonly categories = ITEM_CATEGORIES;
-  /** Its display name — the picker shows what a category is called, not its key. */
   label(c: ItemCategory): string {
     return ITEM_CATEGORY_LABEL[c];
   }
@@ -113,8 +107,7 @@ export class ItemSheet {
     this.form.update((f) => ({ ...f, ...p }));
   }
 
-  /** While expiry is empty, the category picks its precision: month for
-   *  medication (packs print MM/YYYY), day otherwise. */
+  /** With no expiry yet, medication defaults to month precision (MM/YYYY packs). */
   chooseCategory(category: ItemCategory): void {
     if (this.form().expiry != null) {
       this.patch({ category });
@@ -123,18 +116,14 @@ export class ItemSheet {
     this.patch({ category, expiry_precision: category === 'medication' ? 'month' : 'day' });
   }
 
-  /** `YYYY-MM` for the month input — the stored date is that month's last day. */
   readonly expiryMonth = computed(() => toMonth(this.form().expiry));
 
-  /** A month picked in the month input, stored as the month's LAST day: a box
-   *  marked 06/2028 is good THROUGH June, and the 1st would expire it early. */
+  /** Stored as the month's LAST day: 06/2028 is good through June. */
   setExpiryMonth(month: string | null): void {
     this.patch({ expiry: month ? monthEnd(month) : null });
   }
 
-  /** Switch how the expiry is asked for. Re-reads the date through the new
-   *  precision rather than dropping it: month → day keeps the month-end as a
-   *  starting point to correct, and day → month keeps the month it fell in. */
+  /** Switching precision keeps the date rather than dropping it. */
   setPrecision(expiry_precision: ExpiryPrecision): void {
     const expiry = this.form().expiry;
     this.patch({
@@ -143,20 +132,16 @@ export class ItemSheet {
     });
   }
 
-  /** Whether the person typed this name. Only the form sees the keystroke,
-   *  and the server needs it: their own name outranks the catalogue's and stops
-   *  following it. False even when editing, since the prefilled name is the one
-   *  already displayed and saving unchanged must change nothing. */
+  /** Whether the person typed this name: theirs outranks the catalogue's. False
+   *  for a prefilled name, so saving unchanged changes nothing. */
   private readonly nameIsMine = signal(false);
 
-  /** The name box changed because somebody typed in it. */
   renameByHand(name: string): void {
     this.nameIsMine.set(true);
     this.patch({ name });
   }
 
-  /** A name that arrived FROM the catalogue — a scan or a product pick. Hands
-   *  the name back to the product, so later corrections reach this item. */
+  /** A name from the catalogue, which later catalogue corrections may update. */
   private nameFromCatalog(name: string): void {
     this.nameIsMine.set(false);
     this.patch({ name });
@@ -165,9 +150,7 @@ export class ItemSheet {
   save(): void {
     if (!this.form().name.trim() || this.saving()) return;
     this.saving.set(true);
-    // Absent unless it is a statement: `null` here would be a claim that the
-    // name is the catalogue's, and a plain save must not make that claim on
-    // somebody's behalf (the server preserves what the item already had).
+    // Absent unless typed: `null` would claim the name is the catalogue's.
     const body = {
       ...this.form(),
       ...(this.nameIsMine() ? { name_source: 'user' as const } : {}),
@@ -178,8 +161,7 @@ export class ItemSheet {
     const barcode = trimmed !== undefined && trimmed !== '' ? trimmed : null;
     req.subscribe({
       next: () => {
-        // Cache the product image (if a barcode was set) before the parent
-        // refreshes — best-effort, the dismissal doesn't wait for it.
+        // Warms the product image cache; best-effort.
         if (barcode) this.api.lookupProduct(barcode).subscribe({ next: () => {}, error: () => {} });
         this.ref.dismiss(true);
       },
@@ -190,9 +172,7 @@ export class ItemSheet {
     });
   }
 
-  /** Scan a barcode into the form; look up to cache + prefill the name.
-   *  Every outcome is announced — a scan that ends in silence reads as "the
-   *  scanner is broken". */
+  /** Every outcome is announced: silence reads as a broken scanner. */
   scan(): void {
     this.dialog
       .open<ScannerDialog, unknown, string | null>(ScannerDialog, {
@@ -217,8 +197,6 @@ export class ItemSheet {
       });
   }
 
-  /** Name-first product search (the shared picker — inventory, catalog, and the
-   *  shop tier inside the app); a pick links the item and fills the form. */
   findProduct(): void {
     this.dialog
       .open<ProductPicker, ProductPickData, ProductPick | null>(ProductPicker, {
@@ -231,24 +209,18 @@ export class ItemSheet {
         this.patch({ barcode: pick.barcode, product_id: pick.product_id });
         this.nameFromCatalog(pick.name);
         if (pick.unit != null && !this.form().unit?.trim()) this.patch({ unit: pick.unit });
-        // The pack size is how much this row holds — a 950g tub starts at 950g,
-        // which is what makes "how much is left" answerable at all. Only when
-        // the field is empty: a number already typed is a real measurement of
-        // this row (half a tub), and the label is only what it held when new.
+        // A new row starts at its pack size, unless an amount is already typed.
         if (pick.quantity != null && this.form().quantity == null) {
           this.patch({ quantity: pick.quantity });
         }
       });
   }
 
-  /** Whether "View product" has somewhere to go: a linked product, or a barcode
-   *  it can resolve to one. */
   readonly canViewProduct = computed(
     () => this.form().product_id != null || !!this.form().barcode?.trim(),
   );
 
-  /** Leave the sheet for the linked product's page — the scan → payoff-screen
-   *  path. A barcode without an established link is looked up first. */
+  /** Open the product's page, looking a barcode up first. */
   viewProduct(): void {
     const pid = this.form().product_id;
     if (pid != null) {
@@ -269,9 +241,7 @@ export class ItemSheet {
     });
   }
 
-  /** Everything that has happened to this row. A dialog OVER the sheet, not a
-   *  second bottom sheet — Material holds one of those at a time, so opening
-   *  one here would dismiss this form and lose whatever had been typed into it. */
+  /** A dialog, not a second bottom sheet, which would dismiss this form. */
   viewHistory(): void {
     const item = this.data.item;
     if (!item) return;
@@ -281,8 +251,6 @@ export class ItemSheet {
     });
   }
 
-  /** Record what this item cost — a dialog, for the same reason `viewHistory`
-   *  is one: a second bottom sheet would dismiss this form under it. */
   recordPurchase(): void {
     const item = this.data.item;
     if (!item) return;
@@ -292,7 +260,6 @@ export class ItemSheet {
     });
   }
 
-  /** Receipts and manuals for this item — a dialog, same reason as the others. */
   viewFiles(): void {
     const item = this.data.item;
     if (!item) return;

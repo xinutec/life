@@ -29,20 +29,14 @@ interface NavItem {
 
 const ME_CACHE_KEY = 'life.me';
 
-/** Every ConnectionStatus, so a cached value can be checked against the real
- *  set rather than assumed to be one of them. The `Record` keys make the
- *  compiler prove the list is exhaustive — a new status won't build until it's
- *  here (same device as ITEM_CATEGORIES in models.ts). */
+/** Every ConnectionStatus; the Record proves the list complete. */
 const CONNECTION_STATUSES: string[] = Object.keys({
   active: true,
   needs_reauth: true,
   not_linked: true,
 } satisfies Record<ConnectionStatus, true>);
 
-/** Is this parsed blob really a `Me`? Checked, not asserted: the cache outlives
- *  every deploy that ran on this device, so it can hold the shape from two
- *  versions ago — and the shell reads `nextcloud` to decide whether to nag for a
- *  re-link, which is the wrong thing to get from a guess. */
+/** Checked, not asserted: the cache can hold a shape from versions ago. */
 function isMe(v: unknown): v is Me {
   if (!isRecord(v)) return false;
   const m = v;
@@ -55,11 +49,7 @@ function isMe(v: unknown): v is Me {
   );
 }
 
-/** Last-known identity, cached so the app opens offline instead of showing the
- *  sign-in screen when it can't reach `/api/me`. Best-effort — storage may be
- *  unavailable (private mode, quota); a miss just falls back to the network.
- *  A blob that isn't a `Me` is discarded the same way, so an old shape costs a
- *  network round-trip rather than rendering a half-typed identity. */
+/** The last-known identity, so the app opens offline rather than at sign-in. */
 function loadCachedMe(): Me | null {
   try {
     const raw = localStorage.getItem(ME_CACHE_KEY);
@@ -74,9 +64,7 @@ function cacheMe(m: Me | null): void {
   try {
     if (m) localStorage.setItem(ME_CACHE_KEY, JSON.stringify(m));
     else localStorage.removeItem(ME_CACHE_KEY);
-  } catch {
-    // Persisting identity is best-effort; ignore storage failures.
-  }
+  } catch {}
 }
 
 @Component({
@@ -110,23 +98,16 @@ export class App {
 
   private readonly cached = loadCachedMe();
   readonly me = signal<Me | null>(this.cached);
-  /** Full-screen loader ONLY for a genuine cold start — no cached identity to
-   *  show. A returning user renders their cached shell immediately and the
-   *  /api/me refresh runs in the background (see `refreshing`), so there's no
-   *  spinner-over-content flash. */
+  /** Only a cold start with no cached identity blocks on a loader. */
   readonly loading = signal(this.cached === null);
-  /** A background /api/me refresh is in flight AND slow enough to be worth
-   *  signalling — drives a thin, non-blocking progress line over the content
-   *  (never instead of it). Revealed on a delay so a fast refresh stays silent. */
+  /** A background /api/me refresh has outlived the reveal delay. */
   readonly refreshing = signal(false);
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
-  /** True when the initial /api/me call failed for a non-auth reason (offline or
-   *  server) AND there was no cached identity to fall back to — drives a "you're
-   *  offline" notice instead of the misleading "sign in" prompt. */
+  /** /api/me failed for a reason other than auth, with no cached identity:
+   *  show "offline", not "sign in". */
   readonly offline = signal(false);
   readonly avatarError = signal(false);
 
-  // The frequent destinations live in the bottom tab bar.
   readonly nav: NavItem[] = [
     { path: '/today', icon: 'today', label: 'Today' },
     { path: '/shopping', icon: 'shopping_cart', label: 'Buy' },
@@ -135,7 +116,6 @@ export class App {
     { path: '/todo', icon: 'checklist', label: 'To-do' },
   ];
 
-  // Less-common destinations live behind the hamburger menu.
   readonly more: NavItem[] = [
     { path: '/wellbeing', icon: 'mood', label: 'Wellbeing' },
     { path: '/emotions', icon: 'calendar_month', label: 'Emotion calendar' },
@@ -147,9 +127,6 @@ export class App {
   ];
 
   constructor() {
-    // Replication is usually the first to learn the session has lapsed — it polls,
-    // and the user may be on a page that asks the server for nothing — so drop
-    // to the sign-in prompt rather than show a shell that can no longer sync.
     effect(() => {
       if (this.auth.lost()) {
         this.me.set(null);
@@ -161,9 +138,6 @@ export class App {
 
     this.swUpdates.start();
     this.telemetry.init();
-    // Re-arm the daily wellbeing reminder from local check-ins on every open (a
-    // no-op outside the Android app). Independent of the /api/me result — it reads
-    // the offline store, so it works before (or without) the session confirming.
     this.wellbeingReminder.init();
     this.beginRefresh();
     this.api.me().subscribe({
@@ -180,17 +154,12 @@ export class App {
         const f = classifyApiError(e);
         switch (f.kind) {
           case 'unauthenticated':
-            // A genuinely expired/absent session — forget the cached identity
-            // and fall through to the sign-in prompt.
             this.me.set(null);
             cacheMe(null);
             break;
           case 'offline':
           case 'server':
-            // Couldn't confirm identity, but this is NOT a logout: keep the cached
-            // `me` so the app opens. With no cache, `offline` shows an offline
-            // notice rather than a sign-in prompt for what is a connectivity
-            // problem; the toolbar's sync indicator already says we're offline.
+            // Not a logout: keep the cached identity.
             this.offline.set(true);
             break;
           default:
@@ -202,9 +171,7 @@ export class App {
     });
   }
 
-  /** Arm the refresh cue: reveal it only if the fetch outlives the delay, so a
-   *  fast refresh (or an instant offline failure) never flashes the line on and
-   *  off. ~400ms is below where a wait starts to feel like waiting. */
+  /** Show the refresh line only past 400 ms, so a fast refresh never flashes it. */
   private beginRefresh(): void {
     this.refreshTimer = setTimeout(() => this.refreshing.set(true), 400);
   }
@@ -216,16 +183,11 @@ export class App {
     this.refreshing.set(false);
   }
 
-  /** Retry the identity fetch from the offline notice — a reload re-runs the
-   *  whole boot (the service worker still serves the shell). */
   retry(): void {
     window.location.reload();
   }
 
-  // Fire the read endpoints once on login so the service worker caches them —
-  // makes inventory/recipes/house viewable offline even if you went straight
-  // underground without opening those tabs first. Fire-and-forget; the SW does
-  // the caching, these responses are otherwise ignored.
+  // Read each endpoint once so the service worker caches it for offline use.
   private warmOfflineCache(): void {
     const ignore = { error: () => {} };
     this.api.items().subscribe(ignore);
@@ -235,10 +197,8 @@ export class App {
     this.api.house().subscribe(ignore);
   }
 
-  /** The hamburger's "Scan a product": camera → barcode lookup → the product
-   *  page. The standalone payoff-screen path — no form, no item, just "what is
-   *  this thing on my shelf". Every outcome is announced (see the sheets'
-   *  scan flows: silence reads as a broken scanner). */
+  /** Scan a barcode and open its product page. Every outcome is announced:
+   *  silence reads as a broken scanner. */
   scanProduct(): void {
     this.dialog
       .open<ScannerDialog, unknown, string | null>(ScannerDialog, {

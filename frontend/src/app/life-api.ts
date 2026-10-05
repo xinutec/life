@@ -38,8 +38,7 @@ import {
   WarmEmotionsRequest,
 } from './models';
 
-/** Thin client over the life backend. Same-origin in prod; via the dev proxy
- *  (proxy.conf.json) in `ng serve`. Session cookie rides along automatically. */
+/** The life backend's REST API. */
 @Injectable({ providedIn: 'root' })
 export class LifeApi {
   private http = inject(HttpClient);
@@ -51,28 +50,22 @@ export class LifeApi {
     return this.http.post('/logout', {});
   }
 
-  /** Emotion suggestions for a check-in note, from the Mac's local model (see
-   *  src/routes/wellbeing.rs). With no worker it answers with none, and the
-   *  picker is the plain wheel. */
+  /** Emotions suggested for a note by the local model; none without one. */
   suggestEmotions(body: SuggestEmotionsRequest): Observable<SuggestEmotionsResponse> {
     return this.http.post<SuggestEmotionsResponse>('/api/wellbeing/suggest-emotions', body);
   }
 
-  /** Preload the model for a suggestion about to be asked for (fired when a note
-   *  starts being written). Fire-and-forget: the answer is still produced by the
-   *  real suggestEmotions call; this only makes it warm. */
+  /** Preload the model while a note is still being written. */
   warmEmotions(body: WarmEmotionsRequest): Observable<void> {
     return this.http.post<void>('/api/wellbeing/warm-emotions', body);
   }
 
-  /** Start Nextcloud Login Flow v2 and get the URL to approve it at. The
-   *  backend then polls NC in the background for up to five minutes and stores
-   *  the app password itself — this returns as soon as there is a URL to open,
-   *  not when the grant completes. Poll {@link nextcloudStatus} for that. */
+  /** Start Nextcloud Login Flow v2; returns the approval URL before the grant
+   *  completes. {@link nextcloudStatus} says when it has. */
   nextcloudConnect(): Observable<ConnectStarted> {
     return this.http.post<ConnectStarted>('/api/nextcloud/connect/init', {});
   }
-  /** Whether the app password is in hand. Cheap — no Nextcloud round-trip. */
+  /** Whether the app password is in hand. */
   nextcloudStatus(): Observable<ConnectState> {
     return this.http.get<ConnectState>('/api/nextcloud/connect/status');
   }
@@ -96,20 +89,17 @@ export class LifeApi {
   deleteItem(id: number): Observable<unknown> {
     return this.http.delete(`/api/items/${id}`);
   }
-  /** Take an amount out of a stock row ("I used 200g of flour"). `unit` must be
-   *  the row's own — the server refuses a mismatch rather than converting, so
-   *  send what the item says, not what the recipe said. */
+  /** "I used 200 g". `unit` must be the row's own; the server never converts. */
   useItem(id: number, quantity: number, unit: string | null): Observable<Item> {
     return this.http.post<Item>(`/api/items/${id}/use`, { quantity, unit });
   }
 
-  /** Record that you judged an item to be running out. 204, nothing changes. */
+  /** Record that an item is running out. */
   markLow(id: number): Observable<void> {
     return this.http.post<void>(`/api/items/${id}/low`, {});
   }
 
-  /** The same, from the Buy list, where only the row's identity is to hand. The
-   *  server matches it to a stocked item; 204 whether or not one exists. */
+  /** The same, by identity; nothing happens if no item matches. */
   markLowByIdentity(identity: {
     name: string;
     barcode: string | null;
@@ -117,33 +107,24 @@ export class LifeApi {
   }): Observable<void> {
     return this.http.post<void>('/api/items/low', identity);
   }
-  /** Everything the history dialog shows: the events, newest first (none for a
-   *  row older than the audit), and what was paid. Purchases ride alongside, not
-   *  among them: a purchase is a fact about the item, not something done to it. */
+  /** An item's events, newest first, and what was paid for it. */
   itemHistory(id: number): Observable<ItemHistory> {
     return this.http.get<ItemHistory>(`/api/items/${id}/history`);
   }
-  /** Record what an item cost, after the fact — for anything not bought through
-   *  the Buy list. A warranty is measured from it. */
+  /** Record what an item cost, for anything not bought through the Buy list. */
   recordPurchase(id: number, purchase: NewPurchase): Observable<Purchase> {
     return this.http.post<Purchase>(`/api/items/${id}/purchases`, purchase);
   }
-  /** Unmake a purchase: a mistyped price must be removable. */
   deletePurchase(itemId: number, purchaseId: number): Observable<unknown> {
     return this.http.delete(`/api/items/${itemId}/purchases/${purchaseId}`);
   }
-  /** What is attached to an item — metadata only. The bytes come from
-   *  `fileUrl`, so listing five receipts costs no blobs. */
+  /** What is attached to an item, without the bytes (see `fileUrl`). */
   itemFiles(id: number): Observable<ItemFile[]> {
     return this.http.get<ItemFile[]>(`/api/items/${id}/files`);
   }
 
-  /** Attach raw bytes. The name and the optional purchase link ride in headers
-   *  because the body IS the file — the same shape as the product image, and
-   *  no multipart for either side to parse.
-   *
-   *  The name is stripped to ASCII: a header cannot carry arbitrary UTF-8, and
-   *  a phone will happily produce a filename with an emoji in it. */
+  /** The body is the file; the name and purchase ride in headers, so the name
+   *  is stripped to ASCII. */
   addItemFile(id: number, file: File, purchaseId?: number): Observable<ItemFile> {
     const headers: Record<string, string> = {
       'Content-Type': file.type || 'application/octet-stream',
@@ -157,8 +138,7 @@ export class LifeApi {
     return this.http.delete(`/api/items/${id}/files/${fileId}`);
   }
 
-  /** Where the bytes are. A plain link, so the browser's own download handles
-   *  it — the server sends `Content-Disposition: attachment`. */
+  /** A plain link; the server answers it as a download. */
   fileUrl(id: number, fileId: number): string {
     return `/api/items/${id}/files/${fileId}`;
   }
@@ -171,20 +151,13 @@ export class LifeApi {
     return this.http.get<HouseScene>('/api/house');
   }
 
-  /** Upcoming bin collections from the council's public calendar, soonest
-   *  first. Empty when no feed is configured — which is indistinguishable from
-   *  "nothing scheduled", and renders the same either way. */
+  /** Upcoming bin collections, soonest first; empty without a feed. */
   bins(): Observable<BinDay[]> {
     return this.http.get<BinDay[]>('/api/bins');
   }
 
-  /** Put a shop trip in the Nextcloud calendar. `startsAt` is an ISO instant;
-   *  `items` is the Buy list as it stands, which rides along in the event's
-   *  description so the shop is read from the calendar, not from here.
-   *
-   *  A 409 means the calendar isn't linked (or the link has lapsed) — the one
-   *  failure the caller has to handle differently, because the fix is in
-   *  Settings rather than a retry. */
+  /** Put a shop trip in the Nextcloud calendar, with the Buy list in its
+   *  description. 409: the calendar is not linked. */
   planShopTrip(shop: string, startsAt: string, items: string[]): Observable<PlannedTrip> {
     return this.http.post<PlannedTrip>('/api/calendar/shop-trip', {
       shop,
@@ -196,133 +169,95 @@ export class LifeApi {
   shopping(): Observable<ShoppingItem[]> {
     return this.http.get<ShoppingItem[]>('/api/shopping');
   }
-  /** Mark a row bought. `purchase` is optional and its absence is normal — the
-   *  buy must work with a full trolley and one hand, so the price is a note that
-   *  can be skipped, never a gate. */
+  /** Mark a row bought; the price is optional. */
   buyShopping(id: number, purchase?: { shop: string; amount_minor: number }): Observable<Item> {
     return this.http.post<Item>(`/api/shopping/${id}/buy`, purchase ? { purchase } : {});
   }
 
-  /** Look up (and cache) a product by barcode via Open Food Facts. */
   lookupProduct(barcode: string): Observable<Product> {
     return this.http.get<Product>(`/api/products/${encodeURIComponent(barcode)}`);
   }
-  /** Catalog name/brand substring search (the product picker's catalog tier). */
   searchProducts(q: string): Observable<Product[]> {
     return this.http.get<Product[]>('/api/products', { params: { q } });
   }
-  /** Live name search against Asda's storefront (the picker's Asda tier). Unlike
-   *  the Waitrose shop tier, this is a plain backend call — no app bridge — so
-   *  it works in the browser too. */
+  /** A live Asda search, run by the server. */
   searchAsda(q: string): Observable<AsdaHit[]> {
     return this.http.get<AsdaHit[]>('/api/products/shop/asda', { params: { q } });
   }
-  /** Does this shop carry this product's barcode? The backend answers from its
-   *  own memory of past shop queries when it can, so a repeat lookup costs the
-   *  shop nothing; only a miss goes out to search. Matching is by barcode
-   *  server-side — a shop's relevance ranking is not evidence of identity. */
+  /** Does this shop carry this product's barcode? From memory when it can. */
   findAtShop(id: number, source: Source): Observable<ShopFind> {
     return this.http.get<ShopFind>(`/api/products/id/${id}/find/${encodeURIComponent(source)}`);
   }
-  /** Teach the backend what this device's WebView saw at a shop the server
-   *  can't reach itself (Waitrose is behind a bot-wall). Every listing a hunt
-   *  passed over is worth reporting, not just the one that matched: each is a
-   *  durable barcode → shop-id fact that spares the next hunt a page load. */
+  /** Report what this device saw at a shop the server cannot reach. */
   rememberShopListings(source: Source, listings: SeenListing[]): Observable<Remembered> {
     return this.http.post<Remembered>(
       `/api/products/shop/${encodeURIComponent(source)}/listings`,
       listings,
     );
   }
-  /** Where each Buy-list row is known to be SOLD — the shops holding a listing
-   *  for its product, plus the shops a past query showed carrying its barcode.
-   *  Memory only: no shop is contacted, so this can run on every list load.
-   *  Never a stock check, and an empty `sources` means we know nothing about
-   *  that row rather than that nowhere sells it. */
+  /** Where each Buy row is known to be sold, from memory only. Empty means
+   *  unknown, not nowhere. */
   shopCoverage(rows: CoverageQuery[]): Observable<RowCoverage[]> {
     return this.http.post<RowCoverage[]>('/api/shopping/coverage', rows);
   }
-  /** URL of the cached product image (use directly as <img src>). Pass a
-   *  `version` after a replace to bust the browser/service-worker cache. */
+  /** `version` busts the cache after a replace. */
   productImageUrl(barcode: string, version?: number): string {
     const base = `/api/products/${encodeURIComponent(barcode)}/image`;
     return version ? `${base}?v=${version}` : base;
   }
-  /** Replace the cached image for a barcode with raw image bytes. The blob's
-   *  own mime rides along as Content-Type; the backend re-validates it. */
   uploadProductImage(barcode: string, blob: Blob): Observable<void> {
     return this.http.put<void>(`/api/products/${encodeURIComponent(barcode)}/image`, blob, {
       headers: { 'Content-Type': blob.type },
     });
   }
-  /** Import a product from an external source (a shop) into the catalog, keyed on
-   *  (source, external_id). The backend fetches + stores the image server-side. */
+  /** Import a shop's product into the catalogue. */
   importProduct(body: {
     source: Source;
     external_id: string;
     name: string;
     brand?: string | null;
-    /** The pack the shop sells, as the shop writes it ("400G"). Comes back
-     *  parsed as `Product.pack`, which is what fills a new stock row's amount. */
+    /** As the shop writes it ("400G"). */
     quantity_label?: string | null;
-    /** The EAN when the source knows it — merges shop + Open Food Facts data
-     *  onto one canonical product by barcode. */
+    /** Merges the shop's product with Open Food Facts' by barcode. */
     barcode?: string | null;
     image_url?: string | null;
-    /** Price the source quoted — appended to the product's price history. */
     price?: PriceInput | null;
   }): Observable<Product> {
     return this.http.post<Product>('/api/products/import', body);
   }
-  /** Pull a product's listing at a shop and store what it says — price, the
-   *  shop's lifestyle tags, pack size, clean name. Same call attaches a shop for
-   *  the first time and refreshes it later; the backend fetches shop-side and
-   *  enforces that the listing's barcode really is this product's. */
+  /** Attach or refresh a shop's listing, fetched and barcode-checked by the server. */
   syncListing(id: number, source: Source, externalId: string): Observable<Product> {
     return this.http.post<Product>(`/api/products/id/${id}/listings`, {
       source,
       external_id: externalId,
     });
   }
-  /** Everything the product page shows, in one fetch: the canonical product,
-   *  its per-source listings (deep links resolved), latest price per shop
-   *  (cheapest first), and its nutrition/ingredients/allergen/dietary facts. */
+  /** Everything the product page shows. */
   getProductDetail(id: number): Observable<ProductDetail> {
     return this.http.get<ProductDetail>(`/api/products/id/${id}`);
   }
-  /** Settle where the product's sources disagree with its canonical row: each
-   *  decision adopts a source's value ({field, choice: source}), keeps the
-   *  current one ({field, choice: 'keep'}), or sets our own typed value
-   *  ({field, choice: 'user', value}).
-   *
-   *  `FieldChoice` is the backend's own request type, so a field or choice it
-   *  doesn't accept fails to compile. Returns the re-read detail. */
+  /** Settle where sources disagree; returns the re-read detail. */
   reconcile(id: number, decisions: FieldChoice[]): Observable<ProductDetail> {
     return this.http.post<ProductDetail>(`/api/products/id/${id}/reconcile`, decisions);
   }
-  /** Store facts a shop's product PAGE carries but its API doesn't — Asda's
-   *  Brandbank nutrition/ingredients/allergens/dietary, fetched by the hidden
-   *  WebView (the page is bot-walled) and parsed server-side. `ean` is the page's
-   *  own barcode; the backend rejects a blob whose barcode isn't this product's.
-   *  Returns the re-read detail. */
+  /** Store a shop page's facts blob for the server to parse; `ean` is the page's
+   *  own barcode, checked against the product. */
   submitFacts(
     id: number,
     body: { source: Source; ean: string; blob: string },
   ): Observable<ProductDetail> {
     return this.http.post<ProductDetail>(`/api/products/id/${id}/facts`, body);
   }
-  /** URL of a catalog image addressed by product id — for barcodeless shop
-   *  products, which have no /products/{barcode}/image URL. */
+  /** For barcodeless products. */
   productImageByIdUrl(id: number, version?: number): string {
     const base = `/api/products/id/${id}/image`;
     return version ? `${base}?v=${version}` : base;
   }
 
-  /** Unresolved same-field sync conflicts, newest first. */
   conflicts(): Observable<ConflictEntry[]> {
     return this.http.get<ConflictEntry[]>('/api/conflicts');
   }
-  /** Record a client-detected same-field conflict (values JSON-encoded). */
+  /** Values are JSON-encoded. */
   reportConflict(body: {
     kind: ConflictKind;
     ulid: string;
@@ -333,18 +268,14 @@ export class LifeApi {
   }): Observable<void> {
     return this.http.post<void>('/api/conflicts', body);
   }
-  /** Mark a conflict handled — keep-mine and use-other both end here. */
   resolveConflict(id: number): Observable<void> {
     return this.http.post<void>(`/api/conflicts/${id}/resolve`, {});
   }
 
-  /** Everything deleted (all kinds), newest first. Nothing is ever purged. */
   trash(): Observable<TrashEntry[]> {
     return this.http.get<TrashEntry[]>('/api/trash');
   }
-  /** Restore one trash entry — the deliberate undelete path (also used by the
-   *  Undo snackbars). `ref` is the entry's own: an id for server-only kinds, a
-   *  ulid for synced ones. */
+  /** `ref` is an id for REST kinds, a ulid for synced ones. */
   restoreTrash(kind: TrashKind, ref: string): Observable<void> {
     return this.http.post<void>(`/api/trash/${kind}/${encodeURIComponent(ref)}/restore`, {});
   }
@@ -361,9 +292,7 @@ export class LifeApi {
   deleteRecipe(id: number): Observable<unknown> {
     return this.http.delete(`/api/recipes/${id}`);
   }
-  /** Cook it: take every ingredient out of the cupboard. Answers with one line
-   *  per ingredient — INCLUDING the ones nothing happened to, which is the whole
-   *  contract (see recipes::cooking). */
+  /** One line per ingredient, including those nothing happened to. */
   cookRecipe(id: number): Observable<CookedLine[]> {
     return this.http.post<CookedLine[]>(`/api/recipes/${id}/cook`, {});
   }

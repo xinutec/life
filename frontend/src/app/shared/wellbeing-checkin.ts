@@ -5,56 +5,46 @@ import { MatIconModule } from '@angular/material/icon';
 import { Feedback } from './feedback';
 import { WellbeingStore } from '../sync/wellbeing-store';
 
-/** Readings are stored in TENTHS of a point (10..50): a 35 is a 3.5, the mood
- *  between two faces. Only half-points are recordable today, but the scale — and
- *  everything derived from it here — is arithmetic, not a lookup, so finer steps
- *  would need no changes below the check-in strip itself. */
+/** Readings are tenths of a point (10..50): a 35 is a 3.5, between two faces. */
 export const TENTHS_PER_POINT = 10;
 export const HALF_STEP_TENTHS = 5;
 
-/** 35 → 3.5. The one place the scale is undone, so nothing else divides by ten. */
+/** 35 → 3.5; the one place the scale is undone. */
 export function toPoints(tenths: number): number {
   return tenths / TENTHS_PER_POINT;
 }
 
-/** 4 → 40. Whole points only (the five faces); half-steps come from `midpoint`. */
+/** 4 → 40. */
 export function toTenths(points: number): number {
   return points * TENTHS_PER_POINT;
 }
 
-/** True when the reading sits between two faces — a 3.5, not a 3 or a 4. */
 export function isHalfStep(tenths: number): boolean {
   return tenths % TENTHS_PER_POINT !== 0;
 }
 
-/** The reading between two whole faces: 3 and 4 → 35 tenths. */
+/** 3 and 4 → 35. */
 export function midpoint(a: number, b: number): number {
   return (toTenths(a) + toTenths(b)) / 2;
 }
 
-/** The whole faces a reading lights up: one for a 4, both neighbours for a 3.5.
- *  Two lit neighbours is how a half-step shows itself on a strip of whole faces. */
+/** The faces a reading lights: one for a 4, both neighbours for a 3.5. */
 export function facesOf(tenths: number): number[] {
   const points = toPoints(tenths);
   return isHalfStep(tenths) ? [Math.floor(points), Math.ceil(points)] : [points];
 }
 
-/** Tapping `face` with reading `now`, where one face is a whole and two
- *  adjacent faces the half between: from nothing or a distant face → that face;
- *  next to a whole → the half-step; either face of a half-step → that whole.
- *  Null for a no-op (the lone lit face), which callers treat differently: mood
- *  stays put, optional energy clears. */
+/** The reading after tapping `face`: a neighbour of a whole makes the half-step,
+ *  anything else goes to that face. Null for the lone lit face, which mood keeps
+ *  and energy clears. */
 export function nextReading(now: number | null | undefined, face: number): number | null {
-  // From a half-step, ANY tap resolves to that whole face — whether it's one of
-  // the two lit ones (collapse to it) or a distant one (just go there).
   if (now == null || isHalfStep(now)) return toTenths(face);
   const current = toPoints(now);
-  if (current === face) return null; // already on, alone — the caller decides
+  if (current === face) return null;
   return Math.abs(current - face) === 1 ? midpoint(current, face) : toTenths(face);
 }
 
-/** The five wellbeing levels: score, label + Material face icon. Shared so the
- *  check-in strip, the history timeline and the edit sheet all agree. */
+/** The five mood levels. */
 export const WELLBEING_SCORES: readonly { score: number; label: string; icon: string }[] = [
   { score: 1, label: 'awful', icon: 'sentiment_very_dissatisfied' },
   { score: 2, label: 'low', icon: 'sentiment_dissatisfied' },
@@ -63,9 +53,7 @@ export const WELLBEING_SCORES: readonly { score: number; label: string; icon: st
   { score: 5, label: 'great', icon: 'sentiment_very_satisfied' },
 ];
 
-/** The five energy levels: value (1..5, higher = better — like mood), label +
- *  battery icon. Ordered ascending (drained → energetic) so the battery fills as
- *  energy rises, mirroring the mood faces left-to-right. */
+/** The five energy levels; higher is better, as for mood. */
 export const ENERGY_LEVELS: readonly { energy: number; label: string; icon: string }[] = [
   { energy: 1, label: 'drained', icon: 'battery_alert' },
   { energy: 2, label: 'low', icon: 'battery_2_bar' },
@@ -74,21 +62,15 @@ export const ENERGY_LEVELS: readonly { energy: number; label: string; icon: stri
   { energy: 5, label: 'energetic', icon: 'battery_full' },
 ];
 
-/** What one reading looks like: the word for it, the icon, and the colour. */
 export interface LevelMeta {
   label: string;
   icon: string;
-  /** A CSS colour: one rung of the ramp, or — for a half-step — the blend of the
-   *  two it sits between, so the dot's colour says the same thing as its height. */
+  /** A rung of the ramp, or for a half-step the blend of two. */
   color: string;
 }
 
-/** Resolve a reading in tenths against a five-rung scale.
- *
- *  A half-step takes the LOWER rung's icon and both rungs' words ("okay–good").
- *  The icon is the level you definitely reached — a 3.5 is an okay that was
- *  heading for good, not a good that fell short — while the label and the colour
- *  carry the half. Rounding the icon up would quietly promote every half-step. */
+/** A half-step takes the lower rung's icon, the level surely reached, and both
+ *  rungs' words ("okay–good"). */
 function levelMeta(
   tenths: number,
   rungs: readonly { label: string; icon: string }[],
@@ -107,26 +89,19 @@ function levelMeta(
   };
 }
 
-/** The mood level (label, face icon, ramp colour) for a reading in tenths. */
 export function scoreMeta(tenths: number): LevelMeta {
   return levelMeta(tenths, WELLBEING_SCORES, 'wb-score');
 }
 
-/** The energy level (label, battery icon, ramp colour) for a reading in tenths. */
 export function energyMeta(tenths: number): LevelMeta {
   return levelMeta(tenths, ENERGY_LEVELS, 'wb-score');
 }
 
-/** How long after a tap an adjacent tap amends it ("4… no, a bit below").
- *  Longer windows only risk merging a genuine second check-in one face away,
- *  which announces itself and is one Undo away. */
+/** How long after a tap an adjacent tap amends it ("4… no, a bit below"). */
 const AMEND_WINDOW_MS = 60_000;
 
-/** The one-tap mood check-in: five face buttons that log an entry at "now".
- *  Logging is instant and offline; an Undo snackbar covers a mis-tap. Tapping a
- *  neighbouring face while that snackbar is up amends the entry to the half-step
- *  between the two ("4, but a bit lower"). Note and time adjustments are follow-ups
- *  on the history screen, never prerequisites. */
+/** The one-tap mood check-in. An adjacent tap within the amend window makes it
+ *  a half-step. */
 @Component({
   selector: 'app-wellbeing-checkin',
   templateUrl: './wellbeing-checkin.html',
@@ -137,34 +112,21 @@ export class WellbeingCheckin {
   private store = inject(WellbeingStore);
   private feedback = inject(Feedback);
 
-  /** Emitted after a check-in is logged (so a host can e.g. scroll to it). */
   readonly logged = output<void>();
 
-  /** Offer a route into the just-logged entry's detail. Off by default: only a
-   *  screen that can OPEN that entry should show it, and Today cannot — it has
-   *  no edit sheet, and a button that leads nowhere is worse than none. */
+  /** Only for a host that can open the entry. */
   readonly showDetail = input(false);
-  /** The ulid of the entry a person wants to say more about. */
   readonly detail = output<string>();
 
-  /** The entry just logged, while the amend window is open.
-   *
-   *  ⚠ Deliberately NOT an auto-opened sheet: tapping an adjacent face in this
-   *  window records a half-step (a 3.5), and a sheet over the strip would take
-   *  that gesture away to save one tap. */
+  /** The entry just logged, while the amend window is open. Not an auto-opened
+   *  sheet, which would cover the faces the amend tap needs. */
   readonly justLogged = signal<string | null>(null);
 
   readonly scores = WELLBEING_SCORES;
 
-  /** The check-in this tap might still be amending: tap Good then Okay and you
-   *  meant one 3.5, not a 4 and then a 3. Only an ADJACENT face amends — two faces
-   *  apart isn't a half-step, it's a correction (or a different feeling), and both
-   *  of those are better served by leaving the first entry alone. */
+  /** The check-in an adjacent tap would amend. */
   private pending: { key: string; score: number; at: number } | null = null;
-  /** Clears [`justLogged`] when the amend window lapses. Without it the offer
-   *  outlives the moment it belongs to: an hour later the strip would still be
-   *  inviting you to say more about a check-in you finished long ago. Restarted
-   *  on every log, so a second check-in gets its own full window. */
+  /** Clears `justLogged` when the amend window lapses. */
   private lapse: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
@@ -173,7 +135,6 @@ export class WellbeingCheckin {
     });
   }
 
-  /** Start (or restart) the window after which the offer goes away. */
   private armLapse(): void {
     if (this.lapse !== null) clearTimeout(this.lapse);
     this.lapse = setTimeout(() => this.justLogged.set(null), AMEND_WINDOW_MS);
@@ -182,9 +143,7 @@ export class WellbeingCheckin {
   async log(score: number): Promise<void> {
     const recent = this.pending;
     const armed = recent && Date.now() - recent.at < AMEND_WINDOW_MS;
-    // The same face again is a stray double tap, not a second check-in a minute
-    // apart on the identical score. Swallow it: two identical entries is never what
-    // the second tap meant, and the first one is already logged and undoable.
+    // The same face again is a double tap.
     if (armed && recent.score === score) return;
     if (armed && Math.abs(recent.score - score) === 1) {
       const tenths = midpoint(recent.score, score);
@@ -195,13 +154,11 @@ export class WellbeingCheckin {
       this.logged.emit();
       const key = recent.key;
       this.feedback.undo(`Logged ${scoreMeta(tenths).label}`, () => {
-        this.justLogged.set(null); // it points at an entry that no longer exists
+        this.justLogged.set(null);
         void this.store.remove(key);
       });
       return;
     }
-    // Log at "now" immediately (offline-ok); a mis-tap is one Undo away. A
-    // just-created entry is removed outright on undo — no server restore needed.
     const key = await this.store.add({
       recordedAt: new Date().toISOString(),
       scoreTenths: toTenths(score),
@@ -213,7 +170,7 @@ export class WellbeingCheckin {
     this.logged.emit();
     this.feedback.undo(`Logged ${scoreMeta(toTenths(score)).label}`, () => {
       this.pending = null;
-      this.justLogged.set(null); // it points at an entry that no longer exists
+      this.justLogged.set(null);
       void this.store.remove(key);
     });
   }

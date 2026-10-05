@@ -1,26 +1,14 @@
 import { daysUntil, utcDay } from './shared/civil-day';
 
-/** How a recorded warranty reads: the date is the *storage*; what somebody needs
- *  is whether it still covers them, and how long they have. */
-
 export interface WarrantyInfo {
   label: string;
-  /** CSS hook, shared with the `.expiry` grammar: 'expired' | 'soon' | 'ok'. */
   cls: 'expired' | 'soon' | 'ok';
 }
 
-/** The point past which naming the end date is less useful than naming the time
- *  left. Three months is about when a decision — claim it, extend it, replace
- *  the thing — becomes one worth making rather than one to defer. */
+/** Within this, the time left says more than the end date. */
 const SOON_DAYS = 90;
 
-/**
- * Read a warranty end date. `now` is injectable for tests.
- *
- * `until` is derived server-side, and `null` when no warranty was recorded —
- * most purchases. That is "nobody recorded one", not "no warranty", so `null`
- * comes back and nothing renders a claim either way.
- */
+/** Null `until` is "none recorded", not "no warranty", so nothing is shown. */
 export function warrantyInfo(until: number | null, now: Date = new Date()): WarrantyInfo | null {
   if (until === null) return null;
   const end = new Date(until);

@@ -18,10 +18,8 @@ const SHOPPING_PATCHABLE: ReadonlySet<string> = new Set(SHOPPING_MERGE_FIELDS);
 const TODO_PATCHABLE: ReadonlySet<string> = new Set(TODO_MERGE_FIELDS);
 const WELLBEING_PATCHABLE: ReadonlySet<string> = new Set(WELLBEING_MERGE_FIELDS);
 
-/** Sync conflicts: both devices edited the same field while apart. The merge
- *  already kept one version (the device that pushed); this screen shows the
- *  losing value so nothing is silently discarded — keep what was chosen, or
- *  switch to the other value. */
+/** Values the merge discarded when two devices edited one field: keep the
+ *  chosen one, or switch. */
 @Component({
   selector: 'app-conflicts',
   templateUrl: './conflicts.html',
@@ -37,7 +35,6 @@ export class Conflicts {
   private alerts = inject(Alerts);
   private conflictsStore = inject(ConflictsStore);
 
-  // Retained across tab switches, refreshed in the background (see CachedResource).
   readonly entries = computed(() => this.conflictsStore.value() ?? []);
   readonly loaded = this.conflictsStore.loaded;
   readonly error = this.conflictsStore.error;
@@ -47,8 +44,6 @@ export class Conflicts {
   constructor() {
     scaffoldTitle(() => 'Sync conflicts');
     this.conflictsStore.refresh();
-    // Keep the menu badge in step with what this screen shows — fires on load and
-    // after each optimistic resolve, once there's a real count to reconcile.
     effect(() => {
       if (this.loaded()) this.alerts.setConflicts(this.entries().length);
     });
@@ -58,7 +53,6 @@ export class Conflicts {
     this.conflictsStore.refresh();
   }
 
-  /** JSON-encoded value → short human text. */
   fmt(encoded: string): string {
     try {
       const v: unknown = JSON.parse(encoded);
@@ -72,16 +66,13 @@ export class Conflicts {
     }
   }
 
-  /** Keep the value the merge already chose — just clears the log entry. */
   keepMine(e: ConflictEntry): void {
     this.finish(e, undefined);
   }
 
-  /** Apply the other device's value to the live row, then clear the entry. */
   useTheirs(e: ConflictEntry): void {
     const value: unknown = JSON.parse(e.theirs);
-    // The field name comes from our own merge report, but validate against the
-    // store's patchable-field allowlist before writing it back.
+    // Checked against the store's patchable fields before writing.
     let apply: Promise<void> | undefined;
     if (e.kind === 'shopping' && SHOPPING_PATCHABLE.has(e.field)) {
       apply = this.shopping.patch(e.ulid, { [e.field]: value });

@@ -17,22 +17,15 @@ export interface UseSheetData {
   item: Item;
 }
 
-/** Fractions of what's on hand, because that is how you actually think about it
- *  — "half the bag" rather than "475 g". Computed from the row, so the numbers
- *  are always real amounts of a real thing. */
+/** Shares of what is on hand: "half the bag", not "475 g". */
 const SHARES = [
   { label: '¼', of: 0.25 },
   { label: '½', of: 0.5 },
   { label: 'All of it', of: 1 },
 ];
 
-/** "I used some of this" — bottom sheet over an inventory row.
- *
- *  Deliberately does NOT let you pick a unit: the amount is always in the row's
- *  own unit, because a conversion is exactly what the backend refuses to guess
- *  (see inventory::consume). What you type is what comes off.
- *
- *  Dismisses with `true` after a successful decrement so the parent reloads. */
+/** "I used some of this", always in the row's own unit: the backend never
+ *  converts. Dismisses with `true` after a save. */
 @Component({
   selector: 'app-use-sheet',
   templateUrl: './use-sheet.html',
@@ -56,19 +49,14 @@ export class UseSheet {
   readonly saving = signal(false);
   readonly amount = signal<number | null>(null);
 
-  /** The unit shown as the field's suffix; blank for countable things. */
   readonly unit = this.item.unit ?? '';
 
-  /** An amount written the way the rest of the app writes one — "950 g", but
-   *  "1 bottle" rather than "1bottle". */
   private how(quantity: number): string {
     return amount(quantity, this.item.unit);
   }
 
-  /** What's on hand, for the share buttons' arithmetic. */
   readonly have = this.item.quantity ?? 0;
 
-  /** The same, written out for the "you have N" line. */
   readonly haveLabel = amount(this.have, this.item.unit);
 
   readonly shares = computed(() =>
@@ -91,7 +79,6 @@ export class UseSheet {
     this.api.useItem(this.item.id, quantity, this.item.unit).subscribe({
       next: (updated) => {
         const left = updated.quantity ?? 0;
-        // More than was recorded empties the row; say by how much it was short.
         const short = round(quantity - this.have);
         this.feedback.notify(
           left > 0
@@ -114,8 +101,6 @@ export class UseSheet {
   }
 }
 
-/** Two decimals at most — a third of a 950 g bag is 316.666…, and nobody has
- *  that much flour. */
 function round(n: number): number {
   return Math.round(n * 100) / 100;
 }

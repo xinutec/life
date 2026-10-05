@@ -18,13 +18,7 @@ export interface PurchaseDialogData {
   item: Item;
 }
 
-/**
- * Record what something cost, for something already owned.
- *
- * For anything not bought through the Buy list; a warranty is measured FROM a
- * purchase. A dialog over the item sheet, like History: Material holds one
- * bottom sheet at a time.
- */
+/** Record what something already owned cost; a warranty is measured from it. */
 @Component({
   selector: 'app-purchase-dialog',
   templateUrl: './purchase-dialog.html',
@@ -49,32 +43,21 @@ export class PurchaseDialog {
 
   readonly shop = signal('');
   readonly price = signal('');
-  /** `YYYY-MM-DD`. Empty means today, which is what the server reads an absent
-   *  date as — the shop case, where you are standing at the till. */
+  /** Empty means today. */
   readonly boughtOn = signal('');
-  /** Months, as printed on the receipt. Empty is "no warranty recorded", which
-   *  is not a claim that there is none. */
+  /** Empty is "none recorded", not "no warranty". */
   readonly warranty = signal('');
 
-  /** Pence, or null when the box does not hold a price.
-   *
-   *  Parsed here rather than at save so the button can be disabled on it: a
-   *  price is the one field with no sensible fallback, and a purchase of nothing
-   *  is not a record worth keeping. Integer arithmetic throughout — `3.30 * 100`
-   *  is 330.00000000000006, and money must be exact. */
+  /** Pence, or null; the button is disabled without a price. */
   readonly pence = computed(() => toMinorUnits(this.price()));
 
-  /** Whole months, or null. Rejects a decimal outright rather than rounding it:
-   *  "2.5 years" typed into a months box is a misunderstanding, and silently
-   *  storing 2 months of cover would be worse than refusing. */
+  /** Whole months only: "2.5" is refused, not rounded. */
   readonly months = computed(() => {
     const raw = this.warranty().trim();
     if (!raw) return null;
     return /^\d+$/.test(raw) ? Number(raw) : null;
   });
 
-  /** Whether the warranty box holds something that is not a number of months.
-   *  Distinguished from empty, because empty is fine and wrong is not. */
   readonly warrantyBad = computed(() => this.warranty().trim() !== '' && this.months() === null);
 
   readonly canSave = computed(
@@ -82,8 +65,7 @@ export class PurchaseDialog {
       !this.saving() && this.shop().trim() !== '' && this.pence() !== null && !this.warrantyBad(),
   );
 
-  /** Today, as the date input spells it — the latest a purchase can be, since
-   *  the server refuses one that has not happened. */
+  /** The latest a purchase can be. */
   readonly today = localDay();
 
   save(): void {

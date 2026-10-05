@@ -16,17 +16,11 @@ export interface FilesDialogData {
   item: Item;
 }
 
-/** 10 MiB, matching the server. Checked here too so a too-big file is refused
- *  before it is uploaded rather than after — the round trip is the expensive
- *  part on a phone. */
+/** 10 MiB, as the server: refused before the upload, not after. */
 const MAX_BYTES = 10 * 1024 * 1024;
 
-/**
- * Receipts and manuals for one item. On the item, not the product: products
- * are shared reference data, a receipt is personal, and a hand-entered
- * appliance has no product. A dialog because a second bottom sheet would
- * dismiss the item sheet.
- */
+/** Receipts and manuals, on the item: a receipt is personal, and a hand-entered
+ *  appliance has no product. */
 @Component({
   selector: 'app-files-dialog',
   templateUrl: './files-dialog.html',
@@ -51,8 +45,6 @@ export class FilesDialog {
       id: f.id,
       ...split(f.name),
       href: this.api.fileUrl(this.item.id, f.id),
-      // The icon says what it is faster than the mime string would, and the
-      // mime is not something anybody wants to read.
       icon: f.mime === 'application/pdf' ? 'picture_as_pdf' : 'image',
       detail: [size(f.size_bytes), ago(f.created_at)].join(' · '),
     })),
@@ -71,14 +63,9 @@ export class FilesDialog {
     });
   }
 
-  /** The hidden input's change. Cleared before reading so the same file can be
-   *  picked twice after a failure, and no `capture` attribute: that would force
-   *  the camera and remove the photo library, which is where a scanned manual
-   *  lives. */
+  /** Cleared first, so the same file can be picked again. No `capture`, which
+   *  would hide the photo library. */
   pick(event: Event): void {
-    // A guard, not a cast: `event.target` is EventTarget and narrowing it by
-    // assertion is a claim the compiler cannot check. Same shape as
-    // `product.ts`'s `pickImage`, which says so in the same words.
     const input = event.target;
     if (!(input instanceof HTMLInputElement)) return;
     const file = input.files?.[0];
@@ -105,7 +92,6 @@ export class FilesDialog {
     });
   }
 
-  /** Removing goes to the trash, so it is one Undo away like every other delete. */
   remove(id: number): void {
     this.api.deleteItemFile(this.item.id, id).subscribe({
       next: () => {
@@ -126,12 +112,7 @@ export class FilesDialog {
   }
 }
 
-/**
- * A filename split so its END survives truncation: phones name scans
- * `IMG_20240315_143022_receipt.pdf`, and a tail ellipsis leaves identical
- * `IMG_2024…` rows. Two spans rather than a character count, so it is right at
- * every width: the head shrinks under CSS, the tail is `flex: 0 0 auto`.
- */
+/** A name split so its end survives truncation: phones name scans `IMG_2024…`. */
 function split(name: string): { head: string; tail: string; full: string } {
   const keep = Math.min(12, name.length);
   return {
@@ -141,8 +122,7 @@ function split(name: string): { head: string; tail: string; full: string } {
   };
 }
 
-/** Bytes as somebody would say them. One decimal for MB, none for KB — "1.4 MB"
- *  is a size and "1434 KB" is a number. */
+/** "1.4 MB", "640 KB". */
 function size(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;

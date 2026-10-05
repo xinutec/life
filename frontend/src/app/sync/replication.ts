@@ -8,14 +8,11 @@ import { PULL_INTERVAL_MS } from './cadence';
 import { isRecord, numberField } from '../shared/narrow';
 import { SyncSource, SyncStatus } from './sync-status';
 
-/** Auth guard for sync fetches, run before the generic `!res.ok` check. If
- *  `classifyFetchResponse` calls it auth loss (a 401/403, or a stale cookie's
- *  redirect to a non-JSON login page), report "login required", call `onAuthLost` and throw to
- *  abort the cycle; offline or server failures (including the service
- *  worker's 504) return, and the caller's generic throw retries them. */
 /** A document as it travels over sync: the local doc plus RxDB's tombstone. */
 export type Synced<T> = T & { _deleted: boolean };
 
+/** Throws on a lost session, after reporting it; offline and server failures
+ *  return, and the caller's own throw retries them. */
 export function guardAuth(
   res: Response,
   syncError: WritableSignal<string | null>,
@@ -37,46 +34,27 @@ export function guardAuth(
 }
 
 /** The HTTP pull/push replication every synced collection uses (see
- *  docs/design/sync.md): GET `path?since&limit` pulls, POST `path` pushes the
- *  RxDB rows, with rev checkpoints, the auth guard, and quiet retry on transient
- *  errors. */
+ *  docs/design/sync.md). */
 export function startHttpReplication<T>(opts: {
   collection: RxCollection<T>;
   /** Stable RxDB replication identity, e.g. 'shopping-http-sync'. */
   identifier: string;
   /** Sync endpoint, e.g. '/api/sync/shopping'. */
   path: string;
-  /** The owning store's user-facing sync problem signal. */
   syncError: WritableSignal<string | null>;
-  /** App-wide sync-health aggregator — every cycle reports success/failure here
-   *  so the shell can show a persistent "not synced" indicator. */
   syncStatus: SyncStatus;
-  /** console.warn tag + sync-status source key. A closed union, because it
-   *  keys the status maps — see `SyncSource`. */
   label: SyncSource;
-  /** Raised once the server refuses us for want of a session. Replication then
-   *  STOPS: retrying a 401 on a timer neither recovers nor informs; only a fresh
-   *  login helps. */
+  /** Replication stops after calling this: only a fresh login helps. */
   onAuthLost: () => void;
-  /** How often to ask the server whether anything is new, in milliseconds.
-   *  Overridable only so tests need not wait a minute; nothing in the app sets
-   *  it. */
+  /** For tests; the app uses PULL_INTERVAL_MS. */
   pollMs?: number;
 }) {
-  // Set by the guard inside a handler; read in error$, which is where we have the
-  // replication object to cancel.
   let authLost = false;
 
-  // ⚠ `live: true` does not keep pulling: without `pull.stream$` RxDB pulls once
-  // and an open tab freezes. `reSync()` feeds the plugin's own
-  // `masterChangeStream$`, so a 'RESYNC' stream is the intended mechanism.
-  //
-  // ⚠ Keep `waitForLeadership` true. Only the elected tab replicates (so a
-  // second tab pulls nothing itself), which stops N tabs pushing the same
-  // changes; the shared IndexedDB carries the leader's pulls to every tab.
+  // Without `pull.stream$`, `live: true` pulls once and the tab freezes.
+  // Keep `waitForLeadership` (the default): only the leader tab replicates.
   const heartbeat$: Observable<'RESYNC'> = merge(
     interval(opts.pollMs ?? PULL_INTERVAL_MS),
-    // Coming back from offline should not wait out the rest of the interval.
     typeof window === 'undefined' ? EMPTY : fromEvent(window, 'online'),
   ).pipe(map(() => 'RESYNC' as const));
 
@@ -95,11 +73,8 @@ export function startHttpReplication<T>(opts: {
         });
         guardAuth(res, opts.syncError, () => (authLost = true));
         if (!res.ok) throw new Error(`pull failed: ${res.status}`);
-        // The row TYPE is our own wire contract and is taken on trust, but the
-        // two things replication cannot survive being wrong about are checked:
-        // a non-array `documents` would be fed to RxDB as a batch, and a
-        // missing `checkpoint.rev` would rewind the pull to 0 and refetch
-        // everything on every cycle.
+        // Rows are trusted; the two shapes RxDB cannot survive are checked (a
+        // missing rev would rewind every pull to 0).
         const body: unknown = await res.json();
         const documents =
           isRecord(body) && Array.isArray(body['documents']) ? body['documents'] : null;
@@ -107,10 +82,9 @@ export function startHttpReplication<T>(opts: {
         if (documents === null || rev === null) throw new Error('pull returned a malformed batch');
         opts.syncError.set(null);
         opts.syncStatus.clearError(opts.label);
-        // ⚠ A cycle that SUCCEEDS has to say so: a stall throws nothing, so
-        // `clearError` alone would let the indicator claim "synced" forever.
+        // A stall throws nothing, so only a reported success shows we are current.
         opts.syncStatus.reportSuccess(opts.label);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- _deleted is what the pull rows carry; the type adds RxDB's flag to T
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- the pull rows carry _deleted
         return { documents: documents as Synced<T>[], checkpoint: { rev } };
       },
     },
@@ -128,36 +102,24 @@ export function startHttpReplication<T>(opts: {
         opts.syncError.set(null);
         opts.syncStatus.clearError(opts.label);
         opts.syncStatus.reportSuccess(opts.label);
-        // The push response is the server's conflict list — same wire contract
-        // as the pull rows, checked for being a list at all.
         const conflicts: unknown = await res.json();
         if (!Array.isArray(conflicts)) throw new Error('push returned a malformed response');
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- checked to be an array on the line above
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- checked to be an array above
         return conflicts as Synced<T>[];
       },
     },
   });
   replication.error$.subscribe((err) => {
-    // Surface every failed cycle to the app-wide indicator. The auth guard sets
-    // a friendly syncError; for anything else (server down, 5xx, offline fetch)
-    // use a reassuring generic — offline-first means the write is safe locally.
     const message =
       opts.syncError() ??
       'Can’t reach the server — changes are saved on this device and will sync when it’s back.';
     opts.syncStatus.reportError(opts.label, message);
-
     if (authLost) {
-      // Stand down rather than retry. RxDB's retryTime would otherwise re-run
-      // this handler every 5s for the life of the tab, and every attempt is
-      // certain to fail the same way — no session, no recovery, no message. Tell
-      // the app instead, so the shell can ask for a login.
+      // RxDB would retry every 5s forever, certain to fail the same way.
       opts.onAuthLost();
       void replication.cancel();
       return;
     }
-
-    // Keep the console breadcrumb only for the non-auth case (RxDB retries
-    // transient network errors on its own).
     console.warn(`[${opts.label}]`, err);
   });
   return replication;

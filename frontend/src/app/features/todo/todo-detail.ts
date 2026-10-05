@@ -24,7 +24,6 @@ const KINDS: readonly { value: LinkKind; label: string }[] = [
   { value: 'related', label: 'Related' },
 ];
 
-/** ISO date for a quick-pick preset, relative to today (device-local). */
 function presetDate(kind: 'today' | 'tomorrow' | 'weekend' | 'nextweek'): string {
   const d = new Date();
   if (kind === 'tomorrow') d.setDate(d.getDate() + 1);
@@ -34,9 +33,7 @@ function presetDate(kind: 'today' | 'tomorrow' | 'weekend' | 'nextweek'): string
   return localDay(d);
 }
 
-/** A connection group for display: a heading + its resolved rows. Each row is an
- *  edge (`edge` = its ulid, for removal) pointing at a `target`; `todoRef` is set
- *  when the target is itself a to-do, so we can traverse to it. */
+/** One heading's connections; `todoRef` is set when the target is a to-do. */
 interface Group {
   heading: string;
   rows: { edge: string; target: LinkTarget; todoRef: string | null }[];
@@ -60,17 +57,12 @@ interface Group {
 })
 export class TodoDetail implements OnDestroy {
   private deleting = false;
-  // True once the user has actually typed in the field. Guards the dismiss-time
-  // flush so it never writes back the value the sheet opened with — otherwise
-  // an edit that landed remotely while the sheet was open would be clobbered by
-  // the stale original on close (same guard as wellbeing-entry's noteDirty).
+  // Only typed fields are flushed on close, so a remote edit made while the
+  // sheet was open is not overwritten by the stale original.
   private titleDirty = false;
   private notesDirty = false;
 
-  // Dismissing the sheet (backdrop tap / swipe) may not fire the title/notes
-  // blur handlers, which is where edits are saved — flush on teardown so an
-  // in-progress edit isn't lost. Only fields the user actually typed in are
-  // flushed; skipped entirely when the to-do is being deleted.
+  // A dismiss may skip the blur that saves, so flush what was typed.
   ngOnDestroy(): void {
     if (this.deleting) return;
     const t = this.todo();
@@ -93,7 +85,6 @@ export class TodoDetail implements OnDestroy {
   readonly graph = inject(TodoGraph);
 
   constructor() {
-    // The link search must see entities added since the catalogs last loaded.
     this.graph.refreshCatalogs();
   }
 
@@ -102,7 +93,6 @@ export class TodoDetail implements OnDestroy {
   readonly priorities = PRIORITIES;
   readonly ulid = signal(this.data.ulid);
 
-  /** The live to-do (may update while the sheet is open). */
   readonly todo = computed(() => this.graph.todoItems().find((t) => t.ulid === this.ulid()));
   readonly state = computed(() => {
     const t = this.todo();
@@ -110,7 +100,6 @@ export class TodoDetail implements OnDestroy {
   });
   readonly blockers = computed(() => this.graph.blockers(this.ulid()));
 
-  /** Connections grouped by relationship + direction, resolved for display. */
   readonly groups = computed<Group[]>(() => {
     const out = this.graph.outgoing(this.ulid());
     const inc = this.graph.incoming(this.ulid());
@@ -155,17 +144,14 @@ export class TodoDetail implements OnDestroy {
     return g.filter((grp) => grp.rows.length > 0);
   });
 
-  // Inline edit — seeded once from the to-do; patched on change.
   readonly title = signal(this.todo()?.title ?? '');
   readonly notes = signal(this.todo()?.notes ?? '');
 
-  // Add-connection form.
   readonly addKind = signal<LinkKind>('related');
   readonly query = signal('');
   readonly results = computed(() => this.graph.search(this.query(), this.ulid()));
 
-  /** Input handlers: record the edit and mark the field dirty so a dismiss
-   *  will flush it (a bare `.set` would not). */
+  /** Marks the field typed, for the flush on close. */
   onTitleInput(value: string): void {
     this.titleDirty = true;
     this.title.set(value);
@@ -187,15 +173,12 @@ export class TodoDetail implements OnDestroy {
     void this.store.patch(this.ulid(), { notes: this.notes().trim() || null });
   }
 
-  // The chip listboxes emit undefined on a deselect. The selected chip is
-  // locked ([selectable]=false), so that shouldn't happen — but guard anyway:
-  // type always has a value, and priority's "none" is the explicit null chip.
+  // A chip listbox emits undefined on deselect.
   setType(type: TodoType | undefined): void {
     if (type == null) return;
     void this.store.patch(this.ulid(), { type });
   }
 
-  /** Publish this to-do to the case-file site, or keep it private (default). */
   setShared(shared: boolean): void {
     void this.store.patch(this.ulid(), { shared });
   }
@@ -217,7 +200,7 @@ export class TodoDetail implements OnDestroy {
     { label: 'Next week', kind: 'nextweek' },
   ] as const;
 
-  // A cleared native date input emits '' — store that as null, not an empty date.
+  // A cleared date input emits ''.
   private clean(v: string | null): string | null {
     return v && v.trim().length > 0 ? v : null;
   }
@@ -242,8 +225,6 @@ export class TodoDetail implements OnDestroy {
   toggleDone(): void {
     const t = this.todo();
     if (!t) return;
-    // Can't complete a blocked to-do (checkbox is disabled too); un-completing
-    // a done one is always fine.
     if (t.status !== 'done' && this.state() === 'blocked') return;
     void this.store.setStatus(this.ulid(), t.status === 'done' ? 'open' : 'done');
   }
@@ -262,7 +243,6 @@ export class TodoDetail implements OnDestroy {
     this.graph.removeLink(edge);
   }
 
-  /** Traverse: reopen the sheet on a linked to-do. */
   openTodo(ref: string): void {
     this.ref.dismiss();
     this.sheet.open(TodoDetail, { data: { ulid: ref } });
@@ -275,10 +255,7 @@ export class TodoDetail implements OnDestroy {
     void this.store.remove(key);
     this.ref.dismiss();
     if (!doc) return;
-    // Undo mirrors the list view: the store's two-layer undo (local revive +
-    // server-side trash restore for synced rows). Link removal is deferred to
-    // the Undo window's close so an undo brings the to-do back with its
-    // connections intact.
+    // Links go only once the Undo window closes, so an undo brings them back too.
     this.feedback.undo(
       `Deleted “${doc.title}”`,
       () => void this.store.undoDelete(doc),

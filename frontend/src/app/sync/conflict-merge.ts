@@ -8,43 +8,33 @@ import { LifeApi } from '../life-api';
 import { ConflictKind } from '../models';
 import { isRecord, stringField } from '../shared/narrow';
 
-/** One same-field collision the merge had to decide: `mine` was kept (the
- *  pushing device's latest intent), `theirs` lost and gets logged. */
+/** A same-field collision: `mine` was kept, `theirs` is logged. */
 export interface FieldConflict {
   field: string;
   mine: unknown;
   theirs: unknown;
 }
 
-/** A per-document record of what `resolve()` actually did — the merge path is
- *  otherwise invisible (the isEqual push-loss bug went undetected precisely
- *  because nothing here logs). `mine`/`theirs`/`collided` name the fields that
- *  resolved each way, so a stray edit "disturbed" by a merge leaves a trace. */
+/** What `resolve()` did to one document, field by field, so a merge that
+ *  disturbs a local edit leaves a trace. */
 export interface MergeTrace {
   ulid: string;
-  /** Fields taken from this device (I changed them since the assumed base). */
+  /** Changed here since the base: taken from this device. */
   mine: string[];
-  /** Fields left to the server value that the OTHER device changed — the branch
-   *  that pulls in remote edits; the one to watch for clobbered local work. */
+  /** Changed only by the other device: taken from the server. */
   theirs: string[];
-  /** Fields both sides changed to different values: local won, server logged. */
+  /** Changed on both: this device won, the server's value is logged. */
   collided: string[];
-  /** The whole doc resolved to a tombstone (a delete won). */
   deleted: boolean;
-  /** No assumed base to diff against → the local doc won wholesale. */
+  /** No base to diff against, so the local doc won whole. */
   noBase: boolean;
 }
 
-/** How a field's two values are judged equal. The set of strategies a field may
- *  declare is TYPE-DIRECTED (see [[FieldSpec]] / [[EqFor]]), so a spec cannot
- *  misclassify a field — an array can never be compared by identity by accident. */
+/** How a field's two values are judged equal. */
 export type FieldEq = 'value' | 'array';
 
-/** The equality strategies valid for a field of type `V`: an array → `'array'`
- *  (identity would read a fresh-but-equal copy as changed, the emotions sync
- *  bug); a primitive → `'value'` (undefined ≡ null). A non-array OBJECT resolves
- *  to `never`, so such a field fails to compile until `FieldEq` gains a deep
- *  comparer, rather than silently falling back to identity. */
+/** The strategy a field of type `V` must use. An object field is `never`, so
+ *  it fails to compile rather than fall back to identity. */
 type EqFor<V> =
   NonNullable<V> extends readonly unknown[]
     ? 'array'
@@ -52,15 +42,11 @@ type EqFor<V> =
       ? never
       : 'value';
 
-/** An exhaustive, type-directed 3-way-merge spec: every content field of `C`,
- *  each tagged with a strategy valid for its type. `-?` makes every key required,
- *  so a field added to the document won't compile until it's classified here — it
- *  can never be silently dropped from the merge (the push-loss bug) nor wrongly
- *  identity-compared (the emotions bug). */
+/** Every content field of `C` with its strategy. Required keys, so a new field
+ *  cannot compile until the merge knows it. */
 export type FieldSpec<C> = { [K in keyof C]-?: EqFor<C[K]> };
 
-/** Compare one field's two values under its declared strategy. `undefined` folds
- *  to `null`, so an absent optional equals the wire's explicit null. */
+/** `undefined` equals `null`: an absent optional is the wire's null. */
 function eqBy(strategy: FieldEq, a: unknown, b: unknown): boolean {
   const x = a ?? null;
   const y = b ?? null;
@@ -71,8 +57,7 @@ function eqBy(strategy: FieldEq, a: unknown, b: unknown): boolean {
   return Object.is(x, y);
 }
 
-/** Default merge observer: DevTools "Verbose"-level only, so it's silent in
- *  normal use but readable over CDP when diagnosing a sync. */
+/** Verbose-level, so it is silent unless someone is reading over CDP. */
 function logMergeTrace(t: MergeTrace): void {
   console.debug('[conflict:resolve]', t.ulid, {
     mine: t.mine,
@@ -83,25 +68,19 @@ function logMergeTrace(t: MergeTrace): void {
   });
 }
 
-/** A field-level 3-way merge for one row changed on two devices, each side
- *  diffed against the base this device last synced: only mine changed → mine;
- *  only theirs → theirs; both → mine (the latest intent), and the loser goes to
- *  `onConflicts`. A server tombstone stands (trash restore is the one undelete),
- *  a local delete beats remote edits, and `ulid`/`id`/`rev` come from the master. */
+/** A field-level 3-way merge against the base this device last synced: a field
+ *  changed on one side takes that side; on both, this device wins and the loser
+ *  goes to `onConflicts`. A server tombstone stands; a local delete beats
+ *  remote edits. */
 export function makeConflictHandler<
   T extends { rev: number },
   C = Omit<T, 'ulid' | 'id' | 'rev'>,
 >(opts: {
-  /** Type-directed, exhaustive: every content field of `C` with a strategy valid
-   *  for its type. Its keys ARE the field set the merge diffs (see [[FieldSpec]]). */
   fields: FieldSpec<C>;
   onConflicts: (kept: T & { _deleted: boolean }, conflicts: FieldConflict[]) => void;
-  /** Observe every resolve() decision. Defaults to a `console.debug` trace;
-   *  a test injects a spy to assert the merge disturbed no local edit. */
   trace?: (t: MergeTrace) => void;
 }): RxConflictHandler<T> {
   const trace = opts.trace ?? logMergeTrace;
-  // The spec's keys are the merge field set; each maps to its equality strategy.
   const spec = opts.fields as Record<string, FieldEq>;
   const keys = Object.keys(spec);
   const get = (o: unknown, f: string): unknown => (isRecord(o) ? o[f] : undefined);
@@ -110,11 +89,8 @@ export function makeConflictHandler<
   };
   const eq = (f: string, a: unknown, b: unknown): boolean => eqBy(spec[f], a, b);
   return {
-    /** Replication equality, asked in BOTH directions. Upstream it decides whether
-     *  a local doc still needs pushing (`false` queues the push). A local edit
-     *  changes content but not the server-minted `rev`, so rev alone would drop
-     *  every edit: fields are compared too, each by its strategy ([[eqBy]]),
-     *  see replication-push.spec.ts. */
+    /** Also decides whether a local doc still needs pushing; an edit leaves
+     *  `rev` alone, so the fields must be compared too. */
     isEqual: (a, b) =>
       !!a._deleted === !!b._deleted &&
       (!!a._deleted || (a.rev === b.rev && keys.every((f) => eq(f, get(a, f), get(b, f))))),
@@ -125,7 +101,6 @@ export function makeConflictHandler<
         return Promise.resolve(real);
       }
       if (!assumed) {
-        // No base to diff against → the local doc wins wholesale.
         trace({
           ulid: id,
           mine: [],
@@ -142,8 +117,6 @@ export function makeConflictHandler<
       const tookTheirs: string[] = [];
       for (const f of keys) {
         if (eq(f, get(mine, f), get(assumed, f))) {
-          // I didn't touch it → keep the master's value; note when that pulls
-          // in a genuine remote change (real ≠ base), not just an unchanged field.
           if (!eq(f, get(real, f), get(assumed, f))) tookTheirs.push(f);
           continue;
         }
@@ -168,8 +141,7 @@ export function makeConflictHandler<
   };
 }
 
-/** Sends same-field conflicts to the server-side conflict log (so every device
- *  can review them) and points the user at the Conflicts screen. */
+/** Logs collisions on the server, where every device can review them. */
 @Injectable({ providedIn: 'root' })
 export class ConflictReporter {
   private api = inject(LifeApi);
@@ -189,12 +161,10 @@ export class ConflictReporter {
           theirs: JSON.stringify(c.theirs ?? null),
         })
         .subscribe({
-          // The merge already happened; a failed report only loses the log
-          // entry. Warn instead of interrupting sync.
           error: () => console.warn('[conflict] report failed', kind, ulid, c.field),
         });
     }
-    this.alerts.addConflicts(conflicts.length); // badge appears immediately
+    this.alerts.addConflicts(conflicts.length);
     this.snack
       .open(`Edits collided on “${label}” — kept this device's version.`, 'Review', {
         duration: 8000,

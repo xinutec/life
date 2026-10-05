@@ -1,36 +1,26 @@
 import { HttpErrorResponse } from '@angular/common/http';
 
-/** The three ways an HttpClient call can fail that the app makes decisions on.
- *  A discriminated union, so every `switch (f.kind)` must handle `offline` apart
- *  from `unauthenticated`: a network failure must never read as a logged-out
- *  session, which would show offline users the sign-in screen. */
+/** How an API call failed. Offline must never read as signed out, which would
+ *  show offline users the sign-in screen. */
 export type ApiFailure =
   | { readonly kind: 'offline' }
   | { readonly kind: 'unauthenticated' }
   | { readonly kind: 'server'; readonly status: number };
 
-/** Classify an HttpClient error. The ONE place that reads the raw status off an
- *  `HttpErrorResponse` (dev-lint DL-ANGULAR-HTTP-ERROR-CLASSIFIED); the fetch-based
- *  replication's twin is `guardAuth`. Total over `unknown`, for any `error:`
- *  handler. `withFetch()` reports a dropped connection as status 0: offline,
- *  which must not be mistaken for an auth failure. */
+/** The one place that reads an HttpErrorResponse's status (a dev-lint rule).
+ *  Status 0 is a dropped connection. */
 export function classifyApiError(e: unknown): ApiFailure {
   if (e instanceof HttpErrorResponse) {
     if (e.status === 0) return { kind: 'offline' };
     if (e.status === 401 || e.status === 403) return { kind: 'unauthenticated' };
     return { kind: 'server', status: e.status };
   }
-  // HttpClient always emits HttpErrorResponse on its error channel; a non-HTTP
-  // throw reaching here is unexpected, so treat it as an unreachable-server case
-  // rather than a confirmed auth failure — never force a sign-out on a stray throw.
+  // Never sign anyone out on a stray throw.
   return { kind: 'offline' };
 }
 
-/** Classify a raw `fetch()` Response in classifyApiError's taxonomy; `ok`
- *  means parse the body. Auth loss needs a positive signal: 401/403, a followed
- *  redirect, or a 2xx non-JSON body (the login page). A non-ok non-JSON
- *  response is not one: the service worker's offline 504 and the ingress's
- *  error page must not sign offline users out. */
+/** The same for a raw `fetch()`. Signed out takes a positive signal: 401/403, a
+ *  redirect, or a 2xx login page; the service worker's offline 504 is not one. */
 export function classifyFetchResponse(res: Response): { kind: 'ok' } | ApiFailure {
   if (res.status === 401 || res.status === 403) return { kind: 'unauthenticated' };
   const json = (res.headers.get('content-type') ?? '').includes('application/json');
@@ -40,23 +30,17 @@ export function classifyFetchResponse(res: Response): { kind: 'ok' } | ApiFailur
   return { kind: 'ok' };
 }
 
-/** The standard "are you online?" suffix for a failed write — empty unless the
- *  failure was a dropped connection. Keeps the many `Could not ${what}` toasts
- *  from each re-deriving offline-ness off a raw status. */
+/** " — are you online?" for a dropped connection, else ''. */
 export function onlineHint(e: unknown): string {
   return classifyApiError(e).kind === 'offline' ? ' — are you online?' : '';
 }
 
-/** True when the failure was a 404 — the "this specific thing isn't there" case,
- *  distinct from offline / auth / other server errors. Lets a lookup toast say
- *  "not found" vs "are you online?" without re-reading the raw status. */
 export function isNotFound(e: unknown): boolean {
   const f = classifyApiError(e);
   return f.kind === 'server' && f.status === 404;
 }
 
-/** Exhaustiveness guard: `default: assertNever(f)` in a `switch (f.kind)` makes
- *  the compiler reject any future ApiFailure kind a callsite forgets to handle. */
+/** `default: assertNever(f)` makes a new failure kind a compile error. */
 export function assertNever(x: never): never {
   throw new Error(`unhandled ApiFailure: ${JSON.stringify(x)}`);
 }

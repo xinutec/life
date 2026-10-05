@@ -10,31 +10,20 @@ import { sourceLabel } from '../../shared/sources';
 import { ShopProduct, ShopProvider, Shops, isSignedOut, shopPrice } from '../../shop';
 import { WAITROSE } from '../../shops/waitrose';
 
-/** How a shop lookup is going.
- *
- *  `none`: the shop's results were checked and none carried this barcode.
- *  `unknown`: nobody has looked, and this device can't (a bot-walled shop), so
- *  "doesn't have it" would be an answer nobody got.
- *  `signedOut`: the app's shop session is signed out; `signIn` fixes it. */
+/** `none`: checked, and not carried. `unknown`: nobody has looked and this
+ *  device cannot. */
 type ShopLookup = 'idle' | 'searching' | 'found' | 'none' | 'unknown' | 'signedOut' | 'error';
 
-/** The shops a product can be looked up at, in the order they're offered. Both
- *  are answerable from memory anywhere; only Asda can be searched afresh without
- *  the app (see [[find]]). */
 const FINDABLE_SOURCES: Source[] = ['asda', 'waitrose'];
 
-/** Shops the app's WebView can walk itself. Keyed by source id so a lookup, a
- *  refresh and the picker all reach the same provider. */
 const BRIDGE_PROVIDERS: ShopProvider[] = [WAITROSE];
 
 function bridgeProvider(source: Source): ShopProvider | undefined {
   return BRIDGE_PROVIDERS.find((p) => p.id === source);
 }
 
-/** A shop hit as this screen shows it, whoever found it: the server's own Asda
- *  search, our memory of an earlier query, or the phone walking a bot-walled
- *  shop. `product` is set only in the last case — it's the full record already in
- *  hand, so adding it costs no second page load. */
+/** A shop hit, whoever found it. `product` is set when the phone fetched the
+ *  record, so adding it costs no second page load. */
 interface ShopHit {
   source: Source;
   external_id: string;
@@ -46,18 +35,15 @@ interface ShopHit {
   product: ShopProduct | null;
 }
 
-/** One shop's lookup as the screen renders it. */
 interface ShopLookupRow {
   source: Source;
   label: string;
   state: ShopLookup;
-  /** What a hunt is doing right now ("2 of 8") — each step is a page load in a
-   *  hidden WebView, so ten silent seconds would read as a hang. */
+  /** "2 of 8": each step is a page load, and silence would read as a hang. */
   progress: string | null;
   hit: ShopHit | null;
   fromCache: boolean;
-  /** How many of the shop's own results were checked. `none` means "none of
-   *  these", not "not in the catalogue", and the copy has to be able to say so. */
+  /** Results checked: `none` means none of these. */
   checked: number;
 }
 
@@ -73,19 +59,13 @@ function blankLookup(source: Source): ShopLookupRow {
   };
 }
 
-/** What a bot-walled shop's own quote reads as before we've stored it — the same
- *  string the buy rows show, from the record the WebView just fetched. */
 function priceLabel(product: ShopProduct): string | null {
   const price = shopPrice(product);
   return price ? formatMoney(price.amount_minor, price.currency) : null;
 }
 
-/** Finding a product at shops, attaching what is found, and refreshing listed
- *  shops. Owned by the product page and constructed in its injection context.
- *
- *  Memory answers first, in any browser. On a miss the server searches Asda
- *  itself; Waitrose's bot wall needs the app's WebView, so the phone searches
- *  and reports what it saw. */
+/** Finding the product at shops and refreshing listed ones. The server answers
+ *  from memory or searches Asda; Waitrose needs the app's WebView. */
 export class ProductShops {
   private api = inject(LifeApi);
   private feedback = inject(Feedback);
@@ -100,8 +80,7 @@ export class ProductShops {
   private readonly lookupState = signal<Record<string, ShopLookupRow>>({});
   readonly attaching = signal(false);
 
-  /** One lookup row per shop that could still be added: we need a barcode to
-   *  match on, and there is nothing to find at a shop already listed. */
+  /** Shops not yet listed, if there is a barcode to match on. */
   readonly shopLookups = computed<ShopLookupRow[]>(() => {
     const d = this.detail();
     if (!d?.product.barcode) return [];
@@ -119,11 +98,7 @@ export class ProductShops {
     });
   }
 
-  /** Ask whether a shop carries this barcode.
-   *
-   *  The server answers from past queries first, then searches the shops it can
-   *  reach and matches on the EAN, never on relevance order. If it can't reach
-   *  the shop it says `searched: false`, and the hunt below takes over. */
+  /** Server first; `searched: false` hands over to the WebView hunt. */
   find(source: Source): void {
     this.patchLookup(source, { state: 'searching', hit: null, progress: null, checked: 0 });
     this.api.findAtShop(this.id(), source).subscribe({
@@ -144,19 +119,15 @@ export class ProductShops {
     });
   }
 
-  /** Walk a bot-walled shop's search results in the hidden WebView until one
-   *  carries our barcode.
-   *
-   *  Waitrose's hits carry no EAN, so each candidate costs a page load; every one
-   *  passed over is reported to the backend, so no hunt pays for it again. */
+  /** Open each search result until one carries our barcode. Every page read is
+   *  reported, so no hunt pays for it twice. */
   private async hunt(source: Source): Promise<void> {
     const provider = bridgeProvider(source);
     const d = this.detail();
     const barcode = d?.product.barcode;
     const name = d?.product.name?.trim();
     if (!provider || !this.shops.available || !barcode || !name) {
-      // Nobody has looked and this device can't. Say that, rather than letting
-      // an unasked question read as a negative answer.
+      // Say nobody looked, rather than "not carried".
       this.patchLookup(source, { state: 'unknown', progress: null });
       return;
     }
@@ -179,15 +150,12 @@ export class ProductShops {
           checked: i,
         });
         const product = await this.shops.fetchProduct(provider, candidate.external_id);
-        // The shop's own padding, read as ours: one GTIN, whatever its length.
         const codes = product.barcodes.map(canonicalBarcode);
         const matched = codes.includes(barcode);
         this.remember(source, [
           {
             external_id: product.external_id,
-            // A listing gets one row, so of several EANs we keep the one that
-            // identifies it FOR US when there is one — otherwise the next
-            // lookup for this barcode would miss a page we have already read.
+            // File the matched page under our barcode, so the next lookup hits.
             barcode: matched ? barcode : (codes[0] ?? null),
             name: product.name,
             brand: product.brand,
@@ -221,7 +189,6 @@ export class ProductShops {
     }
   }
 
-  /** Show the shop's sign-in, then look again once it closes. */
   signIn(source: Source): void {
     const provider = bridgeProvider(source);
     if (!provider) return;
@@ -231,10 +198,7 @@ export class ProductShops {
     );
   }
 
-  /** File what the WebView saw. Best-effort by design: this is a side benefit of
-   *  a lookup the user asked for, so a failed cache write must not fail their
-   *  hunt — but it is reported, because a cache that silently never writes looks
-   *  exactly like one that works. */
+  /** Best-effort, but logged: a cache that never writes looks like one that works. */
   private remember(source: Source, listings: SeenListing[]): void {
     if (!listings.length) return;
     this.api.rememberShopListings(source, listings).subscribe({
@@ -242,20 +206,12 @@ export class ProductShops {
     });
   }
 
-  /** "Brand · 400G" for a shop hit we haven't imported yet — the same subtitle
-   *  shape as the product page, from whatever the shop handed back. Lets you
-   *  size up the match before committing to Add. */
   hitSubtitle(hit: ShopHit): string {
     return [hit.brand, hit.quantity_label].filter((s) => !!s).join(' · ');
   }
 
-  /** Add the found listing to this product.
-   *
-   *  Asda is re-read shop-side, so the match this screen made is a convenience
-   *  the server never takes on trust — it re-checks the barcode itself. A
-   *  bot-walled shop can't be re-read from there, so we import the record the
-   *  phone already fetched; a hit that came from memory has no record and no
-   *  price, and lands as a listing whose price a refresh fills in. */
+  /** Asda is re-read and re-checked by the server; a WebView shop is imported
+   *  from the record the phone fetched. */
   attachHit(row: ShopLookupRow): void {
     const hit = row.hit;
     if (!hit || this.attaching()) return;
@@ -281,16 +237,11 @@ export class ProductShops {
     );
   }
 
-  /** Whether a listed shop can be re-read from this device. Asda always (the
-   *  server does it); the rest only in the app, whose WebView is the only thing
-   *  that can see their pages. */
   canRefresh(source: Source): boolean {
     return source === 'asda' || (this.shops.available && !!bridgeProvider(source));
   }
 
-  /** Re-read a shop listing on demand — pressed when you've seen the shelf price
-   *  change. Nothing refetches on a timer: shop data goes stale silently, and a
-   *  wrong price you didn't ask for is worse than an old one you can refresh. */
+  /** On demand only: a price you did not ask for is worse than an old one. */
   refresh(row: { source: Source; externalId: string; label: string }): void {
     if (row.source === 'asda') {
       this.pull(row.externalId, `Refreshed ${row.label}.`, `Could not refresh ${row.label}`);

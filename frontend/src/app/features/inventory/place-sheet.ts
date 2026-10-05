@@ -16,12 +16,10 @@ import { LocationKind } from '../../models';
 const KINDS: LocationKind[] = ['house', 'room', 'cupboard', 'fridge', 'layer'];
 
 export interface PlaceSheetData {
-  /** Parent-location options, already resolved by the parent screen. */
   locations: { id: number; label: string }[];
 }
 
-/** Register a storage place — bottom sheet. Dismisses with `true` after a
- *  successful create so the parent reloads. */
+/** Add a storage place; dismisses with `true` after a save. */
 @Component({
   selector: 'app-place-sheet',
   templateUrl: './place-sheet.html',

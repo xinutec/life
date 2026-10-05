@@ -1,7 +1,5 @@
-/** The emotion history as a calendar, one box per day. The fill shows the
- *  day's families in proportion (stripes: a day that moved); the bar under the
- *  number is the score range, which a proportion would hide. Oldest month
- *  first, scrolled to the end once (emotion-calendar-model.ts). */
+/** The emotion history as a calendar: each box filled with the day's families,
+ *  with the score range as a bar a proportion would hide. */
 import {
   ChangeDetectionStrategy,
   Component,
@@ -19,7 +17,6 @@ import { emotionColor, emotionLabel } from '../../shared/emotion-wheel';
 import { WellbeingDoc, WellbeingStore } from '../../sync/wellbeing-store';
 import { CalendarDay, buildCalendar, dayTitle, tallyAcross } from './emotion-calendar-model';
 
-/** Monday first, matching the grid the model pads for. */
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
 
 const MONTH_NAMES = [
@@ -37,9 +34,7 @@ const MONTH_NAMES = [
   'December',
 ] as const;
 
-/** The score scale is 10..50 tenths, so a range bar is drawn against that and
- *  not against whatever the visible days happen to span — a bar that rescaled
- *  itself per month would make two different months incomparable. */
+/** A fixed scale, so two months stay comparable. */
 const SCORE_MIN = 10;
 const SCORE_MAX = 50;
 
@@ -56,8 +51,6 @@ export class EmotionCalendar {
 
   readonly weekdays = WEEKDAYS;
 
-  // `items$` is already the live, non-deleted view — RxDB filters tombstones,
-  // so there is nothing to re-filter here.
   private readonly docs = toSignal(this.store.items$, { initialValue: [] as WellbeingDoc[] });
 
   readonly months = computed(() =>
@@ -69,10 +62,7 @@ export class EmotionCalendar {
 
   private readonly picked = signal<readonly string[]>([]);
 
-  /** Once only. The check-ins arrive asynchronously, so the first render is
-   *  empty and there is nothing to scroll to yet — this waits for the render
-   *  that has months. It must not re-fire afterwards, or a background sync
-   *  would yank the page out from under someone reading July. */
+  /** Once, when the months first render: a later sync must not yank the page. */
   private jumped = false;
 
   constructor() {
@@ -81,8 +71,6 @@ export class EmotionCalendar {
       untracked(() => {
         if (!ready || this.jumped) return;
         this.jumped = true;
-        // The document scrolls, not an inner element — measured, rather than
-        // assumed from the template.
         const el = document.scrollingElement ?? document.documentElement;
         el.scrollTop = el.scrollHeight;
       });
@@ -97,15 +85,9 @@ export class EmotionCalendar {
       .filter((c): c is CalendarDay => !!c && keys.has(c.key));
   });
 
-  /** Every emotion across the selected days, commonest first — what a render of
-   *  the selection would be given. */
   readonly selectedTally = computed(() => tallyAcross(this.selected()));
 
-  /** Chips in the app's existing grammar: `emo emo-<family>`, so a word in the
-   *  selection looks identical to the same word in the picker.
-   *
-   *  The count shows which words recur across the selected days; it is omitted
-   *  at one, where it would only ever read "1". */
+  /** As in the picker; the count is omitted at one. */
   readonly selectedChips = computed(() =>
     this.selectedTally().map(({ token, days }) => ({
       token,
@@ -115,9 +97,7 @@ export class EmotionCalendar {
     })),
   );
 
-  /** Spells the count out, because a bare number on a chip could be a score, a
-   *  rank or a tally. Says it against the size of the selection so "3" is read
-   *  as "3 of 30" rather than as "a lot". */
+  /** "3 of 30", not a bare number that could be a score. */
   chipTitle(chip: { label: string; count: number | null }): string {
     const total = this.selected().length;
     const on = chip.count ?? 1;
@@ -125,9 +105,7 @@ export class EmotionCalendar {
   }
 
   toggle(day: CalendarDay): void {
-    // A day nobody checked in on has nothing to hand on, so it is not selectable
-    // — selecting it would put an empty box in a selection that reads as a set of
-    // feelings.
+    // A day without a check-in has nothing to select.
     if (!day.checkins) return;
     this.picked.update((keys) =>
       keys.includes(day.key) ? keys.filter((k) => k !== day.key) : [...keys, day.key],
@@ -138,14 +116,11 @@ export class EmotionCalendar {
     return this.picked().includes(day.key);
   }
 
-  /** Drops the day SELECTION; nothing in this component writes a check-in. */
   clear(): void {
     this.picked.set([]);
   }
 
-  /** `--emo-<color>` stops laid end to end, as a vertical gradient with hard
-   *  edges — bands rather than a blend, because six blended hues are mud and a
-   *  two-family blend reads as a third family that does not exist. */
+  /** Hard-edged bands: blended hues read as a family that is not there. */
   fill(day: CalendarDay): string {
     if (!day.bands.length) return 'transparent';
     const stops: string[] = [];
@@ -159,8 +134,6 @@ export class EmotionCalendar {
     return `linear-gradient(to bottom, ${stops.join(', ')})`;
   }
 
-  /** Range bar geometry as percentages of the box width, on the fixed 10..50
-   *  scale. Null when there is nothing to draw. */
   rangeBar(day: CalendarDay): { left: number; width: number } | null {
     if (day.scoreLow === null || day.scoreHigh === null || day.spread === 0) return null;
     const span = SCORE_MAX - SCORE_MIN;

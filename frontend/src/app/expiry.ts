@@ -1,22 +1,13 @@
-/** Expiry display: the raw ISO date is the *storage* format; what the user
- *  needs at a glance is urgency — expired, about to, or fine. */
-
 import { ExpiryPrecision } from './models';
 import { daysUntil } from './shared/civil-day';
 
 export interface ExpiryInfo {
   label: string;
-  /** CSS hook: 'expired' | 'soon' | 'ok'. */
   cls: 'expired' | 'soon' | 'ok';
 }
 
-/**
- * Human urgency for a `YYYY-MM-DD` expiry. `now` is injectable for tests.
- *
- * `precision` says how much of the date was printed. A medicine box carries
- * MM/YYYY, stored as the month's last day; the month path prints a month, never
- * a day or a day countdown the box never stated.
- */
+/** How urgent a `YYYY-MM-DD` expiry is. A month-precision one (a medicine box's
+ *  MM/YYYY) never shows a day the box did not state. */
 export function expiryInfo(
   expiry: string,
   precision: ExpiryPrecision = 'day',
@@ -33,10 +24,7 @@ export function expiryInfo(
   return { label: fullDate(date), cls: 'ok' };
 }
 
-/**
- * Month-precision expiry: compared in whole months, and `soon` means this
- * month, the smallest span the data distinguishes.
- */
+/** Compared in whole months; `soon` is this month. */
 function monthInfo(date: Date, now: Date): ExpiryInfo {
   const months =
     (date.getUTCFullYear() - now.getFullYear()) * 12 + (date.getUTCMonth() - now.getMonth());
@@ -59,13 +47,8 @@ function fullDate(date: Date): string {
   });
 }
 
-/**
- * The last day of `YYYY-MM`, which is how a month-precision expiry is stored.
- *
- * Day 0 of the NEXT month is the last of this one, and it is the only spelling
- * that needs no leap-year table. Returns `null` for anything that is not a month
- * — an empty date input is the ordinary case, not an error.
- */
+/** The last day of `YYYY-MM`, as a month-precision expiry is stored; null for
+ *  anything else. Day 0 of the next month needs no leap-year table. */
 export function monthEnd(month: string): string | null {
   const m = /^(\d{4})-(\d{2})$/.exec(month);
   if (!m) return null;
@@ -77,7 +60,7 @@ export function monthEnd(month: string): string | null {
   return last.toISOString().slice(0, 10);
 }
 
-/** The `YYYY-MM` an `<input type="month">` wants, from a stored expiry. */
+/** For `<input type="month">`. */
 export function toMonth(expiry: string | null): string | null {
   if (!expiry) return null;
   return /^\d{4}-\d{2}/.test(expiry) ? expiry.slice(0, 7) : null;

@@ -2,8 +2,7 @@ import { Component, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 
-/** The one header every bottom sheet carries: a title and a Close button.
- *  Keeps the sheet grammar identical across add/edit sheets. */
+/** Every bottom sheet's title and Close button. */
 @Component({
   selector: 'app-sheet-header',
   templateUrl: './sheet-header.html',

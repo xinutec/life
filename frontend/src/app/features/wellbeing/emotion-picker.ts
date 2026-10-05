@@ -23,24 +23,18 @@ import {
 } from '../../shared/emotion-wheel';
 
 export interface EmotionPickerData {
-  /** The emotions already on the entry (qualified tokens, or legacy bare words). */
+  /** Tokens, or legacy bare words. */
   selected: string[];
-  /** Which check-in this is — the key its suggestions are remembered under. */
+  /** The key its suggestions are remembered under. */
   ulid: string;
-  /** The check-in note, if any — what the suggested feelings are read from. */
   note?: string;
 }
 
-/** How often to ask again while a suggestion is being computed. Frequent enough
- *  that the answer appears while you are still looking at the wheel, cheap enough
- *  to leave running: the request is a cache lookup until the answer lands. */
+/** Cheap: a cache lookup until the answer lands. */
 const POLL_MS = 2000;
 
-/** Browse and search the feelings wheel to add or remove a check-in's emotions.
- *
- *  Browse shows the whole vocabulary as plain words (colour for the family,
- *  weight for the ring), so you meet words you wouldn't search for. Works in
- *  `Core/Name` tokens; closes with the new tokens, or `undefined` if dismissed. */
+/** Browse and search the feelings wheel. Closes with the new tokens, or
+ *  `undefined` if dismissed. */
 @Component({
   selector: 'app-emotion-picker',
   templateUrl: './emotion-picker.html',
@@ -62,32 +56,25 @@ export class EmotionPicker {
 
   readonly wheel = EMOTION_WHEEL;
   readonly query = signal('');
-  // The working set holds canonical tokens; legacy bare words are upgraded here,
-  // the single normalisation boundary — every other method deals only in tokens.
+  // Legacy bare words become tokens here and nowhere else.
   readonly selected = signal<ReadonlySet<string>>(new Set(this.data.selected.map(emotionToken)));
 
   readonly results = computed(() => searchEmotions(this.query()));
   readonly count = computed(() => this.selected().size);
   readonly selectedList = computed(() => [...this.selected()]);
 
-  // Suggestions from the local model, first in the mosaic; absent with no model.
-  // Cached per check-in; after an edit the old set stays, marked stale, until
-  // the new one arrives.
+  // From the local model; after an edit the old set stays, marked stale.
   readonly suggestions = signal<readonly EmotionNode[]>([]);
-  /** The shown suggestions were read from an earlier wording of the note. */
   readonly stale = signal(false);
-  /** A model is working on the current wording right now — never merely "we asked". */
+  /** Working on the current wording right now, not merely asked. */
   readonly thinking = signal(false);
-  /** Seconds it has been working, anchored to the server's clock so closing and
-   *  reopening the picker doesn't restart it. */
+  /** Anchored to the server's clock, so reopening does not restart it. */
   readonly thinkingSecs = signal(0);
 
   private poll?: ReturnType<typeof setTimeout>;
   private tick?: ReturnType<typeof setInterval>;
-  // What was already chosen when the picker opened. Frozen deliberately: the
-  // server leaves these out so they don't take up suggestion slots, and sending
-  // the *live* selection would make a word vanish from the list two seconds
-  // after you tapped it — it stays, with a tick, until the picker is reopened.
+  // Frozen at open: the server leaves these out, and the live selection would
+  // make a word vanish seconds after it was tapped.
   private readonly alreadyAtOpen = [...this.selected()];
 
   constructor() {
@@ -95,14 +82,10 @@ export class EmotionPicker {
     if ((this.data.note ?? '').trim()) this.refresh();
   }
 
-  /** Ask what is known about this note, and keep asking while something better is
-   *  being computed. The request is cheap on the server — a lookup, plus queueing
-   *  the work the first time — so polling costs little and stops the moment the
-   *  answer lands. */
+  /** Keep asking while an answer is being computed. */
   private refresh(): void {
     const note = (this.data.note ?? '').trim();
-    // The candidates are the whole wheel — sending them keeps the server's ranking
-    // in lockstep with exactly what the user can pick, with no second copy to drift.
+    // The whole wheel, so the server ranks exactly what can be picked.
     const candidates = EMOTION_NODES.map((n) => ({ token: n.token, desc: n.desc }));
     this.api
       .suggestEmotions({ ulid: this.data.ulid, note, candidates, already: this.alreadyAtOpen })
@@ -112,9 +95,7 @@ export class EmotionPicker {
           const nodes = (r?.suggestions ?? [])
             .map(emotionNode)
             .filter((n): n is EmotionNode => !!n);
-          // Only ever replace what's on screen with something: a fresh empty answer
-          // is real ("nothing in the wheel fits") and replaces; an empty answer
-          // while still thinking is just "not yet" and must not wipe the old set.
+          // An empty answer while still thinking is "not yet", not "none".
           if (nodes.length || !r.pending) this.suggestions.set(nodes);
           this.stale.set(r.stale);
           this.thinking.set(r.pending);
@@ -122,8 +103,6 @@ export class EmotionPicker {
           if (r.pending) this.keepWaiting();
           else this.stopWaiting();
         },
-        // Offline, or the server had nothing to say. Leave whatever is on screen
-        // and stop claiming anything is happening.
         error: () => {
           this.thinking.set(false);
           this.stopWaiting();
@@ -131,8 +110,6 @@ export class EmotionPicker {
       });
   }
 
-  /** Poll for the answer, and count the seconds in between so the elapsed time
-   *  moves smoothly rather than jumping with each request. */
   private keepWaiting(): void {
     this.stopWaiting();
     this.poll = setTimeout(() => this.refresh(), POLL_MS);
@@ -146,12 +123,10 @@ export class EmotionPicker {
     this.tick = undefined;
   }
 
-  /** The qualified token for a node — group or leaf — under a given core. */
   tokenOf(core: EmotionCore, name: string): string {
     return `${core.name}/${name}`;
   }
 
-  /** Where a search hit sits: a group shows just its family, a leaf its group too. */
   path(node: EmotionNode): string {
     return node.kind === 'group' ? node.core : `${node.core} › ${node.secondary}`;
   }
@@ -164,23 +139,20 @@ export class EmotionPicker {
     return emotionColor(token);
   }
 
-  /** The bare word for a token, for chip display. */
   label(token: string): string {
     return emotionLabel(token);
   }
 
-  /** The brief gloss for a token (tooltip on the selected chip). */
   desc(token: string): string {
     return emotionDesc(token);
   }
 
-  /** Every selectable word in a family — both rings — for the family's count. */
+  /** Both rings. */
   wordCount(core: EmotionCore): number {
     return core.groups.reduce((n, g) => n + g.leaves.length + 1, 0);
   }
 
-  /** How many selected tokens fall under a given core (for the family badge) —
-   *  groups count too, since a group is a selectable answer of its own. */
+  /** Groups count: a group is an answer of its own. */
   coreCount(core: EmotionCore): number {
     const sel = this.selected();
     let n = 0;
@@ -197,12 +169,9 @@ export class EmotionPicker {
     this.selected.set(next);
   }
 
-  /** The one word whose gloss is currently open, if any. */
   readonly opened = signal<string | null>(null);
 
-  /** Tap a word's ⓘ: show what it means, in place. Tapping it again — or another
-   *  word's ⓘ — closes it, so only ever one gloss is open and reading a word
-   *  never selects it. */
+  /** One gloss open at a time; reading a word never selects it. */
   toggleGloss(token: string): void {
     this.opened.update((cur) => (cur === token ? null : token));
   }

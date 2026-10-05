@@ -1,10 +1,6 @@
 import type { Source } from '../models';
 
-/** Display names for product-data sources, shared by the product picker and the
- *  product page so a source never reads differently on two screens.
- *
- *  Exhaustive over `Source` with no `default` arm: adding a shop fails to
- *  compile here (noImplicitReturns) rather than showing the raw id. */
+/** A source's display name. No `default` arm, so a new source must be named. */
 export function sourceLabel(source: Source | null): string {
   switch (source) {
     case 'off':

@@ -1,12 +1,7 @@
-/**
- * Reading values from outside the app's types (parsed blobs, host bridges)
- * by checking, not asserting: `x as Shape` is never checked, and a wrong
- * claim surfaces far away as `undefined` or "[object Object]".
- */
+/** Reading values from outside the app's types by checking, not asserting. */
 
-/** A value that can be indexed by string — i.e. worth asking about a field. */
+/** An object that is not an array. */
 export function isRecord(value: unknown): value is Record<string, unknown> {
-  // ⚠ Arrays are excluded: `typeof [] === 'object'`, and a list is not a record.
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
@@ -24,11 +19,7 @@ export function numberField(value: unknown, key: string): number | null {
   return typeof field === 'number' ? field : null;
 }
 
-/**
- * `Object.keys` with the key type kept. `(keyof T)[]` is only sound for an
- * object literal (it ignores inherited and added keys); every caller passes
- * one, and this is the one place that assumption lives.
- */
+/** `Object.keys` with the key type kept; sound only for an object literal. */
 export function keysOf<T extends object>(value: T): (keyof T)[] {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- see above
   return Object.keys(value) as (keyof T)[];

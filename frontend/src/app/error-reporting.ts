@@ -1,16 +1,12 @@
-/**
- * What the user met and nobody else saw — an uncaught error, a failed request —
- * into the activity trace, which already reaches the server's log: a phone has
- * no console anyone reads.
- */
+/** Uncaught errors and failed requests go to the activity trace: a phone has
+ *  no console anyone reads. */
 import { ErrorHandler, inject, Injectable, Injector } from '@angular/core';
 import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
 import { catchError, throwError } from 'rxjs';
 
 import { Telemetry } from './telemetry';
 
-/** The message of anything thrown, unwrapping a rejected promise: `String()` of
- *  a plain object says nothing. */
+/** The message of anything thrown, unwrapping a rejected promise. */
 export function messageOf(error: unknown): string {
   const inner =
     typeof error === 'object' && error !== null && 'rejection' in error ? error.rejection : error;
@@ -21,21 +17,18 @@ export function messageOf(error: unknown): string {
 
 @Injectable()
 export class TelemetryErrorHandler implements ErrorHandler {
-  // Resolved on first use: the trace needs the Router, which cannot be built
-  // before the ErrorHandler it would report to.
+  // Resolved late: Telemetry needs the Router, built after the ErrorHandler.
   private readonly injector = inject(Injector);
 
   handleError(error: unknown): void {
     console.error(error);
     try {
       this.injector.get(Telemetry).failure('error', messageOf(error));
-    } catch {
-      // Reporting must never throw from the one place that catches everything.
-    }
+    } catch {}
   }
 }
 
-/** A failed API call. The trace's own POST is skipped: its failure would feed itself. */
+/** Skips the trace's own POST, whose failure would feed itself. */
 export const failedRequestInterceptor: HttpInterceptorFn = (req, next) => {
   const telemetry = inject(Telemetry);
   return next(req).pipe(

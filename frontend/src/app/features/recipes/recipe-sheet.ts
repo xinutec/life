@@ -15,8 +15,7 @@ import { SheetHeader } from '../../shared/sheet-header';
 import { LifeApi } from '../../life-api';
 import { Recipe, RecipeIngredient } from '../../models';
 
-/** Open the sheet in edit mode by passing an existing recipe; omit for a new
- *  one. */
+/** Present when editing. */
 export interface RecipeSheetData {
   recipe: Recipe;
 }
@@ -32,10 +31,7 @@ function blankIngredient(): RecipeIngredient {
   return { name: '', product_id: null, product_name: null, quantity: null, unit: null };
 }
 
-/** Add / edit-recipe bottom sheet. Online-only (recipes are a server API);
- *  dismisses with `true` after a successful save so the parent reloads. Edit
- *  mode is driven by an optional `RecipeSheetData` — same form, PUT instead of
- *  POST. */
+/** Add or edit a recipe; dismisses with `true` after a save. */
 @Component({
   selector: 'app-recipe-sheet',
   templateUrl: './recipe-sheet.html',
@@ -57,13 +53,10 @@ export class RecipeSheet {
   private dialog = inject(Dialogs);
   private feedback = inject(Feedback);
 
-  /** null = creating; a number = editing that recipe (PUT). */
   private readonly editId = this.data?.recipe.id ?? null;
   readonly editing = this.editId !== null;
   readonly saving = signal(false);
 
-  // Signal-backed form (zoneless: a signal write — incl. from the async save
-  // callback — is what refreshes the view). Seeded from the recipe when editing.
   readonly form = signal<RecipeForm>(this.seed());
 
   private seed(): RecipeForm {
@@ -75,7 +68,6 @@ export class RecipeSheet {
       name: r.name,
       instructions: r.instructions,
       servings: r.servings,
-      // Always leave a row to type into if the recipe had none.
       ingredients: r.ingredients.length
         ? r.ingredients.map((g) => ({ ...g }))
         : [blankIngredient()],
@@ -91,10 +83,8 @@ export class RecipeSheet {
       ingredients: f.ingredients.map((g, j) => (j === i ? { ...g, ...p } : g)),
     }));
   }
-  /** Pin an ingredient line to a catalog product, so it matches the jar in the
-   *  cupboard whatever either one is called. The line keeps ITS name — "cumin"
-   *  is what the recipe says and what you want to read — and only takes the
-   *  product's name if the line is still blank. */
+  /** Link a line to a product, so it matches the jar whatever either is called.
+   *  The line keeps its own name. */
   linkProduct(i: number): void {
     this.dialog
       .open<ProductPicker, ProductPickData, ProductPick | null>(ProductPicker, {
@@ -105,18 +95,15 @@ export class RecipeSheet {
       .subscribe((pick) => {
         if (!pick) return;
         const row = this.form().ingredients[i];
-        // The inventory tier can hand back something with no catalog product
-        // behind it (an item you typed in yourself). Take the name — that is
-        // still a useful pick — but say that nothing was linked, rather than
-        // leaving a row that looks linked and matches like it isn't.
+        // An inventory pick may have no product behind it: keep the name and
+        // say nothing was linked.
         this.patchIngredient(i, {
           name: row.name.trim() || pick.name,
           product_id: pick.product_id,
           product_name: pick.product_id ? pick.name : null,
         });
-        // The unit only: a linked product's pack size suggests one (grams for a
-        // thing sold by weight), and comparable stock depends on having one. Not
-        // its quantity: 950g of flour is what the shop sells, not what the recipe needs.
+        // The unit only: comparing stock needs one, but a pack is not an amount
+        // the recipe needs.
         if (pick.unit != null && !row.unit?.trim()) this.patchIngredient(i, { unit: pick.unit });
         if (!pick.product_id) {
           this.feedback.error(`“${pick.name}” isn’t in the product catalogue, so nothing to link`);

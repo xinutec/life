@@ -2,35 +2,24 @@ import { Injectable, computed, signal } from '@angular/core';
 
 import { STALE_AFTER_MS } from './cadence';
 
-/** Whole-app sync health, in priority order: a device that's offline reports
- *  `offline` even if replication is erroring, because a failed fetch is the
- *  expected symptom of being offline, not a fault to alarm about. */
+/** Whole-app sync health. Offline outranks error: a failed fetch is what
+ *  offline looks like. */
 export type SyncHealth = 'synced' | 'offline' | 'error' | 'stale';
 
-/** Every replication that reports here, spelled once.
- *
- *  ⚠ A closed union because these are KEYS: the error and success maps are
- *  indexed by it, and a typo would file a success under a name whose error is
- *  never cleared. A new synced collection fails to compile until it is added. */
+/** Every replication that reports here. Closed, because it keys the status
+ *  maps and a typo would leave an error never cleared. */
 export type SyncSource = 'shopping sync' | 'todo sync' | 'todo-link sync' | 'wellbeing sync';
 
-/** How often the freshness question is re-asked. `health()` is a computed, so
- *  without something moving underneath it a success cannot age. */
+/** Lets a success age: `health()` is a computed and needs a moving `now`. */
 const TICK_MS = 30_000;
 
-/** The one place that knows whether local edits reached the server — data in
- *  IndexedDB looks saved either way. Replications report each cycle here and the
- *  shell shows an indicator whenever health() isn't `synced`. Errors are per
- *  source, so one failing collection doesn't mask another recovering. */
+/** Whether local edits reached the server; IndexedDB looks saved either way.
+ *  Errors are kept per source, so one recovering cannot hide another failing. */
 @Injectable({ providedIn: 'root' })
 export class SyncStatus {
-  /** navigator.onLine, kept live via the window online/offline events. */
   private readonly online = signal(typeof navigator === 'undefined' ? true : navigator.onLine);
-  /** Latest failure message per replication source; empty object = all healthy. */
   private readonly errors = signal<Partial<Record<SyncSource, string>>>({});
-  /** When each source last completed a cycle cleanly. Empty until one does. */
   private readonly lastOk = signal<Partial<Record<SyncSource, number>>>({});
-  /** The moving `now` that lets a success age. Advanced by `refresh`. */
   private readonly now = signal(Date.now());
 
   constructor() {
@@ -41,41 +30,32 @@ export class SyncStatus {
     }
   }
 
-  /** Re-ask the freshness question. Driven by a timer in the browser; tests pass
-   *  the instant they mean, so no assertion here depends on the wall clock. */
+  /** Tests pass the instant they mean. */
   refresh(at: number = Date.now()): void {
     this.now.set(at);
   }
 
-  /** A replication cycle for `source` completed cleanly, at `at`.
-   *
-   *  ⚠ Distinct from `clearError`, which only says "the last failure is over":
-   *  a stall never fails, so only a success can show the log is current. */
+  /** Not the same as `clearError`: a stall never fails, so only a success
+   *  shows the data is current. */
   reportSuccess(source: SyncSource, at: number = Date.now()): void {
     this.lastOk.update((m) => ({ ...m, [source]: at }));
     this.now.set(at);
   }
 
-  /** The newest success across every source, or null before the first one.
-   *
-   *  ⚠ NEWEST, not oldest. Four collections replicate, and a quiet store lagging
-   *  is not the app being stale; keyed on the oldest, a store nobody has written
-   *  to would hold the whole app in a warning state for ever. */
+  /** The NEWEST success: keyed on the oldest, one quiet store would keep the
+   *  whole app warning forever. */
   private readonly freshest = computed<number | null>(() => {
-    // `Partial` is the honest shape — a map that starts empty does not have
-    // every key — so the undefineds are filtered rather than asserted away.
     const times = Object.values(this.lastOk()).filter((t): t is number => t !== undefined);
     return times.length ? Math.max(...times) : null;
   });
 
-  /** Minutes since the newest success, or null before the first one. */
+  /** Minutes since the newest success, or null while fresh. */
   private readonly staleMinutes = computed<number | null>(() => {
     const last = this.freshest();
     if (last === null) return null;
     const age = this.now() - last;
     if (age <= STALE_AFTER_MS) return null;
-    // ⚠ Never zero: "Nothing has synced for 0 minutes" reassures while the
-    // icon warns. Unreachable at the five-minute threshold, until it is shortened.
+    // Never "0 minutes", which would reassure while the icon warns.
     return Math.max(1, Math.floor(age / 60_000));
   });
 
@@ -85,9 +65,7 @@ export class SyncStatus {
     return this.staleMinutes() === null ? 'synced' : 'stale';
   });
 
-  /** Each state's glyph, as a total `Record` so a new state must name one.
-   *  Stale is `history` ("may be old"); only error is red and alarming.
-   *  `synced` never draws but keeps the map total. */
+  /** A total Record, so a new state must name its glyph. */
   readonly icon = computed<string>(
     () =>
       ({
@@ -98,7 +76,7 @@ export class SyncStatus {
       })[this.health()],
   );
 
-  /** A short human message for the current health — tooltip + aria-label. */
+  /** Tooltip and aria-label. */
   readonly message = computed<string>(() => {
     if (!this.online()) {
       return 'Offline — changes are saved on this device and will sync when you reconnect.';
@@ -112,12 +90,10 @@ export class SyncStatus {
     return 'All changes synced.';
   });
 
-  /** A replication cycle failed. `source` is the store label; last message wins. */
   reportError(source: SyncSource, message: string): void {
     this.errors.update((e) => (e[source] === message ? e : { ...e, [source]: message }));
   }
 
-  /** A replication cycle for `source` completed cleanly. */
   clearError(source: SyncSource): void {
     this.errors.update((e) => {
       if (!(source in e)) return e;

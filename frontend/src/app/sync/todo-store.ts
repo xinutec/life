@@ -7,10 +7,7 @@ import { ConflictReporter, FieldSpec, makeConflictHandler } from './conflict-mer
 import { SyncedCollectionConfig, SyncedStore } from './synced-store';
 import { keysOf } from '../shared/narrow';
 
-/** A to-do row as stored locally. `ulid` is the stable identity; `rev` is the
- *  last server revision seen (set by sync, not local edits); `id` is the server
- *  autoincrement (null until synced). RxDB manages `_deleted` + internal fields.
- *  Mirrors the backend `TodoDoc` wire shape. */
+/** A to-do as stored locally; mirrors the backend `TodoDoc`. */
 // dev-lint: allow-wire-mirror RxDB owns the _deleted tombstone dimension;
 // the wire type adds it in the replication layer, not in this local doc.
 export interface TodoDoc {
@@ -21,20 +18,17 @@ export interface TodoDoc {
   status: TodoStatus;
   priority: TodoPriority | null;
   notes: string | null;
-  /** Start-gate (YYYY-MM-DD): can't act before this day → "waiting". */
+  /** YYYY-MM-DD before which it is "waiting". */
   notBefore: string | null;
-  /** Deadline (YYYY-MM-DD): drives urgency ordering. */
+  /** YYYY-MM-DD deadline. */
   due: string | null;
-  /** On the case-file site (mirrors a case-file checkbox) vs private/app-only.
-   *  Default private — publishing to the case file is a deliberate act. */
+  /** Published to the case-file site; private unless chosen. */
   shared: boolean;
   rev: number;
 }
 
 const schema: RxJsonSchema<TodoDoc> = {
-  // Bump the version + add a migration on ANY schema change, else existing local
-  // DBs hit a hash mismatch. v1: `type` enum widened. v2: `priority` added.
-  // v3: `notBefore` + `due` timing added. v4: `shared` (case-file flag) added.
+  // Any schema change needs a version bump and a migration.
   version: 4,
   primaryKey: 'ulid',
   type: 'object',
@@ -58,12 +52,8 @@ const schema: RxJsonSchema<TodoDoc> = {
   required: ['ulid', 'title', 'type', 'status', 'rev'],
 };
 
-/** The synced content fields (everything but the identity/server fields). */
 type TodoContent = Omit<TodoDoc, 'ulid' | 'id' | 'rev'>;
 
-/** Type-directed 3-way-merge spec: every content field with a strategy valid for
- *  its type (see [[makeConflictHandler]]). Exhaustive by construction — a field
- *  added to TodoDoc won't compile until it's classified here. */
 const TODO_FIELDS: FieldSpec<TodoContent> = {
   title: 'value',
   type: 'value',
@@ -75,17 +65,15 @@ const TODO_FIELDS: FieldSpec<TodoContent> = {
   shared: 'value',
 };
 
-/** The field-name allowlist the Conflicts screen may patch on "use other",
- *  derived from the spec so the two can never drift apart. */
+/** The fields "use other" may patch on the Conflicts screen. */
 export const TODO_MERGE_FIELDS = keysOf(TODO_FIELDS);
 
-/** Local-first store for the to-do list — the machinery lives in
- *  {@link SyncedStore}; this declares only the collection and its content. */
+/** The to-do list. */
 @Injectable({ providedIn: 'root' })
 export class TodoStore extends SyncedStore<TodoDoc> {
   private reporter = inject(ConflictReporter);
 
-  /** Live, sorted, non-deleted to-dos: open before done, then by title. */
+  /** Open before done, then by title. */
   readonly items$ = this.liveQuery([{ status: 'desc' }, { title: 'asc' }]);
 
   protected config(): SyncedCollectionConfig<TodoDoc> {
@@ -97,21 +85,19 @@ export class TodoStore extends SyncedStore<TodoDoc> {
         onConflicts: (kept, conflicts) =>
           this.reporter.report('todo', kept.ulid, kept.title, conflicts),
       }),
-      // '-v2': replication-state reset after the isEqual push-loss bug — see the
-      // comment in wellbeing-store.ts.
       identifier: 'todo-http-sync-v2',
       path: '/api/sync/todo',
       label: 'todo sync',
       trashKind: 'todo',
       migrationStrategies: {
-        1: (doc: Record<string, unknown>) => doc, // enum widened; existing docs already valid
-        2: (doc: Record<string, unknown>) => ({ ...doc, priority: doc['priority'] ?? null }), // add priority field
+        1: (doc: Record<string, unknown>) => doc,
+        2: (doc: Record<string, unknown>) => ({ ...doc, priority: doc['priority'] ?? null }),
         3: (doc: Record<string, unknown>) => ({
           ...doc,
           notBefore: doc['notBefore'] ?? null,
           due: doc['due'] ?? null,
-        }), // add timing fields
-        4: (doc: Record<string, unknown>) => ({ ...doc, shared: doc['shared'] ?? false }), // add case-file flag (private default)
+        }),
+        4: (doc: Record<string, unknown>) => ({ ...doc, shared: doc['shared'] ?? false }),
       },
     };
   }
@@ -135,7 +121,7 @@ export class TodoStore extends SyncedStore<TodoDoc> {
       notes: input.notes,
       notBefore: input.notBefore ?? null,
       due: input.due ?? null,
-      shared: false, // private by default — publishing to the case file is explicit
+      shared: false,
       rev: 0,
     });
   }

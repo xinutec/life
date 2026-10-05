@@ -11,7 +11,6 @@ import { ShoppingDoc, ShoppingStore } from '../../sync/shopping-store';
 import { TodoLinkDoc, TodoLinkStore } from '../../sync/todo-link-store';
 import { TodoDoc, TodoStore } from '../../sync/todo-store';
 
-/** Something a to-do can point at, resolved to a display label + icon. */
 export interface LinkTarget {
   kind: TargetKind;
   ref: string;
@@ -27,13 +26,11 @@ export interface ResolvedLink {
 
 export type TodoState = 'done' | 'blocked' | 'waiting' | 'ready' | 'open';
 
-/** Deadline pressure, orthogonal to `TodoState`. Derived from `due` vs today. */
+/** Deadline pressure, apart from `TodoState`. */
 export type Urgency = 'overdue' | 'today' | 'soon' | 'none';
 
-/** Most pressing first — the sort key wherever to-dos are ordered by deadline. */
 export const URGENCY_RANK: Record<Urgency, number> = { overdue: 0, today: 1, soon: 2, none: 3 };
 
-/** A row's deadline, in words and a CSS class. */
 export interface DueChip {
   label: string;
   cls: 'overdue' | 'due-soon';
@@ -48,10 +45,8 @@ const TARGET_ICON: Record<TargetKind, string> = {
   place: 'place',
 };
 
-/** The connection graph: fuses the to-do and link stores with the app's entity
- *  catalogs (items, recipes, rooms, shopping, places), so a link resolves to a
- *  label, can be searched for, and decides whether a to-do is *ready* or
- *  *blocked*. Catalogs come from the SW-cached API and fail soft to empty. */
+/** To-dos, their links and everything a link can point at: resolves labels,
+ *  searches, and decides ready and blocked. */
 @Injectable({ providedIn: 'root' })
 export class TodoGraph {
   private todos = inject(TodoStore);
@@ -59,9 +54,7 @@ export class TodoGraph {
   private shopping = inject(ShoppingStore);
   private api = inject(LifeApi);
 
-  // "Today" as a signal so waiting/overdue states recompute when the day rolls
-  // over or the app regains focus — no reload needed. Updated at midnight and on
-  // visibility regain.
+  // A signal, updated at midnight and on regaining focus.
   private readonly _today = signal(localDay());
   readonly today = this._today.asReadonly();
 
@@ -83,13 +76,11 @@ export class TodoGraph {
     scheduleMidnight();
   }
 
-  /** Whole days from today to an ISO date (negative = in the past). */
   daysUntil(iso: string): number {
     return daysBetween(this.today(), iso) ?? Number.NaN;
   }
 
-  /** The deadline chip for a to-do, or null when there is nothing pressing to
-   *  show (done, undated, or due more than 3 days out). */
+  /** Null when done, undated, or due more than 3 days out. */
   dueChip(todo: TodoDoc): DueChip | null {
     const u = this.urgencyOf(todo);
     if (u === 'none' || !todo.due) return null;
@@ -100,7 +91,6 @@ export class TodoGraph {
     return { label: d === 1 ? 'due tomorrow' : `due in ${d}d`, cls: 'due-soon' };
   }
 
-  /** Deadline pressure from `due`. Done or undated to-dos have none. */
   urgencyOf(todo: TodoDoc): Urgency {
     if (todo.status === 'done' || !todo.due) return 'none';
     const d = this.daysUntil(todo.due);
@@ -116,11 +106,7 @@ export class TodoGraph {
     initialValue: [] as ShoppingDoc[],
   });
 
-  // Items / recipes / places come from the shared root catalogs — the same cache
-  // Inventory / Recipes / All-items read, so one fetch serves them all and it's
-  // retained across tabs. Rooms are derived from the house scene, which has no
-  // list store, so they keep a local fetch. refreshCatalogs() re-pulls them all,
-  // so an entity added mid-session becomes linkable without a full reload.
+  // Rooms come from the house scene, which has no shared store.
   private itemsStore = inject(ItemsStore);
   private recipesStore = inject(RecipesStore);
   private placesStore = inject(LocationsStore);
@@ -142,9 +128,7 @@ export class TodoGraph {
     { initialValue: [] as string[] },
   );
 
-  /** Re-fetch the entity catalogs (items/recipes/places/rooms). Called on
-   *  entering the to-do view and on opening the detail sheet, so fresh entities
-   *  are linkable without reloading the app. */
+  /** So something added since can be linked. */
   refreshCatalogs(): void {
     this.itemsStore.refresh();
     this.recipesStore.refresh();
@@ -152,7 +136,6 @@ export class TodoGraph {
     this.roomsRefresh$.next(undefined);
   }
 
-  /** Every linkable thing, flattened into a searchable catalog. */
   readonly catalog = computed<LinkTarget[]>(() => {
     const out: LinkTarget[] = [];
     for (const t of this.todoItems())
@@ -193,7 +176,6 @@ export class TodoGraph {
     );
   }
 
-  /** Unified search across everything linkable (excluding the given to-do). */
   search(query: string, excludeTodo?: string): LinkTarget[] {
     const q = query.trim().toLowerCase();
     if (!q) return [];
@@ -203,7 +185,6 @@ export class TodoGraph {
       .slice(0, 25);
   }
 
-  /** Outgoing edges from a to-do, resolved. */
   outgoing(todoUlid: string): ResolvedLink[] {
     return this.links()
       .filter((l) => l.from === todoUlid)
@@ -214,18 +195,14 @@ export class TodoGraph {
       }));
   }
 
-  /** Incoming edges — other to-dos pointing at this one — resolved to the source. */
   incoming(todoUlid: string): { ulid: string; linkKind: LinkKind; source: LinkTarget }[] {
     return this.links()
       .filter((l) => l.targetKind === 'todo' && l.targetRef === todoUlid)
       .map((l) => ({ ulid: l.ulid, linkKind: l.kind, source: this.resolve('todo', l.from) }));
   }
 
-  /** The unfinished dependencies of a to-do. Two target kinds have derivable
-   *  done-ness and can block: another **to-do** (open = blocking) and a
-   *  **shopping row** (on the list and not ticked = blocking; bought/removed =
-   *  satisfied). Other kinds (recipe/item/room/place) have no completion state
-   *  — those links are context, not gates. */
+  /** The open dependencies: only to-dos and Buy rows have a done state, so only
+   *  they can block. */
   blockers(todoUlid: string): { ulid: string; title: string }[] {
     const todoMap = this.todoByUlid();
     const shopMap = new Map(this.shoppingItems().map((s) => [s.ulid, s] as const));
@@ -243,10 +220,8 @@ export class TodoGraph {
     return out;
   }
 
-  /** Derived lifecycle state, in precedence order: done → blocked (an unfinished
-   *  dependency) → waiting (a future start-gate) → ready (open with deps, all
-   *  met) → open. An external gate (blocker) outranks a self-imposed one
-   *  (not_before). Links to stateless targets don't make a to-do "ready". */
+  /** done, then blocked, waiting (a future start), ready (has dependencies, all
+   *  met), open. */
   statusOf(todo: TodoDoc): TodoState {
     if (todo.status === 'done') return 'done';
     if (this.blockers(todo.ulid).length > 0) return 'blocked';
@@ -260,7 +235,6 @@ export class TodoGraph {
     return hasDeps ? 'ready' : 'open';
   }
 
-  /** How many edges touch a to-do (either direction). */
   linkCount(todoUlid: string): number {
     return this.links().filter(
       (l) => l.from === todoUlid || (l.targetKind === 'todo' && l.targetRef === todoUlid),
@@ -275,7 +249,6 @@ export class TodoGraph {
     void this.linkStore.remove(edgeUlid);
   }
 
-  /** Remove every edge touching a to-do (used when the to-do is deleted). */
   removeLinksForTodo(todoUlid: string): void {
     void this.linkStore.removeForTodo(todoUlid);
   }

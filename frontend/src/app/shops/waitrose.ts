@@ -1,12 +1,8 @@
 import type { ShopProvider } from '../shop';
 
-// Extractor JS runs in the hidden WebView on waitrose.com. Contract with the
-// native layer: read `window.__authToken` (captured Bearer), report via
-// `AndroidShop.result(JSON.stringify(...))`. Kept as strings here (in the web app)
-// so Waitrose site changes are a hot deploy, not an APK rebuild.
+// Extractor JS for the hidden WebView on waitrose.com: reads `window.__authToken`,
+// reports via `AndroidShop.result(...)`. Here, so a site change is a deploy.
 
-// Search: dismiss consent, wait for the server-rendered results, extract
-// { lineNumber, name } pairs from the embedded state. No token needed.
 const SEARCH_JS = `
 (async () => {
   function clickAccept() {
@@ -24,8 +20,7 @@ const SEARCH_JS = `
       if (/"lineNumber":"\\d+"/.test(s)) break;
       await new Promise(function (r) { setTimeout(r, 250); });
     }
-    // Other keys (productType, size, …) sit between lineNumber and name in the
-    // same object; [^}]*? spans them without crossing objects.
+    // [^}]*? spans the keys between lineNumber and name within one object.
     var re = /"lineNumber":"(\\d+)"[^}]*?"name":"((?:[^"\\\\]|\\\\.)*)"/g, m, seen = {}, out = [];
     while ((m = re.exec(s)) && out.length < 8) {
       var ln = m[1]; if (seen[ln]) continue; seen[ln] = 1;
@@ -38,8 +33,6 @@ const SEARCH_JS = `
 })();
 `;
 
-// Product: dismiss consent, wait for the captured Bearer, call the SUMMARY API
-// for the lineNumber, normalize. `lineNumber` is digits-only (guarded below).
 function productJs(lineNumber: string): string {
   return `
 (async () => {
@@ -55,10 +48,7 @@ function productJs(lineNumber: string): string {
     for (var i = 0; i < 40 && !window.__authToken; i++) await new Promise(function (r) { setTimeout(r, 250); });
     var tok = window.__authToken;
     if (!tok) {
-      // Signed out, Waitrose mints no Bearer at all, which otherwise looks like a
-      // broken extractor. Reported as signed_out, the likely cause and the one a
-      // sign-in fixes; this search page looks the same either way, so it can't
-      // be confirmed from here.
+      // Signed out, Waitrose mints no Bearer: report the likely cause.
       AndroidShop.result(JSON.stringify({ ok: false, reason: 'signed_out',
         error: "the page minted no Authorization header — usually this browser is signed out of waitrose.com; log in by hand and retry" }));
       return;
@@ -71,12 +61,10 @@ function productJs(lineNumber: string): string {
     if (!p) { AndroidShop.result(JSON.stringify({ ok: false, error: "not found" })); return; }
     var im = p.images || {};
     var pr = p.pricing || {};
-    // Waitrose states the pack on 'weights', not beside the name:
-    // sizeDescription is "42g" / "100g".
+    // The pack is on 'weights': sizeDescription "42g".
     var w = p.weights || {};
-    // One item's price: on a single-item offer Waitrose reports the regular
-    // price as the current sale price, so the offer's own price wins. A
-    // multi-buy (threshold above 1) is no price for one item.
+    // A single-item offer's own price wins (the regular one shows as current);
+    // a multi-buy is no price for one item.
     var offer = (pr.promotions || []).filter(function (o) {
       return o.promotionUnitPrice && (o.groups || []).every(function (g) { return g.threshold === 1; });
     })[0];
@@ -86,8 +74,7 @@ function productJs(lineNumber: string): string {
       image_url: im.large || im.medium || im.extraLarge || im.small || null,
       display_price: (offer && offer.promotionUnitPrice) ||
         (pr.currentSaleUnitRetailPrice && pr.currentSaleUnitRetailPrice.price) || null,
-      // Carried ONLY so the number above can be checked against it: the pricing
-      // block gives that amount no unit, and Waitrose renders this string itself.
+      // Only to check the number's unit against: the pricing block gives none.
       display_price_label: (typeof pr.displayPrice === "string" && pr.displayPrice) || null,
       categories: (p.categories || []).map(function (c) { return c.name; })
     } }));
@@ -108,9 +95,9 @@ export const WAITROSE: ShopProvider = {
     return { url: searchUrl(query.trim().slice(0, 80)), js: SEARCH_JS };
   },
   product(externalId: string) {
-    // Digits-only guard — the id is spliced into the extractor JS and the URL.
+    // Spliced into the JS and the URL.
     if (!/^\d{1,10}$/.test(externalId)) throw new Error('invalid Waitrose lineNumber');
-    // A search page for the lineNumber reliably mints the token; results ignored.
+    // A search page reliably mints the token.
     return { url: searchUrl(externalId), js: productJs(externalId) };
   },
 };

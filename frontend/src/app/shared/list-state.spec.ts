@@ -74,7 +74,7 @@ describe('ListState', () => {
       expect(el.querySelector('mat-progress-bar')).toBeFalsy();
       vi.advanceTimersByTime(400);
       fixture.detectChanges();
-      expect(el.querySelector('mat-progress-bar.refresh')).toBeTruthy();
+      expect(el.querySelector('mat-progress-bar[aria-label="Refreshing"]')).toBeTruthy();
     });
   });
 });

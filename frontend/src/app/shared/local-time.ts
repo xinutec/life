@@ -1,6 +1,5 @@
-/** Converting between an instant and `<input type="datetime-local">`, whose
- *  text is local wall-clock with no offset. `toISOString().slice(0, 16)` would
- *  put UTC there, an hour off in British Summer Time. */
+/** Between an instant and `<input type="datetime-local">`, which is local time
+ *  with no offset. */
 
 const pad = (n: number): string => String(n).padStart(2, '0');
 
@@ -13,12 +12,8 @@ export function toLocalInput(instant: string | Date): string {
   );
 }
 
-/** The input's local wall-clock text → an ISO instant, or null if it isn't one.
- *  `YYYY-MM-DDTHH:mm` parses as local time, as the field means. Parsing alone
- *  is not enough: `new Date()` accepts half-typed input like `"2026-08-"`, and
- *  an impossible day ROLLS OVER rather than failing, so 31 February becomes
- *  3 March, a shop trip on a day nobody chose. The instant must print back as
- *  exactly the text that was typed. */
+/** The input's text as an ISO instant, or null. It must print back as typed:
+ *  `new Date()` accepts half-typed input and rolls 31 February into March. */
 export function fromLocalInput(value: string): string | null {
   const d = new Date(value);
   return toLocalInput(d) === value.slice(0, 16) ? d.toISOString() : null;

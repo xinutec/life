@@ -8,31 +8,22 @@ import { MatInputModule } from '@angular/material/input';
 import { SheetHeader } from '../../shared/sheet-header';
 import { toMinorUnits } from '../../shared/money';
 
-/** One ticked row, as this sheet needs to show it. */
 export interface BuyRow {
   id: number;
   name: string;
 }
 
-/** What the sheet hands back: the shop, and the prices that were filled in.
- *
- *  `prices` holds only the rows that got one — an empty box is not a price of
- *  zero, and recording it as one would put a free item in the spending history. */
+/** The shop, and only the prices filled in: an empty box is not a price of 0. */
 export interface BuyPrices {
   shop: string;
   prices: Map<number, number>;
 }
 
-/** Where the last shop is remembered. Local, not server: it is a convenience for
- *  the next trip, not a fact worth syncing, and it must survive being offline in
- *  a shop — which is exactly where this sheet is used. */
+/** Remembered on the device, which is offline in a shop. */
 const LAST_SHOP_KEY = 'life.lastShop';
 
-/**
- * Where the shopping happened and what each thing cost, on the way to the
- * cupboard. All optional, and "Add without prices" is a first-class button:
- * a step that demanded prices while unpacking would be routed around.
- */
+/** Where it was bought and what it cost, all optional: a step that demanded
+ *  prices while unpacking would be routed around. */
 @Component({
   selector: 'app-buy-sheet',
   templateUrl: './buy-sheet.html',
@@ -44,13 +35,10 @@ export class BuySheet {
   readonly rows = inject<BuyRow[]>(MAT_BOTTOM_SHEET_DATA);
 
   readonly shop = signal(localStorage.getItem(LAST_SHOP_KEY) ?? '');
-  /** Raw text per row id — kept as typed so a half-entered "3." is not thrown
-   *  away mid-keystroke, and only read as money when the sheet is submitted. */
+  /** As typed, so a half-entered "3." survives until submit. */
   readonly typed = signal<Record<number, string>>({});
 
-  /** The text typed for a row, or ''. A method rather than indexing in the
-   *  template: without `noUncheckedIndexedAccess` the template's `?? ''` reads
-   *  as dead code while being load-bearing at runtime. */
+  /** A method: `?? ''` in the template would read as dead code. */
   priceText(id: number): string {
     return this.typed()[id] ?? '';
   }
@@ -59,9 +47,7 @@ export class BuySheet {
     this.typed.update((t) => ({ ...t, [id]: text }));
   }
 
-  /** Rows whose text is present but unreadable as a price. Shown rather than
-   *  silently dropped: a typo that vanishes looks exactly like a price that was
-   *  recorded. */
+  /** Typed but not a price; shown, as a dropped typo looks recorded. */
   readonly unreadable = computed(() =>
     this.rows.filter((r) => {
       const text = this.priceText(r.id);
@@ -69,7 +55,6 @@ export class BuySheet {
     }),
   );
 
-  /** The offending rows, named, for a message that says which one to fix. */
   readonly unreadableNames = computed(() =>
     this.unreadable()
       .map((r) => r.name)
@@ -90,13 +75,11 @@ export class BuySheet {
     this.ref.dismiss({ shop, prices });
   }
 
-  /** Buy them without recording anything. */
   skip(): void {
     this.ref.dismiss('skip');
   }
 
-  /** Dismissing the sheet buys nothing: closing something you opened by mistake
-   *  must not empty the list. */
+  /** Closing buys nothing. */
   close(): void {
     this.ref.dismiss(undefined);
   }

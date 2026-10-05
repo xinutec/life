@@ -19,40 +19,27 @@ export interface HistoryDialogData {
   item: Item;
 }
 
-/** One history line as the list renders it. */
 interface Line {
   id: number;
   icon: string;
-  /** The verb, with the amount folded in when the amount IS the verb's object
-   *  ("Used 200 g"). */
+  /** With the amount when it is the verb's object ("Used 200 g"). */
   title: string;
-  /** Where, and how much was on hand — the parts that are context rather than
-   *  the event itself. Empty when there is nothing to say. */
   detail: string;
   when: string;
 }
 
-/** What each event is called and what it looks like. Keyed on the closed
- *  `ItemEvent` union, so a new event kind fails the build here rather than
- *  rendering as a blank row in a list whose whole job is to account for what
- *  happened. */
+/** A total Record, so a new event kind cannot render as a blank row. */
 const SHAPE: Record<ItemEvent, { icon: string; verb: string }> = {
   added: { icon: 'add_circle_outline', verb: 'Added' },
   moved: { icon: 'swap_horiz', verb: 'Moved' },
   used: { icon: 'remove_circle_outline', verb: 'Used' },
   removed: { icon: 'delete_outline', verb: 'Deleted' },
   restored: { icon: 'undo', verb: 'Restored' },
-  // A judgement, not a movement — the icon is a shopping trolley because that is
-  // literally what happened: it went on the Buy list.
   low: { icon: 'add_shopping_cart', verb: 'Running low' },
 };
 
-/** Everything that has happened to one stock row. A dialog, not a bottom
- *  sheet: it opens from the item sheet, and a second bottom sheet would dismiss
- *  that one with its unsaved edits.
- *
- *  The audit (`item_history`, append-only) is read-only. Purchases ride along
- *  as a separate list and can be deleted, so a mistyped price is removable. */
+/** Everything that happened to one stock row, and what was paid; a purchase can
+ *  be removed. A dialog, as a second bottom sheet would dismiss the form. */
 @Component({
   selector: 'app-history-dialog',
   templateUrl: './history-dialog.html',
@@ -73,13 +60,10 @@ export class HistoryDialog {
   readonly loaded = computed(() => this.entries() !== null);
   readonly lines = computed(() => (this.entries() ?? []).map((e) => this.line(e)));
 
-  /** What this row cost, newest first. Here and not only on the product page:
-   *  a hand-typed buy-list row has no barcode or catalogue product, and the item
-   *  is the only key that always exists. */
+  /** Here as well as on the product page: a hand-typed item has no product. */
   readonly paid = computed(() =>
     this.purchases().map((p) => ({
       id: p.id,
-      // The rate leads when there is one — it is the comparable number.
       what: [
         formatMoney(p.amount_minor, p.currency),
         p.unit_price ? formatUnitPrice(p.unit_price, p.currency) : '',
@@ -88,8 +72,6 @@ export class HistoryDialog {
         .join(' · '),
       where: p.shop,
       when: ago(p.bought_at),
-      // `null` for almost everything, and that is the point: a jar of oregano
-      // has no warranty and nothing here should imply one either way.
       cover: warrantyInfo(p.warranty_until),
     })),
   );
@@ -112,14 +94,8 @@ export class HistoryDialog {
 
   private line(e: ItemHistoryEntry): Line {
     const shape = SHAPE[e.event];
-    // In the item's own unit — the audit stores a bare number, because a use is
-    // only ever recorded in the unit the row measures itself in (the server
-    // refuses a mismatch rather than converting).
     const how = e.quantity == null ? null : amount(e.quantity, this.item.unit);
-    // A use is the ONLY event whose quantity is a delta — how much went. Every
-    // other one records the level at the time. Saying so in words is the whole
-    // difference between "you used 200g" and "it held 200g", which the number
-    // alone cannot carry.
+    // Only a use records how much went; the rest record the level.
     const used = e.event === 'used';
     const detail = [
       !used && how ? `${how} on hand` : null,
@@ -136,9 +112,6 @@ export class HistoryDialog {
     };
   }
 
-  /** Remove a purchase that did not happen. Reloads rather than splicing the
-   *  local list: the dialog already has a load path, and a list edited in two
-   *  places drifts from the server the first time one of them is wrong. */
   removePurchase(id: number): void {
     this.api.deletePurchase(this.item.id, id).subscribe({
       next: () => {
@@ -163,8 +136,7 @@ function message(e: unknown): string {
   const failure = classifyApiError(e);
   switch (failure.kind) {
     case 'offline':
-      // Not cached by the service worker and deliberately not: an audit read
-      // from a stale cache would say a use had not happened when it had.
+      // Not cached: a stale audit would deny a use that happened.
       return 'No connection — the history lives on the server.';
     case 'unauthenticated':
       return 'Signed out — sign in to see this.';

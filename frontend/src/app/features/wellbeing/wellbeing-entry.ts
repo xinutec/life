@@ -26,8 +26,7 @@ import {
 import { WellbeingDoc, WellbeingStore } from '../../sync/wellbeing-store';
 import { EmotionPicker, EmotionPickerData } from './emotion-picker';
 
-/** Edit one check-in: change the score, add/edit a note, adjust the time (to
- *  backdate "this morning"), or delete it. */
+/** Edit one check-in. */
 @Component({
   selector: 'app-wellbeing-entry',
   templateUrl: './wellbeing-entry.html',
@@ -50,13 +49,10 @@ export class WellbeingEntry implements OnDestroy {
   private api = inject(LifeApi);
 
   private deleting = false;
-  // The model is preloaded once per entry, the moment real words appear — a second
-  // nudge would only repeat work, since the day's system prompt is unchanged.
+  // The model is warmed once per entry.
   private warmed = false;
-  // True once the user has actually typed in the note field. Guards the
-  // dismiss-time flush so it never writes back the value the sheet opened with —
-  // otherwise an edit that landed remotely while the sheet was open would be
-  // clobbered by the stale original on close.
+  // Only a typed note is flushed on close, so a remote edit made meanwhile is
+  // not overwritten by the stale original.
   private noteDirty = false;
   private items = toSignal(this.store.items$, { initialValue: [] as WellbeingDoc[] });
 
@@ -65,8 +61,7 @@ export class WellbeingEntry implements OnDestroy {
   readonly ulid = this.data.ulid;
   readonly entry = computed(() => this.items().find((e) => e.ulid === this.ulid));
 
-  /** "okay–good · 3.5" — spells the reading out, since two lit faces is a new
-   *  grammar and a number removes any doubt about what it recorded. */
+  /** "okay–good · 3.5". */
   readonly scoreLabel = computed(() => {
     const tenths = this.entry()?.scoreTenths;
     if (tenths == null) return '';
@@ -79,23 +74,18 @@ export class WellbeingEntry implements OnDestroy {
     return e ? toLocalInput(e.recordedAt) : '';
   });
 
-  // Flush an in-progress note edit if the sheet is dismissed without a blur —
-  // but only one the user actually typed (noteDirty), never the seeded original.
   ngOnDestroy(): void {
     if (this.deleting || !this.noteDirty) return;
     const e = this.entry();
     if (e && this.note().trim() !== (e.note ?? '')) this.saveNote();
   }
 
-  /** The note textarea's input handler: record the edit and mark it dirty so a
-   *  dismiss will flush it (a bare `note.set` would not). */
+  /** Marks the note typed, for the flush on close. */
   onNoteInput(value: string): void {
     this.noteDirty = true;
     this.note.set(value);
-    // First real words: a suggestion is now near-certain to follow, so ask the
-    // server to preload the model while the rest of the note is still being typed
-    // — that overlaps the ~60s cold load with the writing instead of paying it
-    // when the picker opens. Fire-and-forget; a failed warm just means old timing.
+    // First words: warm the model now, overlapping its ~60 s cold load with the
+    // writing.
     if (!this.warmed && value.trim()) {
       this.warmed = true;
       this.api
@@ -104,17 +94,14 @@ export class WellbeingEntry implements OnDestroy {
     }
   }
 
-  /** Tap a face to set it; tap the face NEXT to the one that's on and both light
-   *  up — the reading is now the half-step between them ("4, but a bit lower").
-   *  Tapping either half of a half-step collapses back to that whole face. There's
-   *  no timer here (unlike the check-in strip): the selection is the state. */
+  /** A tap next to the lit face makes the half-step; either face of a half-step
+   *  collapses to it. */
   setScore(face: number): void {
     const now = this.entry()?.scoreTenths;
     void this.store.patch(this.ulid, { scoreTenths: nextReading(now, face) ?? toTenths(face) });
   }
 
-  /** As `setScore`, but energy is optional: tapping the single face that's on
-   *  clears it back to null (a mood-only check-in). */
+  /** As `setScore`, but tapping the lone lit face clears energy. */
   setEnergy(face: number): void {
     const now = this.entry()?.energyTenths;
     if (now === toTenths(face)) {
@@ -126,13 +113,10 @@ export class WellbeingEntry implements OnDestroy {
     });
   }
 
-  /** Is this face lit? True for the face itself, and for BOTH faces of a half-step
-   *  — two lit neighbours is how a 3.5 shows itself on a strip of whole faces. */
   isOn(reading: number | null | undefined, face: number): boolean {
     return reading != null && facesOf(reading).includes(face);
   }
 
-  /** Half-lit: one of the two faces of a half-step, so it reads as "partly this". */
   isHalf(reading: number | null | undefined, face: number): boolean {
     return reading != null && isHalfStep(reading) && facesOf(reading).includes(face);
   }
@@ -141,18 +125,15 @@ export class WellbeingEntry implements OnDestroy {
     return emotionColor(token);
   }
 
-  /** The bare leaf word to show for a stored token (or legacy bare word). */
   emotionLabel(token: string): string {
     return emotionLabel(token);
   }
 
-  /** The brief gloss for a stored token (tooltip on the chip). */
   emotionDesc(token: string): string {
     return emotionDesc(token);
   }
 
-  /** Open the feelings-wheel picker seeded with the current set; on Done, store
-   *  the new selection (Cancel returns undefined and leaves it untouched). */
+  /** Cancel leaves the emotions as they were. */
   editEmotions(): void {
     const ref = this.dialog.open<EmotionPicker, EmotionPickerData, string[] | undefined>(
       EmotionPicker,
@@ -181,8 +162,7 @@ export class WellbeingEntry implements OnDestroy {
     void this.store.patch(this.ulid, { note: this.note().trim() || null });
   }
 
-  /** A half-typed or impossible time is ignored rather than stored: the field
-   *  still shows it, and the entry keeps the time it had. */
+  /** A half-typed or impossible time is ignored. */
   setTime(local: string): void {
     const recordedAt = fromLocalInput(local);
     if (recordedAt === null) return;
@@ -194,8 +174,6 @@ export class WellbeingEntry implements OnDestroy {
     this.deleting = true;
     void this.store.remove(this.ulid);
     this.ref.dismiss();
-    // Two-layer undo: local revive + server-side trash restore for synced rows.
-    // A plain local revive can't survive the server's set-only tombstone.
     if (e) this.feedback.undo('Check-in deleted', () => void this.store.undoDelete(e));
   }
 

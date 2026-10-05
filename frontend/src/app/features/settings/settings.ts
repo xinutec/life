@@ -19,10 +19,7 @@ import {
 } from '../../shared/wellbeing-reminder';
 import { SwUpdates } from '../../sw-updates';
 
-/** Settings: the build version, the Nextcloud calendar link and reminders. The
- *  version is stamped into the bundle at build time, so it is the build running
- *  in *this* tab — a stale PWA shows its own old sha. "Check for updates" forces
- *  the service worker to fetch a newer build and reload. */
+/** The build running in this tab, the Nextcloud link and reminders. */
 @Component({
   selector: 'app-settings',
   templateUrl: './settings.html',
@@ -43,31 +40,22 @@ export class Settings {
   private wellbeingReminder = inject(WellbeingReminder);
 
   protected readonly build = BUILD_INFO;
-  /** Localized build time, or '' when unknown (a bare/dev stamp). */
   protected readonly builtAt = BUILD_INFO.builtAt
     ? new Date(BUILD_INFO.builtAt).toLocaleString()
     : '';
   protected readonly checking = signal(false);
 
-  // The Nextcloud calendar link (app password, Login Flow v2): identity OAuth
-  // cannot reach the DAV endpoints, so the calendar needs its own credential.
+  // The calendar needs its own app password: login OAuth cannot reach DAV.
   protected readonly ncStatus = signal<ConnectionStatus | null>(null);
   protected readonly ncBusy = signal(false);
-  /** The approval URL, kept so it stays tappable if the popup was blocked —
-   *  a WebView or a strict browser can refuse `window.open` even from a click,
-   *  and losing the URL would strand the flow with no way back to it. */
+  /** Kept on screen in case `window.open` was blocked. */
   protected readonly ncUrl = signal<string | null>(null);
 
   constructor() {
     scaffoldTitle(() => 'Settings');
-    // Read the link's state on arrival rather than assuming "not connected":
-    // the card's whole job is to say which it is, and defaulting to the wrong
-    // one would invite a re-link that replaces a working credential.
+    // Read, never assumed: a wrong "not connected" invites replacing a working link.
     this.readNcStatus();
-    // And again whenever this page comes back to the front.
-    // Approving happens on NEXTCLOUD'S page, which on a phone takes over the
-    // foreground, so a timer here would not be running. Coming back to the
-    // front is the event worth listening to.
+    // Approval happens in Nextcloud's page, so re-check on coming back.
     const onReturn = (): void => {
       if (document.visibilityState === 'visible') this.readNcStatus();
     };
@@ -79,18 +67,13 @@ export class Settings {
     });
   }
 
-  /** Ask the server where the link stands, and say so.
-   *
-   *  Never sets `not_linked` over a `null`-on-failure: unknown and unlinked are
-   *  different answers and the card renders them differently. */
+  /** A failure leaves the status unknown, never `not_linked`. */
   private readNcStatus(): void {
     this.api.nextcloudStatus().subscribe({
       next: ({ status }) => {
         const was = this.ncStatus();
         this.ncStatus.set(status);
-        // Only announce a link the user is waiting on. Saying "connected" on
-        // every return to the tab would be noise about something that has not
-        // changed.
+        // Announce only a link someone is waiting on.
         if (status === 'active' && was !== 'active' && this.ncBusy()) {
           this.feedback.notify('Nextcloud calendar connected.');
         }
@@ -99,31 +82,20 @@ export class Settings {
           this.ncUrl.set(null);
           return;
         }
-        // Back here, still unlinked: the grant was abandoned, or is not
-        // finished. Re-enable the button either way — leaving it disabled on a
-        // "waiting" that nothing will ever end is a dead end with no way out of
-        // it. The URL stays on screen, so carrying on is still one tap.
+        // Still unlinked: re-enable the button, or the wait never ends.
         this.ncBusy.set(false);
       },
-      // Unknown stays unknown — see the template: it offers no button rather
-      // than guessing, because both guesses are actionable and wrong.
       error: () => this.ncStatus.set(null),
     });
   }
 
-  // Daily wellbeing-check-in reminders (device-local Android notifications). Each
-  // rule is a time + a quiet window ("remind at 9am if I haven't checked in for 3
-  // hours"); add as many as you like. The editor always shows so the config is
-  // editable, but the reminders only fire inside the Life Android app.
+  // Shown everywhere, fires only in the Android app.
   protected readonly reminderAvailable = this.wellbeingReminder.available;
   protected readonly rules = signal<WellbeingReminderRule[]>(
     this.wellbeingReminder.getConfig().rules,
   );
 
-  /** Send the user to approve the Nextcloud grant. The backend polls for the
-   *  password; this page re-checks when it becomes visible again (see the
-   *  constructor). `noopener` means we can't close that page for them, which
-   *  beats giving it `window.opener`. */
+  /** The backend polls for the password; the page re-checks on return. */
   protected connectNextcloud(): void {
     if (this.ncBusy()) return;
     this.ncBusy.set(true);
@@ -174,8 +146,6 @@ export class Settings {
       } else if (result === 'current') {
         this.feedback.notify('You’re on the latest version.');
       } else if (result === 'failed') {
-        // Covers both halves of checkNow: the check itself failing (offline, the
-        // usual cause) and a staged build refusing to activate. Says neither.
         this.feedback.error('Couldn’t update — try again.');
       } else {
         this.feedback.error('Updates aren’t available in this build.');

@@ -1,33 +1,23 @@
 import { BinDay } from './models';
 import { daysUntil } from './shared/civil-day';
 
-/** A collection day: everything that goes out on one morning, and how soon. */
+/** Everything that goes out on one morning. */
 export interface BinCollection {
-  /** `YYYY-MM-DD`, as the council states it. */
   date: string;
-  /** What goes out, shortened for reading — see {@link shortKind}. */
   kinds: string[];
   /** "today" / "tomorrow" / "in 3 days" / "Thu 20 Aug". */
   when: string;
-  /** Today or tomorrow — the case worth a glance rather than a scroll. The
-   *  bins are a thing you act on the night before, so "soon" that includes
-   *  next week would make the highlight meaningless. */
+  /** Today or tomorrow: bins are put out the night before. */
   imminent: boolean;
 }
 
-/** The council suffixes every name with " collection" — true, and noise in a
- *  list already headed "Bins". Only the exact suffix is dropped, so a name that
- *  does not end that way survives intact rather than being trimmed on a guess. */
+/** Drops the council's " collection" suffix. */
 export function shortKind(kind: string): string {
   const suffix = ' collection';
   return kind.endsWith(suffix) ? kind.slice(0, -suffix.length) : kind;
 }
 
-/** The next collection days, soonest first, grouped so one morning is one row.
- *
- *  Grouped because that is how it happens: three bins go out together, and
- *  three rows saying the same date is a list you have to read to learn one
- *  thing. `now` is injectable for tests, as in `expiry.ts`. */
+/** The next collection days, soonest first, one row per morning. */
 export function nextCollections(days: BinDay[], now: Date = new Date()): BinCollection[] {
   const byDate = new Map<string, string[]>();
   for (const d of days) {

@@ -21,10 +21,7 @@ import { ItemSheet, ItemSheetData } from '../inventory/item-sheet';
 
 type SortKey = 'name' | 'expiry';
 
-/** The complete, flat list of every item that exists — display fields resolved
- *  through the catalog product (name/brand/image) where one is linked. The
- *  "find my stuff" surface: a live name/brand/location filter + a sort. Reached
- *  from the hamburger menu. */
+/** Every item, filtered and sorted: the "find my stuff" screen. */
 @Component({
   selector: 'app-items',
   templateUrl: './items.html',
@@ -48,26 +45,21 @@ export class Items {
   private itemsStore = inject(ItemsStore);
   private locationsStore = inject(LocationsStore);
 
-  // Views of the shared catalogs — retained across tabs and shared with
-  // Inventory / Today (see CachedResource), so returning here is instant.
   readonly items = computed(() => this.itemsStore.value() ?? []);
   readonly locations = computed(() => this.locationsStore.value() ?? []);
   readonly loaded = this.itemsStore.loaded;
   readonly loadError = this.itemsStore.error;
   readonly refreshing = this.itemsStore.refreshing;
 
-  /** Live filter over name/brand/location, and the sort order. */
   readonly query = signal('');
   readonly sort = signal<SortKey>('name');
 
   private readonly byId = computed(() => new Map(this.locations().map((l) => [l.id, l] as const)));
 
-  /** Full-path labels for the edit sheet's location dropdown. */
   private readonly locationOptions = computed(() =>
     this.locations().map((l) => ({ id: l.id, label: this.pathOf(l.id) })),
   );
 
-  /** Items after the filter + sort — what the list renders. */
   readonly visible = computed<Item[]>(() => {
     const q = this.query().trim().toLowerCase();
     const matches = q
@@ -76,7 +68,7 @@ export class Items {
         )
       : this.items().slice();
     if (this.sort() === 'expiry') {
-      // Soonest expiry first; undated items sink to the bottom.
+      // Undated items last.
       matches.sort((a, b) => (a.expiry ?? '9999').localeCompare(b.expiry ?? '9999'));
     } else {
       matches.sort((a, b) => a.name.localeCompare(b.name));
@@ -94,8 +86,6 @@ export class Items {
     this.itemsStore.refresh();
   }
 
-  /** Tap a row to edit it — the same add/edit bottom sheet Inventory uses,
-   *  reused here so the search surface can fix an item in place. */
   editItem(it: Item): void {
     const data: ItemSheetData = { item: it, locations: this.locationOptions() };
     this.sheet
@@ -106,12 +96,10 @@ export class Items {
       });
   }
 
-  /** Full location path (root → leaf), or '' when unplaced. */
   private pathOf(id: number | null): string {
     return locationPath(this.byId(), id);
   }
 
-  /** Delete from the search surface too — same tombstone + Undo as Inventory. */
   deleteItem(id: number): void {
     this.api.deleteItem(id).subscribe({
       next: () => {
@@ -127,19 +115,17 @@ export class Items {
     });
   }
 
-  /** Last two segments of the location path, or '' when unplaced. */
   private location(it: Item): string {
     return this.pathOf(it.location_id).split(' › ').slice(-2).join(' › ');
   }
 
-  /** Compact subtitle: "2 jar · food · Spice cupboard › Top shelf". */
+  /** "2 jar · food · Spice cupboard › Top shelf". */
   meta(it: Item): string {
     return [amount(it.quantity, it.unit), it.category, this.location(it)]
       .filter((s) => s)
       .join(' · ');
   }
 
-  /** Urgency-aware expiry display (expired / soon / date). */
   expiryOf(item: Item): ExpiryInfo {
     return expiryInfo(item.expiry ?? '', item.expiry_precision);
   }

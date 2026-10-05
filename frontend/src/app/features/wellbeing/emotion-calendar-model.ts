@@ -1,59 +1,44 @@
-/** Aggregating check-ins into calendar days, where mixing becomes visible.
- *  Bands are proportions and hide a bad minority, so `spread` (the score
- *  range) separately shows whether the day held still. */
+/** Check-ins as calendar days. Bands are proportions and hide a bad minority,
+ *  so `spread` shows whether the day held still. */
 import { emotionNode } from '../../shared/emotion-wheel';
 import { toPoints } from '../../shared/wellbeing-checkin';
 import { WellbeingDoc } from '../../sync/wellbeing-store';
 
-/** One family's share of a day, as a fraction of 1. */
 export interface CalendarBand {
   core: string;
-  /** Colour key → `--emo-<color>`, the same hue the picker gives this family. */
+  /** `--emo-<color>`, the picker's hue for this family. */
   color: string;
-  /** Share of the day, 0..1, summing to 1 across the bands. Weighted by how
-   *  many words named this family across every check-in that day. */
+  /** 0..1, summing to 1: weighted by words, across the day's check-ins. */
   fraction: number;
 }
 
 export interface CalendarDay {
-  /** `YYYY-MM-DD`, in the viewer's local time — the day a person had, not UTC. */
+  /** In the viewer's local time. */
   key: string;
-  /** Day of the month, which is the number in the box. */
   dayOfMonth: number;
-  /** Readings on this day. 0 = the day is outside the log or was skipped. */
   checkins: number;
-  /** How many of those readings carried a usable score. Can be fewer than
-   *  `checkins`, and zero while `checkins` is not — `scoreLow`/`scoreHigh` are
-   *  null in that case rather than NaN. */
+  /** Readings with a score; the score fields are null when none had one. */
   scored: number;
-  /** Families by share, largest first. Empty when nothing was tagged, which is
-   *  NOT the same as no check-in — `checkins` tells those apart. */
+  /** Largest first; empty means nothing tagged, not no check-in. */
   bands: readonly CalendarBand[];
   scoreLow: number | null;
   scoreHigh: number | null;
-  /** `scoreHigh - scoreLow`; 0 for a single reading, null for none. */
   spread: number | null;
-  /** Every distinct emotion recorded that day, in the order first seen. This is
-   *  what a selected day hands to anything that renders it. */
+  /** Each emotion recorded that day, in first-seen order. */
   tokens: readonly string[];
 }
 
 export interface CalendarMonth {
-  /** `YYYY-MM`. */
   key: string;
   year: number;
-  /** 0-based, as `Date` counts them. */
+  /** 0-based, as `Date` counts. */
   month: number;
-  /** Leading blanks so the 1st lands under its weekday, then every day of the
-   *  month. Weeks start Monday. */
+  /** Leading blanks, then every day; weeks start Monday. */
   cells: readonly (CalendarDay | null)[];
 }
 
-/** Local `YYYY-MM-DD` for an ISO instant.
- *
- *  Deliberately not `slice(0, 10)` on the stored string, which is UTC: a check-in
- *  at 00:20 London in summer is the previous UTC day, and would land in the wrong
- *  box — the one case where the bug is invisible in winter and appears in June. */
+/** Not `slice(0, 10)`, which is UTC: a summer check-in at 00:20 is the previous
+ *  UTC day. */
 export function localDayKey(iso: string, tz?: string): string {
   const d = new Date(iso);
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -65,31 +50,21 @@ export function localDayKey(iso: string, tz?: string): string {
   return parts;
 }
 
-/** A check-in's tags, for a doc that may not have the field at all.
- *
- *  ⚠ The RxDB schema does not require `emotions`, so a stored doc can lack it
- *  whatever `WellbeingDoc` says. Absent is the "checked in, tagged nothing"
- *  day, not an error. */
+/** The schema does not require `emotions`, whatever the type says. */
 function tagsOf(e: WellbeingDoc): readonly string[] {
   return e.emotions ?? [];
 }
 
-/** Each family's share of a day (summing to 1), counting every word once
- *  across all the day's check-ins, so a one-word bad morning isn't half the
- *  day. A six-word check-in outweighs three one-word ones. */
+/** Each word counts once, so a six-word check-in outweighs three one-word ones. */
 export function bandsFor(entries: readonly WellbeingDoc[]): readonly CalendarBand[] {
   const weight = new Map<string, number>();
-  // Carried from the node that named the family rather than derived from it.
-  // `core.toLowerCase()` happens to equal every colour key today, so a fallback
-  // that guessed would pass every test and break silently the first time a
-  // family's hue stops matching its name.
+  // From the node, not guessed from the family's name.
   const hue = new Map<string, string>();
   let words = 0;
   for (const e of entries) {
     for (const t of tagsOf(e)) {
       const node = emotionNode(t);
-      // An unknown token is not counted at all, so it cannot dilute the families
-      // that ARE known — a renamed word would otherwise silently shrink the rest.
+      // Unknown tokens are not counted, so they cannot dilute the known ones.
       if (!node) continue;
       weight.set(node.core, (weight.get(node.core) ?? 0) + 1);
       hue.set(node.core, node.color);
@@ -97,19 +72,12 @@ export function bandsFor(entries: readonly WellbeingDoc[]): readonly CalendarBan
     }
   }
   if (!words) return [];
-  return (
-    [...weight]
-      .map(([core, w]) => ({ core, color: hue.get(core)!, fraction: w / words }))
-      // Largest first, then by name so equal shares order stably rather than by
-      // whichever family the day happened to mention first.
-      .sort((a, b) => b.fraction - a.fraction || a.core.localeCompare(b.core))
-  );
+  return [...weight]
+    .map(([core, w]) => ({ core, color: hue.get(core)!, fraction: w / words }))
+    .sort((a, b) => b.fraction - a.fraction || a.core.localeCompare(b.core));
 }
 
-/** Drop whole weeks with nothing in them from either end.
- *
- *  Padding cells hold a square each, so the first and last months would render
- *  rows of nothing. Interior weeks are kept: a skipped week is a real one. */
+/** Drop empty weeks at either end; a skipped week inside is real. */
 function trimEmptyWeeks(cells: readonly (CalendarDay | null)[]): (CalendarDay | null)[] {
   const weeks: (CalendarDay | null)[][] = [];
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
@@ -119,8 +87,7 @@ function trimEmptyWeeks(cells: readonly (CalendarDay | null)[]): (CalendarDay | 
 }
 
 function dayFrom(key: string, entries: readonly WellbeingDoc[]): CalendarDay {
-  // ⚠ Finite-only, for the reason `tagsOf` exists: some stored docs have no
-  // score, and `Math.min(...[undefined])` is NaN.
+  // Some stored docs have no score, and `Math.min(undefined)` is NaN.
   const scores = entries.map((e) => e.scoreTenths).filter((n) => Number.isFinite(n));
   const tokens: string[] = [];
   for (const e of entries) {
@@ -141,13 +108,8 @@ function dayFrom(key: string, entries: readonly WellbeingDoc[]): CalendarDay {
   };
 }
 
-/** Group check-ins into calendar months, oldest first (like a chat; the view
- *  scrolls to today on load).
- *
- *  Every day from the first reading to the end gets a cell, empty or not: a gap
- *  is a fact. Days outside that range are `null` padding. The end is the later
- *  of the last reading and `today`, so today has a square before its first
- *  check-in. */
+/** Months oldest first, every day from the first reading to the later of the
+ *  last reading and today: a gap is a fact. */
 export function buildCalendar(
   docs: readonly WellbeingDoc[],
   tz?: string,
@@ -164,9 +126,7 @@ export function buildCalendar(
   const keys = [...byDay.keys()].sort();
   const first = keys[0];
   const lastReading = keys[keys.length - 1];
-  // String compare on `YYYY-MM-DD` is total, so `max` is the later spelling. A
-  // reading dated AFTER today — a device with a fast clock, or a doc synced from
-  // one — must still be drawn, which is why this is a max and not just `today`.
+  // A max: a reading dated after today (a fast clock) must still be drawn.
   const last = today > lastReading ? today : lastReading;
 
   const months: CalendarMonth[] = [];
@@ -176,13 +136,10 @@ export function buildCalendar(
   const endM = Number(last.slice(5, 7)) - 1;
   while (y < endY || (y === endY && m <= endM)) {
     const daysInMonth = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
-    // getUTCDay is 0=Sunday; weeks start Monday, so Sunday becomes the 7th slot.
     const lead = (new Date(Date.UTC(y, m, 1)).getUTCDay() + 6) % 7;
     const cells: (CalendarDay | null)[] = Array.from({ length: lead }, () => null);
     for (let d = 1; d <= daysInMonth; d++) {
       const key = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      // String compare is safe and total on `YYYY-MM-DD`: fixed width, zero
-      // padded, most significant first.
       cells.push(key < first || key > last ? null : dayFrom(key, byDay.get(key) ?? []));
     }
     months.push({
@@ -200,32 +157,24 @@ export function buildCalendar(
   return months;
 }
 
-/** One emotion across a selection, and how much of the selection it covers. */
 export interface TokenTally {
   readonly token: string;
-  /** How many of the selected days named it. Never zero. */
   readonly days: number;
 }
 
-/** Every emotion across the selected days, counted per day (not per
- *  check-in), commonest first so the panel's scrolled-off part is the tail.
- *  Ties break on the token, for a stable order. */
+/** Counted per day, commonest first. */
 export function tallyAcross(days: readonly CalendarDay[]): readonly TokenTally[] {
   const counts = new Map<string, number>();
-  // `CalendarDay.tokens` is already distinct per day, so a straight count of
-  // appearances IS a count of days.
   for (const d of days) for (const t of d.tokens) counts.set(t, (counts.get(t) ?? 0) + 1);
   return [...counts]
     .map(([token, n]) => ({ token, days: n }))
     .sort((a, b) => b.days - a.days || a.token.localeCompare(b.token));
 }
 
-/** A day in words, for its tooltip and screen-reader label. Scores in points,
- *  as the faces show them: the stored tenths are not a scale anyone reads. */
+/** For the tooltip and screen reader; scores in points, not tenths. */
 export function dayTitle(day: CalendarDay): string {
   if (!day.checkins) return `${day.key} — no check-in`;
   const fams = day.bands.map((b) => `${b.core} ${Math.round(b.fraction * 100)}%`).join(', ');
-  // "no score" for a day whose readings carried none.
   const range =
     day.scoreLow === null || day.scoreHigh === null
       ? 'no score'

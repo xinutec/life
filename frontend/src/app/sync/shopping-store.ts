@@ -6,10 +6,7 @@ import { ConflictReporter, FieldSpec, makeConflictHandler } from './conflict-mer
 import { SyncedCollectionConfig, SyncedStore } from './synced-store';
 import { keysOf } from '../shared/narrow';
 
-/** A shopping row as stored locally. `ulid` is the stable identity; `rev` is the
- *  last server revision seen (set by sync, not by local edits); `id` is the
- *  server autoincrement (null until synced) used only by the /buy endpoint.
- *  RxDB manages `_deleted` (tombstone) + its own internal fields. */
+/** A Buy row as stored locally; `id` is used only by /buy. */
 // dev-lint: allow-wire-mirror RxDB owns the _deleted tombstone dimension;
 // the wire type adds it in the replication layer, not in this local doc.
 export interface ShoppingDoc {
@@ -19,19 +16,15 @@ export interface ShoppingDoc {
   quantity: number | null;
   unit: string | null;
   barcode: string | null;
-  /** Inventory category the buy→inventory conversion will use (ItemCategory
-   *  string; the server validates it at push). */
+  /** The category the bought item gets; validated by the server at push. */
   category: string;
-  /** Optional link to the products catalog (mirrors items.product_id) — how a
-   *  barcodeless shop product rides the Buy list. */
   product_id: number | null;
   done: boolean;
   rev: number;
 }
 
 const schema: RxJsonSchema<ShoppingDoc> = {
-  // Bump the version + migrate on ANY schema change, else existing local DBs hit
-  // a hash mismatch. v1: category + product_id (buy→inventory identity).
+  // Any schema change needs a version bump and a migration.
   version: 1,
   primaryKey: 'ulid',
   type: 'object',
@@ -50,12 +43,9 @@ const schema: RxJsonSchema<ShoppingDoc> = {
   required: ['ulid', 'name', 'category', 'done', 'rev'],
 };
 
-// Exported for shopping-store.spec.ts — a stale local DB (an old browser
-// profile, the Android WebView) runs these once on next open, so pin them.
+// Exported so the spec can pin them: an old device runs them on next open.
 export const migrationStrategies = {
-  // v1: pre-identity rows take the same defaults the server backfill gives
-  // them (0024: category 'food', no product link), so both sides converge
-  // without a rev bump.
+  // The defaults migration 0024 gives the same rows server-side.
   1: (doc: Record<string, unknown>): Record<string, unknown> => ({
     ...doc,
     category: 'food',
@@ -63,10 +53,8 @@ export const migrationStrategies = {
   }),
 };
 
-/** What identifies "the same thing to buy" across catalogs. Matching tries the
- *  strongest key first: the catalog link, then the barcode, then the name
- *  (case-insensitive). Null keys never match null — two hand-typed rows are
- *  only the same thing if their names say so. */
+/** "The same thing to buy": by catalog link, then barcode, then name. A null
+ *  key never matches a null. */
 export interface BuyIdentity {
   name: string;
   barcode: string | null;
@@ -79,20 +67,15 @@ export function matchesIdentity(doc: ShoppingDoc, identity: BuyIdentity): boolea
   return doc.name.trim().toLowerCase() === identity.name.trim().toLowerCase();
 }
 
-/** Everything a caller decides about a new Buy row; the rest (identity, revision,
- *  done) is the store's to set. */
+/** What a caller decides about a new Buy row. */
 export type BuyInput = Omit<ShoppingDoc, 'ulid' | 'id' | 'done' | 'rev'>;
 
 function newRow(input: BuyInput): ShoppingDoc {
   return { ulid: ulid(), id: null, ...input, done: false, rev: 0 };
 }
 
-/** Which of `inputs` the list hasn't already got, and which it has. Split out of
- *  [[ShoppingStore.addMissing]] so the rule is testable without a database.
- *
- *  Each accepted input is matched against the ones accepted before it as well as
- *  against `active`: a recipe naming the same thing on two lines wants one row,
- *  not two that then dedupe against each other on the next add. */
+/** Which of `inputs` the list hasn't got yet. Each is also matched against the
+ *  ones accepted before it: a thing named twice is one row. */
 export function planAdditions(
   active: readonly ShoppingDoc[],
   inputs: readonly BuyInput[],
@@ -112,11 +95,8 @@ export function planAdditions(
   return { fresh, already };
 }
 
-/** The synced content fields (everything but the identity/server fields). */
 type ShoppingContent = Omit<ShoppingDoc, 'ulid' | 'id' | 'rev'>;
 
-/** Type-directed 3-way-merge spec: every content field with a strategy valid for
- *  its type (see [[makeConflictHandler]]). Exhaustive by construction. */
 const SHOPPING_FIELDS: FieldSpec<ShoppingContent> = {
   name: 'value',
   quantity: 'value',
@@ -127,33 +107,26 @@ const SHOPPING_FIELDS: FieldSpec<ShoppingContent> = {
   done: 'value',
 };
 
-/** The field-name allowlist the Conflicts screen may patch on "use other",
- *  derived from the spec so the two can never drift apart. */
+/** The fields "use other" may patch on the Conflicts screen. */
 export const SHOPPING_MERGE_FIELDS = keysOf(SHOPPING_FIELDS);
 
-/** Local-first store for the shopping list — the machinery lives in
- *  {@link SyncedStore}; this declares only the collection and its content. */
+/** The Buy list. */
 @Injectable({ providedIn: 'root' })
 export class ShoppingStore extends SyncedStore<ShoppingDoc> {
   private reporter = inject(ConflictReporter);
 
-  /** Live, sorted, non-deleted shopping rows (unbought before bought). */
+  /** Unbought before bought. */
   readonly items$ = this.liveQuery([{ done: 'asc' }, { name: 'asc' }]);
 
   protected config(): SyncedCollectionConfig<ShoppingDoc> {
     return {
       name: 'shopping',
       schema,
-      // Field-level 3-way merge: concurrent edits to different fields both
-      // survive; same-field collisions keep this device's value and land in the
-      // server-side conflict log for review.
       conflictHandler: makeConflictHandler<ShoppingDoc>({
         fields: SHOPPING_FIELDS,
         onConflicts: (kept, conflicts) =>
           this.reporter.report('shopping', kept.ulid, kept.name, conflicts),
       }),
-      // '-v2': replication-state reset after the isEqual push-loss bug — see the
-      // comment in wellbeing-store.ts.
       identifier: 'shopping-http-sync-v2',
       path: '/api/sync/shopping',
       label: 'shopping sync',
@@ -167,13 +140,7 @@ export class ShoppingStore extends SyncedStore<ShoppingDoc> {
     await col.insert(newRow(input));
   }
 
-  /** Put several things on the list at once, skipping whatever it already has
-   *  un-done, and report which were which — the caller has to be able to say
-   *  "2 added, 1 already there" rather than claiming it added three.
-   *
-   *  One read of the collection rather than one [[findActive]] per input: this
-   *  is what the recipe bridge calls, and a recipe is a whole list at a time.
-   *  The rule itself is [[planAdditions]]. */
+  /** Add what the list lacks, and say which were already there. */
   async addMissing(inputs: readonly BuyInput[]): Promise<{ added: string[]; already: string[] }> {
     const col = await this.collection;
     const docs = await col.find({ selector: { done: false } }).exec();
@@ -185,8 +152,7 @@ export class ShoppingStore extends SyncedStore<ShoppingDoc> {
     return { added: fresh.map((f) => f.name), already };
   }
 
-  /** The un-done row for the same thing, if the list already has one — what the
-   *  Inventory→Buy bridge checks before adding a duplicate. */
+  /** The un-done row for the same thing, if any. */
   async findActive(identity: BuyIdentity): Promise<ShoppingDoc | null> {
     const col = await this.collection;
     const docs = await col.find({ selector: { done: false } }).exec();
@@ -199,7 +165,7 @@ export class ShoppingStore extends SyncedStore<ShoppingDoc> {
     await this.patch(key, { done });
   }
 
-  /** Remove every ticked-off row (local; syncs as tombstones). */
+  /** Remove every ticked-off row. */
   async clearDone(): Promise<void> {
     const col = await this.collection;
     await col.find({ selector: { done: true } }).remove();

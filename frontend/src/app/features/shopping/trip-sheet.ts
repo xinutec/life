@@ -15,11 +15,7 @@ import { fromLocalInput, toLocalInput } from '../../shared/local-time';
 import { SheetHeader } from '../../shared/sheet-header';
 import { ShoppingDoc, ShoppingStore } from '../../sync/shopping-store';
 
-/** The next whole hour — the default "when".
- *
- *  One rule rather than a guess at your habits: a trip planned now is for later
- *  today, and a field you can see is wrong is better than a clever default you
- *  have to check. */
+/** The next whole hour: the default "when". */
 function nextHour(from: Date): Date {
   const d = new Date(from);
   d.setMinutes(0, 0, 0);
@@ -27,10 +23,8 @@ function nextHour(from: Date): Date {
   return d;
 }
 
-/** Plan a shop trip. The event goes only to Nextcloud Calendar
- *  (docs/design/overview.md §5); the confirmation names the calendar. The Buy
- *  list goes in the description from the screen, not the server, because the
- *  phone's local-first copy may be ahead of the sync. */
+/** Plan a shop trip in the Nextcloud calendar. The list comes from this device,
+ *  which may be ahead of the sync. */
 @Component({
   selector: 'app-trip-sheet',
   templateUrl: './trip-sheet.html',
@@ -57,13 +51,10 @@ export class TripSheet {
   readonly shop = signal(this.data?.shop ?? '');
   readonly when = signal(toLocalInput(nextHour(new Date())));
   readonly saving = signal(false);
-  /** Set when the calendar isn't linked — the one failure a retry can't fix,
-   *  so it is shown in the sheet with the way out rather than as a toast that
-   *  disappears while you are still reading it. */
+  /** The calendar is not linked: shown in the sheet, with the way out. */
   readonly needsLinking = signal(false);
 
-  /** What to bring home: the rows still to buy, in list order. A ticked-off row
-   *  is already in the trolley of a trip that is happening now. */
+  /** The rows still to buy. */
   readonly items = computed(() => this.allItems().filter((i) => !i.done));
 
   readonly summary = computed(() => {
@@ -96,7 +87,6 @@ export class TripSheet {
         error: (e: unknown) => {
           this.saving.set(false);
           const failure = classifyApiError(e);
-          // 409 is the backend saying the Nextcloud link is missing or lapsed.
           if (failure.kind === 'server' && failure.status === 409) {
             this.needsLinking.set(true);
             return;

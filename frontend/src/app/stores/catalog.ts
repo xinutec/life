@@ -4,10 +4,6 @@ import { CachedResource } from '../shared/cached-resource';
 import { LifeApi } from '../life-api';
 import { BinDay, ConflictEntry, Item, Loc, Recipe, TrashEntry } from '../models';
 
-/** The server read-catalogs more than one view shows, each a
- *  {@link CachedResource}: `.refresh()` on entering a view and after a mutation;
- *  read `.value()` / `.loaded()` / `.error()` in the template. */
-
 @Injectable({ providedIn: 'root' })
 export class ItemsStore extends CachedResource<Item[]> {
   constructor() {
@@ -16,9 +12,6 @@ export class ItemsStore extends CachedResource<Item[]> {
   }
 }
 
-/** The council's bin collections. A read-catalog like the rest, even though
- *  nothing here owns the data — the server holds it behind an hour's cache, so
- *  refreshing on view entry costs one local request and never the council one. */
 @Injectable({ providedIn: 'root' })
 export class BinsStore extends CachedResource<BinDay[]> {
   constructor() {
@@ -67,9 +60,7 @@ export class ConflictsStore extends CachedResource<ConflictEntry[]> {
   }
 }
 
-/** Root→leaf breadcrumb ("Kitchen › Fridge") for a location id, resolved
- *  client-side off the locations list ({@link LocationsStore}). '' when
- *  unplaced or unknown; cycle-guarded because `parent_id` is client-editable. */
+/** "Kitchen › Fridge"; '' when unplaced. Guarded against a parent cycle. */
 export function locationPath(byId: Map<number, Loc>, id: number | null): string {
   if (id == null) return '';
   const names: string[] = [];

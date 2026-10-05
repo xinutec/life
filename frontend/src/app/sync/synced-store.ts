@@ -18,56 +18,39 @@ import { LifeDb } from './life-db';
 import { startHttpReplication } from './replication';
 import { SyncSource, SyncStatus } from './sync-status';
 
-/** Tries at an undo's server restore before saying it failed: ten minutes at
- *  the retry interval, while the app is open. */
+/** An undo's server restore is retried this often before it is reported. */
 const RESTORE_ATTEMPTS = 20;
 
-/** The identity + server-managed fields every synced document carries. A
- *  collection's editable *content* is `Omit<T, keyof SyncDoc>`. */
+/** The identity and server fields every synced document carries; the rest is
+ *  content. */
 export interface SyncDoc {
-  /** Stable client identity (ULID); the RxDB primary key. */
   ulid: string;
-  /** Server autoincrement — null until the row has synced; used only by
-   *  id-keyed endpoints and to know whether a delete reached the server. */
+  /** Null until the row has synced. */
   id: number | null;
-  /** Last server revision seen (set by sync, never by a local edit). */
+  /** Last server revision seen; set by sync, never by a local edit. */
   rev: number;
 }
 
-/** Everything collection-specific a concrete store declares; the base supplies
- *  the rest of the machinery (local DB wiring, replication, the reactive query,
- *  patch / remove / two-layer undo). */
+/** What a concrete store declares about its collection. */
 export interface SyncedCollectionConfig<T> {
-  /** RxDB collection name on the shared `lifedb`. */
   name: string;
   schema: RxJsonSchema<T>;
-  /** How a pull-time merge resolves: field-level for editable collections, a
-   *  set-only tombstone for insert/delete-only ones. */
   conflictHandler: RxConflictHandler<T>;
-  /** Stable RxDB replication identity (bump to force a full re-examine). */
+  /** Bump to make RxDB re-examine every document. */
   identifier: string;
-  /** Sync endpoint, e.g. '/api/sync/shopping'. */
   path: string;
-  /** console.warn tag + sync-status source key, e.g. 'shopping sync'. */
   label: SyncSource;
-  /** Trash table this collection restores from — required to offer a restorable
-   *  delete (see {@link undoDelete}); omit for insert/delete-only collections
-   *  that never surface an Undo. */
+  /** Needed for {@link undoDelete} to restore on the server. */
   trashKind?: TrashKind;
-  /** RxDB schema migrations, if the schema has changed version. */
   migrationStrategies?: MigrationStrategies;
 }
 
-/** Base of every local-first synced store: an RxDB collection as the source of
- *  truth, background HTTP replication, and the shared patch / remove / revive /
- *  undo mechanics. A subclass supplies {@link config} and reads through
- *  {@link liveQuery}.
- *
- *  `collection` is created on a microtask so `config()` runs after subclass
- *  field initialisers, and may use injected subclass state. */
+/** Base of every local-first synced store: an RxDB collection, its replication,
+ *  and patch / remove / undo. `collection` starts on a microtask so `config()`
+ *  runs after the subclass's field initialisers. */
 @Injectable()
 export abstract class SyncedStore<T extends SyncDoc> {
-  /** null = ok; a string = a sync problem to surface (e.g. login required). */
+  /** A sync problem to show, or null. */
   readonly syncError = signal<string | null>(null);
 
   private lifeDb = inject(LifeDb);
@@ -78,62 +61,45 @@ export abstract class SyncedStore<T extends SyncDoc> {
   private replication?: ReturnType<typeof startHttpReplication<T>>;
   private cfg!: SyncedCollectionConfig<T>;
 
-  /** The concrete store's one-time, collection-specific description. */
   protected abstract config(): SyncedCollectionConfig<T>;
 
   protected readonly collection: Promise<RxCollection<T>> = Promise.resolve().then(() =>
     this.init(),
   );
 
-  /** A live, offline, reactive view of the non-deleted rows (RxDB filters
-   *  tombstones). Pass a sort; omit it for natural (primary-key) order. */
+  /** The live, non-deleted rows; primary-key order without a sort. */
   protected liveQuery(sort?: MangoQuerySortPart<T>[]): Observable<T[]> {
     return from(this.collection).pipe(
       switchMap((col) => (sort ? col.find({ sort }) : col.find()).$),
-      // RxDB types a document's JSON as RxDocumentData<T> (T plus _rev/_meta/
-      // _attachments). Narrowing it back to T is a claim about RxDB's own
-      // representation, not about anything on the wire, and it is stated here
-      // once for every store rather than at each query.
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- RxDB's own representation, see above
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- RxDocumentData<T> is T plus RxDB's own fields
       map((docs) => docs.map((d) => d.toJSON() as T)),
       shareReplay({ bufferSize: 1, refCount: false }),
     );
   }
 
-  /** Optimistic local edit of one row's content fields (never the identity /
-   *  server fields — hence the content-only parameter type). */
+  /** A local edit of content fields; identity and server fields are not editable. */
   async patch(key: string, fields: Partial<Omit<T, keyof SyncDoc>>): Promise<void> {
     const doc = await this.find(key);
-    // Content keys are a subset of `keyof T`, so the widening cast is sound; it
-    // just bridges the generic `T` to RxDB's own patch type.
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- content keys are a subset of keyof T (above)
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- content keys are a subset of keyof T
     await doc?.incrementalPatch(fields as Partial<T>);
   }
 
-  /** Soft-delete (tombstone) one row; syncs as a set-only tombstone. */
+  /** Tombstone one row. */
   async remove(key: string): Promise<void> {
     const doc = await this.find(key);
     await doc?.remove();
   }
 
-  /** Bring a just-removed doc back locally under the same ulid (insert after
-   *  remove revives the RxDB tombstone). Offline-safe; the local half of
-   *  {@link undoDelete}. */
+  /** Bring a removed doc back locally, under the same ulid. */
   async revive(doc: T): Promise<void> {
     const col = await this.collection;
     await col.insert({ ...doc });
   }
 
-  /** Undo a delete both layers deep: revive locally (works offline) AND, for a
-   *  row the server has already seen, the authoritative server-side trash
-   *  restore. A plain re-push can never clear a server tombstone (the set-only
-   *  rule), so a synced row's undo MUST go through the trash endpoint; a 404
-   *  there just means our delete push hadn't landed yet and the local revive
-   *  already covers it.
-   *
-   *  Any other failure is retried: the server may hold the delete, and the
-   *  revived row would vanish at the next pull. Only a restore that keeps
-   *  failing is reported, and points at the one way back. */
+  /** Undo a delete: revive locally, and restore on the server, since no push
+   *  can clear a server tombstone. A 404 means the delete never got there. Any
+   *  other failure is retried, as the revived row would otherwise vanish at the
+   *  next pull. */
   async undoDelete(doc: T): Promise<void> {
     await this.revive(doc);
     const kind = this.cfg.trashKind;
@@ -160,15 +126,11 @@ export abstract class SyncedStore<T extends SyncDoc> {
       });
   }
 
-  /** How long a failed undo waits before trying again, if the device doesn't
-   *  come back online first. A field so a test need not wait it out. */
+  /** Overridden by tests. */
   protected restoreRetryMs = 30_000;
 
-  /** Pull now, e.g. right after a trash restore, so the row reappears at once.
-   *
-   *  ⚠ `start()`, NOT rxdb's `reSync()`: that emits into a Subject which exists
-   *  only once replication has started, and a tab that lost the leader election
-   *  never starts it, so the call is dropped (pinned by replication.spec.ts). */
+  /** Pull now. `start()`, not RxDB's `reSync()`, which a tab that lost the
+   *  leader election silently drops. */
   reSync(): void {
     void this.replication?.start();
   }

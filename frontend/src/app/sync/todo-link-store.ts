@@ -5,9 +5,8 @@ import { type RxConflictHandler, type RxJsonSchema } from 'rxdb';
 import { LinkKind, TargetKind } from '../models';
 import { SyncedCollectionConfig, SyncedStore } from './synced-store';
 
-/** A to-do connection stored locally. `from` is the source to-do's ulid; the
- *  target is a soft ref (`targetRef` interpreted per `targetKind`). Mirrors the
- *  backend `TodoLinkDoc`. */
+/** A to-do connection; `targetRef` is read per `targetKind`. Mirrors the backend
+ *  `TodoLinkDoc`. */
 // dev-lint: allow-wire-mirror RxDB owns the _deleted tombstone dimension;
 // the wire type adds it in the replication layer, not in this local doc.
 export interface TodoLinkDoc {
@@ -40,23 +39,17 @@ const schema: RxJsonSchema<TodoLinkDoc> = {
   required: ['ulid', 'from', 'kind', 'targetKind', 'targetRef', 'rev'],
 };
 
-// Links are insert/delete-only — no editable fields — so this deliberately does
-// NOT use the shared field-level `makeConflictHandler` (shopping/todo do). A
-// tombstone stands; otherwise local wins. If links ever gain an editable field,
-// switch to makeConflictHandler so one side's edit isn't silently dropped.
+// Links have no editable fields, so a tombstone stands and otherwise local wins.
+// An editable field would need makeConflictHandler.
 const conflictHandler: RxConflictHandler<TodoLinkDoc> = {
   isEqual: (a, b) => a.rev === b.rev && !!a._deleted === !!b._deleted,
   resolve: ({ realMasterState, newDocumentState }) =>
     Promise.resolve(realMasterState._deleted ? realMasterState : newDocumentState),
 };
 
-/** Local-first store for the to-do connection edges — the machinery lives in
- *  {@link SyncedStore}. Insert/delete-only (no content edits, no trash-restore
- *  undo), so it declares only its collection, custom conflict handler, and the
- *  add-with-dedup / bulk-remove operations. */
+/** The to-do connections: insert and delete only. */
 @Injectable({ providedIn: 'root' })
 export class TodoLinkStore extends SyncedStore<TodoLinkDoc> {
-  /** Live, non-deleted connection edges (natural order). */
   readonly links$ = this.liveQuery();
 
   protected config(): SyncedCollectionConfig<TodoLinkDoc> {
@@ -91,8 +84,7 @@ export class TodoLinkStore extends SyncedStore<TodoLinkDoc> {
     await col.insert({ ulid: ulid(), id: null, rev: 0, ...input });
   }
 
-  /** Remove every edge touching a to-do (from OR target) — used when a to-do is
-   *  deleted so it leaves no dangling connections. */
+  /** Remove every edge from or to a to-do. */
   async removeForTodo(todoUlid: string): Promise<void> {
     const col = await this.collection;
     await col

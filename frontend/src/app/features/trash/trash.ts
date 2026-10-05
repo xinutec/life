@@ -15,7 +15,7 @@ import { ShoppingStore } from '../../sync/shopping-store';
 import { TodoStore } from '../../sync/todo-store';
 import { WellbeingStore } from '../../sync/wellbeing-store';
 
-/** Icon + label per kind — matching the nav so the origin is recognisable. */
+/** As in the nav, so the origin is recognisable. */
 const KIND_META: Record<TrashKind, { icon: string; label: string }> = {
   item: { icon: 'inventory_2', label: 'Item' },
   location: { icon: 'place', label: 'Place' },
@@ -27,9 +27,7 @@ const KIND_META: Record<TrashKind, { icon: string; label: string }> = {
   file: { icon: 'attach_file', label: 'File' },
 };
 
-/** Recently deleted — everything ever deleted, restorable with one tap.
- *  Deletes only ever tombstone; this is the way back. Online-only (the trash
- *  lives on the server). */
+/** Everything deleted, restorable with one tap. */
 @Component({
   selector: 'app-trash',
   templateUrl: './trash.html',
@@ -44,12 +42,10 @@ export class Trash {
   private wellbeingStore = inject(WellbeingStore);
   private trashStore = inject(TrashStore);
 
-  // Retained across tab switches, refreshed in the background (see CachedResource).
   readonly entries = computed(() => this.trashStore.value() ?? []);
   readonly loaded = this.trashStore.loaded;
   readonly error = this.trashStore.error;
   readonly refreshing = this.trashStore.refreshing;
-  /** Refs with a restore in flight (disables their button). */
   readonly busy = signal<ReadonlySet<string>>(new Set());
 
   constructor() {
@@ -77,8 +73,7 @@ export class Trash {
         this.trashStore.patch((list) =>
           (list ?? []).filter((e) => !(e.kind === entry.kind && e.ref === entry.ref)),
         );
-        // Synced kinds come back through replication — pull right away so the
-        // restored row is on screen when the user switches tabs.
+        // Pull now, so the restored row is there on the next screen.
         if (entry.kind === 'shopping') this.shoppingStore.reSync();
         if (entry.kind === 'todo') this.todoStore.reSync();
         if (entry.kind === 'wellbeing') this.wellbeingStore.reSync();
