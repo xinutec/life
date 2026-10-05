@@ -12,6 +12,7 @@ export class Alerts {
   refreshConflicts(): void {
     this.api.conflicts().subscribe({
       next: (list) => this.conflictCount.set(list.length),
+      // dev-lint: allow-ignored-error keeps the last count; the conflicts page reports its own load failure
       error: () => {},
     });
   }

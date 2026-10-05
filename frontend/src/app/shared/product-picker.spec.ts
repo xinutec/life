@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { signal } from '@angular/core';
-import { of } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
+import { of, throwError } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Feedback } from './feedback';
@@ -270,6 +271,20 @@ describe('ProductPicker', () => {
     expect(fixture.componentInstance.asda()).toEqual([hit]);
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Asda thing');
     expect(fixture.componentInstance.shopProviders).toEqual([]); // no app bridge, yet Asda shows
+  });
+
+  it('a search that failed says so, not "no matches"', async () => {
+    // Offline, both remote tiers fail; empty tiers alone would read as nothing found.
+    const { fixture, api } = setup();
+    const offline = () => throwError(() => new HttpErrorResponse({ status: 0 }));
+    api.searchProducts.mockImplementation(offline);
+    api.searchAsda.mockImplementation(offline);
+    fixture.detectChanges();
+    await new Promise((r) => setTimeout(r, 300));
+    fixture.detectChanges();
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Could not search — are you online?');
+    expect(text).not.toContain('No matches yet');
   });
 
   it('picking a shop hit fetches, imports, and closes linked to the import', async () => {

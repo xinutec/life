@@ -170,7 +170,7 @@ export class Inventory {
       product_id: it.product_id,
     });
     this.feedback.notify(`Added ${it.name} to the Buy list.`);
-    // Best-effort: the list add is what was asked for.
+    // dev-lint: allow-ignored-error best-effort: the list add is what was asked for
     this.api.markLow(it.id).subscribe({ error: () => undefined });
   }
 

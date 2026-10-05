@@ -9,6 +9,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatListModule } from '@angular/material/list';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import {
+  Observable,
   Subject,
   catchError,
   debounceTime,
@@ -16,9 +17,11 @@ import {
   firstValueFrom,
   of,
   switchMap,
+  tap,
 } from 'rxjs';
 
 import { LifeApi } from '../life-api';
+import { onlineHint } from './api-error';
 import { AsdaHit, Item, ItemCategory, PackSize, Product } from '../models';
 import { ShopCandidate, ShopProvider, Shops, shopPrice } from '../shop';
 import { WAITROSE } from '../shops/waitrose';
@@ -107,14 +110,23 @@ export class ProductPicker {
   readonly query = signal(this.data.initialQuery.trim());
   private readonly query$ = new Subject<string>();
 
-  /** A failed tier is an empty tier. */
+  /** Why the last search came back short, or null: " — are you online?" or "". */
+  readonly searchFailed = signal<string | null>(null);
+
+  /** A failed tier is an empty tier, but says so: "no matches" offline is false. */
+  private failedTier<T>(e: unknown): Observable<T[]> {
+    this.searchFailed.set(onlineHint(e));
+    return of([] as T[]);
+  }
+
   private readonly catalogRaw = toSignal(
     this.query$.pipe(
       debounceTime(250),
       distinctUntilChanged(),
+      tap(() => this.searchFailed.set(null)),
       switchMap((q) =>
         q
-          ? this.api.searchProducts(q).pipe(catchError(() => of([] as Product[])))
+          ? this.api.searchProducts(q).pipe(catchError((e: unknown) => this.failedTier<Product>(e)))
           : of([] as Product[]),
       ),
     ),
@@ -127,7 +139,7 @@ export class ProductPicker {
       distinctUntilChanged(),
       switchMap((q) =>
         q
-          ? this.api.searchAsda(q).pipe(catchError(() => of([] as AsdaHit[])))
+          ? this.api.searchAsda(q).pipe(catchError((e: unknown) => this.failedTier<AsdaHit>(e)))
           : of([] as AsdaHit[]),
       ),
     ),

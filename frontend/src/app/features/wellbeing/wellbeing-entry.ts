@@ -90,6 +90,7 @@ export class WellbeingEntry implements OnDestroy {
       this.warmed = true;
       this.api
         .warmEmotions({ candidates: EMOTION_NODES.map((n) => ({ token: n.token, desc: n.desc })) })
+        // dev-lint: allow-ignored-error a warm-up; the real request reports its own failure
         .subscribe({ next: () => {}, error: () => {} });
     }
   }

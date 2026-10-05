@@ -121,6 +121,7 @@ export class TodoGraph {
       switchMap(() =>
         this.api.house().pipe(
           map((h) => (h.rooms ?? []).map((r) => r.name).filter((n): n is string => !!n)),
+          // dev-lint: allow-ignored-error room names only suggest; with none, the field still takes any text
           catchError(() => of([] as string[])),
         ),
       ),

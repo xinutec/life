@@ -90,7 +90,11 @@
   }
 
   @if (query().trim() && !locals().length && !catalog().length && !asda().length) {
-    <p class="state">No matches yet — keep typing, or add it by name.</p>
+    @if (searchFailed() !== null) {
+      <p class="state">Could not search{{ searchFailed() }} — you can still add it by name.</p>
+    } @else {
+      <p class="state">No matches yet — keep typing, or add it by name.</p>
+    }
   }
 
   @for (provider of shopProviders; track provider.id) {

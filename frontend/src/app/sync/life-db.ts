@@ -58,7 +58,7 @@ export class LifeDb {
       });
       return added[name] as RxCollection<T>;
     });
-    // A failed add must not block the ones after it.
+    // dev-lint: allow-ignored-error a failed add must not block the ones after it; `result` still carries the error
     this.chain = result.catch(() => undefined);
     return result;
   }

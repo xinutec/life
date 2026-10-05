@@ -92,7 +92,7 @@ export class ShoppingItemSheet {
       category: this.category(),
       product_id: this.productId(),
     };
-    // Warms the product image cache; best-effort.
+    // dev-lint: allow-ignored-error warms the product image cache; best-effort
     if (barcode) this.api.lookupProduct(barcode).subscribe({ next: () => {}, error: () => {} });
 
     if (this.ulid) {
@@ -104,6 +104,7 @@ export class ShoppingItemSheet {
     // Putting a thing on the list says it is running out. Best-effort.
     this.api
       .markLowByIdentity({ name, barcode, product_id: this.productId() })
+      // dev-lint: allow-ignored-error best-effort: putting it on the list is what was asked for
       .subscribe({ error: () => undefined });
     this.feedback.notify(`Added ${name}`);
     this.name.set('');
