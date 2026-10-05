@@ -104,7 +104,9 @@ async fn attaching_a_shop_keeps_the_picture_the_product_already_has() {
     )
     .await;
     let before = repo::get(&pool, &bc).await.unwrap().unwrap();
-    repo::set_image_provenance(&pool, before.id, Source::Off)
+    sqlx::query("UPDATE products SET image_source = 'off' WHERE id = ?")
+        .bind(before.id)
+        .execute(&pool)
         .await
         .unwrap();
 

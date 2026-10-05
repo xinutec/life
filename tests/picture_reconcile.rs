@@ -2,8 +2,8 @@
 //! listing offers a URL, so the divergence is by *provenance* (which source our
 //! picture came from), not by value. The rule is pure; the settle round-trip runs
 //! against a real MariaDB. Adopting re-fetches through the SSRF gate: its
-//! refusals are tested in signed_in_http_db.rs, the gate in products_off.rs, and
-//! a successful adoption needs the network, so nothing here runs one.
+//! refusals are tested in signed_in_http_db.rs and the gate in products_off.rs;
+//! here the fetched bytes are given.
 
 mod common;
 
@@ -120,7 +120,7 @@ fn a_listing_without_a_picture_offers_nothing() {
 }
 
 #[tokio::test]
-async fn settle_picture_quiets_it_until_a_url_changes() {
+async fn a_picture_is_kept_or_adopted_but_never_over_an_upload() {
     let url = common::test_db_url();
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
@@ -175,7 +175,9 @@ async fn settle_picture_quiets_it_until_a_url_changes() {
     repo::set_image_by_id(&pool, p.id, &[0x42], "image/jpeg")
         .await
         .unwrap();
-    repo::set_image_provenance(&pool, p.id, Source::Off)
+    sqlx::query("UPDATE products SET image_source = 'off' WHERE id = ?")
+        .bind(p.id)
+        .execute(&pool)
         .await
         .unwrap();
 
@@ -186,7 +188,9 @@ async fn settle_picture_quiets_it_until_a_url_changes() {
     assert_eq!(d.candidates[0].source, Source::Asda);
 
     // Keep OFF's: settling records the current set → the divergence goes quiet.
-    repo::settle_picture(&pool, p.id).await.unwrap();
+    repo::reconcile(&pool, p.id, Some(repo::PictureChoice::Keep), &[])
+        .await
+        .unwrap();
     assert!(
         picture_divergence(&pool, p.id).await.is_none(),
         "a settled picture stays quiet while nothing changes"
@@ -210,4 +214,33 @@ async fn settle_picture_quiets_it_until_a_url_changes() {
         .await
         .expect("a changed source picture re-surfaces the divergence");
     assert_eq!(d.candidates[0].value, "https://asda.example/x2.jpg");
+
+    // Adopt Asda's: its bytes and provenance land, and the choice is settled.
+    let adopt = || repo::PictureChoice::Adopt {
+        source: Source::Asda,
+        bytes: vec![0x07],
+        mime: "image/png".into(),
+    };
+    repo::reconcile(&pool, p.id, Some(adopt()), &[])
+        .await
+        .unwrap();
+    let held = repo::get_by_id(&pool, p.id).await.unwrap().unwrap();
+    assert_eq!(held.image_source, Some(Source::Asda));
+    assert_eq!(
+        repo::get_image_by_id(&pool, p.id).await.unwrap(),
+        Some((vec![0x07], "image/png".into()))
+    );
+    assert!(picture_divergence(&pool, p.id).await.is_none());
+
+    // A hand upload since is not replaced by a source's picture.
+    repo::set_image(&pool, &barcode, &[0x09], "image/jpeg")
+        .await
+        .unwrap();
+    let refused = repo::reconcile(&pool, p.id, Some(adopt()), &[]).await;
+    assert!(
+        matches!(refused, Err(repo::ReconcileError::Refused(_))),
+        "{refused:?}"
+    );
+    let (bytes, _) = repo::get_image_by_id(&pool, p.id).await.unwrap().unwrap();
+    assert_eq!(bytes, vec![0x09]);
 }

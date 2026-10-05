@@ -191,6 +191,7 @@ async fn reconcile_records_a_fact_source_and_settles() {
     repo::reconcile(
         &pool,
         product.id,
+        None,
         &[
             FieldChoice {
                 field: ReconcileField::Nutrition,
@@ -263,6 +264,7 @@ async fn adopting_a_fact_from_a_source_without_it_is_refused() {
     let picked = repo::reconcile(
         &pool,
         product.id,
+        None,
         &[FieldChoice {
             field: ReconcileField::Nutrition,
             choice: Choice::Off,

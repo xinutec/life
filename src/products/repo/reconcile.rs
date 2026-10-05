@@ -7,17 +7,18 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use anyhow::Result;
-use sqlx::MySqlPool;
+use anyhow::{Result, anyhow};
 use sqlx::types::Json;
+use sqlx::{MySqlConnection, MySqlPool};
 
+use crate::error::AppError;
 use crate::products::ids::ProductId;
 use crate::products::source::Source;
 use crate::products::types::{
     Candidate, Choice, FieldChoice, FieldDivergence, Product, ReconcileField, Reconciler,
 };
 
-use super::facts::{fact_display, facts_by_source};
+use super::facts::{fact_display, facts_by_source_in};
 use super::{Listing, get_by_id, listings_for};
 
 /// A canonical scalar field reconciliation covers: how to read its current value
@@ -198,91 +199,150 @@ pub fn picture_divergence(
     })
 }
 
-/// Record the picture bytes' provenance (which source it came from, or `user`).
-pub async fn set_image_provenance(
-    pool: &MySqlPool,
-    product_id: ProductId,
-    source: Source,
-) -> Result<()> {
-    sqlx::query("UPDATE products SET image_source = ? WHERE id = ?")
-        .bind(source)
-        .bind(product_id)
-        .execute(pool)
-        .await?;
-    Ok(())
+/// The picture side of a reconcile. Adopting needs the source's bytes, fetched
+/// over the network, so the route resolves this before the transaction opens.
+pub enum PictureChoice {
+    Keep,
+    Adopt {
+        source: Source,
+        bytes: Vec<u8>,
+        mime: String,
+    },
 }
 
-/// Settle the picture divergence: record the value set as it stands NOW (after any
-/// adoption has changed the bytes' provenance), so it stays quiet until a source's
-/// picture — or ours — changes. Call after applying the picture choice.
-pub async fn settle_picture(pool: &MySqlPool, product_id: ProductId) -> Result<()> {
-    let product = get_by_id(pool, product_id)
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("no such product: {product_id}"))?;
-    let listings = listings_for(pool, product_id).await?;
-    let set = picture_value_set(&product, &listings);
-    upsert_decision(pool, product_id, ReconcileField::Picture, &set).await
+/// A reconcile that failed: a choice the data can't honour (→ 400), or
+/// anything else (→ 500).
+#[derive(Debug, thiserror::Error)]
+pub enum ReconcileError {
+    #[error("{0}")]
+    Refused(String),
+    #[error(transparent)]
+    Db(#[from] sqlx::Error),
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+impl From<ReconcileError> for AppError {
+    fn from(e: ReconcileError) -> Self {
+        match e {
+            ReconcileError::Refused(msg) => AppError::BadRequest(msg),
+            ReconcileError::Db(e) => AppError::Other(e.into()),
+            ReconcileError::Other(e) => AppError::Other(e),
+        }
+    }
+}
+
+fn refuse<T>(msg: String) -> Result<T, ReconcileError> {
+    Err(ReconcileError::Refused(msg))
 }
 
 /// Apply reconcile decisions: set the canonical row from the chosen source, our
 /// own typed value, or leave it (keep); then record the settled value set so the
 /// divergence stays quiet until a source's value changes.
+///
+/// One transaction, the product row locked: every choice applies, or none.
 pub async fn reconcile(
     pool: &MySqlPool,
     product_id: ProductId,
+    picture: Option<PictureChoice>,
     choices: &[FieldChoice],
-) -> Result<()> {
-    let listings = listings_for(pool, product_id).await?;
-    for c in choices {
-        match c.field.reconciler() {
-            // Nutrition and ingredients settle by recording which source to
-            // trust (0035), not by writing the canonical row.
-            Reconciler::Fact => {
-                reconcile_fact(pool, product_id, c).await?;
-                continue;
+) -> Result<(), ReconcileError> {
+    let mut tx = pool.begin().await?;
+    let held: Option<(Option<Source>,)> =
+        sqlx::query_as("SELECT image_source FROM products WHERE id = ? FOR UPDATE")
+            .bind(product_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let Some((image_source,)) = held else {
+        return Err(anyhow!("no such product: {product_id}").into());
+    };
+    let listings = listings_for(&mut *tx, product_id).await?;
+    if let Some(picture) = picture {
+        if let PictureChoice::Adopt {
+            source,
+            bytes,
+            mime,
+        } = picture
+        {
+            // An upload that landed after the page was drawn is not replaced.
+            if image_source == Some(Source::User) {
+                return refuse("the picture was uploaded by hand".into());
             }
-            // The route adopts the picture itself (its bytes come through the
-            // SSRF gate) and calls `settle_picture`; it never reaches here.
-            Reconciler::Picture => anyhow::bail!("the picture is settled by the route"),
-            Reconciler::Scalar => {}
+            sqlx::query(
+                "UPDATE products SET image = ?, image_mime = ?, image_source = ?, \
+                 fetched_at = CURRENT_TIMESTAMP WHERE id = ?",
+            )
+            .bind(bytes)
+            .bind(mime)
+            .bind(source)
+            .bind(product_id)
+            .execute(&mut *tx)
+            .await?;
         }
-        let Some(spec) = RECONCILED_FIELDS.iter().find(|s| s.field == c.field) else {
-            // Unreachable while every Scalar field has a row above; a missing
-            // one is a programming error, not bad input.
-            anyhow::bail!("no reconcile spec for {}", c.field);
-        };
-        match c.choice {
-            Choice::Keep => {}
-            Choice::User => {
-                // Our own value: taken from the request, not a listing.
-                let value = c.value.as_deref().map(str::trim).filter(|v| !v.is_empty());
-                let Some(value) = value else {
-                    anyhow::bail!("choosing our own {} needs a value", c.field);
-                };
-                set_canonical_field(pool, product_id, spec, value, Source::User).await?;
-            }
-            adopt => {
-                let source = adopt
-                    .source()
-                    .ok_or_else(|| anyhow::anyhow!("{adopt} is not a source"))?;
-                let value = listings
-                    .iter()
-                    .find(|l| l.source == source)
-                    .and_then(|l| trimmed((spec.offered)(l)));
-                let Some(value) = value else {
-                    anyhow::bail!("source {source} offers no {} to adopt", c.field);
-                };
-                set_canonical_field(pool, product_id, spec, &value, source).await?;
-            }
-        }
-        // Recompute the set AFTER applying so the decision reflects the settled
-        // state (the adopted value is now the canonical one).
-        let product = get_by_id(pool, product_id)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("no such product: {product_id}"))?;
-        let set = value_set(spec, &product, &listings);
-        upsert_decision(pool, product_id, spec.field, &set).await?;
+        // Settled AFTER any change, so the set holds the new provenance.
+        let product = current(&mut tx, product_id).await?;
+        let set = picture_value_set(&product, &listings);
+        upsert_decision(&mut tx, product_id, ReconcileField::Picture, &set).await?;
     }
+    for c in choices {
+        reconcile_field(&mut tx, product_id, &listings, c).await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn current(conn: &mut MySqlConnection, product_id: ProductId) -> Result<Product> {
+    get_by_id(conn, product_id)
+        .await?
+        .ok_or_else(|| anyhow!("no such product: {product_id}"))
+}
+
+async fn reconcile_field(
+    conn: &mut MySqlConnection,
+    product_id: ProductId,
+    listings: &[Listing],
+    c: &FieldChoice,
+) -> Result<(), ReconcileError> {
+    let spec = match c.field.reconciler() {
+        // Nutrition and ingredients settle by recording which source to
+        // trust (0035), not by writing the canonical row.
+        Reconciler::Fact => return reconcile_fact(conn, product_id, c).await,
+        Reconciler::Picture => return refuse("the picture is chosen apart from the fields".into()),
+        Reconciler::Scalar => RECONCILED_FIELDS
+            .iter()
+            .find(|s| s.field == c.field)
+            // Every Scalar field has a row above; a missing one is a bug.
+            .ok_or_else(|| anyhow!("no reconcile spec for {}", c.field))?,
+    };
+    match c.choice {
+        Choice::Keep => {}
+        Choice::User => {
+            // Our own value: taken from the request, not a listing.
+            let value = c.value.as_deref().map(str::trim).filter(|v| !v.is_empty());
+            let Some(value) = value else {
+                return refuse(format!("choosing our own {} needs a value", c.field));
+            };
+            set_canonical_field(conn, product_id, spec, value, Source::User).await?;
+        }
+        adopt => {
+            let Some(source) = adopt.source() else {
+                return refuse(format!("{adopt} is not a source"));
+            };
+            let value = listings
+                .iter()
+                .find(|l| l.source == source)
+                .and_then(|l| trimmed((spec.offered)(l)));
+            let Some(value) = value else {
+                return refuse(format!("source {source} offers no {} to adopt", c.field));
+            };
+            set_canonical_field(conn, product_id, spec, &value, source).await?;
+        }
+    }
+    // Recompute the set AFTER applying so the decision reflects the settled
+    // state (the adopted value is now the canonical one).
+    let product = current(conn, product_id).await?;
+    let set = value_set(spec, &product, listings);
+    upsert_decision(conn, product_id, spec.field, &set).await?;
     Ok(())
 }
 
@@ -291,19 +351,25 @@ pub async fn reconcile(
 /// a source id records that source, if it actually offers the fact. `USER` is
 /// rejected — these facts are chosen among sources, never typed by hand (unlike
 /// the scalar fields), so we never invent a nutrition panel or ingredient list.
-async fn reconcile_fact(pool: &MySqlPool, product_id: ProductId, c: &FieldChoice) -> Result<()> {
+async fn reconcile_fact(
+    conn: &mut MySqlConnection,
+    product_id: ProductId,
+    c: &FieldChoice,
+) -> Result<(), ReconcileError> {
     if c.choice == Choice::User {
-        anyhow::bail!("{} is chosen by source, not typed", c.field);
+        return refuse(format!("{} is chosen by source, not typed", c.field));
     }
-    let by_source = facts_by_source(pool, product_id).await?;
+    let by_source = facts_by_source_in(conn, product_id).await?;
     let source = match c.choice.source() {
         // by_source is precedence-ordered; the first source that has this fact
         // is the current pick.
-        None => by_source
+        None => match by_source
             .iter()
             .find(|s| fact_display(c.field, &s.facts).is_some())
-            .map(|s| s.source)
-            .ok_or_else(|| anyhow::anyhow!("no source offers {} to keep", c.field))?,
+        {
+            Some(s) => s.source,
+            None => return refuse(format!("no source offers {} to keep", c.field)),
+        },
         Some(want) => {
             let has = by_source
                 .iter()
@@ -311,30 +377,20 @@ async fn reconcile_fact(pool: &MySqlPool, product_id: ProductId, c: &FieldChoice
                 .and_then(|s| fact_display(c.field, &s.facts))
                 .is_some();
             if !has {
-                anyhow::bail!("source {want} offers no {} to adopt", c.field);
+                return refuse(format!("source {want} offers no {} to adopt", c.field));
             }
             want
         }
     };
-    upsert_fact_source(pool, product_id, c.field, source).await
-}
-
-/// Record (or change) the source picked to trust for a fact kind (0035).
-async fn upsert_fact_source(
-    pool: &MySqlPool,
-    product_id: ProductId,
-    kind: ReconcileField,
-    source: Source,
-) -> Result<()> {
     sqlx::query(
         "INSERT INTO product_fact_sources (product_id, kind, source) \
          VALUES (?, ?, ?) \
          ON DUPLICATE KEY UPDATE source = VALUES(source), decided_at = CURRENT_TIMESTAMP",
     )
     .bind(product_id)
-    .bind(kind)
+    .bind(c.field)
     .bind(source)
-    .execute(pool)
+    .execute(conn)
     .await?;
     Ok(())
 }
@@ -345,7 +401,7 @@ async fn upsert_fact_source(
 /// a field that has an `adopt_sql`, so "which column" is settled by construction
 /// and there is nothing to reject at runtime.
 async fn set_canonical_field(
-    pool: &MySqlPool,
+    conn: &mut MySqlConnection,
     product_id: ProductId,
     spec: &ReconciledField,
     value: &str,
@@ -360,13 +416,13 @@ async fn set_canonical_field(
         .bind(value)
         .bind(source)
         .bind(product_id)
-        .execute(pool)
+        .execute(conn)
         .await?;
     Ok(())
 }
 
 async fn upsert_decision(
-    pool: &MySqlPool,
+    conn: &mut MySqlConnection,
     product_id: ProductId,
     field: ReconcileField,
     set: &[String],
@@ -380,7 +436,7 @@ async fn upsert_decision(
     .bind(product_id)
     .bind(field)
     .bind(json)
-    .execute(pool)
+    .execute(conn)
     .await?;
     Ok(())
 }

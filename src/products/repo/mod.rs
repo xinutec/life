@@ -99,10 +99,13 @@ pub async fn search(pool: &MySqlPool, query: &str, limit: u64) -> Result<Vec<Pro
 }
 
 /// Catalog row by surrogate id, or None.
-pub async fn get_by_id(pool: &MySqlPool, id: ProductId) -> Result<Option<Product>> {
+pub async fn get_by_id(
+    conn: impl sqlx::Executor<'_, Database = sqlx::MySql>,
+    id: ProductId,
+) -> Result<Option<Product>> {
     let row: Option<MetaRow> = sqlx::query_as(concat!(product_select!(), " WHERE id = ?"))
         .bind(id)
-        .fetch_optional(pool)
+        .fetch_optional(conn)
         .await?;
     Ok(row.map(Product::from))
 }

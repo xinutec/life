@@ -347,70 +347,67 @@ pub async fn reconcile(
     if repo::get_by_id(&app.pool, id).await?.is_none() {
         return Err(AppError::NotFound);
     }
-    // The picture reconciles differently: adopting it means re-fetching the
-    // source's image through the SSRF gate (an I/O concern the route owns), not a
-    // value copy. Split it out and handle it here; the rest is a plain DB reconcile.
-    let (picture, scalar): (Vec<_>, Vec<_>) = body
+    // The picture is chosen apart: adopting it re-fetches the source's image
+    // through the SSRF gate, which happens here, before the transaction.
+    let (mut pictures, fields): (Vec<_>, Vec<_>) = body
         .into_iter()
         .partition(|c| c.field == ReconcileField::Picture);
-    let total = picture.len() + scalar.len();
-    for c in &picture {
-        apply_picture_choice(&app.pool, id, c).await?;
-    }
-    repo::reconcile(&app.pool, id, &scalar)
-        .await
-        .map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let total = pictures.len() + fields.len();
+    let picture = match (pictures.pop(), pictures.is_empty()) {
+        (None, _) => None,
+        (Some(c), true) => Some(picture_choice(&app.pool, id, &c).await?),
+        (Some(_), false) => {
+            return Err(AppError::BadRequest("one picture choice at most".into()));
+        }
+    };
+    repo::reconcile(&app.pool, id, picture, &fields).await?;
     tracing::info!(product = %id, decisions = total, "product reconciled");
     Ok(Json(build_detail(&app.pool, &user.user_id, id).await?))
 }
 
-/// Apply a picture reconcile choice. `keep` just settles the divergence; a source
-/// id adopts that source's picture — re-fetching its bytes through the same
-/// SSRF-gated, no-redirect fetch the import path uses, then recording the new
-/// provenance. `user` is rejected: a picture is uploaded (PUT .../image), not
-/// picked as "our own" the way a typed name is.
-async fn apply_picture_choice(
+/// Resolve a picture reconcile choice. A source id fetches that source's
+/// picture through the same SSRF-gated, no-redirect fetch the import path
+/// uses. `user` is refused: a picture is uploaded (PUT .../image), not picked
+/// as "our own" the way a typed name is.
+async fn picture_choice(
     pool: &sqlx::MySqlPool,
     id: ProductId,
     c: &FieldChoice,
-) -> Result<(), AppError> {
-    match c.choice {
+) -> Result<repo::PictureChoice, AppError> {
+    let source = match c.choice {
         Choice::User => {
             return Err(AppError::BadRequest(
                 "a picture is uploaded, not typed".into(),
             ));
         }
-        // Keep: nothing to fetch, just settle below.
-        Choice::Keep => {}
-        adopt => {
-            let source = adopt
-                .source()
-                .ok_or_else(|| AppError::BadRequest(format!("{adopt} is not a source")))?;
-            let listings = repo::listings_for(pool, id).await?;
-            let url = listings
-                .iter()
-                .find(|l| l.source == source)
-                .and_then(|l| l.image_url.as_deref())
-                .filter(|s| !s.is_empty())
-                .ok_or_else(|| {
-                    AppError::BadRequest(format!("source {source} offers no picture to adopt"))
-                })?;
-            let hosts = source.image_hosts();
-            if hosts.is_empty() {
-                return Err(AppError::BadRequest(format!(
-                    "source {source} carries no adoptable picture"
-                )));
-            }
-            let (bytes, mime) = off::fetch_image_from(url, hosts).await?.ok_or_else(|| {
-                AppError::BadRequest("the source's picture host is not allowed".into())
-            })?;
-            repo::set_image_by_id(pool, id, &bytes, &mime).await?;
-            repo::set_image_provenance(pool, id, source).await?;
-        }
+        Choice::Keep => return Ok(repo::PictureChoice::Keep),
+        adopt => adopt
+            .source()
+            .ok_or_else(|| AppError::BadRequest(format!("{adopt} is not a source")))?,
+    };
+    let listings = repo::listings_for(pool, id).await?;
+    let url = listings
+        .iter()
+        .find(|l| l.source == source)
+        .and_then(|l| l.image_url.as_deref())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            AppError::BadRequest(format!("source {source} offers no picture to adopt"))
+        })?;
+    let hosts = source.image_hosts();
+    if hosts.is_empty() {
+        return Err(AppError::BadRequest(format!(
+            "source {source} carries no adoptable picture"
+        )));
     }
-    // Settle AFTER any change, so the recorded set reflects the new provenance.
-    repo::settle_picture(pool, id).await?;
-    Ok(())
+    let (bytes, mime) = off::fetch_image_from(url, hosts)
+        .await?
+        .ok_or_else(|| AppError::BadRequest("the source's picture host is not allowed".into()))?;
+    Ok(repo::PictureChoice::Adopt {
+        source,
+        bytes,
+        mime,
+    })
 }
 
 /// The answer to "does this shop carry this product?".

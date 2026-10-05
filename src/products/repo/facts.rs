@@ -304,32 +304,40 @@ pub async fn facts_for(pool: &MySqlPool, product_id: ProductId) -> Result<Produc
 /// (`merge_facts`) and for provenance/divergence — fetched once, reasoned over
 /// purely. Sources are returned in precedence order (retailer before crowd).
 pub async fn facts_by_source(pool: &MySqlPool, product_id: ProductId) -> Result<Vec<SourceFacts>> {
+    let mut conn = pool.acquire().await?;
+    facts_by_source_in(&mut conn, product_id).await
+}
+
+pub(super) async fn facts_by_source_in(
+    conn: &mut MySqlConnection,
+    product_id: ProductId,
+) -> Result<Vec<SourceFacts>> {
     let nrows: Vec<NutritionRow> = sqlx::query_as(
         "SELECT source, basis, serving_size, energy_kj, energy_kcal, fat_g, saturates_g, \
          carbohydrate_g, sugars_g, fibre_g, protein_g, salt_g, extra \
          FROM product_nutrition WHERE product_id = ?",
     )
     .bind(product_id)
-    .fetch_all(pool)
+    .fetch_all(&mut *conn)
     .await?;
     let ing_rows: Vec<(Source, String)> =
         sqlx::query_as("SELECT source, text FROM product_ingredients WHERE product_id = ?")
             .bind(product_id)
-            .fetch_all(pool)
+            .fetch_all(&mut *conn)
             .await?;
     let allergen_rows: Vec<(Source, String, Presence)> = sqlx::query_as(
         "SELECT source, allergen, presence FROM product_allergens WHERE product_id = ? \
          ORDER BY allergen",
     )
     .bind(product_id)
-    .fetch_all(pool)
+    .fetch_all(&mut *conn)
     .await?;
     let dietary_rows: Vec<(Source, Diet, Claim)> = sqlx::query_as(
         "SELECT source, flag, value FROM product_dietary_flags WHERE product_id = ? \
          ORDER BY flag",
     )
     .bind(product_id)
-    .fetch_all(pool)
+    .fetch_all(&mut *conn)
     .await?;
 
     // Group every table's rows by source into one ProductFacts each.

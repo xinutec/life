@@ -180,6 +180,7 @@ async fn reconcile_adopts_keeps_and_settles_against_the_db() {
     repo::reconcile(
         &pool,
         p.id,
+        None,
         &[
             FieldChoice {
                 field: ReconcileField::Brand,
@@ -249,7 +250,7 @@ async fn our_own_name_wins_over_every_source_and_survives_a_refresh() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let barcode: Barcode = "5000000000789".parse().unwrap();
+    let barcode: Barcode = "5000000000819".parse().unwrap();
     let (off_ext, asda_ext): (ExternalId, ExternalId) = (
         "ourtest-off".parse().unwrap(),
         "ourtest-asda".parse().unwrap(),
@@ -297,6 +298,7 @@ async fn our_own_name_wins_over_every_source_and_survives_a_refresh() {
     repo::reconcile(
         &pool,
         p.id,
+        None,
         &[FieldChoice {
             field: ReconcileField::Name,
             choice: Choice::User,
@@ -356,7 +358,7 @@ async fn our_own_brand_and_pack_win_over_sources_and_survive_a_refresh() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let barcode: Barcode = "5000000000790".parse().unwrap();
+    let barcode: Barcode = "5000000000826".parse().unwrap();
     let asda_ext: ExternalId = "ourdetails-asda".parse().unwrap();
     sqlx::query("DELETE FROM products WHERE barcode = ?")
         .bind(&barcode)
@@ -390,6 +392,7 @@ async fn our_own_brand_and_pack_win_over_sources_and_survive_a_refresh() {
     repo::reconcile(
         &pool,
         p.id,
+        None,
         &[
             FieldChoice {
                 field: ReconcileField::Brand,
@@ -491,6 +494,7 @@ async fn a_barcodeless_source_refresh_keeps_our_own_brand() {
     repo::reconcile(
         &pool,
         p.id,
+        None,
         &[FieldChoice {
             field: ReconcileField::Brand,
             choice: Choice::User,
@@ -558,6 +562,7 @@ async fn a_barcodeless_source_refresh_keeps_our_own_name() {
     repo::reconcile(
         &pool,
         p.id,
+        None,
         &[FieldChoice {
             field: ReconcileField::Name,
             choice: Choice::User,
@@ -596,5 +601,87 @@ async fn a_barcodeless_source_refresh_keeps_our_own_name() {
             .raw_name
             .as_deref(),
         Some("Shop Spelling v2"),
+    );
+}
+
+#[tokio::test]
+async fn a_refused_choice_leaves_the_earlier_ones_unwritten() {
+    let url = common::test_db_url();
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    let barcode: Barcode = "5000000000802".parse().unwrap();
+    let (off_ext, asda_ext): (ExternalId, ExternalId) = (
+        "rectest-atomic-off".parse().unwrap(),
+        "rectest-atomic-asda".parse().unwrap(),
+    );
+    sqlx::query("DELETE FROM products WHERE barcode = ?")
+        .bind(&barcode)
+        .execute(&pool)
+        .await
+        .unwrap();
+    for ext in [&off_ext, &asda_ext] {
+        sqlx::query("DELETE FROM product_listings WHERE external_id = ?")
+            .bind(ext)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    let p = repo::upsert_external(
+        &pool,
+        Source::Off,
+        &off_ext,
+        Some(&barcode),
+        &repo::ListingFields {
+            raw_name: Some("Oats"),
+            brand: Some("OFF Brand"),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    repo::upsert_external(
+        &pool,
+        Source::Asda,
+        &asda_ext,
+        Some(&barcode),
+        &repo::ListingFields {
+            raw_name: Some("Oats"),
+            brand: Some("Asda Brand"),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    // The brand choice is fine; the name choice after it is refused.
+    let result = repo::reconcile(
+        &pool,
+        p.id,
+        None,
+        &[
+            FieldChoice {
+                field: ReconcileField::Brand,
+                choice: Choice::Asda,
+                value: None,
+            },
+            FieldChoice {
+                field: ReconcileField::Name,
+                choice: Choice::User,
+                value: None,
+            },
+        ],
+    )
+    .await;
+
+    assert!(
+        matches!(result, Err(repo::ReconcileError::Refused(_))),
+        "our own name needs a value: {result:?}"
+    );
+    let after = repo::get_by_id(&pool, p.id).await.unwrap().unwrap();
+    assert_eq!(after.brand.as_deref(), Some("OFF Brand"));
+    assert!(
+        repo::field_decisions(&pool, p.id).await.unwrap().is_empty(),
+        "no decision is recorded for a reconcile that failed"
     );
 }
