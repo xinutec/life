@@ -8,8 +8,9 @@
 
 use std::collections::HashMap;
 
-use super::matching::{norm, stock_for};
+use super::matching::stock_for;
 use super::types::{Recipe, RecipeIngredient};
+use crate::inventory::consume::same_unit;
 use crate::inventory::types::{Item, ItemId};
 use serde::Serialize;
 use ts_rs::TS;
@@ -86,11 +87,10 @@ fn drain_order<'a>(
     unit: Option<&str>,
     remaining: &HashMap<ItemId, f64>,
 ) -> Vec<&'a Item> {
-    let want = unit.map(norm);
     let mut usable: Vec<&Item> = matches
         .iter()
         .copied()
-        .filter(|it| it.unit.as_deref().map(norm) == want && left_of(it, remaining) > 0.0)
+        .filter(|it| same_unit(it.unit.as_deref(), unit) && left_of(it, remaining) > 0.0)
         .collect();
     usable.sort_by(|a, b| {
         // A date is a reason to hurry and its absence is not, so a row carrying
@@ -167,11 +167,17 @@ fn plan_line(
 /// Every ingredient appears in the result, including the ones nothing happened
 /// to — see the module docs for why silence would be the wrong answer.
 pub fn plan(recipe: &Recipe, inventory: &[Item]) -> Vec<CookedLine> {
+    plan_ingredients(&recipe.ingredients, inventory)
+}
+
+pub(super) fn plan_ingredients(
+    ingredients: &[RecipeIngredient],
+    inventory: &[Item],
+) -> Vec<CookedLine> {
     // Threaded across lines so two ingredients naming the same thing drain it
     // once between them rather than twice each from the original amount.
     let mut remaining: HashMap<ItemId, f64> = HashMap::new();
-    recipe
-        .ingredients
+    ingredients
         .iter()
         .map(|ing| CookedLine {
             ingredient: ing.name.clone(),

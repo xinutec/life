@@ -1,6 +1,7 @@
 //! Pure recipe↔inventory matching: "shopping list = recipe − stock" and
 //! "can I cook this now". Kept free of the DB so it is unit-tested directly.
 
+use super::cooking::{LineOutcome, Untouched, plan_ingredients};
 use super::types::RecipeIngredient;
 use crate::inventory::types::Item;
 
@@ -28,40 +29,30 @@ pub(crate) fn stock_for<'a>(ingredient: &RecipeIngredient, inventory: &'a [Item]
         .collect()
 }
 
-/// Whether the inventory satisfies one ingredient. A row used down to zero is
-/// "we have none", not a match. When the ingredient gives a quantity and some
-/// stock in the same unit (no unit on both sides counts) gives one too, the
-/// summed stock must meet it; otherwise presence of a match is enough.
-fn is_satisfied(ingredient: &RecipeIngredient, inventory: &[Item]) -> bool {
-    let matches: Vec<&Item> = stock_for(ingredient, inventory)
-        .into_iter()
-        .filter(|it| it.quantity.is_none_or(|q| q > 0.0))
-        .collect();
-    if matches.is_empty() {
-        return false;
-    }
-    let Some(needed) = ingredient.quantity else {
-        return true;
-    };
-    let want_unit = ingredient.unit.as_deref().map(norm);
-    let comparable: Vec<f64> = matches
-        .iter()
-        .filter(|it| it.unit.as_deref().map(norm) == want_unit)
-        .filter_map(|it| it.quantity)
-        .collect();
-    // Nothing measured in the recipe's unit: presence is all we can judge.
-    comparable.is_empty() || comparable.iter().sum::<f64>() >= needed
-}
-
 /// The ingredients NOT covered by current inventory — i.e. the shopping list.
+///
+/// Read off the cooking plan, so "can I cook this" is "would cooking come up
+/// short", stock shared between lines included. A line the plan can't measure
+/// ("salt", grams against jars) is covered by any match not used down to zero.
 pub fn shopping_list(
     ingredients: &[RecipeIngredient],
     inventory: &[Item],
 ) -> Vec<RecipeIngredient> {
+    let lines = plan_ingredients(ingredients, inventory);
     ingredients
         .iter()
-        .filter(|ing| !is_satisfied(ing, inventory))
-        .cloned()
+        .zip(lines)
+        .filter(|(ing, line)| match line.outcome {
+            LineOutcome::Took { .. } => false,
+            LineOutcome::Short { .. }
+            | LineOutcome::Untouched {
+                why: Untouched::NoStock,
+            } => true,
+            LineOutcome::Untouched { .. } => !stock_for(ing, inventory)
+                .iter()
+                .any(|it| it.quantity.is_none_or(|q| q > 0.0)),
+        })
+        .map(|(ing, _)| ing.clone())
         .collect()
 }
 

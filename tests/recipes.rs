@@ -21,9 +21,11 @@ fn linked(mut ing: RecipeIngredient, product_id: u64) -> RecipeIngredient {
     ing
 }
 
+/// Each row its own id, as stored rows have: stock is tracked per row.
 fn item(name: &str, qty: Option<f64>, unit: Option<&str>) -> Item {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     Item {
-        id: life::inventory::types::ItemId(0),
+        id: life::inventory::types::ItemId(NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)),
         product_id: None,
         name: name.into(),
         brand: None,
@@ -158,4 +160,23 @@ fn a_count_is_compared_like_any_unit() {
     let recipe = [ing("eggs", Some(2.0), None)];
     assert!(!can_cook(&recipe, &[item("eggs", Some(1.0), None)]));
     assert!(can_cook(&recipe, &[item("eggs", Some(6.0), None)]));
+}
+
+#[test]
+fn two_lines_drawing_on_one_stock_need_it_between_them() {
+    // 200 g twice is 400 g, and the cupboard has 300 g: cooking would come up
+    // short on the second line, so the list says so.
+    let recipe = [
+        ing("flour", Some(200.0), Some("g")),
+        ing("flour", Some(200.0), Some("g")),
+    ];
+    let stock = [item("flour", Some(300.0), Some("g"))];
+    assert!(!can_cook(&recipe, &stock));
+    assert_eq!(shopping_list(&recipe, &stock).len(), 1);
+}
+
+#[test]
+fn an_amount_that_is_no_number_is_judged_by_presence() {
+    let recipe = [ing("flour", Some(f64::NAN), Some("g"))];
+    assert!(can_cook(&recipe, &[item("flour", Some(300.0), Some("g"))]));
 }

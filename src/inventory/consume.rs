@@ -34,13 +34,12 @@ pub enum Taken {
 }
 
 /// Units agree if they match once trimmed and lower-cased, and two absent units
-/// agree with each other (a countable thing — "2 eggs" against "6 eggs").
-fn same_unit(a: Option<&str>, b: Option<&str>) -> bool {
-    match (a, b) {
-        (Some(x), Some(y)) => x.trim().eq_ignore_ascii_case(y.trim()),
-        (None, None) => true,
-        _ => false,
-    }
+/// agree with each other (a countable thing — "2 eggs" against "6 eggs"). A
+/// blank unit is an absent one. The one unit rule: cooking compares through it
+/// too.
+pub fn same_unit(a: Option<&str>, b: Option<&str>) -> bool {
+    let key = |u: Option<&str>| u.map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty());
+    key(a) == key(b)
 }
 
 /// Take `want` (measured in `want_unit`) out of what a row holds.

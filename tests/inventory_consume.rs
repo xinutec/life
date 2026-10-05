@@ -120,3 +120,20 @@ fn using_none_of_it_changes_nothing() {
         Taken::Left(950.0)
     );
 }
+
+#[test]
+fn a_blank_unit_is_no_unit() {
+    assert_eq!(
+        take(stock(Some(6.0), Some(" ")), 2.0, None),
+        Taken::Left(4.0)
+    );
+}
+
+#[test]
+fn units_agree_past_case_beyond_ascii() {
+    // Russian grams: "Г" and "г" differ only in case, outside ASCII.
+    assert_eq!(
+        take(stock(Some(500.0), Some("Г")), 100.0, Some("г")),
+        Taken::Left(400.0)
+    );
+}
