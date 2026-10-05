@@ -14,6 +14,8 @@ use life::inventory::repo as inv_repo;
 use life::inventory::types::{ItemCategory, NewItem};
 use life::purchases::repo::{self as purchases_repo, BoughtItem};
 use life::purchases::types::NewPurchase;
+use life::trash::TrashKind;
+use life::trash::repo as trash_repo;
 
 const PNG: &[u8] = &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0];
 const PDF: &[u8] = b"%PDF-1.7\n1 0 obj\n";
@@ -287,4 +289,54 @@ async fn deleting_the_item_takes_its_files() {
             .expect("list")
             .is_empty()
     );
+}
+
+/// A removed receipt goes to the trash, like every other delete: gone from the
+/// item, listed in Recently deleted, and back whole on restore.
+#[tokio::test]
+async fn a_removed_file_waits_in_the_trash() {
+    let user = "test-user-files-trash";
+    let pool = setup(&[user]).await;
+    let item = inv_repo::create_item(&pool, user, appliance("Toaster"))
+        .await
+        .expect("create");
+    let id = files_repo::add(&pool, user, item.id, None, "receipt.png", "image/png", PNG)
+        .await
+        .expect("add");
+
+    assert!(
+        files_repo::remove(&pool, user, item.id, id)
+            .await
+            .expect("remove")
+    );
+    assert!(
+        files_repo::for_item(&pool, user, item.id)
+            .await
+            .expect("list")
+            .is_empty()
+    );
+    assert!(
+        files_repo::read(&pool, user, item.id, id)
+            .await
+            .expect("read")
+            .is_none()
+    );
+    let trash = trash_repo::list(&pool, user).await.expect("trash");
+    assert!(
+        trash.iter().any(|e| e.kind == TrashKind::File
+            && e.ref_ == id.to_string()
+            && e.name == "receipt.png"),
+        "{trash:?}"
+    );
+
+    assert!(
+        trash_repo::restore(&pool, user, TrashKind::File, &id.to_string())
+            .await
+            .expect("restore")
+    );
+    let (_, _, bytes) = files_repo::read(&pool, user, item.id, id)
+        .await
+        .expect("read")
+        .expect("back");
+    assert_eq!(bytes, PNG);
 }

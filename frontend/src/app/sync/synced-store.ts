@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { Observable, from } from 'rxjs';
-import { map, shareReplay, switchMap } from 'rxjs/operators';
+import { Observable, from, fromEvent, merge, throwError, timer } from 'rxjs';
+import { map, retry, shareReplay, switchMap, take } from 'rxjs/operators';
 import {
   type MangoQuerySortPart,
   type MigrationStrategies,
@@ -11,10 +11,16 @@ import {
 
 import { LifeApi } from '../life-api';
 import { TrashKind } from '../models';
+import { isNotFound, onlineHint } from '../shared/api-error';
+import { Feedback } from '../shared/feedback';
 import { AuthState } from './auth-state';
 import { LifeDb } from './life-db';
 import { startHttpReplication } from './replication';
 import { SyncSource, SyncStatus } from './sync-status';
+
+/** Tries at an undo's server restore before saying it failed: ten minutes at
+ *  the retry interval, while the app is open. */
+const RESTORE_ATTEMPTS = 20;
 
 /** The identity + server-managed fields every synced document carries. A
  *  collection's editable *content* is `Omit<T, keyof SyncDoc>`. */
@@ -68,6 +74,7 @@ export abstract class SyncedStore<T extends SyncDoc> {
   private syncStatus = inject(SyncStatus);
   private api = inject(LifeApi);
   private auth = inject(AuthState);
+  private feedback = inject(Feedback);
   private replication?: ReturnType<typeof startHttpReplication<T>>;
   private cfg!: SyncedCollectionConfig<T>;
 
@@ -122,16 +129,40 @@ export abstract class SyncedStore<T extends SyncDoc> {
    *  restore. A plain re-push can never clear a server tombstone (the set-only
    *  rule), so a synced row's undo MUST go through the trash endpoint; a 404
    *  there just means our delete push hadn't landed yet and the local revive
-   *  already covers it. */
+   *  already covers it.
+   *
+   *  Any other failure is retried: the server may hold the delete, and the
+   *  revived row would vanish at the next pull. Only a restore that keeps
+   *  failing is reported, and points at the one way back. */
   async undoDelete(doc: T): Promise<void> {
     await this.revive(doc);
-    if (this.cfg.trashKind && doc.id != null) {
-      this.api.restoreTrash(this.cfg.trashKind, doc.ulid).subscribe({
+    const kind = this.cfg.trashKind;
+    if (!kind || doc.id == null) return;
+    this.api
+      .restoreTrash(kind, doc.ulid)
+      .pipe(
+        retry({
+          count: RESTORE_ATTEMPTS - 1,
+          delay: (e: unknown) =>
+            isNotFound(e)
+              ? throwError(() => e)
+              : merge(fromEvent(window, 'online'), timer(this.restoreRetryMs)).pipe(take(1)),
+        }),
+      )
+      .subscribe({
         next: () => this.reSync(),
-        error: () => {}, // 404 = delete push never arrived; the revive covers it
+        error: (e: unknown) => {
+          if (isNotFound(e)) return;
+          this.feedback.error(
+            `Could not undo the delete${onlineHint(e)} — restore it from Recently deleted.`,
+          );
+        },
       });
-    }
   }
+
+  /** How long a failed undo waits before trying again, if the device doesn't
+   *  come back online first. A field so a test need not wait it out. */
+  protected restoreRetryMs = 30_000;
 
   /** Pull now, e.g. right after a trash restore, so the row reappears at once.
    *

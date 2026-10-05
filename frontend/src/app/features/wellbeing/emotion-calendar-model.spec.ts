@@ -6,6 +6,7 @@ import {
   CalendarMonth,
   bandsFor,
   buildCalendar,
+  dayTitle,
   localDayKey,
   tallyAcross,
 } from './emotion-calendar-model';
@@ -412,5 +413,25 @@ describe('tallyAcross', () => {
 
   it('is empty for no selection', () => {
     expect(tallyAcross([])).toEqual([]);
+  });
+});
+
+describe('dayTitle', () => {
+  /** The one day of `docs`, built the way the calendar builds it. */
+  function day(docs: WellbeingDoc[]): CalendarDay {
+    const cells = buildCalendar(docs, LONDON, '2026-07-02')[0].cells;
+    return cells.find((c): c is CalendarDay => !!c && c.key === '2026-07-02')!;
+  }
+
+  it('names the score range in points, as the faces show it', () => {
+    const title = dayTitle(
+      day([doc('2026-07-02T08:00:00Z', [], 35), doc('2026-07-02T18:00:00Z', [], 40)]),
+    );
+    expect(title).toContain('score 3.5–4');
+    expect(title).not.toContain('35');
+  });
+
+  it('names a single reading as one score', () => {
+    expect(dayTitle(day([doc('2026-07-02T08:00:00Z', [], 20)]))).toContain('score 2,');
   });
 });

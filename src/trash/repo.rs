@@ -7,6 +7,7 @@ use chrono::NaiveDateTime;
 use sqlx::MySqlPool;
 
 use super::{TrashEntry, TrashKind};
+use crate::files::repo as files_repo;
 use crate::inventory::repo as inventory_repo;
 use crate::purchases::repo as purchases_repo;
 use crate::recipes::repo as recipes_repo;
@@ -35,7 +36,7 @@ impl Row {
 /// Everything in the user's trash, newest deletion first.
 pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<TrashEntry>> {
     // One query per kind; merged + sorted in memory (the trash is small).
-    let queries: [(TrashKind, &str); 7] = [
+    let queries: [(TrashKind, &str); 8] = [
         (
             TrashKind::Item,
             // Resolved the same way the cupboard resolves it (inventory::repo's
@@ -87,6 +88,11 @@ pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<TrashEntry>> {
             "SELECT CAST(id AS CHAR) AS ref_, CONCAT(name, ' at ', shop) AS name, deleted_at \
              FROM purchases WHERE user_id = ? AND deleted_at IS NOT NULL",
         ),
+        (
+            TrashKind::File,
+            "SELECT CAST(id AS CHAR) AS ref_, name, deleted_at \
+             FROM item_files WHERE user_id = ? AND deleted_at IS NOT NULL",
+        ),
     ];
 
     let mut entries = Vec::new();
@@ -119,6 +125,10 @@ pub async fn restore(pool: &MySqlPool, user_id: &str, kind: TrashKind, r: &str) 
         TrashKind::Wellbeing => wellbeing_repo::restore(pool, user_id, r).await,
         TrashKind::Purchase => match r.parse::<u64>() {
             Ok(id) => purchases_repo::restore(pool, user_id, id.into()).await,
+            Err(_) => Ok(false),
+        },
+        TrashKind::File => match r.parse::<u64>() {
+            Ok(id) => files_repo::restore(pool, user_id, id.into()).await,
             Err(_) => Ok(false),
         },
     }

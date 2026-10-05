@@ -40,7 +40,8 @@ function setup(opts: { files?: ItemFile[]; addItemFile?: () => Observable<unknow
   const itemFiles = vi.fn(() => of(opts.files ?? []));
   const addItemFile = vi.fn(opts.addItemFile ?? (() => of(file())));
   const deleteItemFile = vi.fn(() => of(undefined));
-  const feedback = { notify: vi.fn(), error: vi.fn() };
+  const restoreTrash = vi.fn(() => of(undefined));
+  const feedback = { notify: vi.fn(), error: vi.fn(), undo: vi.fn() };
   TestBed.configureTestingModule({
     imports: [FilesDialog],
     providers: [
@@ -52,6 +53,7 @@ function setup(opts: { files?: ItemFile[]; addItemFile?: () => Observable<unknow
           itemFiles,
           addItemFile,
           deleteItemFile,
+          restoreTrash,
           fileUrl: (i: number, f: number) => `/api/items/${i}/files/${f}`,
         },
       },
@@ -60,7 +62,14 @@ function setup(opts: { files?: ItemFile[]; addItemFile?: () => Observable<unknow
   });
   const fixture = TestBed.createComponent(FilesDialog);
   fixture.detectChanges();
-  return { cmp: fixture.componentInstance, itemFiles, addItemFile, deleteItemFile, feedback };
+  return {
+    cmp: fixture.componentInstance,
+    itemFiles,
+    addItemFile,
+    deleteItemFile,
+    restoreTrash,
+    feedback,
+  };
 }
 
 /** A file picker's change event, with the input the component must clear. */
@@ -154,6 +163,17 @@ describe('FilesDialog', () => {
     const [row] = cmp.rows();
     expect(row.head).toBe('');
     expect(row.tail).toBe('receipt.pdf');
+  });
+
+  it('offers an Undo that restores the file from the trash', () => {
+    const { cmp, feedback, restoreTrash, itemFiles } = setup({ files: [file({ id: 4 })] });
+    cmp.remove(4);
+    expect(feedback.undo).toHaveBeenCalledTimes(1);
+    const undo = feedback.undo.mock.calls[0][1] as () => void;
+    const loads = itemFiles.mock.calls.length;
+    undo();
+    expect(restoreTrash).toHaveBeenCalledWith('file', '4');
+    expect(itemFiles.mock.calls.length).toBe(loads + 1);
   });
 
   it('keeps the row and says so when a removal fails', () => {

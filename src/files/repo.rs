@@ -13,7 +13,7 @@ use crate::purchases::types::PurchaseId;
 pub async fn for_item(pool: &MySqlPool, user_id: &str, item_id: ItemId) -> Result<Vec<ItemFile>> {
     let rows = sqlx::query_as::<_, ItemFile>(
         "SELECT id, item_id, purchase_id, name, mime, size_bytes, created_at \
-         FROM item_files WHERE user_id = ? AND item_id = ? \
+         FROM item_files WHERE user_id = ? AND item_id = ? AND deleted_at IS NULL \
          ORDER BY created_at DESC, id DESC",
     )
     .bind(user_id)
@@ -65,7 +65,7 @@ pub async fn read(
 ) -> Result<Option<(String, String, Vec<u8>)>> {
     let row: Option<(String, String, Vec<u8>)> = sqlx::query_as(
         "SELECT name, mime, bytes FROM item_files \
-         WHERE id = ? AND user_id = ? AND item_id = ?",
+         WHERE id = ? AND user_id = ? AND item_id = ? AND deleted_at IS NULL",
     )
     .bind(id)
     .bind(user_id)
@@ -75,13 +75,29 @@ pub async fn read(
     Ok(row)
 }
 
-/// Remove one attachment, hard. Returns whether a row was removed.
+/// Move one attachment to the trash. Returns whether one was there to move.
 pub async fn remove(pool: &MySqlPool, user_id: &str, item_id: ItemId, id: FileId) -> Result<bool> {
-    let res = sqlx::query("DELETE FROM item_files WHERE id = ? AND user_id = ? AND item_id = ?")
-        .bind(id)
-        .bind(user_id)
-        .bind(item_id)
-        .execute(pool)
-        .await?;
+    let res = sqlx::query(
+        "UPDATE item_files SET deleted_at = NOW() \
+         WHERE id = ? AND user_id = ? AND item_id = ? AND deleted_at IS NULL",
+    )
+    .bind(id)
+    .bind(user_id)
+    .bind(item_id)
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected() > 0)
+}
+
+/// Bring a removed attachment back. Returns whether one was in the trash.
+pub async fn restore(pool: &MySqlPool, user_id: &str, id: FileId) -> Result<bool> {
+    let res = sqlx::query(
+        "UPDATE item_files SET deleted_at = NULL \
+         WHERE id = ? AND user_id = ? AND deleted_at IS NOT NULL",
+    )
+    .bind(id)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
     Ok(res.rows_affected() > 0)
 }

@@ -2,6 +2,7 @@
  *  Bands are proportions and hide a bad minority, so `spread` (the score
  *  range) separately shows whether the day held still. */
 import { emotionNode } from '../../shared/emotion-wheel';
+import { toPoints } from '../../shared/wellbeing-checkin';
 import { WellbeingDoc } from '../../sync/wellbeing-store';
 
 /** One family's share of a day, as a fraction of 1. */
@@ -217,4 +218,20 @@ export function tallyAcross(days: readonly CalendarDay[]): readonly TokenTally[]
   return [...counts]
     .map(([token, n]) => ({ token, days: n }))
     .sort((a, b) => b.days - a.days || a.token.localeCompare(b.token));
+}
+
+/** A day in words, for its tooltip and screen-reader label. Scores in points,
+ *  as the faces show them: the stored tenths are not a scale anyone reads. */
+export function dayTitle(day: CalendarDay): string {
+  if (!day.checkins) return `${day.key} — no check-in`;
+  const fams = day.bands.map((b) => `${b.core} ${Math.round(b.fraction * 100)}%`).join(', ');
+  // "no score" for a day whose readings carried none.
+  const range =
+    day.scoreLow === null || day.scoreHigh === null
+      ? 'no score'
+      : day.spread === 0
+        ? `score ${toPoints(day.scoreLow)}`
+        : `score ${toPoints(day.scoreLow)}–${toPoints(day.scoreHigh)}`;
+  const reads = `${day.checkins} check-in${day.checkins === 1 ? '' : 's'}`;
+  return `${day.key} — ${reads}, ${range}${fams ? `, ${fams}` : ', nothing tagged'}`;
 }

@@ -105,9 +105,18 @@ export class FilesDialog {
     });
   }
 
+  /** Removing goes to the trash, so it is one Undo away like every other delete. */
   remove(id: number): void {
     this.api.deleteItemFile(this.item.id, id).subscribe({
-      next: () => this.load(),
+      next: () => {
+        this.load();
+        this.feedback.undo('File removed', () => {
+          this.api.restoreTrash('file', String(id)).subscribe({
+            next: () => this.load(),
+            error: (e: unknown) => this.feedback.error(`Could not undo${onlineHint(e)}`),
+          });
+        });
+      },
       error: (e: unknown) => this.feedback.error(`Could not remove it${onlineHint(e)}`),
     });
   }

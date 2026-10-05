@@ -17,7 +17,7 @@ import { MatIconModule } from '@angular/material/icon';
 
 import { emotionColor, emotionLabel } from '../../shared/emotion-wheel';
 import { WellbeingDoc, WellbeingStore } from '../../sync/wellbeing-store';
-import { CalendarDay, buildCalendar, tallyAcross } from './emotion-calendar-model';
+import { CalendarDay, buildCalendar, dayTitle, tallyAcross } from './emotion-calendar-model';
 
 /** Monday first, matching the grid the model pads for. */
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
@@ -171,16 +171,6 @@ export class EmotionCalendar {
   }
 
   title(day: CalendarDay): string {
-    if (!day.checkins) return `${day.key} — no check-in`;
-    const fams = day.bands.map((b) => `${b.core} ${Math.round(b.fraction * 100)}%`).join(', ');
-    // "no score" for a day whose readings carried none.
-    const range =
-      day.scoreLow === null || day.scoreHigh === null
-        ? 'no score'
-        : day.spread === 0
-          ? `score ${day.scoreLow}`
-          : `score ${day.scoreLow}–${day.scoreHigh}`;
-    const reads = `${day.checkins} check-in${day.checkins === 1 ? '' : 's'}`;
-    return `${day.key} — ${reads}, ${range}${fams ? `, ${fams}` : ', nothing tagged'}`;
+    return dayTitle(day);
   }
 }
