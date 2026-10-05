@@ -17,6 +17,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { Sheets } from '@xinutec/ui-scaffold';
 import { map } from 'rxjs';
 
+import { localDay } from '../../shared/civil-day';
 import { ListState } from '../../shared/list-state';
 import { WellbeingCheckin, energyMeta, scoreMeta, toPoints } from '../../shared/wellbeing-checkin';
 import { WellbeingDoc, WellbeingStore } from '../../sync/wellbeing-store';
@@ -76,11 +77,6 @@ function firstAtOrBefore(times: readonly number[], ms: number, strict = false): 
     else hi = mid;
   }
   return lo;
-}
-
-/** Local calendar day key (YYYY-MM-DD) for grouping. */
-function dayKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 /** Wellbeing history: a one-tap check-in strip, a trend chart (7 days by
@@ -263,7 +259,7 @@ export class Wellbeing {
     const groups = new Map<string, Day>();
     for (const e of this.items()) {
       const d = new Date(e.recordedAt);
-      const key = dayKey(d);
+      const key = localDay(d);
       let g = groups.get(key);
       if (!g) {
         g = { key, label: this.dayLabel(d), entries: [] };

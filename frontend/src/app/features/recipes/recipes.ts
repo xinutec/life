@@ -219,7 +219,6 @@ export class Recipes {
   }
 
   label(ing: RecipeIngredient): string {
-    const amount = ing.quantity != null ? `${ing.quantity}${ing.unit ? ' ' + ing.unit : ''} ` : '';
-    return `${amount}${ing.name}`;
+    return [amount(ing.quantity, ing.unit), ing.name].filter((s) => s).join(' ');
   }
 }

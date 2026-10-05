@@ -17,7 +17,9 @@ import {
   Source,
 } from '../../models';
 import { ago } from '../../shared/ago';
+import { amount } from '../../shared/amount';
 import { assertNever, classifyApiError, onlineHint } from '../../shared/api-error';
+import { MAX_IMAGE_BYTES } from '../../image-picker';
 import { ProductImages } from '../../product-image';
 import { ProductShops } from './product-shops';
 import { Feedback } from '../../shared/feedback';
@@ -408,6 +410,14 @@ export class ProductPage {
     if (!file) return;
     const barcode = this.detail()?.product.barcode;
     if (!barcode) return;
+    if (!file.type.startsWith('image/')) {
+      this.feedback.error('That’s not an image.');
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      this.feedback.error('Image is larger than 5 MB.');
+      return;
+    }
     this.savingImage.set(true);
     this.images.replace(barcode, file, this.id()).subscribe({
       next: () => {
@@ -442,7 +452,7 @@ export class ProductPage {
       // of. Absent when the unit could not be read — see purchases::repo.
       pack: [
         p.unit_price ? formatUnitPrice(p.unit_price, p.currency) : '',
-        p.quantity != null ? `${p.quantity}${p.unit ? ' ' + p.unit : ''}` : '',
+        amount(p.quantity, p.unit),
       ]
         .filter((x) => x)
         .join(' · '),
@@ -481,7 +491,7 @@ export class ProductPage {
     for (const l of shops) {
       // One link per unpriced shop, not per listing: two Asda listings with no
       // price are still one "Asda" line, mirroring the priced side.
-      if (!priced.has(l.source) && l.url && !rows.some((r) => r.label === sourceLabel(l.source))) {
+      if (!priced.has(l.source) && l.url && !rows.some((r) => r.source === l.source)) {
         rows.push({
           key: listingKey(l),
           label: sourceLabel(l.source),

@@ -966,6 +966,21 @@ describe('ProductPage', () => {
     expect(input.value).toBe('');
   });
 
+  it('refuses a picture over the cap, or not a picture, before uploading it', () => {
+    // The same cap the thumbnail picker enforces: a phone pays for the upload
+    // the server would refuse anyway.
+    const { api, page } = setup();
+    for (const file of [
+      new File([new Uint8Array(5 * 1024 * 1024 + 1)], 'big.jpg', { type: 'image/jpeg' }),
+      new File(['%PDF'], 'manual.pdf', { type: 'application/pdf' }),
+    ]) {
+      const input = document.createElement('input');
+      Object.defineProperty(input, 'files', { value: [file] });
+      page.pickImage({ target: input } as unknown as Event);
+    }
+    expect(api.uploadProductImage).not.toHaveBeenCalled();
+  });
+
   it('does nothing when the picker is dismissed without a file', () => {
     const { api, page } = setup();
     const input = document.createElement('input');

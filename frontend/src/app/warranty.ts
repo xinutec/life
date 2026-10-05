@@ -1,3 +1,5 @@
+import { daysUntil, utcDay } from './shared/civil-day';
+
 /** How a recorded warranty reads: the date is the *storage*; what somebody needs
  *  is whether it still covers them, and how long they have. */
 
@@ -6,8 +8,6 @@ export interface WarrantyInfo {
   /** CSS hook, shared with the `.expiry` grammar: 'expired' | 'soon' | 'ok'. */
   cls: 'expired' | 'soon' | 'ok';
 }
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** The point past which naming the end date is less useful than naming the time
  *  left. Three months is about when a decision — claim it, extend it, replace
@@ -25,12 +25,9 @@ export function warrantyInfo(until: number | null, now: Date = new Date()): Warr
   if (until === null) return null;
   const end = new Date(until);
   // DAY to DAY, not instant to instant: the purchase is stored at MIDDAY UTC
-  // (see `bought_at_from` in the purchases repo), and subtracting raw instants
-  // leaks that half-day into the count.
-  const endDay = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate());
-  // The READER'S day on the other side, not Greenwich's (see `bins.ts`).
-  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-  const days = Math.round((endDay - today) / DAY_MS);
+  // (see `bought_at_from` in the purchases repo), so its UTC day is its date.
+  const days = daysUntil(utcDay(end), now);
+  if (days === null) return null;
   if (days < 0) return { label: `warranty ended ${date(end)}`, cls: 'expired' };
   if (days === 0) return { label: 'warranty ends today', cls: 'soon' };
   if (days <= SOON_DAYS) {

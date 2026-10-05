@@ -8,7 +8,7 @@ import { WellbeingEntry } from '../wellbeing/wellbeing-entry';
 import { LifeApi } from '../../life-api';
 import { BinDay } from '../../models';
 import { ShoppingStore } from '../../sync/shopping-store';
-import { TodoStore } from '../../sync/todo-store';
+import { TodoDoc, TodoStore } from '../../sync/todo-store';
 import { TodoGraph } from '../todo/todo-graph';
 import { Today } from './today';
 
@@ -48,6 +48,10 @@ describe('Today', () => {
       statusOf: vi.fn((t: { ulid: string }) => opts.state?.[t.ulid] ?? 'open'),
       urgencyOf: vi.fn((t: { ulid: string }) => opts.urgency?.[t.ulid] ?? 'none'),
       daysUntil: vi.fn(() => -2),
+      // The real chip, over the stubbed urgency and days.
+      dueChip(t: TodoDoc) {
+        return TodoGraph.prototype.dueChip.call(this as unknown as TodoGraph, t);
+      },
     };
     TestBed.configureTestingModule({
       providers: [

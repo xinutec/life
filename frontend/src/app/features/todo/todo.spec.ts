@@ -40,6 +40,9 @@ describe('Todo', () => {
     const graph = {
       statusOf: vi.fn(() => 'open'),
       urgencyOf: vi.fn(() => 'none'),
+      dueChip(t: TodoDoc) {
+        return TodoGraph.prototype.dueChip.call(this as unknown as TodoGraph, t);
+      },
       blockers: vi.fn(() => []),
       linkCount: vi.fn(() => 0),
       removeLinksForTodo: vi.fn(),

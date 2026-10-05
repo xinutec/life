@@ -4,6 +4,7 @@ import { BehaviorSubject, of } from 'rxjs';
 import { catchError, map, switchMap } from 'rxjs/operators';
 
 import { LifeApi } from '../../life-api';
+import { daysBetween, localDay } from '../../shared/civil-day';
 import { ItemsStore, LocationsStore, RecipesStore } from '../../stores/catalog';
 import { LinkKind, TargetKind } from '../../models';
 import { ShoppingDoc, ShoppingStore } from '../../sync/shopping-store';
@@ -29,12 +30,13 @@ export type TodoState = 'done' | 'blocked' | 'waiting' | 'ready' | 'open';
 /** Deadline pressure, orthogonal to `TodoState`. Derived from `due` vs today. */
 export type Urgency = 'overdue' | 'today' | 'soon' | 'none';
 
-/** The device-local calendar day as `YYYY-MM-DD` (the user's day, not UTC). */
-function todayISO(d = new Date()): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+/** Most pressing first — the sort key wherever to-dos are ordered by deadline. */
+export const URGENCY_RANK: Record<Urgency, number> = { overdue: 0, today: 1, soon: 2, none: 3 };
+
+/** A row's deadline, in words and a CSS class. */
+export interface DueChip {
+  label: string;
+  cls: 'overdue' | 'due-soon';
 }
 
 const TARGET_ICON: Record<TargetKind, string> = {
@@ -60,11 +62,11 @@ export class TodoGraph {
   // "Today" as a signal so waiting/overdue states recompute when the day rolls
   // over or the app regains focus — no reload needed. Updated at midnight and on
   // visibility regain.
-  private readonly _today = signal(todayISO());
+  private readonly _today = signal(localDay());
   readonly today = this._today.asReadonly();
 
   constructor() {
-    const refresh = () => this._today.set(todayISO());
+    const refresh = () => this._today.set(localDay());
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') refresh();
@@ -83,9 +85,19 @@ export class TodoGraph {
 
   /** Whole days from today to an ISO date (negative = in the past). */
   daysUntil(iso: string): number {
-    const a = Date.parse(this.today() + 'T00:00:00Z');
-    const b = Date.parse(iso + 'T00:00:00Z');
-    return Math.round((b - a) / 86_400_000);
+    return daysBetween(this.today(), iso) ?? Number.NaN;
+  }
+
+  /** The deadline chip for a to-do, or null when there is nothing pressing to
+   *  show (done, undated, or due more than 3 days out). */
+  dueChip(todo: TodoDoc): DueChip | null {
+    const u = this.urgencyOf(todo);
+    if (u === 'none' || !todo.due) return null;
+    const d = this.daysUntil(todo.due);
+    if (u === 'overdue')
+      return { label: d === -1 ? 'overdue 1d' : `overdue ${-d}d`, cls: 'overdue' };
+    if (u === 'today') return { label: 'due today', cls: 'overdue' };
+    return { label: d === 1 ? 'due tomorrow' : `due in ${d}d`, cls: 'due-soon' };
   }
 
   /** Deadline pressure from `due`. Done or undated to-dos have none. */

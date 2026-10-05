@@ -22,15 +22,15 @@ import { TodoDoc, TodoStore } from '../../sync/todo-store';
 import { prioRank } from '../todo/todo-meta';
 import { TodoDetail } from '../todo/todo-detail';
 import { WellbeingEntry } from '../wellbeing/wellbeing-entry';
-import { TodoGraph, Urgency } from '../todo/todo-graph';
+import { TodoGraph, URGENCY_RANK } from '../todo/todo-graph';
+
+const READY = { label: 'ready', cls: 'ready' };
 
 /** One to-do surfaced on Today, with a short reason chip. */
 interface Attention {
   todo: TodoDoc;
-  chip: { label: string; cls: string } | null;
+  chip: { label: string; cls: string };
 }
-
-const URGENCY_RANK: Record<Urgency, number> = { overdue: 0, today: 1, soon: 2, none: 3 };
 
 /** The landing screen: "what needs me right now?" — a wellbeing check-in, the
  *  to-dos that are overdue/due/ready, food about to expire, and quick jumps.
@@ -79,24 +79,27 @@ export class Today {
    *  (unblocked with met dependencies). Blocked and waiting ones are excluded —
    *  you can't act on them now. Capped; the full list is one tap away. */
   readonly attention = computed<Attention[]>(() => {
-    return this.graph
-      .todoItems()
-      .filter((t) => t.status !== 'done')
-      .map((todo) => ({
-        todo,
-        state: this.graph.statusOf(todo),
-        urgency: this.graph.urgencyOf(todo),
-      }))
-      .filter((x) => x.state !== 'waiting' && x.state !== 'blocked')
-      .filter((x) => x.urgency !== 'none' || x.state === 'ready')
-      .sort(
-        (a, b) =>
-          URGENCY_RANK[a.urgency] - URGENCY_RANK[b.urgency] ||
-          prioRank(a.todo.priority) - prioRank(b.todo.priority) ||
-          (a.todo.due ?? '9999-99-99').localeCompare(b.todo.due ?? '9999-99-99'),
-      )
-      .slice(0, 5)
-      .map((x) => ({ todo: x.todo, chip: this.chip(x.todo, x.urgency) }));
+    return (
+      this.graph
+        .todoItems()
+        .filter((t) => t.status !== 'done')
+        .map((todo) => ({
+          todo,
+          state: this.graph.statusOf(todo),
+          urgency: this.graph.urgencyOf(todo),
+        }))
+        .filter((x) => x.state !== 'waiting' && x.state !== 'blocked')
+        .filter((x) => x.urgency !== 'none' || x.state === 'ready')
+        .sort(
+          (a, b) =>
+            URGENCY_RANK[a.urgency] - URGENCY_RANK[b.urgency] ||
+            prioRank(a.todo.priority) - prioRank(b.todo.priority) ||
+            (a.todo.due ?? '9999-99-99').localeCompare(b.todo.due ?? '9999-99-99'),
+        )
+        .slice(0, 5)
+        // Only ready to-dos have no deadline chip here (the filter above).
+        .map((x) => ({ todo: x.todo, chip: this.graph.dueChip(x.todo) ?? READY }))
+    );
   });
 
   /** The next two bin mornings. Two rather than one because the useful
@@ -141,16 +144,5 @@ export class Today {
   /** Say more about the check-in just logged here, as on Wellbeing. */
   addDetail(ulid: string): void {
     this.sheet.open(WellbeingEntry, { data: { ulid } });
-  }
-
-  private chip(todo: TodoDoc, urgency: Urgency): { label: string; cls: string } | null {
-    if (urgency !== 'none' && todo.due) {
-      const d = this.graph.daysUntil(todo.due);
-      if (urgency === 'overdue')
-        return { label: d === -1 ? 'overdue 1d' : `overdue ${-d}d`, cls: 'overdue' };
-      if (urgency === 'today') return { label: 'due today', cls: 'overdue' };
-      return { label: d === 1 ? 'due tomorrow' : `due in ${d}d`, cls: 'due-soon' };
-    }
-    return { label: 'ready', cls: 'ready' };
   }
 }

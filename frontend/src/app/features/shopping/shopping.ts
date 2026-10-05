@@ -10,6 +10,7 @@ import { Router } from '@angular/router';
 import { Sheets } from '@xinutec/ui-scaffold';
 import { catchError, forkJoin, map, of, switchMap, tap } from 'rxjs';
 
+import { amount } from '../../shared/amount';
 import { Feedback } from '../../shared/feedback';
 import { isNotFound } from '../../shared/api-error';
 import { ListState } from '../../shared/list-state';
@@ -305,8 +306,7 @@ export class Shopping {
   }
 
   label(it: ShoppingDoc): string {
-    if (it.quantity == null) return '';
-    return it.unit ? `${it.quantity} ${it.unit}` : `${it.quantity}`;
+    return amount(it.quantity, it.unit);
   }
 }
 

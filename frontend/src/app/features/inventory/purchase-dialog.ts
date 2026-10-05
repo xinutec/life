@@ -6,6 +6,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 
+import { localDay } from '../../shared/civil-day';
 import { Dialog } from '../../shared/dialog';
 import { Feedback } from '../../shared/feedback';
 import { onlineHint } from '../../shared/api-error';
@@ -83,7 +84,7 @@ export class PurchaseDialog {
 
   /** Today, as the date input spells it — the latest a purchase can be, since
    *  the server refuses one that has not happened. */
-  readonly today = new Date().toLocaleDateString('en-CA');
+  readonly today = localDay();
 
   save(): void {
     const amount = this.pence();

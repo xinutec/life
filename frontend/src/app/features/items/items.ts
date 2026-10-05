@@ -9,6 +9,7 @@ import { MatListModule } from '@angular/material/list';
 import { Sheets } from '@xinutec/ui-scaffold';
 
 import { ExpiryInfo, expiryInfo } from '../../expiry';
+import { amount } from '../../shared/amount';
 import { LifeApi } from '../../life-api';
 import { ProductThumb } from '../../product-thumb';
 import { onlineHint } from '../../shared/api-error';
@@ -133,8 +134,9 @@ export class Items {
 
   /** Compact subtitle: "2 jar · food · Spice cupboard › Top shelf". */
   meta(it: Item): string {
-    const qty = it.quantity == null ? '' : it.unit ? `${it.quantity} ${it.unit}` : `${it.quantity}`;
-    return [qty, it.category, this.location(it)].filter((s) => s).join(' · ');
+    return [amount(it.quantity, it.unit), it.category, this.location(it)]
+      .filter((s) => s)
+      .join(' · ');
   }
 
   /** Urgency-aware expiry display (expired / soon / date). */

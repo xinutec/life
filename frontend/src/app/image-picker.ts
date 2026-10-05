@@ -1,7 +1,8 @@
 import { Directive, input, output, signal } from '@angular/core';
 
-/** Client-side ceiling, mirrors the backend's 5 MiB cap so we reject early. */
-const MAX_BYTES = 5 * 1024 * 1024;
+/** Client-side ceiling, mirrors the backend's 5 MiB cap so we reject early.
+ *  Every picture path checks this one, so none can upload what another refuses. */
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 function firstImage(files: Iterable<File> | undefined): File | undefined {
   return Array.from(files ?? []).find((f) => f.type.startsWith('image/'));
@@ -87,7 +88,7 @@ export class ImagePickerDirective {
       this.pickError.emit('That’s not an image.');
       return;
     }
-    if (file.size > MAX_BYTES) {
+    if (file.size > MAX_IMAGE_BYTES) {
       this.pickError.emit('Image is larger than 5 MB.');
       return;
     }

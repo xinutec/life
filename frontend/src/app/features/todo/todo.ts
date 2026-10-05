@@ -16,7 +16,7 @@ import { TodoPriority, TodoType } from '../../models';
 import { TodoDoc, TodoStore } from '../../sync/todo-store';
 import { TodoAddSheet } from './todo-add-sheet';
 import { TodoDetail } from './todo-detail';
-import { TodoGraph, TodoState } from './todo-graph';
+import { DueChip, TodoGraph, TodoState, URGENCY_RANK } from './todo-graph';
 import { PRIORITIES, TODO_TYPES, prioRank } from './todo-meta';
 
 @Component({
@@ -102,36 +102,16 @@ export class Todo {
     () => this.items().filter((t) => this.graph.statusOf(t) === 'ready').length,
   );
 
-  private urgencyRank(t: TodoDoc): number {
-    switch (this.graph.urgencyOf(t)) {
-      case 'overdue':
-        return 0;
-      case 'today':
-        return 1;
-      case 'soon':
-        return 2;
-      default:
-        return 3;
-    }
-  }
   private compare = (a: TodoDoc, b: TodoDoc): number =>
     Number(a.status === 'done') - Number(b.status === 'done') ||
-    this.urgencyRank(a) - this.urgencyRank(b) ||
+    URGENCY_RANK[this.graph.urgencyOf(a)] - URGENCY_RANK[this.graph.urgencyOf(b)] ||
     prioRank(a.priority) - prioRank(b.priority) ||
     (a.due ?? '9999-99-99').localeCompare(b.due ?? '9999-99-99') ||
     a.title.localeCompare(b.title);
 
-  /** The urgency chip for a row, or null when there's nothing pressing to show
-   *  (done, undated, or a deadline more than 3 days out). */
-  dueChip(it: TodoDoc): { label: string; cls: string } | null {
-    const u = this.graph.urgencyOf(it);
-    if (u === 'none' || !it.due) return null;
-    const d = this.graph.daysUntil(it.due);
-    let label: string;
-    if (u === 'overdue') label = d === -1 ? 'overdue 1d' : `overdue ${-d}d`;
-    else if (u === 'today') label = 'due today';
-    else label = d === 1 ? 'due tomorrow' : `due in ${d}d`;
-    return { label, cls: u === 'soon' ? 'due-soon' : 'overdue' };
+  /** The urgency chip for a row — see [[TodoGraph.dueChip]]. */
+  dueChip(it: TodoDoc): DueChip | null {
+    return this.graph.dueChip(it);
   }
 
   /** "from Sat 5 Jul" — when a waiting to-do becomes actionable. */

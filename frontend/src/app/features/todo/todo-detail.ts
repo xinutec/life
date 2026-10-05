@@ -11,6 +11,7 @@ import { MatListModule } from '@angular/material/list';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { Sheets } from '@xinutec/ui-scaffold';
 
+import { localDay } from '../../shared/civil-day';
 import { Feedback } from '../../shared/feedback';
 import { LinkKind, TodoPriority, TodoType } from '../../models';
 import { TodoStore } from '../../sync/todo-store';
@@ -30,10 +31,7 @@ function presetDate(kind: 'today' | 'tomorrow' | 'weekend' | 'nextweek'): string
   else if (kind === 'weekend')
     d.setDate(d.getDate() + ((6 - d.getDay() + 7) % 7)); // next Sat
   else if (kind === 'nextweek') d.setDate(d.getDate() + ((1 - d.getDay() + 7) % 7 || 7)); // next Mon
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return localDay(d);
 }
 
 /** A connection group for display: a heading + its resolved rows. Each row is an

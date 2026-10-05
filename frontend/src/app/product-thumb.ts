@@ -4,7 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSnackBar } from '@angular/material/snack-bar';
 
-import { ImagePickerDirective } from './image-picker';
+import { ImagePickerDirective, MAX_IMAGE_BYTES } from './image-picker';
 import { ProductImages, showThumb } from './product-image';
 
 /**
@@ -55,9 +55,6 @@ function readClipboardImage(): Promise<string | null> {
     bridge.postMessage(JSON.stringify({ op: 'readImage' }));
   });
 }
-
-/** Client ceiling, mirrors the backend's 5 MiB cap. */
-const MAX_BYTES = 5 * 1024 * 1024;
 
 /** A product thumbnail that is also a one-tap image picker, owning the whole
  *  pick → upload → reload flow:
@@ -148,7 +145,7 @@ export class ProductThumb {
       return;
     }
     const blob = await (await fetch(dataUrl)).blob();
-    if (blob.size > MAX_BYTES) {
+    if (blob.size > MAX_IMAGE_BYTES) {
       this.snack.open('That image is larger than 5 MB.', 'OK', { duration: 4000 });
       return;
     }

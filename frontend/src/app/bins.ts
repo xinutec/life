@@ -1,4 +1,5 @@
 import { BinDay } from './models';
+import { daysUntil } from './shared/civil-day';
 
 /** A collection day: everything that goes out on one morning, and how soon. */
 export interface BinCollection {
@@ -13,8 +14,6 @@ export interface BinCollection {
    *  next week would make the highlight meaningless. */
   imminent: boolean;
 }
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** The council suffixes every name with " collection" — true, and noise in a
  *  list already headed "Bins". Only the exact suffix is dropped, so a name that
@@ -42,19 +41,6 @@ export function nextCollections(days: BinDay[], now: Date = new Date()): BinColl
       const days = daysUntil(date, now);
       return { date, kinds, when: when(date, days), imminent: days !== null && days <= 1 };
     });
-}
-
-/** Whole days from `now` to a `YYYY-MM-DD`, or `null` if it is not a date.
- *
- *  ⚠ **Two civil dates, compared as civil dates.** The council's bare day is read
- *  at UTC midnight; "today" is the READER'S day, from local fields — not
- *  `now.getUTCDate()`, which is a day behind between midnight and 01:00 BST.
- *  Both go through `Date.UTC`, so neither side has hours to be wrong about. */
-function daysUntil(date: string, now: Date): number | null {
-  const at = new Date(`${date}T00:00:00Z`);
-  if (Number.isNaN(at.getTime())) return null;
-  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-  return Math.round((at.getTime() - today) / DAY_MS);
 }
 
 function when(date: string, days: number | null): string {

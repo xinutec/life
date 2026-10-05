@@ -2,14 +2,13 @@
  *  needs at a glance is urgency — expired, about to, or fine. */
 
 import { ExpiryPrecision } from './models';
+import { daysUntil } from './shared/civil-day';
 
 export interface ExpiryInfo {
   label: string;
   /** CSS hook: 'expired' | 'soon' | 'ok'. */
   cls: 'expired' | 'soon' | 'ok';
 }
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Human urgency for a `YYYY-MM-DD` expiry. `now` is injectable for tests.
@@ -23,12 +22,10 @@ export function expiryInfo(
   precision: ExpiryPrecision = 'day',
   now: Date = new Date(),
 ): ExpiryInfo {
+  const days = daysUntil(expiry, now);
+  if (days === null) return { label: expiry, cls: 'ok' };
   const date = new Date(`${expiry}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) return { label: expiry, cls: 'ok' };
   if (precision === 'month') return monthInfo(date, now);
-  // ⚠ The READER'S day, not Greenwich's (see `daysUntil` in `bins.ts`).
-  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-  const days = Math.round((date.getTime() - today) / DAY_MS);
   if (days < 0) return { label: `expired ${-days}d ago`, cls: 'expired' };
   if (days === 0) return { label: 'expires today', cls: 'soon' };
   if (days <= 3) return { label: `in ${days}d`, cls: 'soon' };
