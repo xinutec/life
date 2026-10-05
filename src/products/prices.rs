@@ -1,6 +1,7 @@
 //! Price observations: what a shop charged for a listing, when. Money is always
 //! integer minor units (pence) on the wire and in the DB — never a float.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -114,7 +115,8 @@ pub struct ShopPrice {
     pub amount_minor: i64,
     pub currency: Currency,
     pub unit_price: Option<UnitPrice>,
-    /// When observed, epoch milliseconds (UTC).
+    /// When observed; Unix milliseconds on the wire.
+    #[serde(with = "chrono::serde::ts_milliseconds")]
     #[ts(type = "number")]
-    pub observed_at: i64,
+    pub observed_at: DateTime<Utc>,
 }

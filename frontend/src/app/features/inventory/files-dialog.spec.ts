@@ -31,7 +31,7 @@ function file(over: Partial<ItemFile> = {}): ItemFile {
     name: 'manual.pdf',
     mime: 'application/pdf',
     size_bytes: 2 * 1024 * 1024,
-    created_at: new Date().toISOString(),
+    created_at: Date.now(),
     ...over,
   };
 }

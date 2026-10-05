@@ -8,6 +8,6 @@ import type { ConflictKind } from "./ConflictKind";
  */
 export type ConflictEntry = { id: number, kind: ConflictKind, ulid: string, field: string, label: string, mine: string, theirs: string, 
 /**
- * When the conflict happened, Unix milliseconds (UTC).
+ * When the conflict happened; Unix milliseconds on the wire.
  */
 created_at: number, };

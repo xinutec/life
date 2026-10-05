@@ -133,6 +133,10 @@ async fn a_purchase_with_no_warranty_claims_no_cover() {
     assert_eq!(got[0].warranty_until, None);
     // Absent `bought_on` means now — the buy-list flow's every call.
     assert_eq!(got[0].bought_at.date_naive(), Utc::now().date_naive());
+    // An instant goes out as Unix milliseconds, as every other one does.
+    let wire = serde_json::to_value(&got[0]).unwrap();
+    assert_eq!(wire["bought_at"], got[0].bought_at.timestamp_millis());
+    assert!(wire["warranty_until"].is_null());
 }
 
 #[tokio::test]

@@ -73,7 +73,10 @@ async fn stores_a_payload_verbatim_overwrites_by_kind_and_cascades() {
         blob.len(),
         "size hint = payload length"
     );
-    assert!(docs[0].fetched_at > 0, "carries a fetch time");
+    assert!(
+        chrono::Utc::now() - docs[0].fetched_at < chrono::TimeDelta::minutes(5),
+        "carries the fetch time"
+    );
 
     // Re-fetching the same kind overwrites (last fetch wins), still one row.
     let blob2 = r#"{"calculatedNutrition":[],"vegan":false}"#;

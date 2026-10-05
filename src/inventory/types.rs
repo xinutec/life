@@ -3,7 +3,7 @@
 
 use crate::products::ids::ProductId;
 use crate::str_enum;
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -181,9 +181,10 @@ pub struct ItemHistoryEntry {
     pub quantity: Option<f64>,
     /// Where the row was, by name. `None` if unrecorded or since deleted.
     pub location: Option<String>,
-    /// When, Unix milliseconds (UTC).
+    /// When; Unix milliseconds on the wire.
+    #[serde(with = "chrono::serde::ts_milliseconds")]
     #[ts(type = "number")]
-    pub at: i64,
+    pub at: DateTime<Utc>,
 }
 
 /// Request body for "I used some of this": how much went, in which unit.

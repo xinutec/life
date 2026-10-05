@@ -29,7 +29,7 @@ pub async fn create(pool: &MySqlPool, user_id: &str, new: NewConflict) -> Result
 pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<ConflictEntry>> {
     Ok(sqlx::query_as(
         "SELECT id, kind, ulid, field, label, mine, theirs, \
-         CAST(UNIX_TIMESTAMP(created_at) * 1000 AS SIGNED) AS created_at \
+         created_at \
          FROM sync_conflicts WHERE user_id = ? AND resolved_at IS NULL \
          ORDER BY created_at DESC, id DESC",
     )

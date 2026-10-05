@@ -7,6 +7,7 @@
 pub mod repo;
 
 use crate::str_enum;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -37,7 +38,8 @@ pub struct TrashEntry {
     #[ts(rename = "ref")]
     pub ref_: String,
     pub name: String,
-    /// When it was deleted, Unix milliseconds (UTC).
+    /// When it was deleted; Unix milliseconds on the wire.
+    #[serde(with = "chrono::serde::ts_milliseconds")]
     #[ts(type = "number")]
-    pub deleted_at: i64,
+    pub deleted_at: DateTime<Utc>,
 }

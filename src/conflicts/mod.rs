@@ -7,6 +7,7 @@
 pub mod repo;
 
 use crate::str_enum;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -35,9 +36,10 @@ pub struct ConflictEntry {
     pub label: String,
     pub mine: String,
     pub theirs: String,
-    /// When the conflict happened, Unix milliseconds (UTC).
+    /// When the conflict happened; Unix milliseconds on the wire.
+    #[serde(with = "chrono::serde::ts_milliseconds")]
     #[ts(type = "number")]
-    pub created_at: i64,
+    pub created_at: DateTime<Utc>,
 }
 
 /// Client report of one same-field conflict (POST /api/conflicts body).

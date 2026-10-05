@@ -4,6 +4,8 @@
 use crate::purchases::types::Purchase;
 use std::fmt;
 
+use chrono::{DateTime, Utc};
+
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -67,9 +69,10 @@ pub struct ProductListing {
 pub struct SourceDocument {
     pub source: Source,
     pub kind: DocKind,
-    /// When we fetched it (epoch millis).
+    /// When we fetched it; Unix milliseconds on the wire.
+    #[serde(with = "chrono::serde::ts_milliseconds")]
     #[ts(type = "number")]
-    pub fetched_at: i64,
+    pub fetched_at: DateTime<Utc>,
     /// Size of the stored payload, bytes — a hint that we hold it, not the body.
     #[ts(type = "number")]
     pub bytes: i64,

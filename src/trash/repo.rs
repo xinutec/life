@@ -27,7 +27,7 @@ impl Row {
             kind,
             ref_: self.ref_,
             name: self.name,
-            deleted_at: self.deleted_at.and_utc().timestamp_millis(),
+            deleted_at: self.deleted_at.and_utc(),
         }
     }
 }

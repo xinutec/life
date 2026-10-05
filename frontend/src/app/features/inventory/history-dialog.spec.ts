@@ -78,7 +78,7 @@ function purchase(over: Partial<Purchase> = {}): Purchase {
     quantity: 2,
     unit: 'l',
     unit_price: { amount_minor: 125, measure: 'L' },
-    bought_at: new Date().toISOString(),
+    bought_at: Date.now(),
     warranty_months: null,
     warranty_until: null,
     ...over,

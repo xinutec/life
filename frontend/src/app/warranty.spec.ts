@@ -10,7 +10,7 @@ beforeAll(() => vi.stubEnv('TZ', 'Europe/London'));
 afterAll(() => vi.unstubAllEnvs());
 
 const TODAY = new Date('2026-07-02T10:30:00Z');
-const at = (iso: string) => `${iso}T12:00:00Z`;
+const at = (iso: string) => Date.parse(`${iso}T12:00:00Z`);
 
 describe('warrantyInfo', () => {
   it('says nothing at all when no warranty was recorded', () => {
@@ -18,7 +18,6 @@ describe('warrantyInfo', () => {
     // warranty; "no cover" and "nobody wrote it down" are different claims and
     // only one of them is ours to make.
     expect(warrantyInfo(null, TODAY)).toBeNull();
-    expect(warrantyInfo('not a date', TODAY)).toBeNull();
   });
 
   it('names the end date while it is comfortably away', () => {

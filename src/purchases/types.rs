@@ -66,7 +66,9 @@ pub struct Purchase {
     /// unknown to `packsize::parse`.
     #[sqlx(skip)]
     pub unit_price: Option<UnitPrice>,
-    #[ts(type = "string")]
+    /// Unix milliseconds on the wire.
+    #[serde(with = "chrono::serde::ts_milliseconds")]
+    #[ts(type = "number")]
     pub bought_at: DateTime<Utc>,
     /// Months of cover from `bought_at`, as recorded. `None` is "not recorded",
     /// which most purchases are and should render as nothing at all.
@@ -75,6 +77,7 @@ pub struct Purchase {
     /// read so it cannot drift from the purchase it is measured from — a stored
     /// end date can outlive a correction to either half.
     #[sqlx(default)]
-    #[ts(type = "string | null")]
+    #[serde(with = "chrono::serde::ts_milliseconds_option")]
+    #[ts(type = "number | null")]
     pub warranty_until: Option<DateTime<Utc>>,
 }

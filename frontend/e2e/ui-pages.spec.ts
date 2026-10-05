@@ -313,7 +313,7 @@ const FILES: ItemFile[] = [
     name: 'receipt.png',
     mime: 'image/png',
     size_bytes: 307_200,
-    created_at: '2026-09-01T10:00:00Z',
+    created_at: Date.parse('2026-09-01T10:00:00Z'),
   },
   {
     id: 2,
@@ -322,7 +322,7 @@ const FILES: ItemFile[] = [
     name: 'IMG_20240315_143022_receipt_dishwasher_manual.pdf',
     mime: 'application/pdf',
     size_bytes: 2_097_152,
-    created_at: '2026-08-20T10:00:00Z',
+    created_at: Date.parse('2026-08-20T10:00:00Z'),
   },
 ];
 
@@ -389,7 +389,7 @@ const ITEM_PURCHASES = [
     quantity: 2,
     unit: 'l',
     unit_price: { amount_minor: 125, measure: 'L' },
-    bought_at: '2026-08-29T09:00:00Z',
+    bought_at: Date.parse('2026-08-29T09:00:00Z'),
     warranty_months: null,
     warranty_until: null,
   },
@@ -560,7 +560,7 @@ const PRODUCT_DETAIL = {
       quantity: 594,
       unit: 'g',
       unit_price: { amount_minor: 715, measure: 'KG' },
-      bought_at: '2026-08-20T09:00:00Z',
+      bought_at: Date.parse('2026-08-20T09:00:00Z'),
       warranty_months: null,
       warranty_until: null,
     },

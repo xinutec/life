@@ -13,4 +13,8 @@ export type ItemFile = { id: number, item_id: number,
  * `None` for a manual, which belongs to the thing rather than to any one
  * time you bought it.
  */
-purchase_id: number | null, name: string, mime: string, size_bytes: number, created_at: string, };
+purchase_id: number | null, name: string, mime: string, size_bytes: number, 
+/**
+ * Unix milliseconds on the wire.
+ */
+created_at: number, };

@@ -446,7 +446,7 @@ export class ProductPage {
       ]
         .filter((x) => x)
         .join(' · '),
-      when: ago(new Date(p.bought_at).getTime()),
+      when: ago(p.bought_at),
     })),
   );
 

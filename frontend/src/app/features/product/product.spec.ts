@@ -914,7 +914,7 @@ describe('ProductPage', () => {
           quantity: 594,
           unit: 'g',
           unit_price: { amount_minor: 715, measure: 'KG' },
-          bought_at: '2026-08-30T10:00:00Z',
+          bought_at: Date.parse('2026-08-30T10:00:00Z'),
           warranty_months: null,
           warranty_until: null,
         },

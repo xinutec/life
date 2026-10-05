@@ -23,6 +23,6 @@ source: Source,
  */
 external_id: ExternalId, amount_minor: number, currency: Currency, unit_price: UnitPrice | null, 
 /**
- * When observed, epoch milliseconds (UTC).
+ * When observed; Unix milliseconds on the wire.
  */
 observed_at: number, };

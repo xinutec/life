@@ -33,10 +33,10 @@ fn appliance(name: &str) -> NewItem {
     }
 }
 
-async fn setup(user: &str) -> sqlx::MySqlPool {
+async fn setup(users: &[&str]) -> sqlx::MySqlPool {
     let pool = db::connect(&common::test_db_url()).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
-    for u in [user, "test-user-files-other"] {
+    for &u in users {
         sqlx::query("DELETE FROM item_files WHERE user_id = ?")
             .bind(u)
             .execute(&pool)
@@ -89,8 +89,8 @@ fn only_images_and_pdfs_are_recognised_and_svg_is_not_one() {
 
 #[tokio::test]
 async fn a_receipt_knows_its_purchase_and_a_manual_does_not() {
-    let user = "test-user-files";
-    let pool = setup(user).await;
+    let user = "test-user-files-kinds";
+    let pool = setup(&[user]).await;
     let item = inv_repo::create_item(&pool, user, appliance("Dishwasher"))
         .await
         .expect("create");
@@ -189,9 +189,9 @@ async fn a_receipt_knows_its_purchase_and_a_manual_does_not() {
 
 #[tokio::test]
 async fn a_file_is_only_reachable_through_its_own_item_and_its_own_owner() {
-    let user = "test-user-files";
+    let user = "test-user-files-reach";
     let other = "test-user-files-other";
-    let pool = setup(user).await;
+    let pool = setup(&[user, other]).await;
     let dishwasher = inv_repo::create_item(&pool, user, appliance("Dishwasher"))
         .await
         .expect("create");
@@ -266,8 +266,8 @@ async fn a_file_is_only_reachable_through_its_own_item_and_its_own_owner() {
 /// attached to nothing has no route to reach it and no screen to show it.
 #[tokio::test]
 async fn deleting_the_item_takes_its_files() {
-    let user = "test-user-files";
-    let pool = setup(user).await;
+    let user = "test-user-files-delete";
+    let pool = setup(&[user]).await;
     let item = inv_repo::create_item(&pool, user, appliance("Kettle"))
         .await
         .expect("create");

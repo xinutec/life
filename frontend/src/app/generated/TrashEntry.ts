@@ -9,6 +9,6 @@ import type { TrashKind } from "./TrashKind";
  */
 export type TrashEntry = { kind: TrashKind, ref: string, name: string, 
 /**
- * When it was deleted, Unix milliseconds (UTC).
+ * When it was deleted; Unix milliseconds on the wire.
  */
 deleted_at: number, };

@@ -22,7 +22,11 @@ name: string, shop: string, amount_minor: number, currency: Currency, quantity: 
  * comparing packs, not an amount paid. `None` when the pack or its unit is
  * unknown to `packsize::parse`.
  */
-unit_price: UnitPrice | null, bought_at: string, 
+unit_price: UnitPrice | null, 
+/**
+ * Unix milliseconds on the wire.
+ */
+bought_at: number, 
 /**
  * Months of cover from `bought_at`, as recorded. `None` is "not recorded",
  * which most purchases are and should render as nothing at all.
@@ -33,4 +37,4 @@ warranty_months: number | null,
  * read so it cannot drift from the purchase it is measured from — a stored
  * end date can outlive a correction to either half.
  */
-warranty_until: string | null, };
+warranty_until: number | null, };

@@ -87,7 +87,7 @@ export class HistoryDialog {
         .filter((x) => x)
         .join(' · '),
       where: p.shop,
-      when: ago(new Date(p.bought_at).getTime()),
+      when: ago(p.bought_at),
       // `null` for almost everything, and that is the point: a jar of oregano
       // has no warranty and nothing here should imply one either way.
       cover: warrantyInfo(p.warranty_until),

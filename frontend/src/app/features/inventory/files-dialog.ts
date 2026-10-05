@@ -54,7 +54,7 @@ export class FilesDialog {
       // The icon says what it is faster than the mime string would, and the
       // mime is not something anybody wants to read.
       icon: f.mime === 'application/pdf' ? 'picture_as_pdf' : 'image',
-      detail: [size(f.size_bytes), ago(new Date(f.created_at).getTime())].join(' · '),
+      detail: [size(f.size_bytes), ago(f.created_at)].join(' · '),
     })),
   );
 

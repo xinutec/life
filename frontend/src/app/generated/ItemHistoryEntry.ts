@@ -16,6 +16,6 @@ quantity: number | null,
  */
 location: string | null, 
 /**
- * When, Unix milliseconds (UTC).
+ * When; Unix milliseconds on the wire.
  */
 at: number, };

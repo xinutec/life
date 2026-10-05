@@ -9,7 +9,7 @@ import type { Source } from "./Source";
  */
 export type SourceDocument = { source: Source, kind: DocKind, 
 /**
- * When we fetched it (epoch millis).
+ * When we fetched it; Unix milliseconds on the wire.
  */
 fetched_at: number, 
 /**

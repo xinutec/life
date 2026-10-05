@@ -32,7 +32,9 @@ pub struct ItemFile {
     pub mime: String,
     #[ts(type = "number")]
     pub size_bytes: u64,
-    #[ts(type = "string")]
+    /// Unix milliseconds on the wire.
+    #[serde(with = "chrono::serde::ts_milliseconds")]
+    #[ts(type = "number")]
     pub created_at: DateTime<Utc>,
 }
 

@@ -630,7 +630,7 @@ pub async fn item_history(
     // dropped or shown blank, as `products::Source` is read.
     Ok(sqlx::query_as(
         "SELECT h.id, h.event, h.quantity, l.name AS location, \
-         CAST(UNIX_TIMESTAMP(h.at) * 1000 AS SIGNED) AS at \
+         h.at \
          FROM item_history h \
          LEFT JOIN locations l ON l.id = h.location_id AND l.user_id = h.user_id \
          WHERE h.item_id = ? AND h.user_id = ? \

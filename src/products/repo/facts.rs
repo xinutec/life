@@ -247,7 +247,7 @@ pub async fn get_document(
 pub async fn documents_for(pool: &MySqlPool, product_id: ProductId) -> Result<Vec<SourceDocument>> {
     let rows: Vec<SourceDocument> = sqlx::query_as(
         "SELECT source, kind, \
-         CAST(UNIX_TIMESTAMP(fetched_at) * 1000 AS SIGNED) AS fetched_at, \
+         fetched_at, \
          CAST(LENGTH(body) AS SIGNED) AS bytes \
          FROM product_documents WHERE product_id = ? ORDER BY source, kind",
     )

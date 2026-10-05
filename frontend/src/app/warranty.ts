@@ -21,10 +21,9 @@ const SOON_DAYS = 90;
  * most purchases. That is "nobody recorded one", not "no warranty", so `null`
  * comes back and nothing renders a claim either way.
  */
-export function warrantyInfo(until: string | null, now: Date = new Date()): WarrantyInfo | null {
-  if (!until) return null;
+export function warrantyInfo(until: number | null, now: Date = new Date()): WarrantyInfo | null {
+  if (until === null) return null;
   const end = new Date(until);
-  if (Number.isNaN(end.getTime())) return null;
   // DAY to DAY, not instant to instant: the purchase is stored at MIDDAY UTC
   // (see `bought_at_from` in the purchases repo), and subtracting raw instants
   // leaks that half-day into the count.

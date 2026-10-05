@@ -80,7 +80,7 @@ pub async fn latest_prices(pool: &MySqlPool, product_id: ProductId) -> Result<Ve
                     amount_minor,
                     measure,
                 }),
-            observed_at: r.observed_at.and_utc().timestamp_millis(),
+            observed_at: r.observed_at.and_utc(),
         })
         .collect())
 }
