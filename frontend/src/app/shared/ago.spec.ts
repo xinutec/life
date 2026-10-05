@@ -1,15 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { ago } from './ago';
+
+/** Pinned, not inherited: calendar days differ by zone. */
+beforeAll(() => vi.stubEnv('TZ', 'Europe/London'));
+afterAll(() => vi.unstubAllEnvs());
 
 /** `now` is a parameter, so every case states its instant. */
 describe('ago', () => {
   const NOW = Date.UTC(2026, 8, 12, 12, 0, 0); // 2026-09-12T12:00:00Z
   const hoursBefore = (h: number) => NOW - h * 3_600_000;
 
-  it('says today for the last 24 hours', () => {
+  it('says today for anything earlier the same day', () => {
     expect(ago(NOW, NOW)).toBe('today');
-    expect(ago(hoursBefore(23), NOW)).toBe('today');
+    expect(ago(hoursBefore(11), NOW)).toBe('today'); // 02:00 BST
   });
 
   it('says yesterday, then counts days, up to a week', () => {
@@ -27,15 +31,17 @@ describe('ago', () => {
     expect(out).toMatch(/\d/);
   });
 
-  it('counts elapsed 24-hour periods, NOT calendar days', () => {
-    // ⚠ Pinned deliberately, and it is worth seeing. 23:00 the previous
-    // calendar day reads as "today" at 09:00, because only ten hours have
-    // passed. The module argues recency over precision, so this is a choice —
-    // but an app that says "today" and "yesterday" is making a calendar claim,
-    // and this test is where a decision to change it would start.
-    const nineAm = Date.UTC(2026, 8, 12, 9, 0, 0);
-    const elevenPmYesterday = Date.UTC(2026, 8, 11, 23, 0, 0);
-    expect(ago(elevenPmYesterday, nineAm)).toBe('today');
+  it('counts calendar days, not elapsed hours', () => {
+    // Ten hours apart, but last night is yesterday.
+    const nineAm = Date.UTC(2026, 8, 12, 8, 0, 0); // 09:00 BST
+    const elevenPmYesterday = Date.UTC(2026, 8, 11, 22, 0, 0); // 23:00 BST
+    expect(ago(elevenPmYesterday, nineAm)).toBe('yesterday');
+  });
+
+  it('takes the day from the reader, not from Greenwich', () => {
+    // 23:30 UTC is 00:30 BST the next day.
+    const justAfterMidnight = Date.UTC(2026, 8, 11, 23, 30, 0);
+    expect(ago(Date.UTC(2026, 8, 11, 22, 30, 0), justAfterMidnight)).toBe('yesterday');
   });
 
   it('does not go negative on a timestamp from the future', () => {
