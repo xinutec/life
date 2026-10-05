@@ -2,21 +2,15 @@
 import type { ProductId } from "./ProductId";
 
 /**
- * One ingredient line of a recipe. Matched to inventory by `product_id` when
- * the line names a catalog product and the stock does too, and by `name`
- * otherwise — the two are alternatives, not a precedence: see
- * [[super::matching]] for why a link can only ever find MORE stock.
+ * One ingredient, matched to stock by product and by name ([[super::matching]]).
  */
 export type RecipeIngredient = { name: string, 
 /**
- * The catalog product this line names, if it names one. Optional forever:
- * an ingredient is a kind of thing and most lines will never be worth
- * pinning to one barcode.
+ * Optional: an ingredient is a kind of thing, rarely one barcode.
  */
 product_id: ProductId | null, 
 /**
- * The linked product's canonical name, joined on read; never stored, so
- * whatever a client sends is ignored. `serde(default)` lets a client PUT
- * back a recipe it just read (`skip_deserializing` makes ts-rs warn).
+ * Joined on read and never stored; `serde(default)` lets a client PUT back
+ * what it read.
  */
 product_name: string | null, quantity: number | null, unit: string | null, };

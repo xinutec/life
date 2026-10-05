@@ -1,8 +1,5 @@
-//! Client activity trace: navigations and taps, POSTed in batches, logged into
-//! the same stream as the request trace (so `kind=tap label="Find at Asda"`
-//! sits before the `GET …/find/asda` it caused) and stored in `client_events`,
-//! which outlives the pod's log. The client captures them centrally; see the
-//! frontend's `telemetry.ts`.
+//! The client's navigations and taps, logged into the request trace (so a tap
+//! sits before the request it caused) and kept in `client_events`.
 
 use axum::Json;
 use axum::extract::State;
@@ -13,8 +10,7 @@ use ts_rs::TS;
 use crate::session::AuthUser;
 use crate::state::AppState;
 
-/// One thing that happened in the client. `kind` is "nav" (a route change,
-/// `label` absent) or "tap" (a control, `label` its visible text, verbatim).
+/// `kind` is "nav" or "tap"; a tap's `label` is the control's visible text.
 #[derive(Debug, Deserialize, TS)]
 #[ts(export)]
 pub struct TelemetryEvent {
@@ -22,30 +18,21 @@ pub struct TelemetryEvent {
     pub path: String,
     #[serde(default)]
     pub label: Option<String>,
-    /// Client clock, epoch millis. Kept because a batch lands all at once, so the
-    /// server receive time can't order events within it; the client's can.
+    /// Client epoch millis: a batch lands at once, so only these order it.
     #[ts(type = "number")]
     pub at: i64,
 }
 
-/// A per-batch cap so a buggy or hostile client can't turn one POST into a log
-/// flood — the real client batches a handful at a time.
+/// So one POST cannot flood the log.
 const MAX_EVENTS: usize = 100;
-/// Labels are verbatim UI text; bound them so a pathological one can't bloat a
-/// log line. Counted in chars, not bytes, to never split a multi-byte glyph.
+/// In chars, so a glyph is never split.
 const MAX_LABEL: usize = 160;
-/// `kind` and `path` are client-chosen too, so they are flattened like `label`,
-/// and bounded because a value longer than its column fails the whole batch.
-/// 16 leaves room for a kind a newer client sends.
+/// Client-chosen too, so flattened and bounded to its column; room for a newer kind.
 const MAX_KIND: usize = 16;
-/// Long enough for any route this app has, matching the column.
 const MAX_PATH: usize = 512;
 
-/// Format characters that are invisible or reorder display: zero-width
-/// characters (U+200B, U+FEFF, the joiners) make a label that reads as empty,
-/// and bidi overrides (U+202A–202E, U+2066–2069) make a log line display
-/// something other than it says (Trojan Source). `char::is_control` covers only
-/// Cc, and a named list avoids a Unicode tables crate.
+/// Invisible and reordering characters: zero-width ones make a label read as
+/// empty, bidi overrides make a log line say something else (Trojan Source).
 fn is_deceptive_format(c: char) -> bool {
     matches!(c,
         '\u{00ad}'
@@ -57,10 +44,8 @@ fn is_deceptive_format(c: char) -> bool {
     )
 }
 
-/// Flatten a client-supplied label to one harmless log field — **the endpoint's
-/// security boundary**: a newline would forge log lines. Control characters
-/// become spaces, whitespace runs collapse (`split_whitespace` also catches the
-/// U+2028/U+2029 that `char::is_control` misses), capped in chars.
+/// The endpoint's security boundary: one harmless log field, as a newline would
+/// forge log lines. `split_whitespace` also catches U+2028/2029.
 pub fn one_line(label: &str, max: usize) -> String {
     let unbroken: String = label
         .chars()
@@ -81,21 +66,16 @@ pub fn one_line(label: &str, max: usize) -> String {
         .collect()
 }
 
-/// One event with every client-chosen field flattened and bounded — the only
-/// shape allowed past this module, into the log or into the table.
-///
-/// A struct, so a field added to [`TelemetryEvent`] without sanitising it fails
-/// to compile.
+/// The only shape allowed past this module. A struct, so an unsanitised new
+/// field cannot compile.
 #[derive(Debug)]
 pub struct Sanitised {
     pub kind: String,
     pub path: String,
-    /// `""` when the event carries none — a nav. Empty rather than `Option`
-    /// because the log field and the column both want a string either way.
+    /// `""` for a nav.
     pub label: String,
 }
 
-/// Flatten and bound every field the client chooses.
 pub fn sanitise(e: &TelemetryEvent) -> Sanitised {
     Sanitised {
         kind: one_line(&e.kind, MAX_KIND),
@@ -104,10 +84,7 @@ pub fn sanitise(e: &TelemetryEvent) -> Sanitised {
     }
 }
 
-/// Append a batch to `client_events`.
-///
-/// One multi-row INSERT. Public for `tests/client_events_db.rs`: the endpoint
-/// swallows write failures, so a broken INSERT is invisible from outside.
+/// Public for its test: the endpoint swallows write failures.
 pub async fn store(
     pool: &sqlx::MySqlPool,
     user_id: &str,
@@ -129,10 +106,8 @@ pub async fn store(
     q.build().execute(pool).await.map(|_| ())
 }
 
-/// POST /api/telemetry — fold the client's events into the log stream. Always
-/// 204: telemetry is best-effort, and the client neither reads the response nor
-/// retries. Auth-gated so every line is attributed and the endpoint isn't an
-/// open log-write for anyone.
+/// POST /api/telemetry → always 204: the client neither reads it nor retries.
+/// Auth-gated, so the log is not open to anyone.
 pub async fn record(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -158,9 +133,7 @@ pub async fn record(
         );
     }
 
-    // Best-effort: the client neither reads this nor retries, so a 500 saves
-    // nothing. Logged at error, because a table that silently stopped filling
-    // would read as "nobody used the app".
+    // Logged at error: an empty table would read as "nobody used the app".
     if let Err(e) = store(&app.pool, &user.user_id, &rows).await {
         tracing::error!(
             user = %user.user_id,

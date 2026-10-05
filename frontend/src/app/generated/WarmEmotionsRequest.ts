@@ -2,9 +2,7 @@
 import type { EmotionCandidate } from "./EmotionCandidate";
 
 /**
- * Fired when a check-in's note starts being written: preload the model for the
- * suggestion that is now almost certain to follow. Carries only the vocabulary —
- * the system prompt (vocab + this day's few-shot) is all the preload needs, and
- * the note itself does not exist yet.
+ * Preload while a note is being written; the system prompt needs only the
+ * vocabulary.
  */
 export type WarmEmotionsRequest = { candidates: Array<EmotionCandidate>, };

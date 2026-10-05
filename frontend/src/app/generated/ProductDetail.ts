@@ -9,41 +9,27 @@ import type { SourceDocument } from "./SourceDocument";
 import type { SourceFacts } from "./SourceFacts";
 
 /**
- * Everything the product page shows, in one fetch —
- * GET /api/products/id/{id}.
+ * Everything the product page shows (GET /api/products/id/{id}).
  */
 export type ProductDetail = { product: Product, 
 /**
- * Every source that lists the product, oldest first.
+ * Oldest first.
  */
 listings: Array<ProductListing>, 
 /**
- * Latest price per shop, cheapest first.
+ * Cheapest first, one per shop.
  */
 prices: Array<ShopPrice>, facts: ProductFacts, 
 /**
- * Each source's own facts, for provenance (who declared which allergen, whose
- * nutrition panel is which). Oldest-ranked source order.
+ * In source precedence order.
  */
 facts_by_source: Array<SourceFacts>, 
 /**
- * Where the sources disagree with the canonical row and you haven't decided
- * yet — the diff to approve. Empty when everything agrees or is settled.
- * Includes the facts that reconcile by source-pick (nutrition, ingredients).
+ * The disagreements to settle, including the source-picked facts.
  */
-reconciliation: ProductReconciliation, 
+reconciliation: ProductReconciliation, documents: Array<SourceDocument>, 
 /**
- * Raw source payloads we've fetched and kept (see SourceDocument) — so the
- * UI knows what's already stored and needn't re-fetch it.
- */
-documents: Array<SourceDocument>, 
-/**
- * What THIS person has paid for it, newest first — a different claim from
- * `prices`, which is what shops charge. Shown together they answer "is this
- * the going rate"; shown interchangeably they would be a lie, so they are
- * two fields and not one list.
- *
- * Matched by product id OR barcode, so a purchase made before the catalogue
- * link existed, or one whose link was corrected, still appears.
+ * What this person paid, newest first: not `prices`, which is what shops
+ * charge. Matched by id or barcode, so older purchases still appear.
  */
 purchases: Array<Purchase>, };

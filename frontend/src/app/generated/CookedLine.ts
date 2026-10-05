@@ -2,12 +2,8 @@
 import type { Take } from "./Take";
 import type { Untouched } from "./Untouched";
 
-/**
- * One line of the report the cook button hands back.
- */
 export type CookedLine = { ingredient: string, 
 /**
- * The line's unit, which every take shares (units are never converted);
- * `None` for a countable line.
+ * Shared by every take; `None` for a countable line.
  */
 unit: string | null, } & ({ "kind": "took", from: Array<Take>, } | { "kind": "short", from: Array<Take>, short: number, } | { "kind": "untouched", why: Untouched, });

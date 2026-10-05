@@ -1,10 +1,6 @@
-//! A surrogate key as its own type, so one kind of row number cannot be passed
-//! where another belongs.
+//! Row ids as distinct types, so one kind cannot be passed for another.
 
-/// Declare a row id: a `u64` from the database, distinct from every other kind
-/// of row id. No validation — any `u64` the database hands back is valid — so
-/// the whole point is the *name*. On the wire and in TypeScript it is a plain
-/// number; `From<u64>` mints one from `last_insert_id()`.
+/// A `u64` row id of its own type; a plain number on the wire.
 #[macro_export]
 macro_rules! row_id {
     ($(#[$m:meta])* $t:ident) => {

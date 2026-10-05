@@ -3,11 +3,6 @@ import type { Currency } from "./Currency";
 import type { Source } from "./Source";
 
 /**
- * One shop's latest shelf price for a Buy row — what the shop charges, never
- * what anybody paid.
+ * What the shop charges, never what anybody paid.
  */
-export type RowPrice = { source: Source, 
-/**
- * Minor units (pence for GBP).
- */
-amount_minor: number, currency: Currency, };
+export type RowPrice = { source: Source, amount_minor: number, currency: Currency, };

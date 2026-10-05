@@ -1,4 +1,4 @@
-//! Storage for purchases: append them, and read a thing's price history back.
+//! Purchases: append them, and read a thing's price history back.
 
 use anyhow::{Result, bail};
 use chrono::{DateTime, Months, NaiveTime, TimeZone, Utc};
@@ -9,12 +9,9 @@ use crate::inventory::types::ItemId;
 use crate::products::ids::ProductId;
 use crate::products::prices::{UnitMeasure, UnitPrice};
 
-/// What the buy-list row already knows about the thing being bought. Passed
-/// separately from [`NewPurchase`] because none of it is typed by the person —
-/// it is copied from the row, so the capture step asks only for shop and price.
+/// What the buy-list row knows, copied rather than typed.
 pub struct BoughtItem<'a> {
-    /// The item the buy created. Always known at the call site, and the only
-    /// identifier that is — see `Purchase::item_id`.
+    /// The one key that always exists.
     pub id: ItemId,
     pub product_id: Option<ProductId>,
     pub barcode: Option<&'a str>,
@@ -23,11 +20,7 @@ pub struct BoughtItem<'a> {
     pub unit: Option<&'a str>,
 }
 
-/// Record a purchase.
-///
-/// Validates rather than coerces: a price of "-5" is a client bug or a fat
-/// finger, and stored it would be indistinguishable from a real number in a
-/// history whose whole value is that its numbers are true.
+/// Validates rather than coerces: a stored "-5" would pass for a real price.
 pub async fn record(
     pool: &MySqlPool,
     user_id: &str,
@@ -70,16 +63,11 @@ pub async fn record(
     Ok(res.last_insert_id().into())
 }
 
-/// Fifty years. Not a technical limit — the point past which a "warranty" is
-/// evidence somebody typed years into a months box, which is the mistake this
-/// field invites.
+/// Past this, somebody typed years into the months box.
 const MAX_WARRANTY_MONTHS: i32 = 600;
 
-/// When the purchase happened: the stated day, or now.
-///
-/// A day is stored at midday UTC: midnight is the one time a zone offset can
-/// move to the neighbouring day. A future day is refused as a typo; a warranty
-/// counted from it would report cover nobody has.
+/// The stated day, or now. A day is stored at midday UTC, where no zone offset
+/// moves it; a future day is refused as a typo.
 fn bought_at_from(on: Option<chrono::NaiveDate>) -> Result<DateTime<Utc>> {
     let Some(day) = on else {
         return Ok(Utc::now());
@@ -94,11 +82,8 @@ fn bought_at_from(on: Option<chrono::NaiveDate>) -> Result<DateTime<Utc>> {
     Ok(at)
 }
 
-/// What this person paid for ONE cupboard item, newest first.
-///
-/// Unlike [`history`] ("this THING, ever", keyed on the catalogue), keyed on the
-/// item: the only way to reach a purchase from a hand-typed buy-list row, which
-/// has no barcode and no product (migration 0044).
+/// One cupboard item's purchases, newest first: the only way to reach one made
+/// from a hand-typed row, which has no product (0044).
 pub async fn for_item(pool: &MySqlPool, user_id: &str, item_id: ItemId) -> Result<Vec<Purchase>> {
     let rows = sqlx::query_as::<_, Purchase>(
         "SELECT id, item_id, product_id, barcode, name, shop, amount_minor, currency, \
@@ -113,9 +98,7 @@ pub async fn for_item(pool: &MySqlPool, user_id: &str, item_id: ItemId) -> Resul
     Ok(rows.into_iter().map(with_derived).collect())
 }
 
-/// Move one purchase to the trash; see migration 0048 for why it is soft.
-/// Returns whether a live row of this user's, on this item, was removed. Scoped
-/// on `item_id` too, so a purchase id from a different item 404s.
+/// To the trash (0048). Scoped on `item_id` too.
 pub async fn remove(
     pool: &MySqlPool,
     user_id: &str,
@@ -134,7 +117,6 @@ pub async fn remove(
     Ok(res.rows_affected() > 0)
 }
 
-/// Bring a removed purchase back from the trash.
 pub async fn restore(pool: &MySqlPool, user_id: &str, id: PurchaseId) -> Result<bool> {
     let res = sqlx::query(
         "UPDATE purchases SET deleted_at = NULL \
@@ -147,20 +129,16 @@ pub async fn restore(pool: &MySqlPool, user_id: &str, id: PurchaseId) -> Result<
     Ok(res.rows_affected() > 0)
 }
 
-/// What a purchase works out to per kg / litre / item, the scale shops print
-/// ("£8.00/KG"). Uses `packsize::parse` so there is one unit table.
+/// The rate shops print ("£8.00/KG"), through `packsize::parse`'s one unit table.
 fn per_unit(amount_minor: i64, quantity: Option<f64>, unit: Option<&str>) -> Option<UnitPrice> {
     let (q, u) = (quantity?, unit?);
     let pack = crate::products::packsize::parse(&format!("{q}{u}"))?;
-    // parse() guarantees a finite value greater than zero, so this cannot divide
-    // by zero — but the rate is still only meaningful for a positive amount.
     let (scale, measure) = match pack.unit {
         crate::products::packsize::PackUnit::Gram => (1000.0, UnitMeasure::Kg),
         crate::products::packsize::PackUnit::Millilitre => (1000.0, UnitMeasure::Litre),
         crate::products::packsize::PackUnit::Count => (1.0, UnitMeasure::Each),
     };
-    // Bound to a domain range so the cast is safe, as in `products::asda`.
-    // £1,000,000 in pence: past it, the pack was misread.
+    // Past £1,000,000 the pack was misread.
     const MAX_PENCE: f64 = 100_000_000.0;
     let amount = i32::try_from(amount_minor).ok()?;
     let rate = (f64::from(amount) * scale / pack.value).round();
@@ -177,12 +155,8 @@ fn per_unit(amount_minor: i64, quantity: Option<f64>, unit: Option<&str>) -> Opt
     })
 }
 
-/// Everything this person has paid for a thing, newest first.
-///
-/// Matched on product id OR barcode, not on product id alone. An item can be
-/// linked to the wrong product and later relinked (see migration 0043); the
-/// barcode is what re-attaches the history when that happens, and a purchase
-/// made before the link existed has only the barcode to be found by.
+/// Everything paid for a thing, newest first, by product id or barcode: a relinked
+/// item (0043), or a purchase from before the link, is found by its barcode.
 pub async fn history(
     pool: &MySqlPool,
     user_id: &str,
@@ -209,13 +183,9 @@ pub async fn history(
     Ok(rows.into_iter().map(with_derived).collect())
 }
 
-/// Fill in everything DERIVED from the stored columns, for both readers.
 fn with_derived(mut p: Purchase) -> Purchase {
     p.unit_price = per_unit(p.amount_minor, p.quantity, p.unit.as_deref());
-    // Calendar months, not 30-day blocks: a two-year warranty on something
-    // bought on 3 March runs to 3 March, which is what the receipt means and
-    // what somebody would check it against. `checked_add_months` also clamps a
-    // 31st into a short month rather than overflowing into the next one.
+    // Calendar months: two years from 3 March runs to 3 March, as on the receipt.
     p.warranty_until = p
         .warranty_months
         .and_then(|m| u32::try_from(m).ok())

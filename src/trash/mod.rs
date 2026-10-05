@@ -1,8 +1,5 @@
-//! The trash: everything the user deleted, restorable. Deletes only ever
-//! tombstone (`deleted_at`); this lists tombstones across all kinds and clears
-//! them on restore. Nothing is purged. A synced row's restore bumps `rev`, so it
-//! reaches every device through the pull; this is the one deliberate undelete,
-//! since a sync push can never clear a tombstone.
+//! Everything deleted, restorable; nothing is purged. A synced row's restore bumps
+//! its `rev`: the one undelete, as no push can clear a tombstone.
 
 pub mod repo;
 
@@ -12,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 str_enum! {
-    /// Which table a trash entry lives in.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[serde(rename_all = "snake_case")]
     #[ts(export)]
@@ -27,10 +23,8 @@ str_enum! {
         File => "file",
     }
 }
-/// One deleted thing, as shown on the trash screen. `ref_` identifies the row
-/// within its kind: the numeric id for REST entities (item/location/recipe),
-/// the ULID for synced ones — ids can be absent client-side
-/// for never-synced rows, ULIDs never are.
+/// `ref_` is an id for REST kinds, a ULID for synced ones (a never-synced row has
+/// no id).
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
 pub struct TrashEntry {
@@ -39,7 +33,7 @@ pub struct TrashEntry {
     #[ts(rename = "ref")]
     pub ref_: String,
     pub name: String,
-    /// When it was deleted; Unix milliseconds on the wire.
+    /// Unix milliseconds on the wire.
     #[serde(with = "chrono::serde::ts_milliseconds")]
     #[ts(type = "number")]
     pub deleted_at: DateTime<Utc>,

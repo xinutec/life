@@ -7,37 +7,27 @@ import type { Source } from "./Source";
 
 export type Product = { 
 /**
- * Catalog id (surrogate key). A product may have no barcode (hand-defined).
+ * A product may have no barcode.
  */
 id: ProductId, barcode: Barcode | null, name: string | null, brand: string | null, quantity_label: string | null, 
 /**
- * `quantity_label` read as an amount ([`super::packsize`]), so stock linked
- * to this product starts out knowing how much it holds. Derived on read: the
- * label is reconcilable and hand-editable, so a stored copy could disagree.
- * `None` without a label, or for one we would rather refuse than guess.
+ * `quantity_label` read as an amount ([`super::packsize`]); derived on read,
+ * as the label can be corrected. `None` for one we would rather not guess.
  */
 pack: PackSize | null, 
 /**
- * Where the row came from. `None` only for rows predating provenance.
+ * `None` only for rows older than provenance.
  */
 source: Source | null, 
 /**
- * Source-scoped external id (e.g. a Waitrose lineNumber). Unique per source;
- * how a shop product with no barcode is addressed and de-duped.
+ * Unique per source; how a barcodeless shop product is found again.
  */
 external_id: ExternalId | null, 
 /**
- * Which source's title `name` currently is (see repo's canonical-name
- * refresh) — provenance for display, never hand-assigned.
+ * Which source's title `name` is.
  */
 name_source: Source | null, 
 /**
- * Which source the cached picture came from — provenance for picture
- * reconciliation. `None` exactly when there is no picture.
+ * `None` exactly when there is no picture.
  */
-image_source: Source | null, 
-/**
- * True if we have a cached image. Served from /api/products/id/{id}/image
- * (barcodeless shop products), or /api/products/{barcode}/image when barcoded.
- */
-has_image: boolean, };
+image_source: Source | null, has_image: boolean, };

@@ -3,20 +3,10 @@ import type { Candidate } from "./Candidate";
 import type { ReconcileField } from "./ReconcileField";
 
 /**
- * A field where at least one source disagrees with the canonical product and no
- * decision has settled it yet.
+ * A field some source disputes, not yet settled.
  */
-export type FieldDivergence = { field: ReconcileField, 
+export type FieldDivergence = { field: ReconcileField, label: string, current: string | null, 
 /**
- * Human label for the field ('Name', 'Brand', 'Pack size').
- */
-label: string, 
-/**
- * The current canonical value, or None when the product has none.
- */
-current: string | null, 
-/**
- * Each source whose value differs from the current one — the choices to
- * adopt, one per source (two sources may agree on the same value).
+ * One per differing source.
  */
 candidates: Array<Candidate>, };

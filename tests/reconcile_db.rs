@@ -114,7 +114,7 @@ async fn reconcile_adopts_keeps_and_settles_against_the_db() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let barcode: Barcode = "5000000000456".parse().unwrap();
+    let barcode: Barcode = "5000000000463".parse().unwrap();
     let (off_ext, asda_ext): (ExternalId, ExternalId) = (
         "rectest-off".parse().unwrap(),
         "rectest-asda".parse().unwrap(),

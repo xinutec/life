@@ -1,5 +1,4 @@
-//! Storage for item attachments. Every query is scoped on `user_id`, and the
-//! listing never reads a blob.
+//! Item attachments, scoped on `user_id`; the listing never reads a blob.
 
 use anyhow::Result;
 use sqlx::MySqlPool;
@@ -8,8 +7,7 @@ use super::types::{FileId, ItemFile};
 use crate::inventory::types::ItemId;
 use crate::purchases::types::PurchaseId;
 
-/// Metadata for everything attached to one item, newest first. No blobs — see
-/// [`ItemFile`] for why the list and the download are separate.
+/// Newest first, no blobs.
 pub async fn for_item(pool: &MySqlPool, user_id: &str, item_id: ItemId) -> Result<Vec<ItemFile>> {
     let rows = sqlx::query_as::<_, ItemFile>(
         "SELECT id, item_id, purchase_id, name, mime, size_bytes, created_at \
@@ -23,10 +21,7 @@ pub async fn for_item(pool: &MySqlPool, user_id: &str, item_id: ItemId) -> Resul
     Ok(rows)
 }
 
-/// Attach a file. Returns its id.
-///
-/// `mime` is the SNIFFED type, not the declared one — the caller is responsible
-/// for having established that, and the column is documented as holding it.
+/// `mime` must be the sniffed type.
 pub async fn add(
     pool: &MySqlPool,
     user_id: &str,
@@ -52,11 +47,7 @@ pub async fn add(
     Ok(res.last_insert_id().into())
 }
 
-/// The bytes and their mime, for serving one file back.
-///
-/// Scoped on `item_id` as well as `user_id`, like the purchase reads: the route
-/// arrives through an item, and a file id belonging to a DIFFERENT item of
-/// yours should 404 rather than be served from under the wrong thing.
+/// Scoped on `item_id` too, so another item's file id 404s.
 pub async fn read(
     pool: &MySqlPool,
     user_id: &str,
@@ -75,7 +66,7 @@ pub async fn read(
     Ok(row)
 }
 
-/// Move one attachment to the trash. Returns whether one was there to move.
+/// To the trash.
 pub async fn remove(pool: &MySqlPool, user_id: &str, item_id: ItemId, id: FileId) -> Result<bool> {
     let res = sqlx::query(
         "UPDATE item_files SET deleted_at = NOW() \
@@ -89,7 +80,6 @@ pub async fn remove(pool: &MySqlPool, user_id: &str, item_id: ItemId, id: FileId
     Ok(res.rows_affected() > 0)
 }
 
-/// Bring a removed attachment back. Returns whether one was in the trash.
 pub async fn restore(pool: &MySqlPool, user_id: &str, id: FileId) -> Result<bool> {
     let res = sqlx::query(
         "UPDATE item_files SET deleted_at = NULL \

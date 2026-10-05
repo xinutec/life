@@ -1,4 +1,4 @@
-//! The sync-conflict log HTTP surface: report, list, resolve.
+//! The sync-conflict log.
 
 use axum::Json;
 use axum::extract::{Path, State};

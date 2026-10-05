@@ -12,15 +12,14 @@ use crate::nextcloud::credentials::{self, LinkStatus};
 use crate::session::AuthUser;
 use crate::state::AppState;
 
-/// Identity echo for /api/me. A typed struct (not a hand-built json!) so the
-/// TS shape is generated, not transcribed.
+/// A struct, so the TypeScript shape is generated.
 #[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct Me {
     pub user_id: String,
     pub display_name: String,
-    /// NC serves avatars publicly, so the SPA can load this cross-origin.
+    /// Nextcloud serves avatars publicly.
     pub avatar_url: String,
     pub nextcloud: LinkStatus,
 }
@@ -39,7 +38,7 @@ pub async fn me(
     }))
 }
 
-/// GET /api/house → the house geometry scene (scenes/house.json by default).
+/// GET /api/house → scenes/house.json by default.
 pub async fn house(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,

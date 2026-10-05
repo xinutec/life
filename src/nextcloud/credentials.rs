@@ -1,5 +1,4 @@
-//! Store for the NC app password (Login Flow v2 result), in life's own DB.
-//! Single credential per user; no expiry, no refresh.
+//! The Nextcloud app password: one per user, no expiry.
 
 use anyhow::Result;
 use sqlx::MySqlPool;
@@ -16,7 +15,6 @@ pub enum LinkStatus {
     NotLinked,
 }
 
-/// Upsert the app password granted via Login Flow v2.
 pub async fn store(pool: &MySqlPool, user_id: &str, creds: &AppPassword) -> Result<()> {
     sqlx::query(
         "INSERT INTO nc_credentials (user_id, login_name, app_password, status) \
@@ -32,28 +30,20 @@ pub async fn store(pool: &MySqlPool, user_id: &str, creds: &AppPassword) -> Resu
     Ok(())
 }
 
-/// The stored app password, ready to sign a CalDAV request.
 pub struct Credentials {
     pub login_name: String,
     pub app_password: String,
 }
 
-/// What signing a CalDAV request with what we hold would get you.
-///
-/// Not an `Option`: the two empty-handed outcomes ask different things of the
-/// user. [`NotLinked`](Usable::NotLinked) needs the grant run once;
-/// [`NeedsReauth`](Usable::NeedsReauth) needs it replaced, and "connect your
-/// calendar" would send them looking for the wrong button.
+/// Not an `Option`: never linked and rejected ask different things of the user.
 pub enum Usable {
-    /// No grant has ever completed — Login Flow v2 has not been run.
+    /// Login Flow v2 has never completed.
     NotLinked,
-    /// There is a password, but Nextcloud has already rejected it once. Trying
-    /// it again would fail the same way, so we don't.
+    /// Nextcloud rejected it once; it would fail the same way again.
     NeedsReauth,
     Ready(Credentials),
 }
 
-/// Read the credential for a DAV request, in one query.
 pub async fn for_dav(pool: &MySqlPool, user_id: &str) -> Result<Usable> {
     let row: Option<(String, String, String)> = sqlx::query_as(
         "SELECT login_name, app_password, status FROM nc_credentials WHERE user_id = ?",
@@ -71,11 +61,7 @@ pub async fn for_dav(pool: &MySqlPool, user_id: &str) -> Result<Usable> {
     })
 }
 
-/// Record that Nextcloud rejected the stored password.
-///
-/// The password is left in place rather than deleted: it is the evidence that a
-/// grant once happened, `store` overwrites it on the next link anyway, and a row
-/// that vanishes on one bad response would turn a Nextcloud outage into "you
+/// Kept rather than deleted: one bad response must not turn an outage into "you
 /// never connected this".
 pub async fn mark_needs_reauth(pool: &MySqlPool, user_id: &str) -> Result<()> {
     sqlx::query("UPDATE nc_credentials SET status = 'needs_reauth' WHERE user_id = ?")
@@ -85,7 +71,7 @@ pub async fn mark_needs_reauth(pool: &MySqlPool, user_id: &str) -> Result<()> {
     Ok(())
 }
 
-/// Cheap status read for /api/me — no NC round-trip.
+/// No Nextcloud round-trip.
 pub async fn status(pool: &MySqlPool, user_id: &str) -> Result<LinkStatus> {
     let row: Option<(String,)> =
         sqlx::query_as("SELECT status FROM nc_credentials WHERE user_id = ?")

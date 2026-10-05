@@ -1,10 +1,8 @@
-//! Emotion suggestions: a local model ranks which of the vocabulary's feelings
-//! fit a check-in note, so the picker offers them first. The model runs on the
-//! Mac, which the fleet cannot dial: this builds a self-contained prompt,
-//! [`store`](super::suggest_store) queues it, and the Mac's worker answers. The
-//! prompt's few-shot of the user's own taggings teaches their calibration (*Low*,
-//! not *Grief*), which roughly doubled agreement; [`filter_suggestions`] drops
-//! tokens outside the candidates. With no worker, the picker shows the wheel.
+//! Emotion suggestions from a local model on the Mac, which the fleet cannot
+//! dial: this builds a self-contained prompt, [`store`](super::suggest_store)
+//! queues it, and the worker answers. A few-shot of the user's own taggings
+//! teaches their calibration (*Low*, not *Grief*), which roughly doubled
+//! agreement; [`filter_suggestions`] drops anything outside the candidates.
 
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -14,24 +12,17 @@ use std::collections::HashSet;
 use std::time::Duration;
 use ts_rs::TS;
 
-/// Most recent past taggings to few-shot. Enough to teach a style; bounded so the
-/// prompt stays a fixed, cacheable size as history grows.
+/// Bounded, so the prompt stays a fixed, cacheable size.
 pub const MAX_EXAMPLES: u32 = 80;
-/// The most suggestions to surface — a short, glanceable head of the list.
 pub const MAX_SUGGESTIONS: usize = 6;
-/// How many to keep in the cache. More than are shown, because the ones already
-/// chosen are dropped at display time: caching exactly six would mean a check-in
-/// where you'd picked three of them showed only three.
+/// More than are shown, as the chosen ones are dropped at display time.
 pub const MAX_CACHED: usize = 12;
 
-/// Request from the picker: which check-in this is, the note, the whole feelings
-/// vocabulary as candidates, and the tokens already chosen.
 #[derive(Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct SuggestEmotionsRequest {
-    /// The check-in being edited — the cache key, so reopening the picker on an
-    /// unchanged note costs a lookup rather than a fresh generation.
+    /// The cache key.
     pub ulid: String,
     pub note: String,
     pub candidates: Vec<EmotionCandidate>,
@@ -39,9 +30,8 @@ pub struct SuggestEmotionsRequest {
     pub already: Vec<String>,
 }
 
-/// One selectable feeling: its `Core/Name` token and the plain-English gloss.
-/// `Serialize` too: the day's vocabulary is stored back verbatim so a rollover
-/// can rebuild the prompt with nobody waiting (see `suggest_store`).
+/// A `Core/Name` token and its gloss; stored back so a rollover can rebuild the
+/// prompt.
 #[derive(Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -50,10 +40,8 @@ pub struct EmotionCandidate {
     pub desc: String,
 }
 
-/// Fired when a check-in's note starts being written: preload the model for the
-/// suggestion that is now almost certain to follow. Carries only the vocabulary —
-/// the system prompt (vocab + this day's few-shot) is all the preload needs, and
-/// the note itself does not exist yet.
+/// Preload while a note is being written; the system prompt needs only the
+/// vocabulary.
 #[derive(Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -61,28 +49,20 @@ pub struct WarmEmotionsRequest {
     pub candidates: Vec<EmotionCandidate>,
 }
 
-/// Response: suggested tokens, most-fitting first, each guaranteed to be one of
-/// the request's candidates and not already chosen — plus enough state for the
-/// picker to be honest about where they came from.
+/// Suggested tokens, best first, each a candidate and not already chosen.
 #[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct SuggestEmotionsResponse {
     pub suggestions: Vec<String>,
-    /// These were computed from an EARLIER wording of the note. Worth showing —
-    /// they're usually still close — but only if labelled as such.
+    /// From an earlier wording: usually close, but labelled.
     pub stale: bool,
-    /// A generation for the current wording is outstanding, so a better answer is
-    /// coming. False when nothing is running, including when no worker exists at
-    /// all: the picker must never claim to be thinking when nothing is.
+    /// A better answer is coming. Never true with no worker to produce it.
     pub pending: bool,
-    /// Seconds since that generation was queued, for "thinking for 12s". Counted
-    /// from the queue, not from this request, so it survives closing and
-    /// reopening the picker. Present only while `pending`.
+    /// Counted from the queue, so it survives reopening; only while `pending`.
     pub thinking_secs: Option<u32>,
 }
 
-/// One past tagging, for the few-shot: what was written, and what was chosen.
 pub struct EmotionExample {
     pub note: String,
     pub tokens: Vec<String>,
@@ -94,9 +74,8 @@ Choose the feelings from the list that are genuinely present in the note, ranked
 Only choose feelings that are really there: returning few, or none, is correct — do not pad. \
 Never invent a feeling; every token you return must be copied exactly from the list.";
 
-/// The system turn: instructions, the candidate menu, then (if any) the user's own
-/// past taggings as few-shot. The whole thing is fixed between check-ins, so the
-/// worker's model can cache its KV prefix and only re-read the note.
+/// Instructions, candidates, then past taggings: fixed between check-ins, so the
+/// model's cached prefix holds and only the note is new.
 pub fn build_system(candidates: &[EmotionCandidate], examples: &[EmotionExample]) -> String {
     let mut s = String::from(SYSTEM_INSTRUCTIONS);
     s.push_str("\n\nFeelings to choose from (token — meaning):\n");
@@ -123,7 +102,6 @@ pub fn build_system(candidates: &[EmotionCandidate], examples: &[EmotionExample]
     s
 }
 
-/// The user turn: the note, and the shape of the answer.
 pub fn build_user(note: &str) -> String {
     format!(
         "Note:\n{note}\n\nReturn JSON {{\"tokens\": [up to {MAX_SUGGESTIONS} tokens copied exactly \
@@ -131,8 +109,7 @@ pub fn build_user(note: &str) -> String {
     )
 }
 
-/// The whole prompt as the worker receives it — self-contained, so the worker
-/// needs no database and no copy of the vocabulary.
+/// Self-contained: the worker needs no database and no vocabulary.
 pub fn build_prompt(
     candidates: &[EmotionCandidate],
     examples: &[EmotionExample],
@@ -144,20 +121,14 @@ pub fn build_prompt(
     })
 }
 
-/// Identify a note by content. Comparing hashes rather than text keeps the
-/// cache row small and makes "is this still the wording those came from?" a
-/// fixed-cost check. Whitespace-trimmed, so re-opening after a stray space does
-/// not look like an edit.
+/// A note by content, trimmed, so a stray space is not an edit.
 pub fn note_hash(note: &str) -> String {
     hex::encode(Sha256::digest(note.trim().as_bytes()))
 }
 
-/// Fetch the user's own labelled check-ins (note + chosen feelings) for the
-/// few-shot, most recent first — but only through the end of YESTERDAY (UTC).
-///
-/// Excluding today keeps the system prompt byte-identical for a day, so the
-/// worker's KV-prefix cache hits; today's taggings inform tomorrow. `id DESC`
-/// breaks ties so the set, and the cache key, is deterministic.
+/// The user's tagged check-ins, newest first, through YESTERDAY (UTC) only: the
+/// prompt stays byte-identical all day for the prefix cache. `id DESC` makes the
+/// set deterministic.
 pub async fn fetch_examples(
     pool: &MySqlPool,
     user_id: &str,
@@ -184,16 +155,10 @@ pub async fn fetch_examples(
         .collect())
 }
 
-/// How long after the UTC rollover the day's prompt is rebuilt. Not on the
-/// stroke of midnight: `fetch_examples` cuts the few-shot at `UTC_DATE()`, and
-/// starting a few minutes late means the database has unambiguously turned the
-/// page before we ask it what yesterday held.
+/// A few minutes past midnight, so the database has surely turned the day.
 pub const ROLLOVER_WARM_AFTER_MIDNIGHT: Duration = Duration::from_secs(5 * 60);
 
-/// How long to wait, from `now`, before the next rollover preload.
-///
-/// Pure, so the boundary is testable. Always strictly positive: landing on the
-/// target instant schedules the NEXT day rather than looping.
+/// Always positive: landing on the instant schedules the next day.
 pub fn until_rollover_warm(now: DateTime<Utc>) -> Duration {
     let target = |day: NaiveDate| {
         day.and_time(NaiveTime::MIN).and_utc()
@@ -214,13 +179,10 @@ pub fn until_rollover_warm(now: DateTime<Utc>) -> Duration {
         .unwrap_or(ROLLOVER_WARM_AFTER_MIDNIGHT)
 }
 
-/// Pull the ranked tokens out of what the model wrote — the JSON `{"tokens": [...]}`
-/// it was asked for. Pure, so it is tested against captured output. Anything that
-/// isn't that shape yields no tokens rather than an error: the model simply gave us
-/// nothing usable, which is a legitimate (if disappointing) answer, not a failure
-/// worth surfacing.
+/// The tokens from `{"tokens": [...]}`; any other shape is no tokens, which is an
+/// answer, not an error.
 pub fn parse_tokens(content: &str) -> Vec<String> {
-    // Models sometimes wrap JSON in a ```json fence despite being asked not to.
+    // Models wrap JSON in a ```json fence despite being asked not to.
     let trimmed = content.trim();
     let body = trimmed
         .strip_prefix("```json")
@@ -241,9 +203,8 @@ pub fn parse_tokens(content: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Keep only real, not-already-chosen suggestions, de-duplicated in the model's
-/// rank order and capped at `max`. This is the guardrail that makes a hallucinated
-/// word impossible: a token the vocabulary doesn't contain never survives.
+/// The guardrail: a token outside the vocabulary never survives. Deduplicated in
+/// rank order, capped at `max`.
 pub fn filter_suggestions(
     raw: Vec<String>,
     valid: &HashSet<&str>,
@@ -266,37 +227,29 @@ pub fn filter_suggestions(
     out
 }
 
-/// Where the answer for the current wording stands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Progress {
-    /// The cached suggestions were computed from this very wording.
+    /// Computed from this very wording.
     Answered,
-    /// They were not (or there are none): a job for this wording is queued.
+    /// Not, or none: a job for this wording is queued.
     Waiting {
-        /// Seconds since this wording was first queued.
         secs: i64,
-        /// A worker holds a fresh claim on the job, so it is generating now.
+        /// A worker holds a fresh claim: generating now.
         being_worked: bool,
-        /// A worker polled recently, so it will take the job.
+        /// A worker polled recently and will take the job.
         worker_alive: bool,
     },
 }
 
-/// What the picker is told. Pure: the route gathers what is known (the cache,
-/// the queue, the worker's liveness) and this decides what it amounts to.
-///
-/// Suggestions from an earlier wording are shown but marked `stale`: notes
-/// drift, and close beats blank. `pending` promises a better answer only when a
-/// worker is there to produce it — claiming the job, which survives a long
-/// generation when the worker cannot poll, or polling recently.
+/// What the picker is told. Pure. An earlier wording's suggestions are shown
+/// marked `stale`; `pending` only with a worker there to answer.
 pub fn respond(
     cached: Vec<String>,
     progress: Progress,
     candidates: &[EmotionCandidate],
     already: &[String],
 ) -> SuggestEmotionsResponse {
-    // Display-time filtering: the cache holds every valid token, and which of
-    // them are worth offering depends on what is selected right now.
+    // The cache holds every valid token; what to offer depends on the selection.
     let valid: HashSet<&str> = candidates.iter().map(|c| c.token.as_str()).collect();
     let already: HashSet<&str> = already.iter().map(String::as_str).collect();
     let suggestions = filter_suggestions(cached, &valid, &already, MAX_SUGGESTIONS);

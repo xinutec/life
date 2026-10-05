@@ -3,16 +3,6 @@ import type { Currency } from "./Currency";
 import type { UnitPrice } from "./UnitPrice";
 
 /**
- * A price a source reported for a listing. The client sends this on import
- * (derived from an Asda hit or a Waitrose product); the backend appends it to
- * the listing's price history.
+ * A price a shop quoted, appended to the listing's history.
  */
-export type PriceInput = { 
-/**
- * Shelf price in minor units (pence for GBP).
- */
-amount_minor: number, currency: Currency, 
-/**
- * For fair cross-pack comparison, when the shop quotes one.
- */
-unit_price: UnitPrice | null, };
+export type PriceInput = { amount_minor: number, currency: Currency, unit_price: UnitPrice | null, };

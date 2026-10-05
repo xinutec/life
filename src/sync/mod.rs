@@ -1,6 +1,5 @@
-//! Offline-first sync: a global, commit-ordered revision counter shared by all
-//! syncable tables, plus per-collection pull/push. See
-//! `docs/design/sync.md`.
+//! Offline-first sync over a global, commit-ordered revision counter
+//! (docs/design/sync.md).
 
 pub mod repo;
 pub mod types;
@@ -8,7 +7,7 @@ pub mod types;
 use anyhow::Result;
 use sqlx::MySqlPool;
 
-/// Run the one-time backfills at startup, after migrations. Idempotent.
+/// One-time backfills, after migrations. Idempotent.
 pub async fn backfill(pool: &MySqlPool) -> Result<()> {
     let n = repo::backfill_shopping(pool).await?;
     if n > 0 {

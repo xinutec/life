@@ -2,15 +2,10 @@
 import type { Source } from "./Source";
 
 /**
- * One source's value for a field that disagrees with the canonical product —
- * a choice you can adopt.
+ * One source's value for a disputed field.
  */
-export type Candidate = { 
+export type Candidate = { source: Source, 
 /**
- * The source offering this value.
- */
-source: Source, 
-/**
- * The source's value for the field, as a display string.
+ * As a display string.
  */
 value: string, };

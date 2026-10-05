@@ -1,5 +1,4 @@
-//! Price observations: what a shop charged for a listing, when. Money is always
-//! integer minor units (pence) on the wire and in the DB — never a float.
+//! What a shop charged for a listing, and when; always integer minor units.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -9,7 +8,7 @@ use super::ids::ExternalId;
 use super::source::Source;
 
 crate::str_enum! {
-    /// What a per-unit price is quoted per: the scale shops print ("£8.00/KG").
+    /// What a per-unit price is per ("£8.00/KG").
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[ts(export)]
     pub enum UnitMeasure: "unit measure" {
@@ -23,8 +22,7 @@ crate::str_enum! {
 }
 
 impl UnitMeasure {
-    /// A shop's own spelling ("KG", "LT", "EA"), or `None` for one we don't
-    /// know rather than a guess.
+    /// `None` for a spelling we do not know.
     pub fn from_shop(label: &str) -> Option<Self> {
         match label.trim().to_ascii_uppercase().as_str() {
             "KG" => Some(Self::Kg),
@@ -35,18 +33,16 @@ impl UnitMeasure {
     }
 }
 
-/// A price per unit of measure, for comparing packs: 892 per KG. The two halves
-/// travel together because either alone says nothing.
+/// 892 per KG; either half alone says nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct UnitPrice {
-    /// Minor units per `measure`.
     #[ts(type = "number")]
     pub amount_minor: i64,
     pub measure: UnitMeasure,
 }
 
-/// An ISO 4217 code, checked once where it arrives: three letters, upper case.
+/// Three upper-case letters, checked where it arrives.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, TS)]
 #[ts(export)]
 pub struct Currency(String);
@@ -83,39 +79,28 @@ impl<'de> Deserialize<'de> for Currency {
     }
 }
 
-/// A price a source reported for a listing. The client sends this on import
-/// (derived from an Asda hit or a Waitrose product); the backend appends it to
-/// the listing's price history.
+/// A price a shop quoted, appended to the listing's history.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, TS)]
 #[ts(export)]
 pub struct PriceInput {
-    /// Shelf price in minor units (pence for GBP).
     #[ts(type = "number")]
     pub amount_minor: i64,
     pub currency: Currency,
-    /// For fair cross-pack comparison, when the shop quotes one.
     pub unit_price: Option<UnitPrice>,
 }
 
-/// What one shop currently charges for a product — the `prices` part of the
-/// product detail (GET /api/products/id/{id}), cheapest shop first.
-///
-/// Exactly one row per source: a shop can list the same physical product twice
-/// (two Asda CINs sharing an EAN), and "where do I buy this, for how much" wants
-/// one answer per shop — the cheapest. `external_id` names the listing that
-/// quoted this price, so the shop link goes to the item actually being quoted.
+/// What one shop charges now: its cheapest listing, as a shop can list one
+/// product twice. `external_id` names that listing, so the link goes to it.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct ShopPrice {
-    /// The listing's source. Unique within a response.
     pub source: Source,
-    /// Source-scoped id of the listing this price came from.
     pub external_id: ExternalId,
     #[ts(type = "number")]
     pub amount_minor: i64,
     pub currency: Currency,
     pub unit_price: Option<UnitPrice>,
-    /// When observed; Unix milliseconds on the wire.
+    /// Unix milliseconds on the wire.
     #[serde(with = "chrono::serde::ts_milliseconds")]
     #[ts(type = "number")]
     pub observed_at: DateTime<Utc>,

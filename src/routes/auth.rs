@@ -1,4 +1,4 @@
-//! Auth routes: NC identity login + the NC app-password (CalDAV) link flow.
+//! Nextcloud login, and the app-password link for the calendar.
 
 use std::time::{Duration, Instant};
 
@@ -18,11 +18,8 @@ use crate::pending_login;
 use crate::session::{AuthUser, COOKIE_NAME, UserSession, create_session, destroy_session};
 use crate::state::AppState;
 
-/// The cookie deliberately outlives the session it names: the `sessions` row is
-/// the only clock, and it slides forward on every request (see
-/// `session::resolve_session`); a cookie that expired with it would end a session
-/// still in use. A cookie whose row is gone is simply a 401. 400 days is the
-/// browser's own ceiling.
+/// Outlives the session on purpose: the `sessions` row is the only clock and it
+/// slides on every request. 400 days is the browsers' ceiling.
 fn session_cookie(value: String) -> Cookie<'static> {
     Cookie::build((COOKIE_NAME, value))
         .path("/")
@@ -33,8 +30,7 @@ fn session_cookie(value: String) -> Cookie<'static> {
         .build()
 }
 
-/// The login-in-progress cookie. `Lax`, because the callback arrives as a
-/// top-level navigation from Nextcloud and a `Strict` cookie would not be sent.
+/// `Lax`: the callback is a top-level navigation from Nextcloud.
 fn pending_cookie(value: String) -> Cookie<'static> {
     Cookie::build((pending_login::COOKIE_NAME, value))
         .path("/")
@@ -45,10 +41,8 @@ fn pending_cookie(value: String) -> Cookie<'static> {
         .build()
 }
 
-/// Only allow same-site internal paths as a post-login redirect target.
-/// Rejects `//host` (protocol-relative) and `/\host` — browsers fold `\` to
-/// `/` in special-scheme URLs, so a Location of `/\evil.com` would redirect
-/// off-site.
+/// Same-site paths only. Rejects `//host` and `/\host`, which browsers fold
+/// to `//`.
 pub fn validate_return_to(return_to: Option<&str>) -> String {
     match return_to {
         Some(p) if p.starts_with('/') && !p[1..].starts_with(['/', '\\']) => p.to_string(),
@@ -61,8 +55,8 @@ pub struct LoginQuery {
     return_to: Option<String>,
 }
 
-/// GET /login → redirect to NC's OAuth2 authorize endpoint, remembering the login
-/// in a signed cookie (see [`pending_login`] for why the `state` echo isn't enough).
+/// GET /login → redirect to Nextcloud's authorize endpoint, remembering the login
+/// in a signed cookie (see [`pending_login`]).
 pub async fn login(
     State(app): State<AppState>,
     jar: CookieJar,
@@ -82,10 +76,8 @@ pub struct CallbackQuery {
     state: Option<String>,
 }
 
-/// GET /auth/callback → exchange code, read identity, create our session.
-///
-/// Every way this can fail says so in the log. A login that dies here otherwise
-/// looks like a bare 401 and tells you nothing.
+/// GET /auth/callback → exchange the code and create our session. Every failure
+/// is logged; otherwise it is a bare 401.
 pub async fn callback(
     State(app): State<AppState>,
     jar: CookieJar,
@@ -97,8 +89,6 @@ pub async fn callback(
         q.state.as_deref(),
         Utc::now(),
     ) else {
-        // No cookie (the login didn't start here), older than 10 minutes at the NC
-        // consent screen, or a `state` that doesn't match the one we minted.
         tracing::warn!(reason = "no_pending_login", "login callback rejected");
         return Err(AppError::Unauthorized);
     };
@@ -117,12 +107,11 @@ pub async fn callback(
     let signed = create_session(&app.pool, &app.cfg.session_secret, &user).await?;
     let dest = validate_return_to(pending.return_to.as_deref());
     tracing::info!(user = %user.user_id, %dest, "login complete");
-    // The login is over: drop its cookie so a stale one can't be replayed.
+    // Dropped, so it cannot be replayed.
     let jar = jar.remove(Cookie::from(pending_login::COOKIE_NAME));
     Ok((jar.add(session_cookie(signed)), Redirect::to(&dest)))
 }
 
-/// POST /logout → destroy the session + clear the cookie.
 pub async fn logout(
     State(app): State<AppState>,
     jar: CookieJar,
@@ -134,22 +123,20 @@ pub async fn logout(
     Ok((jar.remove(Cookie::from(COOKIE_NAME)), Redirect::to("/")))
 }
 
-/// Where to approve the calendar link.
 #[derive(Debug, Serialize, TS)]
 #[ts(export)]
 pub struct ConnectStarted {
     pub login_url: String,
 }
 
-/// Whether the calendar link is usable.
 #[derive(Debug, Serialize, TS)]
 #[ts(export)]
 pub struct ConnectState {
     pub status: LinkStatus,
 }
 
-/// POST /api/nextcloud/connect/init → start Login Flow v2, return the grant
-/// URL, and poll for completion in the background until granted or timeout.
+/// POST /api/nextcloud/connect/init → start Login Flow v2 and poll for the grant
+/// in the background.
 pub async fn connect_init(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -187,9 +174,8 @@ pub async fn connect_init(
     Ok(Json(ConnectStarted { login_url }))
 }
 
-/// GET /dev-login → DEV ONLY. Mints a session for `DEV_LOGIN_USER` with no
-/// Nextcloud. The route is only mounted when that env var is set (see
-/// routes::router); this handler also re-checks, so it 404s otherwise.
+/// GET /dev-login → development only: a session for `DEV_LOGIN_USER`. Mounted
+/// only when that is set, and re-checked here.
 pub async fn dev_login(
     State(app): State<AppState>,
     jar: CookieJar,

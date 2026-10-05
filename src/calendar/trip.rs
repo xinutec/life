@@ -1,54 +1,35 @@
-//! The shop trip as a `VEVENT`. Life keeps no trip table
-//! (docs/design/overview.md §5), so everything needed in the shop (where, what
-//! to get, the reminder) must be in the event. Built apart from sending
-//! ([`super::caldav`]) so it tests without Nextcloud.
+//! A shop trip as a `VEVENT`. Life keeps no trip table, so all the shop needs is
+//! in the event.
 
 use anyhow::{Result, bail};
 use chrono::{DateTime, Duration, Utc};
 use icalendar::{Alarm, Calendar, Component, Event, EventLike, Property};
 
-/// A planned trip to one shop.
 pub struct ShopTrip {
-    /// Named as the Buy list names it — "Asda", "Waitrose", or whatever was
-    /// typed. life has no shop entity, and inventing one to validate against
-    /// would refuse the corner shop.
+    /// As typed: life has no shop entity, and validating would refuse the corner shop.
     pub shop: String,
     pub starts_at: DateTime<Utc>,
     pub minutes: i64,
-    /// What to get, in the order the list has it. May be empty — a trip is
-    /// worth putting in the diary before you know what's on it.
+    /// In list order; may be empty.
     pub items: Vec<String>,
 }
 
-/// How long before the trip to nudge. Long enough to put your shoes on, short
-/// enough that the reminder is still about *this* trip and not a note for the
-/// day ahead.
 const REMIND_BEFORE_MINUTES: i64 = 30;
 
-/// The longest trip we'll write. Not a rule about shopping — a bound on a
-/// number that arrives from a client, so a fat-fingered field can't write an
-/// event across next week.
+/// A bound on a client's number, so a typo cannot fill next week.
 const MAX_MINUTES: i64 = 8 * 60;
 
-/// Who wrote the event, in the `PRODID` every calendar client can read.
-///
-/// The `icalendar` crate would otherwise name itself.
+/// Or the `icalendar` crate names itself.
 const PRODID: &str = "-//Xinutec//life//EN";
 
-/// The most items to spell out in the description. A Buy list is a trolley, not
-/// a catalogue; past this the event stops being readable on a lock screen and
-/// the list itself is the better place to look.
+/// Past this, the description stops being readable on a lock screen.
 const MAX_LISTED: usize = 60;
 
-/// The event's title, and the one line most calendar views will show.
 pub fn summary(shop: &str) -> String {
     format!("Shop at {shop}")
 }
 
-/// Render the trip as a complete `VCALENDAR` document.
-///
-/// `now` is passed in rather than read, so the `DTSTAMP` a test asserts on is
-/// the one the test chose.
+/// `now` is passed in, so a test chooses the `DTSTAMP`.
 pub fn ics(trip: &ShopTrip, uid: &str, now: DateTime<Utc>) -> Result<String> {
     let shop = trip.shop.trim();
     if shop.is_empty() {
@@ -64,9 +45,7 @@ pub fn ics(trip: &ShopTrip, uid: &str, now: DateTime<Utc>) -> Result<String> {
         .uid(uid)
         .timestamp(now)
         .summary(&title)
-        // Free text, deliberately: `GEO` coordinates render as a map pin in some
-        // clients and as nothing in others, and the shop's name is the part that
-        // is right in all of them. See overview.md §5.
+        // Free text: `GEO` is a map pin in some clients and nothing in others.
         .location(shop)
         .starts(trip.starts_at)
         .ends(trip.starts_at + Duration::minutes(trip.minutes));
@@ -75,8 +54,7 @@ pub fn ics(trip: &ShopTrip, uid: &str, now: DateTime<Utc>) -> Result<String> {
         event.description(&list);
     }
 
-    // The reminder is the point of writing this at all: an event nobody is
-    // told about is a note, and the Buy list is already a better note.
+    // The reminder is the point: an event nobody is told about is just a note.
     event.alarm(Alarm::display(
         &title,
         -Duration::minutes(REMIND_BEFORE_MINUTES),
@@ -84,19 +62,14 @@ pub fn ics(trip: &ShopTrip, uid: &str, now: DateTime<Utc>) -> Result<String> {
 
     let mut calendar = Calendar::new();
     calendar.push(event.done());
-    // Replaced rather than appended: `PRODID` appears exactly once in a
-    // VCALENDAR, and a second one would be a malformed document that some
-    // clients accept and others reject.
+    // Replaced: a second `PRODID` is malformed.
     calendar.properties.retain(|p| p.key() != "PRODID");
     calendar.append_property(Property::new("PRODID", PRODID));
     Ok(calendar.done().to_string())
 }
 
-/// The Buy list as description text, or `None` when there is nothing to say.
-///
-/// Blank entries are dropped rather than rendered as empty bullets, and the
-/// tail past [`MAX_LISTED`] is *counted* rather than silently cut — a list that
-/// quietly stopped at sixty would be read in the shop as the whole list.
+/// Blank entries dropped; past [`MAX_LISTED`] the rest are counted, as a list
+/// silently cut would be read in the shop as the whole list.
 fn shopping_list(items: &[String]) -> Option<String> {
     let named: Vec<&str> = items
         .iter()

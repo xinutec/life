@@ -1,10 +1,7 @@
-//! Asda product search via its public Algolia index. The key is search-only and
-//! shipped to every browser, so the server needs no login or bot wall, unlike
-//! Waitrose (a WebView provider in the frontend's `shops/`).
-//!
-//! `IMAGE_ID` is the primary EAN, but not searchable: this is name search only.
-//! On 4xx the key has rotated: copy the `x-algolia-api-key` header from a search
-//! in browser devtools into `SEARCH_KEY`.
+//! Asda search through its public Algolia index: the key is search-only and in
+//! every browser, so no login or bot wall. Name search only (`IMAGE_ID`, the EAN,
+//! is not searchable). On 4xx the key has rotated: copy `x-algolia-api-key` from a
+//! search in browser devtools into `SEARCH_KEY`.
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -14,52 +11,38 @@ use super::ids::{Barcode, ExternalId};
 use super::nutrition::{Claim, Diet, DietaryFlag};
 use super::prices::{Currency, PriceInput, UnitMeasure, UnitPrice};
 
-/// Algolia application id — also the request host (`{app}-dsn.algolia.net`).
+/// Also the request host (`{app}-dsn.algolia.net`).
 const APP_ID: &str = "8I6WSKCCNV";
-/// Public *search-only* key (see module docs; safe to commit — it's in Asda's
-/// own browser bundle). Not a user secret.
+/// Search-only and in Asda's own bundle; not a secret.
 const SEARCH_KEY: &str = "03e4272048dd17f771da37b57ff8a75e";
-/// The storefront product index.
 const INDEX: &str = "ASDA_PRODUCTS";
-/// scene7 image CDN, keyed by the product's `IMAGE_ID` (its EAN). Ungated
-/// (200 from anywhere), so the import path can fetch it server-side. `$ProdList$`
-/// is Asda's list-thumbnail preset.
+/// The scene7 CDN, keyed by `IMAGE_ID`; open to the server. `$ProdList$` is the
+/// list-thumbnail preset.
 const IMAGE_BASE: &str = "https://asdagroceries.scene7.com/is/image/asdagroceries/";
 
-/// A normalized Asda search hit, ready for the product picker. Mirrors the
-/// fields the picker shows plus the identity it needs to import + link.
+/// An Asda search hit, as the picker shows and imports it.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct AsdaHit {
-    /// Asda catalogue item number (CIN); the stable per-source id we import by.
+    /// The CIN, which the import keys on.
     pub external_id: ExternalId,
     pub name: String,
     pub brand: Option<String>,
-    /// Primary EAN (from `IMAGE_ID`) when it's barcode-shaped; the shopping row
-    /// carries this even though the imported catalogue row stays barcodeless.
+    /// The EAN from `IMAGE_ID`, when barcode-shaped.
     pub barcode: Option<Barcode>,
-    /// Pack size, e.g. "400G".
     pub quantity_label: Option<String>,
-    /// Formatted England price for display, e.g. "£3.57".
+    /// England price, formatted.
     pub price_label: Option<String>,
-    /// Structured England price (minor units + per-unit), recorded as a price
-    /// observation when this hit is imported. `None` when the hit has no price.
+    /// England price, recorded as an observation on import.
     pub price: Option<PriceInput>,
-    /// scene7 thumbnail URL (host-allowlisted for server-side import).
     pub image_url: Option<String>,
-    /// Asda's own lifestyle tags for this product (vegan, gluten-free, …), as
-    /// dietary flags. Only ever assertions — see `LIFESTYLE_FLAGS`.
+    /// Lifestyle tags as dietary flags, assertions only.
     pub dietary: Vec<DietaryFlag>,
-    /// Asda's ENTIRE record for this hit, verbatim — the lossless backstop that
-    /// the structured fields above are extracted from. Kept off the wire
-    /// (`serde(skip)`) and off the TS bindings (`ts(skip)`): it's for storing on
-    /// the listing, not for the picker to render.
+    /// The whole record, verbatim, for the listing; not sent to the client.
     #[serde(skip)]
     #[ts(skip)]
     pub raw: Option<serde_json::Value>,
 }
-
-// --- Algolia wire shapes (only the fields we use) ---
 
 #[derive(Deserialize)]
 struct AlgoliaResponse {
@@ -68,9 +51,7 @@ struct AlgoliaResponse {
 
 #[derive(Deserialize)]
 struct AlgoliaResult {
-    // Kept as raw JSON values: each hit is both decoded into `RawHit` (for the
-    // fields we model) AND stored verbatim (the lossless record), so a field we
-    // don't parse yet is never lost.
+    // Each hit is decoded AND kept verbatim, so an unparsed field is never lost.
     #[serde(default)]
     hits: Vec<serde_json::Value>,
 }
@@ -91,16 +72,13 @@ struct RawHit {
     pack_size: Option<String>,
     #[serde(rename = "PRICES")]
     prices: Option<Prices>,
-    /// Asda's lifestyle tag block: every tag it knows, 1 = claimed, 0 = NOT
-    /// claimed (see `lifestyle_flags`).
+    /// Every tag Asda knows, 1 = claimed, 0 = not claimed.
     #[serde(rename = "NUTRITIONAL_INFO", default)]
     nutritional_info: std::collections::BTreeMap<String, i64>,
 }
 
-/// Asda's lifestyle tag → our dietary flag slug, so its flags merge with OFF's
-/// instead of sitting beside them as near-duplicates. Only diet/lifestyle and
-/// free-from tags: the rest (LowSalt, HighFibre, …) are marketing about quantity,
-/// not a yes/no, and stay in the stored `raw_json`.
+/// Lifestyle tag → our flag, so Asda's merge with OFF's. Only diet and free-from
+/// tags; the rest (LowSalt, …) are not yes/no.
 const LIFESTYLE_FLAGS: &[(&str, Diet)] = &[
     ("Vegan", Diet::Vegan),
     ("Vegetarian", Diet::Vegetarian),
@@ -115,11 +93,8 @@ const LIFESTYLE_FLAGS: &[(&str, Diet)] = &[
     ("Organic", Diet::Organic),
 ];
 
-/// Asda's lifestyle tags as dietary flags, every one 'yes'.
-///
-/// **A 0 is not a "no".** Asda ships all 24 tags and sets the ones it claims:
-/// Quaker Oat So Simple has `Vegetarian: 0`, though oats plainly are. Reading 0
-/// as a negative would tell you a vegetarian product isn't one.
+/// Every flag 'yes': a 0 is not a "no". Asda sets only what it claims, and Quaker
+/// Oat So Simple has `Vegetarian: 0`.
 fn lifestyle_flags(info: &std::collections::BTreeMap<String, i64>) -> Vec<DietaryFlag> {
     LIFESTYLE_FLAGS
         .iter()
@@ -151,12 +126,10 @@ fn non_empty(s: Option<String>) -> Option<String> {
     s.map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
 }
 
-/// Asda's float pounds → integer pence, rounded, or `None` for anything that
-/// isn't a real price: `as i64` saturates (and turns NaN into 0) silently, which
-/// would put a malformed payload in the price history as a plausible number.
+/// Pounds to pence, or `None` for anything not a real price: `as i64` would turn
+/// NaN into 0 silently.
 fn to_minor(pounds: f64) -> Option<i64> {
-    /// £1,000,000 in pence. Not a technical limit — an i64 holds far more —
-    /// but the point past which a "price" is evidence the payload is wrong.
+    /// Past this, a "price" means the payload is wrong.
     const MAX_PENCE: f64 = 100_000_000.0;
     let pence = (pounds * 100.0).round();
     if !pence.is_finite() || !(0.0..=MAX_PENCE).contains(&pence) {
@@ -169,14 +142,12 @@ fn to_minor(pounds: f64) -> Option<i64> {
     Some(pence as i64)
 }
 
-/// The unit of measure out of Asda's per-unit label: "£8.93/KG" → Kg. `None`
-/// when there is no "/…" measure, or one we don't know.
+/// "£8.93/KG" → Kg.
 fn unit_measure(formatted: &str) -> Option<UnitMeasure> {
     UnitMeasure::from_shop(formatted.rsplit_once('/')?.1)
 }
 
-/// Build a price observation from Asda's England price region, or `None` if it
-/// has no positive shelf price.
+/// From the England region; `None` without a positive shelf price.
 fn price_input(r: &PriceRegion) -> Option<PriceInput> {
     let amount = r.price.filter(|p| *p > 0.0)?;
     Some(PriceInput {
@@ -194,9 +165,7 @@ fn price_input(r: &PriceRegion) -> Option<PriceInput> {
     })
 }
 
-/// Parse a raw Algolia multi-query response body into normalized hits. The pure
-/// half of `search` (no I/O), so it's exercised directly from tests against a
-/// captured response. Hits missing the identity we need (CIN + name) are dropped.
+/// The pure half of `search`. Hits without a CIN and a name are dropped.
 pub fn parse_hits(body: &str) -> Result<Vec<AsdaHit>> {
     let parsed: AlgoliaResponse =
         serde_json::from_str(body).context("Asda Algolia decode failed")?;
@@ -205,29 +174,20 @@ pub fn parse_hits(body: &str) -> Result<Vec<AsdaHit>> {
         .into_iter()
         .flat_map(|r| r.hits)
         .filter_map(|value| {
-            // A hit that can't even be decoded into the fields we model can't be
-            // identified or imported, so it's dropped — same fate as one missing
-            // its CIN/name below.
             let raw: RawHit = serde_json::from_value(value.clone()).ok()?;
             normalize(raw, value)
         })
         .collect())
 }
 
-/// Turn one raw Algolia hit into an `AsdaHit`, or `None` if it lacks the
-/// identity we need (a CIN and a name). `raw_value` is the same hit untouched,
-/// carried onto the `AsdaHit` as the lossless record.
 fn normalize(raw: RawHit, raw_value: serde_json::Value) -> Option<AsdaHit> {
-    // A hit whose CIN isn't a well-formed id is dropped rather than repaired:
-    // an id we can't address the listing by is not an identity.
+    // An id we cannot address the listing by is not an identity.
     let external_id: ExternalId = non_empty(raw.cin.or(raw.object_id))?.parse().ok()?;
     let name = non_empty(raw.name)?;
     let image_id = non_empty(raw.image_id);
-    // IMAGE_ID is usually the EAN but not always; a non-barcode one just means
-    // this hit teaches us no barcode.
+    // IMAGE_ID is usually but not always the EAN.
     let barcode = image_id.as_deref().and_then(|id| id.parse().ok());
     let image_url = image_id.map(|id| format!("{IMAGE_BASE}{id}?$ProdList$"));
-    // The England region feeds both the display label and the structured price.
     let en = raw.prices.and_then(|p| p.en);
     let price = en.as_ref().and_then(price_input);
     let price_label = en
@@ -249,11 +209,9 @@ fn normalize(raw: RawHit, raw_value: serde_json::Value) -> Option<AsdaHit> {
     })
 }
 
-/// A second, shorter search for when the full name finds nothing: the first
-/// listed brand and the name's first word, skipping brand words and words with
-/// digits or `%`. Asda ranks long names badly ("Fusilli 100% durum wheat"
-/// matches only "100%"); measured on the catalogue, this recovers what a third
-/// or fourth query shape would. `None` without a brand or a word left.
+/// A shorter second search when the full name finds nothing: the brand and the
+/// name's first word, skipping brand words and words with digits or `%`. Asda
+/// ranks long names badly ("Fusilli 100% durum wheat" matches only "100%").
 pub fn fallback_query(name: &str, brand: Option<&str>) -> Option<String> {
     let brands = brand?;
     let brand = brands.split(',').next()?.trim();
@@ -277,20 +235,15 @@ pub fn fallback_query(name: &str, brand: Option<&str>) -> Option<String> {
     Some(format!("{brand} {head}"))
 }
 
-/// The hit whose barcode is this product's, or `None`.
-///
-/// Asda can only be searched by name, and its ranking is no identity (a search
-/// for "Asda ES Balsamic Modena" ranks a raspberry glaze first), so relevance is
-/// ignored and only a barcode match counts. `None` means every hit was checked.
+/// The hit with this product's barcode. Ranking is no identity: "Asda ES
+/// Balsamic Modena" ranks a raspberry glaze first.
 pub fn match_barcode(hits: Vec<AsdaHit>, barcode: &Barcode) -> Option<AsdaHit> {
     hits.into_iter()
         .find(|h| h.barcode.as_ref() == Some(barcode))
 }
 
-/// One product by its CIN — the exact-identity fetch behind "refresh this
-/// listing". Asda has no by-id endpoint, but the CIN IS a searchable attribute,
-/// so we query it and then VERIFY the hit's own CIN rather than trusting the
-/// first result: a search is a relevance guess, and this must be an identity.
+/// One product by its CIN. Asda has no by-id endpoint, so the CIN is searched and
+/// the hit's own CIN verified.
 pub async fn fetch_by_id(http: &reqwest::Client, cin: &ExternalId) -> Result<Option<AsdaHit>> {
     Ok(search(http, cin.as_str(), 5)
         .await?
@@ -298,9 +251,7 @@ pub async fn fetch_by_id(http: &reqwest::Client, cin: &ExternalId) -> Result<Opt
         .find(|h| &h.external_id == cin))
 }
 
-/// Search the Asda storefront by product name. Returns up to `limit` normalized
-/// hits (best-match order preserved from Algolia). A blank query yields `[]`
-/// without a network call.
+/// Up to `limit` hits in Algolia's order; a blank query makes no call.
 pub async fn search(http: &reqwest::Client, query: &str, limit: u32) -> Result<Vec<AsdaHit>> {
     let query = query.trim();
     if query.is_empty() {

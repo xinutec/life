@@ -1,9 +1,5 @@
-//! Product facts (nutrition, ingredients, allergens, dietary flags) and the
-//! source documents they were read from.
-//!
-//! Stored per source, so OFF and a retailer's Brandbank facts sit side by side;
-//! a write restates one source, and `facts_for` merges them on read
-//! (precedence for nutrition and ingredients, union for allergens).
+//! Product facts and the source documents they came from. Stored per source and
+//! merged on read: precedence for nutrition and ingredients, union for allergens.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -39,8 +35,7 @@ struct NutritionRow {
     extra: Option<Json<BTreeMap<String, f64>>>,
 }
 
-/// Upsert this source's nutrition panel for a product (keyed by product + source
-/// since 0033, so OFF's and a retailer's panels coexist).
+/// Keyed by product and source (0033), so panels from two sources coexist.
 pub async fn upsert_nutrition(
     pool: &MySqlPool,
     product_id: ProductId,
@@ -87,7 +82,6 @@ async fn upsert_nutrition_in(
     Ok(())
 }
 
-/// Upsert this source's ingredients text (one block per product+source, 0033).
 pub async fn set_ingredients(
     pool: &MySqlPool,
     product_id: ProductId,
@@ -116,11 +110,8 @@ async fn set_ingredients_in(
     Ok(())
 }
 
-/// Replace this source's allergen set (empty clears it), leaving other sources'
-/// rows alone; `facts_for` unions them on read.
-///
-/// One transaction: a half-applied replace would read as the product not
-/// containing an allergen, a health error rather than a data-quality one.
+/// Replace this source's allergens, leaving others'. One transaction: half a
+/// replace would read as "free from", a health error.
 pub async fn replace_allergens(
     pool: &MySqlPool,
     product_id: ProductId,
@@ -144,7 +135,7 @@ async fn replace_allergens_in(
         .bind(source)
         .execute(&mut *conn)
         .await?;
-    // One row per allergen id: the key is (product, source, allergen).
+    // The key is (product, source, allergen).
     let allergens = allergen_list(allergens.iter().map(|a| (a.allergen.clone(), a.presence)));
     for a in allergens {
         sqlx::query(
@@ -161,10 +152,8 @@ async fn replace_allergens_in(
     Ok(())
 }
 
-/// Replace THIS SOURCE's dietary flags, leaving other sources' claims alone
-/// (migration 0028): a re-lookup of OFF must not erase Asda's; `facts_for` merges
-/// on read. Atomic, as `replace_allergens`: half a replace drops real claims, and
-/// `merge_dietary` reads a missing "no" as an unopposed "yes".
+/// Replace this source's dietary flags, leaving others' (0028). Atomic: a missing
+/// "no" reads as an unopposed "yes".
 pub async fn replace_dietary(
     pool: &MySqlPool,
     product_id: ProductId,
@@ -203,9 +192,8 @@ pub(super) async fn replace_dietary_in(
     Ok(())
 }
 
-/// Keep a fetched source payload verbatim (product_documents, 0034), so we never
-/// fetch it twice and can re-derive from it later. Keyed by (product, source,
-/// kind); re-fetching the same kind overwrites and re-stamps `fetched_at`.
+/// Keep a fetched payload verbatim (0034), so it is never fetched twice;
+/// re-fetching the same kind overwrites it.
 pub async fn upsert_document(
     pool: &MySqlPool,
     product_id: ProductId,
@@ -226,8 +214,6 @@ pub async fn upsert_document(
     Ok(())
 }
 
-/// The raw payload we hold for (product, source, kind), if any — for re-parsing
-/// without another fetch.
 pub async fn get_document(
     pool: &MySqlPool,
     product_id: ProductId,
@@ -245,8 +231,7 @@ pub async fn get_document(
     Ok(row.map(|(b,)| b))
 }
 
-/// Metadata for every raw payload held for a product (not the bodies) — what the
-/// product detail advertises so the client needn't re-fetch what we already have.
+/// Metadata only, no bodies.
 pub async fn documents_for(pool: &MySqlPool, product_id: ProductId) -> Result<Vec<SourceDocument>> {
     let rows: Vec<SourceDocument> = sqlx::query_as(
         "SELECT source, kind, \
@@ -260,10 +245,9 @@ pub async fn documents_for(pool: &MySqlPool, product_id: ProductId) -> Result<Ve
     Ok(rows)
 }
 
-/// Persist a product's full fact set from one source. Nutrition and ingredients
-/// the source didn't provide are left as they are; allergens and dietary flags
-/// always replace, since their absence is meaningful. One transaction: a partial
-/// set would put, say, Asda's nutrition beside OFF's allergens, attributed to Asda.
+/// A source's full fact set. Nutrition and ingredients it lacks stay; allergens
+/// and dietary flags replace, as their absence means something. One transaction,
+/// or Asda's nutrition could sit beside OFF's allergens attributed to Asda.
 pub async fn store_facts(
     pool: &MySqlPool,
     product_id: ProductId,
@@ -276,7 +260,7 @@ pub async fn store_facts(
     Ok(())
 }
 
-/// [`store_facts`] on the caller's connection, for a caller with more to commit.
+/// [`store_facts`] on the caller's connection.
 pub(super) async fn store_facts_in(
     conn: &mut MySqlConnection,
     product_id: ProductId,
@@ -294,18 +278,14 @@ pub(super) async fn store_facts_in(
     Ok(())
 }
 
-/// Read back everything we know about a product beyond its identity. Feeds
-/// the product detail (GET /api/products/id/{id}) — the rich product page.
 pub async fn facts_for(pool: &MySqlPool, product_id: ProductId) -> Result<ProductFacts> {
     let by_source = facts_by_source(pool, product_id).await?;
     let prefs = fact_source_prefs(pool, product_id).await?;
     Ok(merge_facts(&by_source, &prefs))
 }
 
-/// Every source's own account of a product's facts, one `SourceFacts` per source
-/// that has any. This is the raw material both for the merged display
-/// (`merge_facts`) and for provenance/divergence — fetched once, reasoned over
-/// purely. Sources are returned in precedence order (retailer before crowd).
+/// Each source's own facts, in precedence order (retailer before crowd): the raw
+/// material for both the merge and the divergences.
 pub async fn facts_by_source(pool: &MySqlPool, product_id: ProductId) -> Result<Vec<SourceFacts>> {
     let mut conn = pool.acquire().await?;
     facts_by_source_in(&mut conn, product_id).await
@@ -343,7 +323,6 @@ pub(super) async fn facts_by_source_in(
     .fetch_all(&mut *conn)
     .await?;
 
-    // Group every table's rows by source into one ProductFacts each.
     let mut by_source: BTreeMap<Source, ProductFacts> = BTreeMap::new();
     let blank = || ProductFacts {
         nutrition: None,
@@ -370,10 +349,8 @@ pub(super) async fn facts_by_source_in(
     for (source, text) in ing_rows {
         by_source.entry(source).or_insert_with(blank).ingredients = Some(text);
     }
-    // A stored value outside the taxonomy fails the query itself (the columns
-    // decode as their enums), rather than being papered over with a default.
-    // A row stored under an older name reads as its OFF id, so a source that
-    // said "wheat" and "barley" holds one `gluten`.
+    // An unknown stored value fails the query rather than defaulting; an older
+    // allergen name reads as its OFF id, so "wheat" and "barley" are one gluten.
     let mut allergens: BTreeMap<Source, Vec<(AllergenId, Presence)>> = BTreeMap::new();
     for (source, allergen, presence) in allergen_rows {
         allergens
@@ -396,19 +373,15 @@ pub(super) async fn facts_by_source_in(
         .into_iter()
         .map(|(source, facts)| SourceFacts { source, facts })
         .collect();
-    // Precedence order, so the UI lists the trusted source first.
     out.sort_by_key(|s| (fact_rank(s.source), s.source));
     Ok(out)
 }
 
-/// Which source to trust for each source-picked fact (0035).
 pub type FactSourceMap = HashMap<ReconcileField, Source>;
 
-/// The fact-source picks recorded for a product (empty if none — precedence then
-/// decides the merge).
+/// Empty when none: precedence decides.
 pub async fn fact_source_prefs(pool: &MySqlPool, product_id: ProductId) -> Result<FactSourceMap> {
-    // A kind we no longer know fails the query: dropping it would un-settle a
-    // fact you already decided.
+    // An unknown kind fails: dropping it would un-settle a decision.
     let rows: Vec<(ReconcileField, Source)> =
         sqlx::query_as("SELECT kind, source FROM product_fact_sources WHERE product_id = ?")
             .bind(product_id)
@@ -417,12 +390,8 @@ pub async fn fact_source_prefs(pool: &MySqlPool, product_id: ProductId) -> Resul
     Ok(rows.into_iter().collect())
 }
 
-/// The whole-value facts that reconcile by picking one source (not by merge).
-/// Allergens and dietary are excluded on purpose — they're safety-critical and
-/// merge by union / tri-state.
-///
-/// Derived from the field type rather than listed again: a new `Fact` field is
-/// picked up here without anyone remembering to add it.
+/// The facts settled by picking one source. Allergens and diets are not: they are
+/// safety facts and merge. Derived from the type, so a new one joins itself.
 pub fn picked_facts() -> impl Iterator<Item = ReconcileField> {
     ReconcileField::ALL
         .iter()
@@ -430,10 +399,8 @@ pub fn picked_facts() -> impl Iterator<Item = ReconcileField> {
         .filter(|f| f.reconciler() == Reconciler::Fact)
 }
 
-/// Combine every source's facts into the one answer to display, honouring any
-/// recorded source pick (0035). Nutrition and ingredients take one source's value
-/// whole — the pick if set and present, else by precedence; allergens union and
-/// dietary tri-state (safety — a pick never applies). Pure.
+/// The facts to show: a pick or precedence for nutrition and ingredients, union
+/// and tri-state for allergens and diets, which a pick never touches. Pure.
 pub fn merge_facts(by_source: &[SourceFacts], prefs: &FactSourceMap) -> ProductFacts {
     let panels: Vec<(Source, Nutrition)> = by_source
         .iter()
@@ -471,35 +438,29 @@ pub fn merge_facts(by_source: &[SourceFacts], prefs: &FactSourceMap) -> ProductF
     }
 }
 
-/// The value from the picked source, if that pick is set and that source actually
-/// has a value here. `None` falls the caller back to precedence.
+/// The picked source's value, if it has one; `None` falls back to precedence.
 fn pick_source<'a, T>(values: &'a [(Source, T)], pref: Option<&Source>) -> Option<&'a T> {
     let want = *pref?;
     values.iter().find(|(src, _)| *src == want).map(|(_, v)| v)
 }
 
-/// Facts that reconcile by source-pick and where the sources genuinely disagree,
-/// as `FieldDivergence`s to fold into the same approve grammar as the scalar
-/// fields. A pick already recorded (in `prefs`) settles it. Pure — the unit under
-/// test.
+/// The picked facts the sources really disagree on, as divergences. A recorded
+/// pick settles one. Pure.
 pub fn fact_divergences(by_source: &[SourceFacts], prefs: &FactSourceMap) -> Vec<FieldDivergence> {
     let mut out = Vec::new();
     for field in picked_facts() {
-        // Once a source is picked for this fact, the divergence is settled.
         if prefs.contains_key(&field) {
             continue;
         }
-        // Each source's display value for this fact, in precedence order.
         let offered: Vec<(Source, String)> = by_source
             .iter()
             .filter_map(|s| fact_display(field, &s.facts).map(|v| (s.source, v)))
             .collect();
-        // Only a real disagreement (≥2 distinct values) is worth approving.
         let distinct: BTreeSet<&str> = offered.iter().map(|(_, v)| v.as_str()).collect();
         if distinct.len() < 2 {
             continue;
         }
-        // The current pick is the precedence winner (offered is already ranked).
+        // The current pick is the precedence winner.
         let current = offered.first().map(|(_, v)| v.clone());
         let candidates: Vec<Candidate> = offered
             .into_iter()
@@ -516,10 +477,7 @@ pub fn fact_divergences(by_source: &[SourceFacts], prefs: &FactSourceMap) -> Vec
     out
 }
 
-/// One source's display string for a picked fact, or `None` if it has none.
-///
-/// `None` for a field that isn't a picked fact: those reconcile by another
-/// mechanism entirely and have no single value to show in a radio row.
+/// `None` for a field that is not a picked fact.
 pub(super) fn fact_display(field: ReconcileField, facts: &ProductFacts) -> Option<String> {
     match field {
         ReconcileField::Nutrition => facts.nutrition.as_ref().map(summarize_nutrition),

@@ -1,4 +1,4 @@
-//! The trash HTTP surface: list what's deleted, restore by kind + ref.
+//! Listing and restoring what was deleted.
 
 use std::str::FromStr;
 
@@ -19,8 +19,7 @@ pub async fn list(
     Ok(Json(repo::list(&app.pool, &user.user_id).await?))
 }
 
-/// POST /api/trash/{kind}/{ref}/restore → 204, or 404 if there was nothing to
-/// restore (unknown ref, not deleted, not this user's).
+/// POST /api/trash/{kind}/{ref}/restore → 204, or 404 if nothing was restored.
 pub async fn restore(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,

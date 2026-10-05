@@ -1,4 +1,4 @@
-//! The shapes a purchase takes on the wire and in the database.
+//! Purchases on the wire and in the database.
 
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
@@ -7,53 +7,42 @@ use ts_rs::TS;
 use crate::products::ids::ProductId;
 use crate::products::prices::{Currency, UnitPrice};
 
-/// What the client says when a buy-list row is marked bought AND the price was
-/// noted. Every field the person has to type is here; everything else (what it
-/// was, what pack, when) is copied from the row being bought, because asking
-/// again for what the app already knows is how a capture step stops being used.
+/// Only what the person types; the rest is copied from the row being bought.
 #[derive(Debug, Clone, Deserialize, TS)]
 #[ts(export)]
 pub struct NewPurchase {
-    /// Free text. "the corner shop" is a real answer — see migration 0043.
+    /// Free text: "the corner shop" is a real answer.
     pub shop: String,
-    /// Minor units (pence for GBP). Integer, never a float: money must be exact.
+    /// Minor units.
     #[ts(type = "number")]
     pub amount_minor: i64,
-    /// Defaulted rather than required: the common case should cost no keystrokes.
     #[serde(default = "Currency::gbp")]
     pub currency: Currency,
-    /// When it was bought, for something recorded after the fact (an appliance
-    /// entered so its warranty has a start). Absent means now: the buy-list flow.
-    ///
-    /// A DATE, converted by the server: nobody knows what time they bought a
-    /// dishwasher, and a client's own midnight can be a day off.
+    /// For something recorded after the fact; absent means now. A date: nobody
+    /// knows what time they bought a dishwasher.
     #[serde(default)]
     pub bought_on: Option<NaiveDate>,
-    /// How many months of cover the receipt says, if any. Absent means no
-    /// warranty was recorded — NOT that there is none. See migration 0046.
+    /// Absent: none recorded, not none (0046).
     #[serde(default)]
     pub warranty_months: Option<i32>,
 }
 
 crate::row_id! {
-    /// `purchases.id` — one time something was paid for.
+    /// `purchases.id`.
     PurchaseId
 }
 
-/// A recorded purchase, as it reads back.
 #[derive(Debug, Clone, PartialEq, Serialize, TS, sqlx::FromRow)]
 #[ts(export)]
 pub struct Purchase {
     #[ts(type = "number")]
     pub id: PurchaseId,
     pub product_id: Option<ProductId>,
-    /// The cupboard item this bought — the one key that always exists, since a
-    /// hand-typed buy-list row has no barcode and no product.
+    /// The one key that always exists.
     #[ts(type = "number | null")]
     pub item_id: Option<crate::inventory::types::ItemId>,
     pub barcode: Option<String>,
-    /// What it was called when it was bought — the one field no later
-    /// correction to the catalogue can invalidate.
+    /// The name when bought, which no later correction changes.
     pub name: String,
     pub shop: String,
     #[ts(type = "number")]
@@ -61,21 +50,16 @@ pub struct Purchase {
     pub currency: Currency,
     pub quantity: Option<f64>,
     pub unit: Option<String>,
-    /// Derived on read, never stored: per kg / litre / item, rounded. A rate for
-    /// comparing packs, not an amount paid. `None` when the pack or its unit is
-    /// unknown to `packsize::parse`.
+    /// Derived on read: per kg, litre or item, for comparing packs.
     #[sqlx(skip)]
     pub unit_price: Option<UnitPrice>,
     /// Unix milliseconds on the wire.
     #[serde(with = "chrono::serde::ts_milliseconds")]
     #[ts(type = "number")]
     pub bought_at: DateTime<Utc>,
-    /// Months of cover from `bought_at`, as recorded. `None` is "not recorded",
-    /// which most purchases are and should render as nothing at all.
+    /// `None` is "not recorded", and renders as nothing.
     pub warranty_months: Option<i32>,
-    /// DERIVED, never stored: `bought_at` plus `warranty_months`. Computed on
-    /// read so it cannot drift from the purchase it is measured from — a stored
-    /// end date can outlive a correction to either half.
+    /// Derived on read, so it cannot drift from what it is measured from.
     #[sqlx(default)]
     #[serde(with = "chrono::serde::ts_milliseconds_option")]
     #[ts(type = "number | null")]

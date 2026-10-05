@@ -1,5 +1,4 @@
-//! Product catalog HTTP surface: lookup, search, import, shop finds,
-//! reconciliation, facts and images.
+//! Product catalogue HTTP surface.
 
 use axum::Json;
 use axum::body::{Body, Bytes};
@@ -25,10 +24,8 @@ pub struct SearchParams {
     q: String,
 }
 
-/// GET /api/products/shop/asda?q= → live name search against Asda (see
-/// products::asda), the picker's explicit shop tier. A blank query is `[]` with
-/// no outbound call. Every hit is remembered (products::shop_cache): each carries
-/// its EAN, so one search teaches many barcode → CIN mappings.
+/// GET /api/products/shop/asda?q= → a live Asda search. Every hit is remembered:
+/// each carries its EAN, so one search teaches many barcode → CIN mappings.
 pub async fn search_asda(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
@@ -39,11 +36,7 @@ pub async fn search_asda(
     Ok(Json(hits))
 }
 
-/// Cache what a search showed us. Deliberately infallible from the caller's
-/// side: remembering is a side benefit of a query the user asked for, so a
-/// cache write that fails must not turn their working search into an error.
-/// It's logged, not swallowed silently — a cache that quietly never writes
-/// would look exactly like one that's working.
+/// Best-effort, but logged: a cache that never writes looks like one that works.
 async fn remember_hits(pool: &sqlx::MySqlPool, hits: &[asda::AsdaHit]) {
     let listings: Vec<shop_cache::CachedListing> = hits
         .iter()
@@ -57,9 +50,7 @@ async fn remember_hits(pool: &sqlx::MySqlPool, hits: &[asda::AsdaHit]) {
     }
 }
 
-/// GET /api/products?q= → catalog name/brand substring search (the product
-/// picker's catalog tier). Catalog-only and cheap: no OFF/shop traffic — the
-/// external tiers are separate, explicit actions in the picker.
+/// GET /api/products?q= → catalogue search by name or brand; no outside calls.
 pub async fn search(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
@@ -72,8 +63,8 @@ pub async fn search(
     Ok(Json(repo::search(&app.pool, q, 20).await?))
 }
 
-/// GET /api/products/{barcode} → cached metadata, fetching+caching from OFF on
-/// a miss. 404 if OFF has no such product.
+/// GET /api/products/{barcode} → the catalogue row, fetched from Open Food Facts
+/// on a miss.
 pub async fn lookup(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
@@ -88,8 +79,6 @@ pub async fn lookup(
         return Err(AppError::NotFound);
     };
     tracing::debug!(%barcode, name = ?found.name, has_image = found.image_url.is_some(), "product fetched from Open Food Facts");
-    // Open Food Facts keys its own listing by the barcode, and its whole response
-    // rides along verbatim, so nothing it sent is dropped.
     let account = SourceAccount {
         source: Source::Off,
         external_id: ExternalId::from(&barcode),
@@ -107,9 +96,8 @@ pub async fn lookup(
     Ok(Json(repo::ingest(&app.pool, &account, picture).await?))
 }
 
-/// The picture to store with an ingest, fetched before it so no network call
-/// happens inside its transaction. Best-effort: a picture that cannot be fetched
-/// is logged, and the product is stored without one.
+/// Fetched before the ingest, so no network call runs inside its transaction.
+/// Best-effort: without one the product is stored pictureless.
 async fn fetch_picture(
     current: Option<&Product>,
     account: &SourceAccount,
@@ -122,11 +110,7 @@ async fn fetch_picture(
         .flatten()
 }
 
-/// PUT /api/products/{barcode}/image → replace the cached image with the raw
-/// bytes in the request body (Content-Type names the mime). The frontend sends
-/// the picked/pasted/dropped blob straight through, so there's no multipart to
-/// parse. Body size is bounded by a per-route `DefaultBodyLimit` (see the router)
-/// and re-checked here. Returns 204 on success.
+/// PUT /api/products/{barcode}/image → replace the picture with the body's bytes.
 pub async fn set_image(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
@@ -138,8 +122,7 @@ pub async fn set_image(
         .get(header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
-    // Friendly rejection for obviously-wrong uploads; the declared mime is
-    // otherwise only advisory — the bytes decide (below).
+    // The declared mime only screens out obvious mistakes; the bytes decide.
     if off::accept_upload_mime(content_type).is_none() {
         return Err(AppError::BadRequest(
             "Content-Type must be a raster image type (jpeg/png/gif/webp/avif)".into(),
@@ -151,7 +134,6 @@ pub async fn set_image(
     if body.len() > off::MAX_UPLOAD_BYTES {
         return Err(AppError::BadRequest("image exceeds 5 MiB".into()));
     }
-    // Store what the bytes actually are, not what the header claims.
     let Some(mime) = off::sniff_image_mime(&body) else {
         return Err(AppError::BadRequest(
             "the uploaded bytes are not a recognized image".into(),
@@ -162,39 +144,24 @@ pub async fn set_image(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// A product to fold into the catalog from an external source. The client (which
-/// has the source's data — e.g. a Waitrose product looked up by lineNumber) sends
-/// already-normalized fields; the backend stays source-agnostic.
+/// A shop's product, as the client normalised it.
 #[derive(serde::Deserialize)]
 pub struct ImportProduct {
-    /// The shop this listing came from. Only a shop may be imported; an
-    /// unknown id is refused by deserialization, before any of this runs.
     pub source: Source,
-    /// Source-scoped id (e.g. a Waitrose lineNumber). Like `source`, a malformed
-    /// one is refused by deserialization, before any of this runs.
     pub external_id: ExternalId,
     pub name: String,
     pub brand: Option<String>,
-    /// The pack the shop sells, as the shop writes it ("400G"). Read as an
-    /// amount on the way back out (see products::packsize), which is what lets
-    /// stock linked from here start out knowing how much it holds. Optional:
-    /// not every shop's search result carries one.
+    /// As the shop writes it ("400G").
     pub quantity_label: Option<String>,
-    /// The product's EAN, when the source knows it (Asda's IMAGE_ID, a Waitrose
-    /// barCode). Reconciles this listing onto the canonical product for that
-    /// barcode, so shop + Open Food Facts data merge into one product.
+    /// Merges the listing onto the canonical product for that barcode.
     pub barcode: Option<String>,
-    /// Optional image on the source's CDN; fetched server-side, host-allowlisted.
+    /// Fetched server-side from an allowlisted host.
     pub image_url: Option<String>,
-    /// Optional price the source quoted; appended to the listing's price history.
     pub price: Option<PriceInput>,
-    // No `category`: `products.category` is our ItemCategory, not a shop taxonomy.
 }
 
-/// POST /api/products/import → upsert a catalog row from an external source,
-/// keyed on (source, external_id). Idempotent: re-importing refreshes the row.
-/// An `image_url` that passes the source's host allowlist is fetched from the
-/// source CDN and stored (served back via /api/products/id/{id}/image).
+/// POST /api/products/import → upsert a shop's product, keyed on (source,
+/// external_id).
 pub async fn import(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
@@ -216,9 +183,7 @@ pub async fn import(
         .as_deref()
         .map(str::trim)
         .filter(|v| !v.is_empty());
-    // A supplied barcode must be a real EAN before we key a canonical product on
-    // it. Blank is absence rather than an error — clients send `""` for "the shop
-    // didn't tell us" — but anything non-blank has to be one.
+    // Blank is "the shop didn't say"; anything else must be a real EAN.
     let barcode = body
         .barcode
         .as_deref()
@@ -245,23 +210,17 @@ pub async fn import(
         price: body.price.clone(),
         facts: FactsUpdate::None,
     };
-    // What the product holds now decides whether its picture is worth fetching.
     let current = match &barcode {
         Some(bc) => repo::get(&app.pool, bc).await?,
         None => repo::get_by_source_external(&app.pool, body.source, ext).await?,
     };
     let picture = fetch_picture(current.as_ref(), &account).await;
-    // The answer carries the pack read FROM the label (`pack`), which the caller
-    // fills a new stock row from the moment this returns.
     let product = repo::ingest(&app.pool, &account, picture).await?;
     tracing::info!(source = %body.source, external_id = %ext, ?barcode, name, "product imported");
     Ok(Json(product))
 }
 
-/// GET /api/products/id/{id} → everything the product page shows in one fetch:
-/// the canonical product, its per-source listings (deep links resolved), the
-/// latest price per shop (cheapest first), and its facts. Prices and facts are
-/// empty until a shop quote / OFF lookup has provided them.
+/// GET /api/products/id/{id} → everything the product page shows.
 pub async fn product_detail(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -270,17 +229,13 @@ pub async fn product_detail(
     Ok(Json(build_detail(&app.pool, &user.user_id, id).await?))
 }
 
-/// Assemble the product-page aggregate for a product id (404 if it doesn't
-/// exist). Shared by the detail GET and the reconcile POST, which answers with
-/// the re-read detail.
 async fn build_detail(
     pool: &sqlx::MySqlPool,
     user_id: &str,
     id: ProductId,
 ) -> Result<ProductDetail, AppError> {
     let product = repo::get_by_id(pool, id).await?.ok_or(AppError::NotFound)?;
-    // By id AND barcode: a purchase made before this catalogue row existed, or
-    // one whose link was corrected, is still this person's purchase.
+    // By id and barcode: a purchase from before this row existed is still one.
     let purchases = purchases_repo::history(
         pool,
         user_id,
@@ -296,14 +251,10 @@ async fn build_detail(
         repo::field_decisions(pool, id),
         repo::documents_for(pool, id),
     )?;
-    // Merge the per-source facts to the one shown (honouring any source pick), and
-    // build the diff to approve — the scalar disagreements plus the source-picked
-    // facts (nutrition, ingredients) that genuinely differ.
     let facts = repo::merge_facts(&facts_by_source, &fact_prefs);
     let mut fields = repo::divergences(&product, &listings, &decisions);
     fields.extend(repo::fact_divergences(&facts_by_source, &fact_prefs));
-    // The picture reconciles by provenance, not value (see picture_divergence):
-    // needs the raw listings (their image_url), so compute it before mapping them.
+    // Needs the raw listings' image URLs, so before they are mapped.
     if let Some(pd) = repo::picture_divergence(&product, &listings, &decisions) {
         fields.push(pd);
     }
@@ -332,23 +283,18 @@ async fn build_detail(
     })
 }
 
-/// POST /api/products/id/{id}/reconcile → settle field disagreements between the
-/// product's sources and its canonical row. Each decision either adopts a
-/// source's value or keeps the current one; either way the divergence is marked
-/// settled so it won't resurface until a source's value changes. Returns the
-/// re-read product detail (with the divergence list now updated).
+/// POST /api/products/id/{id}/reconcile → settle where sources disagree; returns
+/// the re-read detail.
 pub async fn reconcile(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
     Path(id): Path<ProductId>,
     Json(body): Json<Vec<FieldChoice>>,
 ) -> Result<Json<ProductDetail>, AppError> {
-    // 404 before touching anything if the product doesn't exist.
     if repo::get_by_id(&app.pool, id).await?.is_none() {
         return Err(AppError::NotFound);
     }
-    // The picture is chosen apart: adopting it re-fetches the source's image
-    // through the SSRF gate, which happens here, before the transaction.
+    // Adopting a picture fetches it, which must happen before the transaction.
     let (mut pictures, fields): (Vec<_>, Vec<_>) = body
         .into_iter()
         .partition(|c| c.field == ReconcileField::Picture);
@@ -365,10 +311,8 @@ pub async fn reconcile(
     Ok(Json(build_detail(&app.pool, &user.user_id, id).await?))
 }
 
-/// Resolve a picture reconcile choice. A source id fetches that source's
-/// picture through the same SSRF-gated, no-redirect fetch the import path
-/// uses. `user` is refused: a picture is uploaded (PUT .../image), not picked
-/// as "our own" the way a typed name is.
+/// A source's picture comes through the SSRF-gated fetch the import uses; `user`
+/// is refused, as a picture is uploaded rather than typed.
 async fn picture_choice(
     pool: &sqlx::MySqlPool,
     id: ProductId,
@@ -410,29 +354,19 @@ async fn picture_choice(
     })
 }
 
-/// The answer to "does this shop carry this product?".
 #[derive(serde::Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct ShopFind {
-    /// The barcode-confirmed listing, if we have one.
     pub hit: Option<asda::AsdaHit>,
-    /// Whether this came from memory rather than a fresh shop query. The UI says
-    /// so: an answer we already had and one we just paid for are different
-    /// things, and hiding which is which makes the cache unfalsifiable.
+    /// From memory rather than a fresh query: the UI says which.
     pub from_cache: bool,
-    /// Whether the shop itself was asked. Without this, `hit: None` would have to
-    /// mean two opposite things: "we asked and this shop doesn't carry it" and
-    /// "we've never looked". Only the server-searchable shops can produce the
-    /// first; for a bot-walled shop a miss is always the second, and the phone —
-    /// which CAN look — acts on the difference.
+    /// Whether the shop was asked: `hit: None` from a shop nobody asked means
+    /// "not looked", which tells the phone to look itself.
     pub searched: bool,
 }
 
-/// A remembered listing, shaped as a search hit.
-///
-/// Price and dietary flags are absent rather than stale: the cache keeps identity
-/// (this barcode is this CIN), which doesn't rot. Attaching re-fetches the rest,
-/// so this only has to let you confirm it's the right product.
+/// A remembered listing as a hit: identity only, as price and flags would be
+/// stale; attaching re-fetches them.
 fn cached_as_hit(c: shop_cache::CachedListing) -> asda::AsdaHit {
     asda::AsdaHit {
         external_id: c.external_id,
@@ -444,25 +378,18 @@ fn cached_as_hit(c: shop_cache::CachedListing) -> asda::AsdaHit {
         price: None,
         image_url: c.image_url,
         dietary: vec![],
-        // A remembered hit is identity only; the full record is re-fetched on
-        // attach (`fetch_by_id`), which is what carries `raw` to storage.
         raw: None,
     }
 }
 
 /// GET /api/products/id/{id}/find/{source} → does this shop carry the barcode?
-///
-/// `shop_listings` answers first; on a miss the shop is asked and its whole
-/// result remembered. Identity is the barcode, never the name
-/// ([`asda::match_barcode`]). Only Asda can be searched from here: for Waitrose
-/// a miss is `searched: false`, and the phone reports to `remember_seen`.
+/// Memory first; on a miss Asda is searched, matching on the barcode
+/// ([`asda::match_barcode`]). Other shops answer `searched: false`.
 pub async fn find_at_shop(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
     Path((id, source)): Path<(ProductId, String)>,
 ) -> Result<Json<ShopFind>, AppError> {
-    // A path segment is a client's string until it parses; after this line the
-    // rest of the handler cannot be looking at a shop that doesn't exist.
     let source = match source.parse::<Source>() {
         Ok(s) if s.is_shop() => s,
         _ => return Err(AppError::BadRequest(format!("unknown shop: {source}"))),
@@ -484,9 +411,6 @@ pub async fn find_at_shop(
         }));
     }
 
-    // Nothing in memory. Only a shop the server can query gets asked from here;
-    // for the rest, saying "we haven't looked" is the whole answer, and it is the
-    // answer the phone needs to know it should look itself.
     if source != Source::Asda {
         return Ok(Json(ShopFind {
             hit: None,
@@ -522,10 +446,9 @@ pub async fn find_at_shop(
     }))
 }
 
-/// POST /api/products/shop/{source}/listings → remember listings a phone's
-/// WebView saw at a shop the server can't reach (`remember_hits`' mirror), so a
-/// hunt's page loads are paid once. Forgiving in shape, but refuses anything that
-/// would poison the barcode index. Returns how many rows were stored.
+/// POST /api/products/shop/{source}/listings → remember what a phone's WebView
+/// saw at a shop the server cannot reach. Refuses anything that would poison the
+/// barcode index.
 pub async fn remember_seen(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
@@ -548,7 +471,6 @@ pub async fn remember_seen(
     }))
 }
 
-/// How many listings a report actually stored.
 #[derive(serde::Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct Remembered {
@@ -556,22 +478,16 @@ pub struct Remembered {
     pub remembered: usize,
 }
 
-/// Which shop listing to pull, for `sync_listing`.
 #[derive(serde::Deserialize)]
 pub struct SyncListing {
-    /// The shop to pull from — 'asda' today (see below).
     pub source: Source,
-    /// The source's id for the product (an Asda CIN).
+    /// An Asda CIN.
     pub external_id: ExternalId,
 }
 
-/// POST /api/products/id/{id}/listings → fetch this product's listing at a shop
-/// and store its price (a new observation), lifestyle tags, pack size and name.
-///
-/// Attach and refresh are one idempotent path, so a refresh never captures less
-/// than an attach. The server fetches rather than accepting client facts, so the
-/// barcode guard below is enforced, not trusted. Asda only: Waitrose has no
-/// server-side fetch.
+/// POST /api/products/id/{id}/listings → fetch and store this product's listing
+/// at Asda. Attach and refresh are one path; the server fetches, so the barcode
+/// check below is enforced rather than trusted.
 pub async fn sync_listing(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
@@ -590,18 +506,12 @@ pub async fn sync_listing(
     let Some(hit) = asda::fetch_by_id(&app.http, &body.external_id).await? else {
         return Err(AppError::NotFound);
     };
-    // The barcode is what makes this listing THIS product; a shop search is only
-    // ever a relevance guess. Enforce the identity here so a mistaken (or
-    // malicious) caller can't staple someone else's product onto this one.
+    // A search is a relevance guess; the barcode is identity.
     if hit.barcode.is_none() || hit.barcode != product.barcode {
         return Err(AppError::BadRequest(
             "that listing's barcode doesn't match this product".into(),
         ));
     }
-    // Asda's whole account: the structured fields plus the untouched record
-    // (`raw_json`) on its own listing line, so nothing Asda sent is lost and every
-    // field can stand as a candidate in reconciliation; its lifestyle tags, kept
-    // apart from OFF's claims (migration 0028) and merged on read; its price.
     let account = SourceAccount {
         source: Source::Asda,
         external_id: hit.external_id.clone(),
@@ -615,8 +525,6 @@ pub async fn sync_listing(
         price: hit.price.clone(),
         facts: FactsUpdate::Dietary(hit.dietary.clone()),
     };
-    // The picture is identity, not a rotting figure, so it comes onto a product
-    // that has none now. Best-effort: a failed fetch never fails the attach.
     let picture = fetch_picture(Some(&product), &account).await;
     let updated = repo::ingest(&app.pool, &account, picture).await?;
     tracing::info!(product = %updated.id, cin = %hit.external_id, flags = hit.dietary.len(), "asda listing pulled");
@@ -625,21 +533,15 @@ pub async fn sync_listing(
 
 #[derive(serde::Deserialize)]
 pub struct SubmitFacts {
-    /// The shop whose page this is — 'asda' today.
     pub source: Source,
-    /// The EAN the fetched page reported (Asda's `c_EAN_GTIN`), for the identity
-    /// guard — this must be THIS product's barcode.
+    /// The page's own barcode, which must be this product's.
     pub ean: Barcode,
-    /// The source's raw product-content blob (Asda's `c_BRANDBANK_JSON`), parsed
-    /// server-side. The client never asserts the facts themselves.
+    /// Parsed server-side; the client never asserts facts.
     pub blob: String,
 }
 
-/// POST /api/products/id/{id}/facts → store facts only a shop's product page
-/// carries (Asda's Brandbank blob). The page is behind Cloudflare, so the app's
-/// WebView posts the raw blob and the server parses it; the client never
-/// asserts interpreted facts. Refused unless the page's EAN is this product's.
-/// Returns the refreshed detail.
+/// POST /api/products/id/{id}/facts → store a shop page's facts blob, refused
+/// unless the page's barcode is this product's. Returns the refreshed detail.
 pub async fn submit_facts(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -655,17 +557,12 @@ pub async fn submit_facts(
     let product = repo::get_by_id(&app.pool, id)
         .await?
         .ok_or(AppError::NotFound)?;
-    // The page's barcode is what makes its facts THIS product's. Enforce it here
-    // so the WebView can't (by mistake or otherwise) post a different product's
-    // page onto this one.
     if product.barcode.as_ref() != Some(&body.ean) {
         return Err(AppError::BadRequest(
             "that page's barcode doesn't match this product".into(),
         ));
     }
-    // Keep the page's payload verbatim FIRST — so we hold it even if parsing finds
-    // nothing (or a better parser wants it later), and never have to drive the
-    // WebView through Cloudflare again for the same product.
+    // Kept verbatim first, so the WebView never has to fetch this page again.
     repo::upsert_document(&app.pool, id, Source::Asda, DocKind::Page, &body.blob).await?;
     let facts = brandbank::parse(&body.blob).map_err(|e| AppError::BadRequest(e.to_string()))?;
     repo::store_facts(&app.pool, id, &facts, Source::Asda).await?;
@@ -680,9 +577,7 @@ pub async fn submit_facts(
     build_detail(&app.pool, &user.user_id, id).await.map(Json)
 }
 
-/// GET /api/products/id/{id}/image → cached image bytes for a catalog row by id.
-/// The barcodeless counterpart to /products/{barcode}/image (shop products have
-/// no barcode to address the image by).
+/// GET /api/products/id/{id}/image → for products without a barcode.
 pub async fn image_by_id(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
@@ -695,7 +590,6 @@ pub async fn image_by_id(
     image_response(&headers, bytes, &mime)
 }
 
-/// GET /api/products/{barcode}/image → the cached image bytes.
 pub async fn image(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
@@ -708,13 +602,8 @@ pub async fn image(
     image_response(&headers, bytes, &mime)
 }
 
-/// A stored image. `no-cache` with an `ETag` of its bytes: the URL stays the same
-/// when the server replaces a picture, so each view revalidates, and an
-/// unchanged picture costs a 304.
-///
-/// Stored bytes are served on our own origin, so never let the browser sniff
-/// them into something active, and sandbox the document if the URL is opened
-/// directly.
+/// `no-cache` with an ETag: a replaced picture keeps its URL. Served from our own
+/// origin, so never sniffed into anything active, and sandboxed if opened.
 fn image_response(headers: &HeaderMap, bytes: Vec<u8>, mime: &str) -> Result<Response, AppError> {
     use sha2::{Digest, Sha256};
     let etag = format!("\"{}\"", hex::encode(&Sha256::digest(&bytes)[..16]));

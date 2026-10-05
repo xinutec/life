@@ -2,13 +2,11 @@
 import type { TrashKind } from "./TrashKind";
 
 /**
- * One deleted thing, as shown on the trash screen. `ref_` identifies the row
- * within its kind: the numeric id for REST entities (item/location/recipe),
- * the ULID for synced ones — ids can be absent client-side
- * for never-synced rows, ULIDs never are.
+ * `ref_` is an id for REST kinds, a ULID for synced ones (a never-synced row has
+ * no id).
  */
 export type TrashEntry = { kind: TrashKind, ref: string, name: string, 
 /**
- * When it was deleted; Unix milliseconds on the wire.
+ * Unix milliseconds on the wire.
  */
 deleted_at: number, };

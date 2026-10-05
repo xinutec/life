@@ -3,9 +3,7 @@ import type { ItemHistoryEntry } from "./ItemHistoryEntry";
 import type { Purchase } from "./Purchase";
 
 /**
- * Everything the history dialog shows for one stock row. Purchases sit beside
- * the events, not among them: an `ItemEvent` read back must be a stored value,
- * and nothing stores a `bought` event. It is the only view of a purchase made
- * from a hand-typed buy-list row, which has no product page.
+ * The history dialog: events, and beside them the purchases, which no event
+ * records.
  */
 export type ItemHistory = { entries: Array<ItemHistoryEntry>, purchases: Array<Purchase>, };

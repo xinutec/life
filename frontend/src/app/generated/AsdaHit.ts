@@ -5,38 +5,26 @@ import type { ExternalId } from "./ExternalId";
 import type { PriceInput } from "./PriceInput";
 
 /**
- * A normalized Asda search hit, ready for the product picker. Mirrors the
- * fields the picker shows plus the identity it needs to import + link.
+ * An Asda search hit, as the picker shows and imports it.
  */
 export type AsdaHit = { 
 /**
- * Asda catalogue item number (CIN); the stable per-source id we import by.
+ * The CIN, which the import keys on.
  */
 external_id: ExternalId, name: string, brand: string | null, 
 /**
- * Primary EAN (from `IMAGE_ID`) when it's barcode-shaped; the shopping row
- * carries this even though the imported catalogue row stays barcodeless.
+ * The EAN from `IMAGE_ID`, when barcode-shaped.
  */
-barcode: Barcode | null, 
+barcode: Barcode | null, quantity_label: string | null, 
 /**
- * Pack size, e.g. "400G".
- */
-quantity_label: string | null, 
-/**
- * Formatted England price for display, e.g. "£3.57".
+ * England price, formatted.
  */
 price_label: string | null, 
 /**
- * Structured England price (minor units + per-unit), recorded as a price
- * observation when this hit is imported. `None` when the hit has no price.
+ * England price, recorded as an observation on import.
  */
-price: PriceInput | null, 
+price: PriceInput | null, image_url: string | null, 
 /**
- * scene7 thumbnail URL (host-allowlisted for server-side import).
- */
-image_url: string | null, 
-/**
- * Asda's own lifestyle tags for this product (vegan, gluten-free, …), as
- * dietary flags. Only ever assertions — see `LIFESTYLE_FLAGS`.
+ * Lifestyle tags as dietary flags, assertions only.
  */
 dietary: Array<DietaryFlag>, };

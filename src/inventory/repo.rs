@@ -1,5 +1,4 @@
-//! Persistence for locations and items. `position` is stored as JSON text and
-//! parsed here, so it survives however MariaDB reports the JSON column type.
+//! Persistence for locations and items. `position` is JSON text, parsed here.
 
 use anyhow::{Context, Result, anyhow};
 use chrono::NaiveDate;
@@ -52,7 +51,6 @@ struct ItemRow {
     expiry_precision: ExpiryPrecision,
     location_id: Option<LocationId>,
     barcode: Option<String>,
-    // A boolean SQL expression decodes as an integer.
     has_image: i64,
 }
 
@@ -75,12 +73,9 @@ impl ItemRow {
     }
 }
 
-/// The resolved item read: holding fields from `items`, display fields resolved
-/// against the linked catalog product. A macro so it stays a literal for sqlx.
-///
-/// Only a `name_source = 'user'` name outranks the catalogue's: either fixed
-/// precedence is wrong for someone (a marketing-sentence OFF name, a hand-typed
-/// shorthand).
+/// The item read, display fields resolved through the linked product; a macro to
+/// stay a literal for sqlx. Only a `name_source = 'user'` name outranks the
+/// catalogue's.
 macro_rules! item_select {
     () => {
         "SELECT i.id AS id, i.product_id AS product_id, \
@@ -94,9 +89,8 @@ macro_rules! item_select {
     };
 }
 
-/// The catalog link for a new/updated item: an explicit `product_id` wins (it's
-/// the only route to a barcodeless shop product), else fall back to matching the
-/// barcode against the cached catalog.
+/// An explicit `product_id` wins (the only way to a barcodeless product), else the
+/// barcode's cached product.
 async fn resolve_product_id(
     conn: impl sqlx::Executor<'_, Database = sqlx::MySql>,
     new: &NewItem,
@@ -107,11 +101,8 @@ async fn resolve_product_id(
     product_id_for_barcode(conn, new.barcode.as_deref()).await
 }
 
-/// Resolve the catalog product id for a barcode, if one is cached.
-///
-/// An item's barcode is whatever was scanned or typed, so it is parsed rather
-/// than queried directly: something that isn't a barcode matches no product, and
-/// a blank one would otherwise match every barcodeless row in the catalog.
+/// Parsed, not queried as typed: a blank barcode would match every barcodeless
+/// product.
 async fn product_id_for_barcode(
     conn: impl sqlx::Executor<'_, Database = sqlx::MySql>,
     barcode: Option<&str>,
@@ -192,7 +183,6 @@ pub async fn get_item(pool: &MySqlPool, user_id: &str, id: ItemId) -> Result<Opt
 }
 
 pub async fn create_item(pool: &MySqlPool, user_id: &str, new: NewItem) -> Result<Item> {
-    // The row and its `added` history commit together, as every write here does.
     let mut tx = pool.begin().await?;
     let id = insert_item(&mut tx, user_id, &new).await?;
     tx.commit().await?;
@@ -201,20 +191,15 @@ pub async fn create_item(pool: &MySqlPool, user_id: &str, new: NewItem) -> Resul
         .ok_or_else(|| anyhow!("created item {id} not found"))
 }
 
-/// Insert an item and its `added` history row on the caller's connection, so a
-/// caller with more to do (the Buy list's buy) commits it all as one.
+/// On the caller's connection, so the buy commits it all as one.
 pub(crate) async fn insert_item(
     conn: &mut sqlx::MySqlConnection,
     user_id: &str,
     new: &NewItem,
 ) -> Result<ItemId> {
-    // Prefer an explicit catalog link (the only way to reach a barcodeless shop
-    // product); otherwise link by barcode when it's already known (scanned/looked up).
     let product_id = resolve_product_id(&mut *conn, new).await?;
-    // A name typed while ADDING is a scribble — you type "cheese" and then scan,
-    // and the form fills the product's name in only if the box is still empty. So
-    // the catalogue wins unless the client explicitly says the name is the
-    // person's, which `tests/catalog_db.rs` has always required.
+    // A name typed while adding is a scribble the scan fills in: the catalogue
+    // wins unless the client says the name is the person's.
     let name_source = new
         .name_source
         .unwrap_or(ItemNameSource::Product)
@@ -255,8 +240,7 @@ pub(crate) async fn insert_item(
     Ok(id)
 }
 
-/// Move an item to a new location (or `None` to detach). Returns the updated
-/// item, or `None` if no such item belongs to this user.
+/// `None` detaches; returns `None` if no such item is this user's.
 pub async fn move_item(
     pool: &MySqlPool,
     user_id: &str,
@@ -264,8 +248,7 @@ pub async fn move_item(
     new_location_id: Option<LocationId>,
 ) -> Result<Option<Item>> {
     let mut tx = pool.begin().await?;
-    // sqlx connects with CLIENT_FOUND_ROWS, so a move to where the thing already
-    // is still counts its row: zero means no such live item.
+    // CLIENT_FOUND_ROWS: a move to the same place still counts its row.
     let moved = sqlx::query(
         "UPDATE items SET location_id = ? WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
     )
@@ -290,13 +273,8 @@ pub async fn move_item(
     get_item(pool, user_id, item_id).await
 }
 
-/// Update every field of an item. Returns the updated item, or `None` if no
-/// such item belongs to the user. Records a `moved` history row if the location
-/// changed.
-///
-/// One transaction with the row locked: the update keeps fields the caller did
-/// not state, so a value read outside the lock would be written back over a
-/// concurrent change.
+/// Update an item, recording `moved` if the location changed. The row is locked,
+/// since fields the caller did not state are kept and must not be read stale.
 pub async fn update_item(
     pool: &MySqlPool,
     user_id: &str,
@@ -316,9 +294,7 @@ pub async fn update_item(
     let Some((was_at,)) = held else {
         return Ok(None);
     };
-    // `None` for name_source or expiry_precision is "no statement", not a value:
-    // every caller but the item form sends nothing, and must leave a chosen name
-    // or a month-only expiry (migration 0045) as it is.
+    // `None` here is "no statement": a chosen name or a month-only expiry stays.
     sqlx::query(
         "UPDATE items SET product_id = ?, name = ?, name_source = COALESCE(?, name_source), \
          category = ?, quantity = ?, unit = ?, expiry = ?, \
@@ -354,12 +330,8 @@ pub async fn update_item(
     get_item(pool, user_id, id).await
 }
 
-/// Record `low` against whatever stocked item a Buy row names, if any.
-///
-/// ⚠ Matched here, not client-side: the Buy screen never loads the inventory
-/// catalogue, so a client match reads an empty store. Identity is the list's own
-/// rule — catalog link, barcode, then case-insensitive name. `Ok(false)` = a
-/// one-off purchase, which is ordinary.
+/// Record `low` against whatever stocked item a Buy row names. Matched here, as
+/// the Buy screen never loads the inventory. `Ok(false)`: a one-off purchase.
 pub async fn mark_low_matching(
     pool: &MySqlPool,
     user_id: &str,
@@ -368,7 +340,7 @@ pub async fn mark_low_matching(
     product_id: Option<ProductId>,
 ) -> Result<bool> {
     let barcode = barcode.map(barcode_hint);
-    // Strongest key first, so a renamed row still resolves by barcode or link.
+    // Strongest key first, so a renamed row still resolves.
     let row: Option<(ItemId,)> = sqlx::query_as(
         "SELECT id FROM items \
          WHERE user_id = ? AND deleted_at IS NULL \
@@ -394,15 +366,9 @@ pub async fn mark_low_matching(
     mark_low(pool, user_id, id).await
 }
 
-/// Record that a stock row was judged to be running low.
-///
-/// A decision, not a measurement: nothing moves, so no transaction. Repeats are
-/// allowed — the rhythm is the gaps between them. `Ok(false)` = no such live
-/// item for this user.
+/// A judgement, not a measurement: nothing moves. Repeats are the signal.
 pub async fn mark_low(pool: &MySqlPool, user_id: &str, id: ItemId) -> Result<bool> {
-    // The location rides along so the history reads the same as every other
-    // event, and so "ran out of the one in the fridge" stays answerable. One
-    // statement: the row it reads is the row it records.
+    // With the location, so "the one in the fridge" stays answerable.
     let res = sqlx::query(
         "INSERT INTO item_history (item_id, user_id, location_id, event, quantity) \
          SELECT id, user_id, location_id, ?, NULL FROM items \
@@ -416,10 +382,8 @@ pub async fn mark_low(pool: &MySqlPool, user_id: &str, id: ItemId) -> Result<boo
     Ok(res.rows_affected() > 0)
 }
 
-/// Take an amount out of a stock row ("I used 200g of flour"), reading and
-/// writing in one transaction with the row locked, so two phones can't both
-/// take from 950. The rule is [`consume::take`]. `Ok(None)` = no live item; the
-/// [`Taken`] outcome goes back to the route, which knows how to phrase it.
+/// "I used 200 g": the row locked, so two phones cannot both take from 950. The
+/// rule is [`consume::take`]; `Ok(None)` is no live item.
 pub async fn use_item(
     pool: &MySqlPool,
     user_id: &str,
@@ -428,8 +392,7 @@ pub async fn use_item(
     want_unit: Option<&str>,
 ) -> Result<Option<(Taken, Option<Item>)>> {
     let mut tx = pool.begin().await?;
-    // FOR UPDATE: the whole point of the transaction. Without it the subtraction
-    // is a read-modify-write race and stock quietly drifts upward.
+    // Without the lock, stock drifts upward in a read-modify-write race.
     let row: Option<(Option<f64>, Option<String>, Option<LocationId>)> = sqlx::query_as(
         "SELECT quantity, unit, location_id FROM items \
          WHERE id = ? AND user_id = ? AND deleted_at IS NULL FOR UPDATE",
@@ -450,7 +413,6 @@ pub async fn use_item(
     let left = match outcome {
         Taken::Left(n) => n,
         Taken::Emptied { .. } => 0.0,
-        // Nothing to write: the row keeps whatever it had.
         Taken::UnitMismatch | Taken::Untracked => {
             tx.rollback().await?;
             return Ok(Some((outcome, get_item(pool, user_id, id).await?)));
@@ -462,9 +424,8 @@ pub async fn use_item(
         .bind(user_id)
         .execute(&mut *tx)
         .await?;
-    // The history row records the DELTA, not the new level — "200g went" is the
-    // fact a consumption rate is later computed from, and it survives an edit
-    // that resets the quantity by hand.
+    // The delta, not the new level: it is what a consumption rate needs, and it
+    // survives a hand edit of the quantity.
     let took = match outcome {
         Taken::Emptied { short } => want - short,
         _ => want,
@@ -484,8 +445,7 @@ pub async fn use_item(
     Ok(Some((outcome, get_item(pool, user_id, id).await?)))
 }
 
-/// Delete an item — a tombstone, restorable from the trash; history is kept.
-/// Returns whether a row was tombstoned.
+/// A tombstone, restorable; history is kept.
 pub async fn delete_item(pool: &MySqlPool, user_id: &str, id: ItemId) -> Result<bool> {
     let mut tx = pool.begin().await?;
     let res = sqlx::query(
@@ -504,7 +464,6 @@ pub async fn delete_item(pool: &MySqlPool, user_id: &str, id: ItemId) -> Result<
     Ok(deleted)
 }
 
-/// Restore a deleted item. Returns whether a tombstone was cleared.
 pub async fn restore_item(pool: &MySqlPool, user_id: &str, id: ItemId) -> Result<bool> {
     let mut tx = pool.begin().await?;
     let res = sqlx::query(
@@ -523,8 +482,7 @@ pub async fn restore_item(pool: &MySqlPool, user_id: &str, id: ItemId) -> Result
     Ok(restored)
 }
 
-/// Whether `id` names one of this user's live locations. `None`, "nowhere",
-/// always does.
+/// `None`, nowhere, always is.
 pub async fn is_own_location(
     pool: &MySqlPool,
     user_id: &str,
@@ -543,9 +501,8 @@ pub async fn is_own_location(
     Ok(row.is_some())
 }
 
-/// Every location id in the subtree rooted at `root` (inclusive), computed from
-/// ALL of the user's rows (deleted or not — parent links stay intact under
-/// tombstoning). Empty if `root` isn't the user's.
+/// The subtree from all the user's rows, deleted or not: tombstones keep their
+/// parent links. Empty if `root` is not theirs.
 async fn subtree_ids(
     conn: impl sqlx::Executor<'_, Database = sqlx::MySql>,
     user_id: &str,
@@ -559,11 +516,8 @@ async fn subtree_ids(
     Ok(super::tree::subtree(&rows, root))
 }
 
-/// Delete a location and its whole subtree — tombstones, restorable as one unit
-/// (every row gets the SAME `deleted_at` stamp; restore keys on it). Items keep
-/// their `location_id`: with the location hidden they read as unplaced, and a
-/// restore puts them right back where they were. Returns whether the root was
-/// tombstoned.
+/// Tombstone a location and its subtree with one shared stamp, which restore
+/// keys on. Items keep their `location_id` and come back with it.
 pub async fn delete_location(pool: &MySqlPool, user_id: &str, id: LocationId) -> Result<bool> {
     let ids = subtree_ids(pool, user_id, id).await?;
     if ids.is_empty() {
@@ -582,13 +536,10 @@ pub async fn delete_location(pool: &MySqlPool, user_id: &str, id: LocationId) ->
     Ok(res.rows_affected() > 0)
 }
 
-/// Restore a deleted location together with the descendants that were deleted
-/// in the same operation (same `deleted_at` stamp — descendants deleted
-/// separately earlier stay in the trash as their own entries). Returns whether
-/// anything was restored.
+/// Restores the subtree deleted in the same stamp; ones deleted earlier stay in
+/// the trash as their own entries.
 pub async fn restore_location(pool: &MySqlPool, user_id: &str, id: LocationId) -> Result<bool> {
-    // The stamp, the tree and the restore in one transaction, the root locked, so
-    // the stamp cannot change between being read and being matched.
+    // One transaction, the root locked, so the stamp cannot change under us.
     let mut tx = pool.begin().await?;
     let stamp: Option<(Option<chrono::NaiveDateTime>,)> =
         sqlx::query_as("SELECT deleted_at FROM locations WHERE id = ? AND user_id = ? FOR UPDATE")
@@ -615,19 +566,14 @@ pub async fn restore_location(pool: &MySqlPool, user_id: &str, id: LocationId) -
     Ok(res.rows_affected() > 0)
 }
 
-/// Everything that has happened to one stock row, newest first.
-///
-/// Scoped on `h.user_id`, the history's own record of who did it, not through
-/// the item, which could change hands. Empty is a real answer: a row older than
-/// the audit has none, and so, as far as this caller may know, does another
-/// user's id.
+/// Newest first, scoped on the history's own `user_id`. Empty for a row older
+/// than the audit, and for somebody else's id.
 pub async fn item_history(
     pool: &MySqlPool,
     user_id: &str,
     item_id: ItemId,
 ) -> Result<Vec<ItemHistoryEntry>> {
-    // A stored event outside the enum fails the query rather than being
-    // dropped or shown blank, as `products::Source` is read.
+    // An unknown event fails the query rather than showing blank.
     Ok(sqlx::query_as(
         "SELECT h.id, h.event, h.quantity, l.name AS location, \
          h.at \

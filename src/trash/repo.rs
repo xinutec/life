@@ -1,6 +1,5 @@
-//! Trash listing + restore dispatch. The listing unions the tombstoned rows of
-//! every entity kind; restores delegate to the owning feature repo so each kind
-//! keeps its own semantics (history events, subtree grouping, sync revs).
+//! The trash: listing unions every kind's tombstones; restores go to each kind's
+//! own repo, which keeps its semantics.
 
 use anyhow::Result;
 use chrono::NaiveDateTime;
@@ -33,17 +32,13 @@ impl Row {
     }
 }
 
-/// Everything in the user's trash, newest deletion first.
+/// Newest deletion first.
 pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<TrashEntry>> {
-    // One query per kind; merged + sorted in memory (the trash is small).
     let queries: [(TrashKind, &str); 8] = [
         (
             TrashKind::Item,
-            // Resolved the same way the cupboard resolves it (inventory::repo's
-            // `item_select!`): an authored name outranks the catalogue. The two
-            // must agree — you find something in the trash by the name you last
-            // saw it under, so a row that renames itself on the way in is a row
-            // you cannot search for.
+            // Named as the cupboard names it (`item_select!`), so you find it by
+            // the name you last saw.
             "SELECT CAST(i.id AS CHAR) AS ref_, \
              CASE WHEN i.name_source = 'user' THEN COALESCE(i.name, p.name, '') \
                   ELSE COALESCE(p.name, i.name, '') END AS name, \
@@ -63,8 +58,7 @@ pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<TrashEntry>> {
         ),
         (
             TrashKind::Shopping,
-            // Pre-backfill rows can lack a ulid; they can't be restored by ref,
-            // so hide them (backfill_shopping normally fixes this at boot).
+            // Rows without a ulid cannot be restored by ref.
             "SELECT ulid AS ref_, name, deleted_at FROM shopping_items \
              WHERE user_id = ? AND deleted_at IS NOT NULL AND ulid IS NOT NULL",
         ),
@@ -75,9 +69,7 @@ pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<TrashEntry>> {
         ),
         (
             TrashKind::Wellbeing,
-            // A check-in has no title; synthesise a label from its score. Stored in
-            // tenths, so undo the scale here — TRIM(TRAILING…) leaves "4" a 4 while
-            // a half-step still reads "3.5".
+            // Tenths undone; TRIM leaves "4" a 4 and a half-step "3.5".
             "SELECT ulid AS ref_, CONCAT('Check-in (', \
                  TRIM(TRAILING '.0' FROM FORMAT(score_tenths / 10, 1)), '/5)') AS name, \
              deleted_at \
@@ -104,8 +96,7 @@ pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<TrashEntry>> {
     Ok(entries)
 }
 
-/// Restore one entry. Returns whether anything was actually restored (false =
-/// unknown ref / not deleted / malformed id).
+/// False for an unknown ref, a row not deleted, or a malformed id.
 pub async fn restore(pool: &MySqlPool, user_id: &str, kind: TrashKind, r: &str) -> Result<bool> {
     match kind {
         TrashKind::Item => match r.parse::<u64>() {

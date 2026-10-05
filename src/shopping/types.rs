@@ -1,6 +1,4 @@
-//! Shopping-list types. A shopping item is a "to buy" line; quantity/unit are
-//! optional. `done` = ticked off as bought. `category`/`product_id` are the
-//! identity the buy→inventory conversion carries onto the created item.
+//! Buy-list rows.
 
 use serde::Serialize;
 use ts_rs::TS;

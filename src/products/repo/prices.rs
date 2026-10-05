@@ -8,9 +8,7 @@ use crate::products::ids::{ExternalId, ListingId, ProductId};
 use crate::products::prices::{Currency, PriceInput, ShopPrice, UnitMeasure, UnitPrice};
 use crate::products::source::Source;
 
-/// Append a price observation to a listing's history. Prices are a time series —
-/// never overwritten — so "current price" is the latest row, and history is all
-/// of them.
+/// Appended, never overwritten: the latest row is the current price.
 pub async fn record_price(
     conn: impl sqlx::Executor<'_, Database = sqlx::MySql>,
     listing_id: ListingId,
@@ -42,13 +40,8 @@ struct ShopPriceRow {
     observed_at: NaiveDateTime,
 }
 
-/// What each shop currently charges for this product, cheapest shop first —
-/// feeds the "available at Asda £X · Waitrose £Y" view.
-///
-/// Each listing contributes its most recent observation (prices are a time
-/// series; the newest row is "current"). A shop listing the product twice —
-/// two Asda CINs on one EAN — collapses to its cheapest listing, so the result
-/// holds exactly one row per source, as `ShopPrice` promises.
+/// Cheapest shop first, one row per shop: each listing's newest observation, and
+/// a shop listing the product twice collapses to its cheaper listing.
 pub async fn latest_prices(pool: &MySqlPool, product_id: ProductId) -> Result<Vec<ShopPrice>> {
     let rows: Vec<ShopPriceRow> = sqlx::query_as(
         "SELECT l.source, l.external_id, po.amount_minor, po.currency, po.unit_amount_minor, \
@@ -62,8 +55,7 @@ pub async fn latest_prices(pool: &MySqlPool, product_id: ProductId) -> Result<Ve
     .bind(product_id)
     .fetch_all(pool)
     .await?;
-    // Cheapest-first already, so the first row for a source IS that shop's best
-    // price; later rows from the same shop are its dearer listings.
+    // Cheapest first, so a shop's first row is its best price.
     let mut seen = std::collections::HashSet::new();
     Ok(rows
         .into_iter()

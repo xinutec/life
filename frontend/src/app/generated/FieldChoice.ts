@@ -2,14 +2,8 @@
 import type { Choice } from "./Choice";
 import type { ReconcileField } from "./ReconcileField";
 
-/**
- * One decision in a reconcile request: what to do about one field.
- */
 export type FieldChoice = { field: ReconcileField, choice: Choice, 
 /**
- * The typed value, when `choice` is [`Choice::User`]. `#[ts(optional)]` so
- * the generated type says `value?: string` — matching `serde(default)`
- * exactly, rather than forcing every keep/adopt decision to spell out a
- * null it doesn't have.
+ * For [`Choice::User`]; optional on the wire, as `serde(default)` makes it.
  */
 value?: string, };

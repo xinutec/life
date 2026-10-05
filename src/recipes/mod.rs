@@ -1,5 +1,4 @@
-//! The recipes feature area: recipes + ingredients, and the pure matching
-//! against inventory that yields shopping lists and "cook now".
+//! Recipes, and matching them against the inventory.
 
 pub mod cooking;
 pub mod matching;

@@ -1,6 +1,4 @@
-//! Wellbeing HTTP surface. The check-ins themselves reconcile through
-//! `/api/sync/wellbeing` (see `sync::repo`); this holds the one derived,
-//! online-only helper: emotion suggestions for the picker.
+//! Emotion suggestions for the picker; check-ins themselves go through sync.
 
 use axum::Json;
 use axum::extract::State;
@@ -15,13 +13,9 @@ use crate::wellbeing::suggest::{
 };
 use crate::wellbeing::suggest_store;
 
-/// Suggestions for this note, from what is already known; generation happens
-/// out of band on the Mac (`suggest_store`), so this never waits on a model.
-/// Returns the set for exactly this wording, else the set for an earlier wording
-/// marked `stale` (notes drift, and close beats blank), else nothing.
-///
-/// `pending` is set only if a worker was seen recently, so the picker never
-/// claims to be thinking with no model behind it.
+/// Suggestions for this note from what is already known, never waiting on a
+/// model: this wording's set, else an earlier wording's marked `stale`, else
+/// none. `pending` only with a worker seen recently.
 pub async fn suggest_emotions(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -50,20 +44,15 @@ pub async fn suggest_emotions(
         return answer(tokens, Progress::Answered);
     }
 
-    // Queue the work even with no worker listening: the note is written now, and
-    // whenever the Mac next wakes up the answer will be waiting the next time this
-    // check-in is opened. Only the *promise* of an answer depends on a live worker.
-    //
-    // The picker asks again every couple of seconds while it waits, so the common
-    // case here is "already queued" — check that first and build nothing.
+    // Queued even with no worker, so the answer waits for the next open. Usually
+    // already queued: the picker asks every couple of seconds.
     let queued = match suggest_store::pending_for(&app.pool, &user.user_id, &body.ulid, &hash)
         .await?
     {
         Some(queued) => queued,
         None => {
-            // A failed read fails the ask, which the picker repeats. Building on
-            // no examples instead would queue a prompt unlike the day's warmed
-            // one, and answer worse without saying so.
+            // Fail rather than build on no examples, which would answer worse
+            // without saying so.
             let examples =
                 suggest::fetch_examples(&app.pool, &user.user_id, suggest::MAX_EXAMPLES).await?;
             let prompt = suggest::build_prompt(&body.candidates, &examples, note);
@@ -77,8 +66,7 @@ pub async fn suggest_emotions(
                 &vocabulary,
             )
             .await?;
-            // Wake a worker already holding a poll open, so the note is picked up
-            // now rather than at its next look.
+            // Wake a worker holding a poll open.
             app.notify_job_queued();
             queued
         }
@@ -93,12 +81,8 @@ pub async fn suggest_emotions(
     )
 }
 
-/// Preload the model for a suggestion that is about to be asked for — fired when a
-/// check-in's note starts being written. Building the *same* system prompt the
-/// real request will use means the preload also warms that prompt's KV-cache
-/// prefix, so the suggestion a moment later is a cache hit rather than a cold ~60s
-/// load. Fire-and-forget: no worker, or a slow build, simply leaves the old
-/// timing; the answer is still computed by the real request either way.
+/// Preload the model while a note is being written, with the same system prompt
+/// the real ask will use, so its cached prefix is warm. Best-effort.
 pub async fn warm_emotions(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -108,8 +92,7 @@ pub async fn warm_emotions(
         return Ok(StatusCode::NO_CONTENT);
     }
     remember_vocabulary(&app, &user.user_id, &body.candidates).await;
-    // Without the examples there is nothing worth warming: a prompt built from
-    // none is not the one the real ask will use, so its cached prefix would miss.
+    // Without the examples the prompt would not match the real one.
     match suggest::fetch_examples(&app.pool, &user.user_id, suggest::MAX_EXAMPLES).await {
         Ok(examples) => {
             app.request_warm(suggest::build_system(&body.candidates, &examples));
@@ -122,11 +105,8 @@ pub async fn warm_emotions(
     }
 }
 
-/// Keep the vocabulary the picker just sent, so the rollover timer can rebuild
-/// this prompt at midnight with nobody waiting (see `suggest_store`, 0038).
-///
-/// Infallible for the caller — a hint for tomorrow must not fail today's
-/// suggestion — but logged, or a store that never writes looks like one that does.
+/// So the midnight rollover can rebuild this prompt (0038). Best-effort, but
+/// logged.
 async fn remember_vocabulary(app: &AppState, user_id: &str, candidates: &[EmotionCandidate]) {
     if let Err(e) = suggest_store::remember_vocabulary(&app.pool, user_id, candidates).await {
         tracing::warn!("could not remember the emotion vocabulary: {e:#}");

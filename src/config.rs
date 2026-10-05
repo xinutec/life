@@ -1,50 +1,35 @@
-//! Runtime configuration, read from the environment at startup.
-//!
-//! Secrets (session secret, NC OAuth client) come from the environment so
-//! they can be supplied as k8s secrets in deployment and a `.env`-style shell
-//! locally. Nothing here is hard-coded.
+//! Configuration from the environment, read at startup.
 
 use anyhow::{Context, Result};
 
 #[derive(Clone, Debug)]
 pub struct Config {
-    /// MariaDB connection string, e.g. `mysql://life:pw@host/life`.
+    /// `mysql://life:pw@host/life`.
     pub database_url: String,
-    /// HMAC key for signing session cookies.
     pub session_secret: String,
-    /// Address to bind the HTTP server to.
     pub bind_addr: String,
 
-    /// Base URL of the Nextcloud instance, no trailing slash.
+    /// No trailing slash.
     pub nc_base_url: String,
-    /// OAuth2 client registered in NC admin (identity flow).
+    /// For the login flow.
     pub nc_client_id: String,
     pub nc_client_secret: String,
-    /// Must match the redirect URI registered for the OAuth2 client.
     pub nc_redirect_uri: String,
 
-    /// Directory of the built Angular bundle to serve (with SPA fallback). When
-    /// unset the server is API-only — e.g. in dev, where `ng serve` proxies.
+    /// The Angular bundle; unset, the server is API-only.
     pub static_dir: Option<String>,
 
-    /// DEV ONLY. When set, `/dev-login` mints a session for this user id
-    /// without Nextcloud. Absent in production → the route 404s. Never set this
-    /// in a deployed environment.
+    /// Development only: `/dev-login` mints a session for this user. Never set in
+    /// a deployment.
     pub dev_login_user: Option<String>,
 
-    /// Path to the house geometry scene (served at GET /api/house).
     pub house_scene: String,
 
-    /// Bearer token the emotion-suggestion worker authenticates with. The worker
-    /// runs on the Mac and dials in, because the pod cannot dial the Mac. Unset:
-    /// no worker channel, and the picker shows the plain wheel.
+    /// The worker dials in, as the pod cannot dial the Mac. Unset: no suggestions.
     pub emotion_worker_token: Option<String>,
 
-    /// The council's public bin-collection iCal subscription, e.g. Brent's
-    /// `https://recyclingservices.brent.gov.uk/waste/<property>/calendar.ics`.
-    ///
-    /// Never a constant in this public source: the URL identifies one address.
-    /// Unset: no bins card.
+    /// e.g. `https://recyclingservices.brent.gov.uk/waste/<property>/calendar.ics`.
+    /// Never a constant: the URL identifies one address. Unset: no bins.
     pub bins_ical_url: Option<String>,
 }
 
@@ -59,8 +44,7 @@ fn env_or(key: &str, default: &str) -> String {
 impl Config {
     pub fn from_env() -> Result<Self> {
         let nc_base_url = env("NC_BASE_URL")?.trim_end_matches('/').to_string();
-        // Fail fast at boot rather than panicking inside the /login handler at
-        // request time: identity::authorize_url parses this as a base URL.
+        // At boot rather than in the /login handler.
         let parsed = url::Url::parse(&nc_base_url)
             .with_context(|| format!("NC_BASE_URL is not a valid URL: {nc_base_url:?}"))?;
         if !matches!(parsed.scheme(), "http" | "https") || parsed.host().is_none() {

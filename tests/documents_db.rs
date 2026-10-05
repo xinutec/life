@@ -16,7 +16,7 @@ async fn stores_a_payload_verbatim_overwrites_by_kind_and_cascades() {
     let pool = db::connect(&url).await.expect("connect");
     db::migrate(&pool).await.expect("migrate");
 
-    let barcode: Barcode = "5000000000901".parse().unwrap();
+    let barcode: Barcode = "5000000000918".parse().unwrap();
     sqlx::query("DELETE FROM products WHERE barcode = ?")
         .bind(&barcode)
         .execute(&pool)

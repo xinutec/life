@@ -3,17 +3,10 @@ import type { ExternalId } from "./ExternalId";
 import type { Source } from "./Source";
 
 /**
- * One source's listing of a product, with its public product page resolved
- * (stored URL if the source supplied one, else derived from the listing's
- * identity — see source::listing_url).
+ * One source's listing, its page link resolved (stored, or derived from its id).
  */
-export type ProductListing = { source: Source, external_id: ExternalId, 
+export type ProductListing = { source: Source, external_id: ExternalId, url: string | null, 
 /**
- * Deep link to the source's product page, when it has one.
- */
-url: string | null, 
-/**
- * What this source titles the product (the canonical `name` picks among
- * these).
+ * What this source calls the product.
  */
 raw_name: string | null, };

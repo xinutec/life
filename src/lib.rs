@@ -1,5 +1,4 @@
-//! life backend library. The binary (`src/main.rs`) is a thin wrapper; tests
-//! live in `tests/` and exercise this public surface.
+//! life's backend library; `main.rs` is a thin wrapper.
 
 pub mod calendar;
 pub mod config;

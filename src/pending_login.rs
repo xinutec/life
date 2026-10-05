@@ -1,36 +1,31 @@
-//! The pending half of a Nextcloud login, in a signed cookie that binds it to
-//! the browser that started it, which is what `state` proves. Needed because
-//! from a browser with no NC session `oauth2/authorize` detours through Login
-//! Flow, which drops the query, and the callback arrives with an empty `state=`.
-//! `state` is still checked whenever NC returns it; the signature survives a pod
-//! restart mid-login. Accepted risk: login CSRF then needs someone on the VPN to
-//! land a callback within the 10-minute window. The alternative is no login.
+//! A login in progress, in a signed cookie bound to the browser that started it.
+//! Needed because, from a browser with no Nextcloud session, `oauth2/authorize`
+//! detours through Login Flow and the callback arrives with an empty `state=`.
+//! `state` is still checked when returned. Accepted risk: a login CSRF needs
+//! someone on the VPN to land a callback within the 10-minute window.
 
 use chrono::{DateTime, Duration, Utc};
 use rand::Rng;
 
 use crate::session::{sign_value, verify_value};
 
-/// Cookie holding the login in progress. Short-lived; cleared at the callback.
 pub const COOKIE_NAME: &str = "oauth_pending";
 
-/// How long a started login may take to come back.
 pub fn ttl() -> Duration {
     Duration::seconds(600)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PendingLogin {
-    /// Echoed to NC as `state`; compared back when NC bothers to return it.
+    /// Sent as `state`; compared when Nextcloud returns it.
     pub nonce: String,
-    /// Internal path to land on afterwards; allowlist-validated when used.
+    /// Allowlist-checked when used.
     pub return_to: Option<String>,
     pub expires_at: DateTime<Utc>,
 }
 
 impl PendingLogin {
-    /// `<expiry unix>|<nonce>|<return_to>` — `return_to` last, so a `|` inside a
-    /// query string can't shift the fields.
+    /// `<expiry unix>|<nonce>|<return_to>`: `return_to` last, as it may hold `|`.
     fn encode(&self) -> String {
         format!(
             "{}|{}|{}",
@@ -56,8 +51,7 @@ impl PendingLogin {
     }
 }
 
-/// Start a login: a fresh nonce for NC's `state`, plus the signed cookie value that
-/// remembers it.
+/// A fresh nonce and the signed cookie that remembers it.
 pub fn issue(secret: &str, return_to: Option<String>, now: DateTime<Utc>) -> (String, String) {
     let mut bytes = [0u8; 24];
     rand::rng().fill_bytes(&mut bytes);
@@ -69,10 +63,8 @@ pub fn issue(secret: &str, return_to: Option<String>, now: DateTime<Utc>) -> (St
     (pending.nonce.clone(), sign_value(secret, &pending.encode()))
 }
 
-/// Finish a login: the pending entry if this callback really belongs to it.
-///
-/// `state` is what NC returned — `None`/empty when it was lost through the Login
-/// Flow. Present means it must match; absent means the cookie stands alone.
+/// The pending login if this callback belongs to it. An empty `state` (lost in
+/// Login Flow) leaves the cookie to stand alone; a present one must match.
 pub fn accept(
     secret: &str,
     cookie: Option<&str>,

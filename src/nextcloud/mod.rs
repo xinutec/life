@@ -1,6 +1,4 @@
-//! Nextcloud integration. Two boundaries only — identity (login) and calendar
-//! (CalDAV). life never writes to NC's database; see
-//! docs/design/overview.md §2.
+//! Nextcloud: identity (login) and the calendar (CalDAV) only.
 
 pub mod credentials;
 pub mod identity;

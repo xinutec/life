@@ -1,15 +1,11 @@
-//! Nextcloud OAuth2 — identity only.
-//!
-//! Establishes *who the user is* and nothing else. The access token is used
-//! once to read `{id, displayname}` and then discarded; no refresh token is
-//! ever stored, so life never hits NC's single-use-refresh-token rotation.
+//! Nextcloud OAuth2, for identity only: the token is used once and discarded, so
+//! no refresh token is stored to rotate.
 
 use anyhow::{Context, Result, anyhow};
 use serde::Deserialize;
 
 use crate::config::Config;
 
-/// Build the URL the browser is redirected to in order to grant access.
 pub fn authorize_url(cfg: &Config, state: &str) -> String {
     let mut url = url::Url::parse(&format!(
         "{}/index.php/apps/oauth2/authorize",
@@ -29,7 +25,6 @@ struct TokenResponse {
     access_token: String,
 }
 
-/// Exchange an authorization `code` for an access token.
 pub async fn exchange_code(http: &reqwest::Client, cfg: &Config, code: &str) -> Result<String> {
     let res = http
         .post(format!(
@@ -73,8 +68,6 @@ struct OcsData {
     displayname: String,
 }
 
-/// Look up the granting user's id + display name. The token is consumed here
-/// and never persisted.
 pub async fn fetch_user(
     http: &reqwest::Client,
     cfg: &Config,

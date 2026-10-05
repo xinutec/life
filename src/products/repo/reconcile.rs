@@ -1,9 +1,6 @@
-//! Reconciliation: where sources disagree with the canonical row.
-//!
-//! Each source's account lives on its listing; the canonical `products` row
-//! holds one value per field. A disagreement not yet settled is a divergence
-//! to approve. Divergences are computed live; a decision records the value set
-//! it settled, so it stays quiet until a source's value changes.
+//! Where sources disagree with the canonical row. Divergences are computed live;
+//! a decision records the value set it settled, so it stays quiet until a
+//! source's value changes.
 
 use std::collections::{BTreeSet, HashMap};
 
@@ -21,22 +18,16 @@ use crate::products::types::{
 use super::facts::{fact_display, facts_by_source_in};
 use super::{Listing, get_by_id, listings_for};
 
-/// A canonical scalar field reconciliation covers: how to read its current value
-/// off the product and its offered value off a listing.
 struct ReconciledField {
     field: ReconcileField,
     current: fn(&Product) -> Option<String>,
     offered: fn(&Listing) -> Option<String>,
-    /// The UPDATE that adopts a value for this field, bound `(value, source,
-    /// product_id)`. It lives in the table so `set_canonical_field` picks a
-    /// whole statement rather than splicing a column name — the column can
-    /// never come from the request, and there is no "unknown field" arm to fall
-    /// through, because a non-scalar field cannot reach it.
+    /// The UPDATE, bound `(value, source, product_id)`: a whole statement per
+    /// field, so a column name is never spliced from a request.
     adopt_sql: &'static str,
 }
 
-/// The fields with a single canonical value that a source can disagree about.
-/// (Picture and the facts reconcile through their own mechanisms, below.)
+/// The single-valued fields; the picture and facts reconcile their own way.
 const RECONCILED_FIELDS: &[ReconciledField] = &[
     ReconciledField {
         field: ReconcileField::Name,
@@ -62,12 +53,8 @@ fn trimmed(s: Option<String>) -> Option<String> {
     s.map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
 }
 
-/// The distinct values on the table for a field — the canonical value plus every
-/// listing's — sorted. Stored with a decision as its suppression key: while this
-/// set is unchanged the divergence stays settled; any change re-surfaces it.
-///
-/// Case-sensitive on purpose: a source that differs only in capitals offers a
-/// spelling to adopt or refuse, which folding case would hide.
+/// The canonical value and every listing's, sorted: a decision's suppression
+/// key. Case-sensitive, so a source's different capitals stay a choice.
 fn value_set(spec: &ReconciledField, product: &Product, listings: &[Listing]) -> Vec<String> {
     let mut set = BTreeSet::new();
     if let Some(v) = trimmed((spec.current)(product)) {
@@ -81,10 +68,9 @@ fn value_set(spec: &ReconciledField, product: &Product, listings: &[Listing]) ->
     set.into_iter().collect()
 }
 
-/// field → the value set that was on the table when it was last decided.
+/// field → the value set when it was decided.
 pub type DecisionMap = HashMap<ReconcileField, Vec<String>>;
 
-/// The decisions settled for a product's fields.
 pub async fn field_decisions(pool: &MySqlPool, product_id: ProductId) -> Result<DecisionMap> {
     let rows: Vec<(ReconcileField, Json<Vec<String>>)> = sqlx::query_as(
         "SELECT field, seen_values FROM product_field_decisions WHERE product_id = ?",
@@ -92,14 +78,11 @@ pub async fn field_decisions(pool: &MySqlPool, product_id: ProductId) -> Result<
     .bind(product_id)
     .fetch_all(pool)
     .await?;
-    // A field we no longer know fails the query (it decodes as the enum) rather
-    // than being skipped, which would quietly revive the divergence it settled.
+    // An unknown field fails the query rather than reviving what it settled.
     Ok(rows.into_iter().map(|(f, v)| (f, v.0)).collect())
 }
 
-/// Where the sources disagree with the canonical row and it isn't already
-/// settled. Pure — the I/O (listings, decisions) is fetched by the caller, so
-/// the rule is unit-testable without a database.
+/// Unsettled disagreements. Pure; the caller fetches.
 pub fn divergences(
     product: &Product,
     listings: &[Listing],
@@ -121,7 +104,6 @@ pub fn divergences(
         if candidates.is_empty() {
             continue;
         }
-        // Settled if the exact value set on the table matches what was decided.
         let set = value_set(spec, product, listings);
         if decisions.get(&spec.field) == Some(&set) {
             continue;
@@ -136,14 +118,10 @@ pub fn divergences(
     out
 }
 
-/// The suppression key for a picture decision: the current image's provenance
-/// plus every offered picture URL. Any change (a new source picture, or the
-/// canonical picture's source changing) alters the set and re-surfaces the
-/// divergence; while it's unchanged the decision keeps it settled.
+/// The picture's suppression key: its provenance and every offered URL.
 fn picture_value_set(product: &Product, listings: &[Listing]) -> Vec<String> {
     let mut set = BTreeSet::new();
-    // The current holder, marked so it can't collide with a URL and so adopting a
-    // different source (which changes provenance) re-keys the decision.
+    // Marked so it cannot collide with a URL.
     set.insert(match product.image_source {
         Some(s) => format!("@{s}"),
         None => "@".to_string(),
@@ -156,11 +134,9 @@ fn picture_value_set(product: &Product, listings: &[Listing]) -> Vec<String> {
     set.into_iter().collect()
 }
 
-/// The picture disagreement, if any. The canonical image is bytes and a listing
-/// offers a URL, so there's nothing to value-compare; instead a listing from a
-/// source OTHER than the one our picture came from is a candidate — "this shop
-/// has its own picture you could adopt". A hand-uploaded picture (`image_source`
-/// == `user`) is ours and never nagged. Pure — I/O is the caller's.
+/// A listing from a source other than our picture's is a candidate. Bytes and
+/// URLs do not compare, so this goes by provenance; a hand upload is never
+/// nagged. Pure.
 pub fn picture_divergence(
     product: &Product,
     listings: &[Listing],
@@ -190,15 +166,13 @@ pub fn picture_divergence(
     Some(FieldDivergence {
         field: ReconcileField::Picture,
         label: ReconcileField::Picture.label().to_string(),
-        // The source we currently hold a picture from (if any) — the frontend
-        // shows the actual thumbnail; this is the provenance behind it.
         current: current_src.map(|s| s.to_string()),
         candidates,
     })
 }
 
-/// The picture side of a reconcile. Adopting needs the source's bytes, fetched
-/// over the network, so the route resolves this before the transaction opens.
+/// Adopting needs bytes fetched over the network, so the route resolves this
+/// before the transaction opens.
 pub enum PictureChoice {
     Keep,
     Adopt {
@@ -208,8 +182,7 @@ pub enum PictureChoice {
     },
 }
 
-/// A reconcile that failed: a choice the data can't honour (→ 400), or
-/// anything else (→ 500).
+/// A choice the data cannot honour (400), or anything else (500).
 #[derive(Debug, thiserror::Error)]
 pub enum ReconcileError {
     #[error("{0}")]
@@ -234,11 +207,8 @@ fn refuse<T>(msg: String) -> Result<T, ReconcileError> {
     Err(ReconcileError::Refused(msg))
 }
 
-/// Apply reconcile decisions: set the canonical row from the chosen source, our
-/// own typed value, or leave it (keep); then record the settled value set so the
-/// divergence stays quiet until a source's value changes.
-///
-/// One transaction, the product row locked: every choice applies, or none.
+/// Apply the choices and record each settled value set, in one transaction with
+/// the product row locked: every choice applies, or none.
 pub async fn reconcile(
     pool: &MySqlPool,
     product_id: ProductId,
@@ -277,7 +247,7 @@ pub async fn reconcile(
             .execute(&mut *tx)
             .await?;
         }
-        // Settled AFTER any change, so the set holds the new provenance.
+        // After any change, so the set holds the new provenance.
         let product = current(&mut tx, product_id).await?;
         let set = picture_value_set(&product, &listings);
         upsert_decision(&mut tx, product_id, ReconcileField::Picture, &set).await?;
@@ -302,20 +272,17 @@ async fn reconcile_field(
     c: &FieldChoice,
 ) -> Result<(), ReconcileError> {
     let spec = match c.field.reconciler() {
-        // Nutrition and ingredients settle by recording which source to
-        // trust (0035), not by writing the canonical row.
+        // These record which source to trust (0035); nothing is copied.
         Reconciler::Fact => return reconcile_fact(conn, product_id, c).await,
         Reconciler::Picture => return refuse("the picture is chosen apart from the fields".into()),
         Reconciler::Scalar => RECONCILED_FIELDS
             .iter()
             .find(|s| s.field == c.field)
-            // Every Scalar field has a row above; a missing one is a bug.
             .ok_or_else(|| anyhow!("no reconcile spec for {}", c.field))?,
     };
     match c.choice {
         Choice::Keep => {}
         Choice::User => {
-            // Our own value: taken from the request, not a listing.
             let value = c.value.as_deref().map(str::trim).filter(|v| !v.is_empty());
             let Some(value) = value else {
                 return refuse(format!("choosing our own {} needs a value", c.field));
@@ -336,19 +303,15 @@ async fn reconcile_field(
             set_canonical_field(conn, product_id, spec, &value, source).await?;
         }
     }
-    // Recompute the set AFTER applying so the decision reflects the settled
-    // state (the adopted value is now the canonical one).
+    // After applying, so the set is the settled one.
     let product = current(conn, product_id).await?;
     let set = value_set(spec, &product, listings);
     upsert_decision(conn, product_id, spec.field, &set).await?;
     Ok(())
 }
 
-/// Settle a picked fact (nutrition / ingredients): record which source to trust.
-/// `KEEP` records the current precedence winner (so the divergence stays quiet);
-/// a source id records that source, if it actually offers the fact. `USER` is
-/// rejected — these facts are chosen among sources, never typed by hand (unlike
-/// the scalar fields), so we never invent a nutrition panel or ingredient list.
+/// Record which source to trust for a fact; `keep` records the current winner.
+/// Never `user`: a nutrition panel is chosen among sources, not typed.
 async fn reconcile_fact(
     conn: &mut MySqlConnection,
     product_id: ProductId,
@@ -359,8 +322,7 @@ async fn reconcile_fact(
     }
     let by_source = facts_by_source_in(conn, product_id).await?;
     let source = match c.choice.source() {
-        // by_source is precedence-ordered; the first source that has this fact
-        // is the current pick.
+        // Precedence order, so the first that has it is the current pick.
         None => match by_source
             .iter()
             .find(|s| fact_display(c.field, &s.facts).is_some())
@@ -393,11 +355,7 @@ async fn reconcile_fact(
     Ok(())
 }
 
-/// Set one canonical scalar field to an adopted value.
-///
-/// Takes the spec rather than a field name: a `ReconciledField` only exists for
-/// a field that has an `adopt_sql`, so "which column" is settled by construction
-/// and there is nothing to reject at runtime.
+/// Takes the spec, not a name: only a field with an `adopt_sql` has one.
 async fn set_canonical_field(
     conn: &mut MySqlConnection,
     product_id: ProductId,
@@ -405,9 +363,8 @@ async fn set_canonical_field(
     value: &str,
     source: Source,
 ) -> Result<()> {
-    // Each reconcilable scalar carries a provenance column (`*_source`): the
-    // adopted source, or `user` for our own correction. `user` there is what a
-    // later source refresh checks before touching the value.
+    // `*_source` records the adopted source, or `user`, which later refreshes
+    // respect.
     //
     // dev-lint: allow-sqlx static literal chosen from RECONCILED_FIELDS, above
     sqlx::query(spec.adopt_sql)

@@ -61,7 +61,7 @@ fn off(barcode: &Barcode) -> SourceAccount {
 #[tokio::test]
 async fn an_open_food_facts_account_lands_whole() {
     let pool = pool().await;
-    let bc: Barcode = "9993300000001".parse().unwrap();
+    let bc: Barcode = "9993300000018".parse().unwrap();
     fresh(&pool, &bc).await;
 
     let p = repo::ingest(

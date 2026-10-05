@@ -2,10 +2,6 @@
 import type { NewPurchase } from "./NewPurchase";
 
 /**
- * What may ride along with a buy: the price, if it was noted.
- *
- * Optional because it must be: marking things bought empties the list with a
- * full trolley and one hand, and a capture step that blocked it would get the
- * list abandoned. Recording nothing is a valid, common answer.
+ * The price, if it was noted: buying must work with a full trolley.
  */
 export type BuyRequest = { purchase: NewPurchase | null, };

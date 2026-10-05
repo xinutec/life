@@ -1,4 +1,4 @@
-//! Persistence for recipes + their ingredients.
+//! Persistence for recipes and their ingredients.
 
 use std::collections::HashMap;
 
@@ -29,8 +29,7 @@ struct IngredientRow {
     unit: Option<String>,
 }
 
-/// All recipes for a user, each with its ingredients. One query per table; the
-/// ingredients are grouped in memory by recipe id.
+/// One query per table, grouped in memory.
 pub async fn list_recipes(pool: &MySqlPool, user_id: &str) -> Result<Vec<Recipe>> {
     let recipe_rows: Vec<RecipeRow> = sqlx::query_as(
         "SELECT id, name, instructions, servings FROM recipes \
@@ -119,7 +118,6 @@ pub async fn get_recipe(pool: &MySqlPool, user_id: &str, id: u64) -> Result<Opti
     }))
 }
 
-/// Create a recipe and its ingredients atomically.
 pub async fn create_recipe(pool: &MySqlPool, user_id: &str, new: NewRecipe) -> Result<Recipe> {
     let mut tx = pool.begin().await?;
     let res = sqlx::query(
@@ -149,19 +147,14 @@ pub async fn create_recipe(pool: &MySqlPool, user_id: &str, new: NewRecipe) -> R
     }
     tx.commit().await?;
 
-    // Re-read rather than echo what was sent: `product_name` is joined on read,
-    // so an echoed body would say a linked line has no product until the next
-    // GET disagreed with it.
+    // Re-read: `product_name` is joined on read.
     get_recipe(pool, user_id, id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("recipe {id} vanished between insert and read"))
 }
 
-/// Replace a recipe's fields and its whole ingredient list atomically. Returns
-/// the updated recipe, or None if no live recipe with that id belongs to the
-/// user (unknown / deleted / someone else's). Ingredients are delete-all +
-/// re-insert (the same shape `create_recipe` writes), so the list the client
-/// sends is exactly what's stored — no stale rows survive an edit.
+/// Replace a recipe and its whole ingredient list; `None` if no live recipe of
+/// this user's has that id.
 pub async fn update_recipe(
     pool: &MySqlPool,
     user_id: &str,
@@ -169,8 +162,7 @@ pub async fn update_recipe(
     new: NewRecipe,
 ) -> Result<Option<Recipe>> {
     let mut tx = pool.begin().await?;
-    // Lock the recipe for the whole edit, so two edits each replacing the
-    // ingredient list cannot interleave their deletes and inserts.
+    // Locked, so two edits cannot interleave their deletes and inserts.
     let exists: Option<(u64,)> = sqlx::query_as(
         "SELECT id FROM recipes WHERE id = ? AND user_id = ? AND deleted_at IS NULL FOR UPDATE",
     )
@@ -210,16 +202,12 @@ pub async fn update_recipe(
     }
     tx.commit().await?;
 
-    // Re-read, as `create_recipe` does and for the same reason.
     get_recipe(pool, user_id, id).await
 }
 
-/// Cook it: take every ingredient out of the cupboard and report each line.
-/// `Ok(None)` = no such recipe for this user.
-///
-/// The plan comes from a plain read and is applied in one transaction as
-/// floored deltas (`GREATEST(quantity - ?, 0)`), so a concurrent change can't
-/// make it take more than planned or go negative. The report is the plan.
+/// Planned from a plain read, applied as floored deltas in one transaction, so a
+/// concurrent change cannot make it take more or go negative. `Ok(None)`: no such
+/// recipe.
 pub async fn cook_recipe(
     pool: &MySqlPool,
     user_id: &str,
@@ -257,8 +245,7 @@ pub async fn cook_recipe(
     Ok(Some(lines))
 }
 
-/// Delete a recipe — a tombstone, restorable from the trash; its ingredient
-/// rows stay attached. Returns whether a row was tombstoned.
+/// A tombstone, restorable; the ingredients stay.
 pub async fn delete_recipe(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
     let res = sqlx::query(
         "UPDATE recipes SET deleted_at = NOW() \
@@ -271,7 +258,6 @@ pub async fn delete_recipe(pool: &MySqlPool, user_id: &str, id: u64) -> Result<b
     Ok(res.rows_affected() > 0)
 }
 
-/// Restore a deleted recipe. Returns whether a tombstone was cleared.
 pub async fn restore_recipe(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
     let res = sqlx::query(
         "UPDATE recipes SET deleted_at = NULL \

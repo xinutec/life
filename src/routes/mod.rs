@@ -32,9 +32,8 @@ use tracing::Level;
 
 use crate::state::AppState;
 
-/// Cache policy for static files. ⚠ `index.html` is `no-cache` (revalidate via
-/// ETag): without a header clients cache it heuristically and run an old build
-/// for hours. Everything else Angular emits is content-hashed, so `immutable`.
+/// `index.html` revalidates, or clients run an old build for hours; everything
+/// else is content-hashed, so `immutable`.
 fn cache_control_for(res: &Response<ServeFileSystemResponseBody>) -> Option<HeaderValue> {
     let is_html = res
         .headers()
@@ -48,10 +47,8 @@ fn cache_control_for(res: &Response<ServeFileSystemResponseBody>) -> Option<Head
     })
 }
 
-/// Serve the app's page for a client-side ROUTE, and 404 anything that plainly
-/// named a file: a woff2 answered with `200 text/html` renders as broken icons
-/// and reports nothing. The test is a dot in the last segment — a heuristic, but
-/// listing the bundle's assets would change with every build.
+/// The app's page for a client-side route, but a 404 for anything that names a
+/// file (a dot in the last segment): a woff2 answered with HTML fails silently.
 fn spa(index: &str, path: &str) -> axum::response::Response {
     use axum::response::IntoResponse as _;
 
@@ -65,8 +62,7 @@ fn spa(index: &str, path: &str) -> axum::response::Response {
     match std::fs::read_to_string(index) {
         Ok(page) => axum::response::Html(page).into_response(),
         Err(error) => {
-            // STATIC_DIR set with no index is a misconfigured deployment, and
-            // saying so beats serving an empty page that looks like the app.
+            // A STATIC_DIR without an index is a misconfiguration; say so.
             tracing::error!("the app's index could not be read: {error}");
             (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "no index").into_response()
         }
@@ -77,10 +73,7 @@ pub fn router(state: AppState) -> Router {
     let api = Router::new()
         .route("/me", get(api::me))
         .route("/house", get(api::house))
-        // An ambient household fact like the house geometry, not an entity of
-        // ours: read from the council, owned by nobody here.
         .route("/bins", get(calendar::bins))
-        // Out, not in: the diary is Nextcloud's, and this writes one event to it.
         .route("/calendar/shop-trip", post(calendar::plan_shop_trip))
         .route("/nextcloud/connect/init", post(auth::connect_init))
         .route("/nextcloud/connect/status", get(auth::connect_status))
@@ -101,8 +94,7 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/items/{id}/files",
             get(inventory::list_files).post(inventory::add_file).layer(
-                // Re-stated in the handler too. A limit that lives only here is
-                // one that silently disappears if the route is ever re-wired.
+                // Re-stated in the handler, in case the route is re-wired.
                 DefaultBodyLimit::max(files_types::MAX_FILE_BYTES + 64 * 1024),
             ),
         )
@@ -152,9 +144,7 @@ pub fn router(state: AppState) -> Router {
             post(wellbeing::suggest_emotions),
         )
         .route("/wellbeing/warm-emotions", post(wellbeing::warm_emotions))
-        // The Mac's suggestion worker dials IN here — it holds the model, and the
-        // fleet may not open connections toward it. Bearer token, not a session:
-        // it is a daemon acting for nobody.
+        // The Mac's worker dials in here; the fleet may not dial the Mac.
         .route("/emotion-worker/next", get(emotion_worker::next))
         .route("/emotion-worker/{id}/result", post(emotion_worker::result))
         .route("/telemetry", post(telemetry::record))
@@ -181,21 +171,15 @@ pub fn router(state: AppState) -> Router {
         .route("/products/{barcode}", get(products::lookup))
         .route(
             "/products/{barcode}/image",
-            // Image uploads can be a few MiB; raise the default 2 MiB body limit
-            // for THIS route only (the handler re-checks the real 5 MiB cap). The
-            // GET side has no request body, so the raised limit is harmless there.
+            // Raised for this route only; the handler checks the real 5 MiB cap.
             get(products::image)
                 .put(products::set_image)
                 .layer(DefaultBodyLimit::max(off::MAX_UPLOAD_BYTES + 64 * 1024)),
         )
-        // An unmatched /api path is a 404 in the API's own language. Without this
-        // it would fall through to the SPA fallback below and answer 200 with
-        // index.html — and a 2xx non-JSON body is precisely how the client's
-        // `classifyFetchResponse` recognises a lapsed session, so a typo'd or
-        // retired route would read to the sync layer as "you're logged out".
+        // Without this an unknown /api path would get index.html, a 2xx non-JSON
+        // body, which the client reads as a lapsed session.
         .fallback(|| async { AppError::NotFound })
-        // One INFO line per API request (method, path, status, latency). Scoped to
-        // /api so static-asset serving and the k8s /healthz probe don't spam it.
+        // One INFO line per API request; not for assets or /healthz.
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
@@ -209,22 +193,17 @@ pub fn router(state: AppState) -> Router {
         .route("/logout", post(auth::logout))
         .nest("/api", api);
 
-    // DEV ONLY: mount /dev-login only when DEV_LOGIN_USER is set.
     if state.cfg.dev_login_user.is_some() {
         app = app.route("/dev-login", get(auth::dev_login));
     }
 
-    // Serve the built Angular bundle (single origin), falling back to
-    // index.html so client-side routes resolve. API-only when STATIC_DIR unset.
     if let Some(dir) = state.cfg.static_dir.clone() {
         let index = format!("{dir}/index.html");
         let serve = ServeDir::new(&dir).fallback(get(move |uri: axum::http::Uri| {
             let index = index.clone();
             async move { spa(&index, uri.path()) }
         }));
-        // ⚠ The layer wraps only the STATIC service: an API response is neither
-        // a document to revalidate nor an immutable asset, and giving JSON a
-        // year-long `immutable` would be the same bug pointing the other way.
+        // Static files only: JSON is neither revalidated nor immutable.
         let serve = ServiceBuilder::new()
             .layer(SetResponseHeaderLayer::overriding(
                 header::CACHE_CONTROL,

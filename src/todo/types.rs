@@ -1,7 +1,4 @@
-//! To-do types. A to-do is a *typed* task with an open/done status and optional
-//! notes. The type is a curated enum that grows as new kinds are actually
-//! needed — not up front. Typed, directional
-//! connections to other to-dos and app entities live in the `todo_link` table.
+//! To-dos: typed tasks with a status; their connections are in `todo_link`.
 
 use crate::str_enum;
 use chrono::NaiveDate;
@@ -9,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 str_enum! {
-    /// The kind of to-do. Add a variant when a new kind earns its place.
+    /// Add a variant when a new kind earns its place.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[serde(rename_all = "snake_case")]
     #[ts(export)]
@@ -23,7 +20,7 @@ str_enum! {
 }
 
 str_enum! {
-    /// Lifecycle status. "Blocked" and "waiting" are derived, not stored.
+    /// "Blocked" and "waiting" are derived, not stored.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[serde(rename_all = "snake_case")]
     #[ts(export)]
@@ -34,7 +31,7 @@ str_enum! {
 }
 
 str_enum! {
-    /// Triage priority. Optional on a to-do (`None` = unprioritised, sorts last).
+    /// Optional; unprioritised sorts last.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[serde(rename_all = "snake_case")]
     #[ts(export)]
@@ -44,7 +41,6 @@ str_enum! {
         Low => "low",
     }
 }
-/// A to-do as returned by the API.
 #[derive(Debug, Clone, PartialEq, Serialize, TS, sqlx::FromRow)]
 #[ts(export)]
 pub struct Todo {
@@ -56,18 +52,15 @@ pub struct Todo {
     pub status: TodoStatus,
     pub priority: Option<TodoPriority>,
     pub notes: Option<String>,
-    /// Start-gate: don't surface / can't act before this day (drives "waiting";
-    /// doubles as snooze). `None` = no gate.
+    /// Not before this day ("waiting"; doubles as snooze).
     #[serde(rename = "notBefore")]
     pub not_before: Option<NaiveDate>,
-    /// Deadline (drives urgency ordering). `None` = no deadline.
     pub due: Option<NaiveDate>,
-    /// Belongs on the case-file site (mirrors a case-file checkbox), vs private
-    /// and app-only. Default private; publishing is an explicit act.
+    /// On the case-file site; private unless chosen.
     pub shared: bool,
 }
 
-/// Request body for creating a to-do. New to-dos start `open`.
+/// New to-dos start `open`.
 #[derive(Debug, Deserialize)]
 pub struct NewTodo {
     pub title: String,
@@ -81,15 +74,11 @@ pub struct NewTodo {
     pub not_before: Option<NaiveDate>,
     #[serde(default)]
     pub due: Option<NaiveDate>,
-    /// Private unless the caller opts in — the safe default for a case file.
     #[serde(default)]
     pub shared: bool,
 }
 
-/// Partial update, as `PATCH` implies: **an absent field is left alone**, while
-/// `null` on a nullable column clears it. So a caller can send `{"notes": "..."}`
-/// without restating the to-do, or silently resetting `shared` to private as a
-/// `#[serde(default)]` bool would.
+/// A PATCH: an absent field is left alone, `null` clears a nullable one.
 #[derive(Debug, Default, Deserialize)]
 pub struct UpdateTodo {
     #[serde(default)]
@@ -110,9 +99,8 @@ pub struct UpdateTodo {
     pub shared: Option<bool>,
 }
 
-/// Deserialize a nullable field into `Option<Option<T>>` so the two cases stay
-/// distinct: field absent → `None` (leave it), field present as `null` →
-/// `Some(None)` (clear it). Plain `#[serde(default)]` collapses both to `None`.
+/// Absent → `None` (leave it), `null` → `Some(None)` (clear it);
+/// `#[serde(default)]` alone would collapse the two.
 fn absent_or_null<'de, T, D>(de: D) -> Result<Option<Option<T>>, D::Error>
 where
     T: Deserialize<'de>,
@@ -122,25 +110,22 @@ where
 }
 
 str_enum! {
-    /// How a to-do connects to its target. Directional: the edge runs *from* the
-    /// to-do *to* the target.
+    /// Directional: from the to-do to the target.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[serde(rename_all = "snake_case")]
     #[ts(export)]
     pub enum LinkKind: "link kind" {
-        /// The to-do depends on the target (target should come first / blocks it).
+    /// The target comes first.
         DependsOn => "depends_on",
-        /// The target is a sub-task of the to-do (parent → child).
+    /// The target is a sub-task.
         Subtask => "subtask",
-        /// A plain association, no ordering implied.
         Related => "related",
     }
 }
 
 str_enum! {
-    /// What a connection points at. A target is referenced *softly* — by `ulid`
-    /// (another to-do), DB id (an app entity), or room name (a house room) — never a
-    /// hard FK, so links sync independently of their endpoints.
+    /// Referenced softly (a ulid, an id, a room name), never by FK, so links sync
+    /// apart from their endpoints.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[serde(rename_all = "snake_case")]
     #[ts(export)]

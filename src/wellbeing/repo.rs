@@ -1,14 +1,11 @@
-//! Persistence for wellbeing check-ins. All the CRUD travels the sync path
-//! (`sync::repo::pull_wellbeing` / `push_wellbeing`); the only thing here is the
-//! explicit trash restore, since a sync push can never clear a tombstone.
+//! The trash restore: no sync push can clear a tombstone.
 
 use anyhow::Result;
 use sqlx::MySqlPool;
 
 use crate::sync::repo::stamp;
 
-/// Restore a tombstoned check-in (trash/undo). Mirrors `todo::repo::restore`: a
-/// fresh `rev` propagates the resurrected row to every device via the next pull.
+/// A fresh `rev` carries the restored row to every device.
 pub async fn restore(pool: &MySqlPool, user_id: &str, ulid: &str) -> Result<bool> {
     stamp(pool, |rev| {
         sqlx::query(

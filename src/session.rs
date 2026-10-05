@@ -1,7 +1,5 @@
-//! life's own DB-backed sessions. Nextcloud is touched only at login; every
-//! request after that authenticates against this opaque session.
-//!
-//! Cookie layout: `<id>.<hex hmac_sha256(id)>`, verified constant-time.
+//! Our own sessions: Nextcloud is touched only at login. Cookie:
+//! `<id>.<hex hmac_sha256(id)>`, verified in constant time.
 
 use anyhow::Result;
 use axum::extract::{FromRef, FromRequestParts};
@@ -18,15 +16,10 @@ use crate::state::AppState;
 
 type HmacSha256 = Hmac<Sha256>;
 
-/// How long a session survives *without use*. The expiry slides forward on every
-/// request (see [[resolve_session]]), so this is an idle timeout, not a cap on
-/// how long you may stay signed in: use the app within the week and you are never
-/// signed out.
+/// An idle timeout, not a cap: the expiry slides on every request.
 const SESSION_TTL_DAYS: i64 = 7;
 
-/// Don't rewrite the expiry on every single request — only when sliding it would
-/// actually move it by more than this. A day's use is then a handful of writes,
-/// not one per API call.
+/// The expiry is rewritten only when it would move by more than this.
 const RENEW_INTERVAL_HOURS: i64 = 1;
 
 pub const COOKIE_NAME: &str = "session";
@@ -37,10 +30,7 @@ pub struct UserSession {
     pub display_name: String,
 }
 
-/// Why a session cookie was turned away. Worth keeping apart, because a bare 401
-/// collapses four quite different stories into one: the device never sent a
-/// cookie, the cookie was forged or the signing secret rotated, the session is
-/// unknown to us, or a timer simply ran out. Only the last one is routine.
+/// Kept apart, as a bare 401 hides four stories; only expiry is routine.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SessionReject {
     NoCookie,
@@ -73,8 +63,7 @@ pub fn sign_value(secret: &str, value: &str) -> String {
     format!("{value}.{}", hex::encode(mac.finalize().into_bytes()))
 }
 
-/// Verify a signed cookie and return the inner id, or None if the signature
-/// is absent/malformed/wrong. `verify_slice` is constant-time.
+/// `verify_slice` is constant-time.
 pub fn verify_value(secret: &str, signed: &str) -> Option<String> {
     let idx = signed.rfind('.')?;
     let (value, dotted_sig) = signed.split_at(idx);
@@ -92,7 +81,6 @@ struct SessionRow {
     expires_at: NaiveDateTime,
 }
 
-/// Create a session row and return the signed cookie value.
 pub async fn create_session(pool: &MySqlPool, secret: &str, user: &UserSession) -> Result<String> {
     let mut id_bytes = [0u8; 32];
     rand::rng().fill_bytes(&mut id_bytes);
@@ -109,11 +97,7 @@ pub async fn create_session(pool: &MySqlPool, secret: &str, user: &UserSession) 
     Ok(sign_value(secret, &id))
 }
 
-/// Resolve a signed cookie to a session, sliding its expiry forward as a side
-/// effect. Lazily deletes the row if expired.
-///
-/// The cookie deliberately outlives the row (see `routes::auth::session_cookie`),
-/// so this row is the only clock.
+/// Slides the expiry, and lazily deletes an expired row. The row is the only clock.
 pub async fn resolve_session(
     pool: &MySqlPool,
     secret: &str,
@@ -154,7 +138,6 @@ pub async fn resolve_session(
     }))
 }
 
-/// Delete the session backing a signed cookie (logout).
 pub async fn destroy_session(pool: &MySqlPool, secret: &str, signed: &str) -> Result<()> {
     if let Some(id) = verify_value(secret, signed) {
         sqlx::query("DELETE FROM sessions WHERE id = ?")
@@ -165,7 +148,7 @@ pub async fn destroy_session(pool: &MySqlPool, secret: &str, signed: &str) -> Re
     Ok(())
 }
 
-/// Extractor: rejects with 401 unless a valid session cookie is present.
+/// Rejects with 401 without a valid session cookie.
 pub struct AuthUser(pub UserSession);
 
 impl<S> FromRequestParts<S> for AuthUser
@@ -188,9 +171,6 @@ where
         match resolve_session(&app.pool, &app.cfg.session_secret, cookie.value()).await? {
             SessionLookup::Valid(user) => Ok(AuthUser(user)),
             SessionLookup::Rejected(reason) => {
-                // A 401 alone can't tell "the timer ran out" from "your device
-                // lost the cookie" from "someone is forging one" — and those want
-                // very different reactions.
                 tracing::info!(reason = reason.as_str(), "session rejected");
                 Err(AppError::Unauthorized)
             }
@@ -198,8 +178,7 @@ where
     }
 }
 
-/// Delete expired session rows, which lazy expiry never reaches for an abandoned
-/// cookie. Sessions are not user data, so the no-purge rule doesn't apply.
+/// Lazy expiry never reaches an abandoned cookie's row. Sessions are not user data.
 pub async fn sweep_expired(pool: &MySqlPool) -> Result<u64> {
     let res = sqlx::query("DELETE FROM sessions WHERE expires_at < NOW()")
         .execute(pool)

@@ -2,9 +2,6 @@
 import type { FieldDivergence } from "./FieldDivergence";
 
 /**
- * What a product's sources disagree about, for you to approve — empty when
- * there is nothing to review. Computed live from the listings vs the canonical
- * row, minus anything already decided (see repo's field decisions), so it never
- * goes stale.
+ * What the sources disagree on, computed live minus what was decided.
  */
 export type ProductReconciliation = { fields: Array<FieldDivergence>, };

@@ -1,10 +1,6 @@
-//! "I cooked this": what a recipe takes out of the cupboard. Pure; the repo
-//! writes. It spreads [`crate::inventory::consume`]'s one-row rule across the
-//! rows an ingredient can come from.
-//!
-//! **Every line is reported, never skipped.** Many can't be settled ("salt",
-//! jars against grams), and a cook button that silently did a third of the job
-//! would leave numbers you trust and shouldn't.
+//! "I cooked this": what a recipe takes out of the cupboard. Pure. Every line is
+//! reported: many cannot be settled ("salt", jars against grams), and a report of
+//! successes only would overstate what changed.
 
 use std::collections::HashMap;
 
@@ -15,46 +11,37 @@ use crate::inventory::types::{Item, ItemId};
 use serde::Serialize;
 use ts_rs::TS;
 
-/// How much to take off one stock row.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct Take {
     #[ts(type = "number")]
     pub item_id: ItemId,
-    /// What the row is called, so the report can name it without a second read.
+    /// So the report can name it without a second read.
     pub name: String,
     pub amount: f64,
-    /// What the row holds once this is taken off.
+    /// What the row holds afterwards.
     pub left: f64,
 }
 
-/// Why an ingredient line came away untouched.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum Untouched {
-    /// Nothing in the cupboard matches this ingredient at all.
     NoStock,
-    /// The recipe doesn't say how much (just "salt"), so there is no amount to
-    /// subtract. The commonest case by far, and not a problem.
+    /// No amount ("salt"): the commonest case, and not a problem.
     NoAmount,
-    /// Stock matched, but none of it is measured comparably — a jar against a
-    /// recipe's grams, or a row carrying no quantity. Units are never converted
-    /// (see [[crate::inventory::consume]]).
+    /// Matching stock, none of it in a comparable unit or with a quantity.
     NoComparableStock,
 }
 
-/// What cooking does to one ingredient line.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 #[ts(export)]
 pub enum LineOutcome {
-    /// Taken in full, off these rows.
     Took {
         from: Vec<Take>,
     },
-    /// Took everything comparable there was and still came up `short`. The food
-    /// was cooked either way; the cupboard's number was just behind.
+    /// Took all there was and came up `short`; the food was cooked either way.
     Short {
         from: Vec<Take>,
         short: f64,
@@ -64,24 +51,18 @@ pub enum LineOutcome {
     },
 }
 
-/// One line of the report the cook button hands back.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct CookedLine {
     pub ingredient: String,
-    /// The line's unit, which every take shares (units are never converted);
-    /// `None` for a countable line.
+    /// Shared by every take; `None` for a countable line.
     pub unit: Option<String>,
     #[serde(flatten)]
     pub outcome: LineOutcome,
 }
 
-/// Which rows can serve an ingredient, in draining order: soonest expiry first
-/// (no expiry last), then the smallest amount, as you would cook, leaving fewer
-/// part-used rows.
-///
-/// `remaining` is what each row holds so far in this plan, so a second line
-/// naming the same thing sees what the first took.
+/// Rows in draining order: soonest expiry first (none last), then the smallest
+/// amount, as you would cook. `remaining` threads the plan so far.
 fn drain_order<'a>(
     matches: &[&'a Item],
     unit: Option<&str>,
@@ -93,19 +74,15 @@ fn drain_order<'a>(
         .filter(|it| same_unit(it.unit.as_deref(), unit) && left_of(it, remaining) > 0.0)
         .collect();
     usable.sort_by(|a, b| {
-        // A date is a reason to hurry and its absence is not, so a row carrying
-        // an expiry sorts ahead of one without.
         (a.expiry.is_none(), a.expiry)
             .cmp(&(b.expiry.is_none(), b.expiry))
-            // `total_cmp`: a total order for every f64, unlike comparing bits.
             .then_with(|| left_of(a, remaining).total_cmp(&left_of(b, remaining)))
-            // Then the id, so the order is total and stable between runs.
+            // Then the id, for a stable order.
             .then_with(|| a.id.cmp(&b.id))
     });
     usable
 }
 
-/// What a row holds at this point in the plan.
 fn left_of(item: &Item, remaining: &HashMap<ItemId, f64>) -> f64 {
     remaining
         .get(&item.id)
@@ -113,7 +90,6 @@ fn left_of(item: &Item, remaining: &HashMap<ItemId, f64>) -> f64 {
         .unwrap_or(item.quantity.unwrap_or(0.0))
 }
 
-/// What one ingredient takes, updating `remaining` as it goes.
 fn plan_line(
     ingredient: &RecipeIngredient,
     inventory: &[Item],
@@ -162,10 +138,7 @@ fn plan_line(
     }
 }
 
-/// What cooking this recipe takes out of the cupboard, line by line.
-///
-/// Every ingredient appears in the result, including the ones nothing happened
-/// to — see the module docs for why silence would be the wrong answer.
+/// One line per ingredient, including those nothing happened to.
 pub fn plan(recipe: &Recipe, inventory: &[Item]) -> Vec<CookedLine> {
     plan_ingredients(&recipe.ingredients, inventory)
 }
@@ -174,8 +147,7 @@ pub(super) fn plan_ingredients(
     ingredients: &[RecipeIngredient],
     inventory: &[Item],
 ) -> Vec<CookedLine> {
-    // Threaded across lines so two ingredients naming the same thing drain it
-    // once between them rather than twice each from the original amount.
+    // Threaded across lines, so two naming one thing drain it once between them.
     let mut remaining: HashMap<ItemId, f64> = HashMap::new();
     ingredients
         .iter()
@@ -192,11 +164,7 @@ pub(super) fn plan_ingredients(
         .collect()
 }
 
-/// Every take the plan makes, in order — the rows an outcome actually moved.
-///
-/// The two readers below fold this differently (one keeps the last level, one
-/// sums the amounts) but walk it identically, so the walk lives once and the
-/// two folds stay written out, which is the half worth reading.
+/// Every take, in order; the two readers below fold it differently.
 fn takes(lines: &[CookedLine]) -> impl Iterator<Item = &Take> {
     lines.iter().flat_map(|l| match &l.outcome {
         LineOutcome::Took { from } | LineOutcome::Short { from, .. } => from.as_slice(),
@@ -204,8 +172,7 @@ fn takes(lines: &[CookedLine]) -> impl Iterator<Item = &Take> {
     })
 }
 
-/// Every row the plan touches and what it should hold afterwards, one entry per
-/// row — the last word wins, which is the running total `plan` already threaded.
+/// What each touched row should hold afterwards; the last word wins.
 pub fn settled(lines: &[CookedLine]) -> Vec<(ItemId, f64)> {
     let mut out: Vec<(ItemId, f64)> = Vec::new();
     for take in takes(lines) {
@@ -217,7 +184,7 @@ pub fn settled(lines: &[CookedLine]) -> Vec<(ItemId, f64)> {
     out
 }
 
-/// How much came off each row in total — what the history rows record.
+/// How much came off each row: what the history records.
 pub fn taken_per_row(lines: &[CookedLine]) -> Vec<(ItemId, f64)> {
     let mut out: Vec<(ItemId, f64)> = Vec::new();
     for take in takes(lines) {

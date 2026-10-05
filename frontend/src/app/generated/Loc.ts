@@ -2,6 +2,6 @@
 import type { LocationKind } from "./LocationKind";
 
 /**
- * A spatial node as returned by the API. (Exported to TS as `Loc`.)
+ * Exported to TypeScript as `Loc`.
  */
 export type Loc = { id: number, kind: LocationKind, name: string, parent_id: number | null, sort_order: number, position: unknown | null, };

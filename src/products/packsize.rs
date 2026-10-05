@@ -1,14 +1,10 @@
-//! A shop's pack label (`950g`, `33 cl`, `22x27G`, `EACH`) as an amount; the raw
-//! string is still what is shown. Mass becomes grams and volume millilitres, so
-//! packs compare directly ([`crate::inventory::consume`] deliberately doesn't
-//! convert: there `kg` against `g` is two people disagreeing). Unrecognised
-//! labels are `None`, not a guess: no `oz`, `gr` or `ltr`.
+//! A pack label (`950g`, `33 cl`, `22x27G`, `EACH`) as an amount in grams,
+//! millilitres or a count. Unrecognised labels are `None`, not a guess.
 
 use serde::Serialize;
 use ts_rs::TS;
 
-/// The unit a parsed pack size is expressed in — one per dimension, so two
-/// packs in the same dimension are always directly comparable.
+/// One per dimension, so packs compare directly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 pub enum PackUnit {
@@ -16,36 +12,28 @@ pub enum PackUnit {
     Gram,
     #[serde(rename = "ml")]
     Millilitre,
-    /// A number of things rather than an amount of anything — Asda's `EACH`.
+    /// Asda's `EACH`.
     #[serde(rename = "count")]
     Count,
 }
 
-/// What a pack holds, read off its label.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct PackSize {
-    /// How much, measured in `unit`. Always finite and greater than zero: a
-    /// pack of none of something is not a reading, it is a parse that went
-    /// wrong, and this reports that as `None` instead.
+    /// Finite and positive; anything else parses as `None`.
     pub value: f64,
     pub unit: PackUnit,
 }
 
-/// Read a shop's pack label, or `None` when there is no amount in it we are
-/// sure of. See the module docs for why refusing is the safe direction.
 pub fn parse(label: &str) -> Option<PackSize> {
     let text = label.trim().to_lowercase();
-    // A pack sold by the item says so instead of measuring itself. It is still
-    // an amount — one of them — which is what makes it worth reading.
     if text == "each" || text == "ea" {
         return Some(PackSize {
             value: 1.0,
             unit: PackUnit::Count,
         });
     }
-    // A multipack states its size twice over — "22x27g" is 22 sachets of 27g —
-    // and what is in the cupboard is the product of the two.
+    // "22x27g" is 22 sachets of 27g.
     let (multiplier, rest) = split_multipack(&text);
     let (amount, word) = split_amount(rest)?;
     let (per, unit) = unit_of(word)?;
@@ -53,10 +41,8 @@ pub fn parse(label: &str) -> Option<PackSize> {
     (value.is_finite() && value > 0.0).then_some(PackSize { value, unit })
 }
 
-/// `"22x27g"` → `(22.0, "27g")`. Anything that is not a leading count and a
-/// separator → `(1.0, the whole thing)`, so a stray `x` inside a word (`"box of
-/// 6"`) falls through to the ordinary path rather than splitting it. A count of
-/// zero, below zero or not finite is left to the caller's positive-size check.
+/// `"22x27g"` → `(22.0, "27g")`; anything else → `(1.0, whole)`, so `"box of 6"`
+/// is not split.
 fn split_multipack(text: &str) -> (f64, &str) {
     for separator in ['x', '×'] {
         if let Some((count, rest)) = text.split_once(separator)
@@ -68,9 +54,7 @@ fn split_multipack(text: &str) -> (f64, &str) {
     (1.0, text)
 }
 
-/// Split `"27g"` / `"33 cl"` / `"750 grams"` into its number and its unit word.
-/// The number must come first and the unit must be all that follows it — a
-/// label with anything else in it is one we do not understand.
+/// The number first, and nothing after it but the unit.
 fn split_amount(text: &str) -> Option<(f64, &str)> {
     let text = text.trim();
     let end = text
@@ -80,11 +64,7 @@ fn split_amount(text: &str) -> Option<(f64, &str)> {
     Some((number.parse().ok()?, word.trim()))
 }
 
-/// How much of the canonical unit one of `word` is, and which unit that is.
-///
-/// Non-exhaustive by design: a word that is not here is one this refuses, and
-/// adding to the table is how a newly-seen spelling is supported — never by
-/// falling back to a default, which would put an invented dimension on a pack.
+/// Non-exhaustive by design: a new spelling is added here, never defaulted.
 fn unit_of(word: &str) -> Option<(f64, PackUnit)> {
     use PackUnit::{Gram, Millilitre};
     Some(match word {

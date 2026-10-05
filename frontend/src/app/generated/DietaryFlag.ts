@@ -2,7 +2,4 @@
 import type { Claim } from "./Claim";
 import type { Diet } from "./Diet";
 
-/**
- * One dietary flag and its assertion.
- */
 export type DietaryFlag = { flag: Diet, value: Claim, };

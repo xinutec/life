@@ -1,5 +1,3 @@
-//! Application error type with an axum `IntoResponse` so handlers can `?`.
-
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -13,7 +11,6 @@ pub enum AppError {
     #[error("not found")]
     NotFound,
 
-    /// Client sent something we can't accept (bad mime, empty/oversized upload).
     #[error("{0}")]
     BadRequest(String),
 
@@ -23,15 +20,11 @@ pub enum AppError {
     #[error("nextcloud app password no longer valid — relink required")]
     NcReauthRequired,
 
-    /// A service outside life failed, in a way the message can usefully name.
-    /// 502 rather than 500 because nothing here is broken, and unlike
-    /// [`Other`](AppError::Other) the text is shown: "no calendar on this
-    /// account accepts events" is the user's to act on, and "internal error"
-    /// would send them to read this codebase instead.
+    /// Outside life, so 502, and the text is shown: it is the user's to act on.
     #[error("{0}")]
     Upstream(String),
 
-    /// Anything unexpected → 500, body is generic, detail is logged.
+    /// 500 with a generic body; the detail is logged.
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }

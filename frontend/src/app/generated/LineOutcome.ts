@@ -2,7 +2,4 @@
 import type { Take } from "./Take";
 import type { Untouched } from "./Untouched";
 
-/**
- * What cooking does to one ingredient line.
- */
 export type LineOutcome = { "kind": "took", from: Array<Take>, } | { "kind": "short", from: Array<Take>, short: number, } | { "kind": "untouched", why: Untouched, };

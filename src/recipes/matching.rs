@@ -1,5 +1,4 @@
-//! Pure recipe↔inventory matching: "shopping list = recipe − stock" and
-//! "can I cook this now". Kept free of the DB so it is unit-tested directly.
+//! Recipe against inventory: what to buy, and can I cook it. Pure.
 
 use super::cooking::{LineOutcome, Untouched, plan_ingredients};
 use super::types::RecipeIngredient;
@@ -9,19 +8,15 @@ pub(crate) fn norm(s: &str) -> String {
     s.trim().to_lowercase()
 }
 
-/// The stock that counts as this ingredient: anything linked to the same catalog
-/// product, plus anything whose name matches case-insensitively.
-///
-/// A union, not a precedence: an ingredient is a kind ("cumin"), a product one
-/// barcode, so a winning link would stop the jar you own counting the day you buy
-/// another brand. A link can only find more stock, never less.
+/// Stock linked to the same product, plus stock with the same name. A union: a
+/// link can only find more, so the jar you own still counts after you buy another
+/// brand.
 pub(crate) fn stock_for<'a>(ingredient: &RecipeIngredient, inventory: &'a [Item]) -> Vec<&'a Item> {
     let want_name = norm(&ingredient.name);
     inventory
         .iter()
         .filter(|it| {
-            // `Some(x) == Some(x)` only: two unlinked rows are not "the same
-            // product", they are two rows that know nothing about themselves.
+            // Two unlinked rows are not "the same product".
             let same_product =
                 ingredient.product_id.is_some() && it.product_id == ingredient.product_id;
             same_product || norm(&it.name) == want_name
@@ -29,11 +24,8 @@ pub(crate) fn stock_for<'a>(ingredient: &RecipeIngredient, inventory: &'a [Item]
         .collect()
 }
 
-/// The ingredients NOT covered by current inventory — i.e. the shopping list.
-///
 /// Read off the cooking plan, so "can I cook this" is "would cooking come up
-/// short", stock shared between lines included. A line the plan can't measure
-/// ("salt", grams against jars) is covered by any match not used down to zero.
+/// short". A line the plan cannot measure is covered by any match not at zero.
 pub fn shopping_list(
     ingredients: &[RecipeIngredient],
     inventory: &[Item],
@@ -56,7 +48,6 @@ pub fn shopping_list(
         .collect()
 }
 
-/// True if every ingredient is satisfied by current inventory.
 pub fn can_cook(ingredients: &[RecipeIngredient], inventory: &[Item]) -> bool {
     shopping_list(ingredients, inventory).is_empty()
 }

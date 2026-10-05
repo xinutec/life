@@ -1,7 +1,5 @@
-//! To-do list HTTP surface. Thin — delegates to `todo::repo`. The app itself
-//! reads and writes to-dos through the RxDB sync endpoints (`/api/sync/todo`);
-//! these REST routes serve the case-file scripts (`dicom-scan`'s
-//! `push_life_todo.py`), which list, create and patch but never delete.
+//! To-dos for the case-file scripts (`dicom-scan`'s `push_life_todo.py`); the app
+//! itself goes through sync.
 
 use axum::Json;
 use axum::extract::{Path, State};

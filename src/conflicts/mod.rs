@@ -1,8 +1,5 @@
-//! The sync-conflict log. When two devices edit the SAME field of the same row
-//! while one is offline, the client's field-level merge keeps the pushing
-//! device's value and reports the losing one here, so nothing is silently
-//! discarded — the Conflicts screen offers keep-mine / use-other. Entries are
-//! resolved (stamped), never deleted.
+//! The sync-conflict log: the values a same-field merge discarded, for review.
+//! Resolved by stamping, never deleted.
 
 pub mod repo;
 
@@ -12,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 str_enum! {
-    /// Which synced collection the conflicted row belongs to.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[serde(rename_all = "snake_case")]
     #[ts(export)]
@@ -22,9 +18,7 @@ str_enum! {
         Wellbeing => "wellbeing",
     }
 }
-/// One unresolved same-field conflict, as listed on the Conflicts screen.
-/// `mine`/`theirs` are JSON-encoded field values (the client encodes them, so
-/// numbers/nulls round-trip exactly).
+/// `mine` and `theirs` are JSON-encoded by the client, so they round-trip exactly.
 #[derive(Debug, Clone, Serialize, TS, sqlx::FromRow)]
 #[ts(export)]
 pub struct ConflictEntry {
@@ -36,13 +30,12 @@ pub struct ConflictEntry {
     pub label: String,
     pub mine: String,
     pub theirs: String,
-    /// When the conflict happened; Unix milliseconds on the wire.
+    /// Unix milliseconds on the wire.
     #[serde(with = "chrono::serde::ts_milliseconds")]
     #[ts(type = "number")]
     pub created_at: DateTime<Utc>,
 }
 
-/// Client report of one same-field conflict (POST /api/conflicts body).
 #[derive(Debug, Deserialize)]
 pub struct NewConflict {
     pub kind: ConflictKind,

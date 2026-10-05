@@ -2,34 +2,23 @@
 import type { Currency } from "./Currency";
 
 /**
- * What the client says when a buy-list row is marked bought AND the price was
- * noted. Every field the person has to type is here; everything else (what it
- * was, what pack, when) is copied from the row being bought, because asking
- * again for what the app already knows is how a capture step stops being used.
+ * Only what the person types; the rest is copied from the row being bought.
  */
 export type NewPurchase = { 
 /**
- * Free text. "the corner shop" is a real answer — see migration 0043.
+ * Free text: "the corner shop" is a real answer.
  */
 shop: string, 
 /**
- * Minor units (pence for GBP). Integer, never a float: money must be exact.
+ * Minor units.
  */
-amount_minor: number, 
+amount_minor: number, currency: Currency, 
 /**
- * Defaulted rather than required: the common case should cost no keystrokes.
- */
-currency: Currency, 
-/**
- * When it was bought, for something recorded after the fact (an appliance
- * entered so its warranty has a start). Absent means now: the buy-list flow.
- *
- * A DATE, converted by the server: nobody knows what time they bought a
- * dishwasher, and a client's own midnight can be a day off.
+ * For something recorded after the fact; absent means now. A date: nobody
+ * knows what time they bought a dishwasher.
  */
 bought_on: string | null, 
 /**
- * How many months of cover the receipt says, if any. Absent means no
- * warranty was recorded — NOT that there is none. See migration 0046.
+ * Absent: none recorded, not none (0046).
  */
 warranty_months: number | null, };

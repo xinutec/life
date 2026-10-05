@@ -2,16 +2,14 @@
 import type { Basis } from "./Basis";
 
 /**
- * The nutrition panel, per `basis`. Every figure is optional — a source declares
- * whatever it has. `None` throughout + empty `extra` means "no panel".
+ * Every figure optional; all `None` with an empty `extra` is no panel.
  */
 export type Nutrition = { basis: Basis, 
 /**
- * The manufacturer's serving description, verbatim (e.g. "40g").
+ * Verbatim, e.g. "40g".
  */
 serving_size: string | null, energy_kj: number | null, energy_kcal: number | null, fat_g: number | null, saturates_g: number | null, carbohydrate_g: number | null, sugars_g: number | null, fibre_g: number | null, protein_g: number | null, salt_g: number | null, 
 /**
- * Other per-`basis` nutriments (sodium, vitamins, …), keyed by OFF's name
- * with the `_100g` suffix stripped. The promoted big-8 keys are excluded.
+ * Other nutriments by OFF's name, `_100g` stripped; never the promoted ones.
  */
 extra: Record<string, number>, };

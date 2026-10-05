@@ -4,18 +4,11 @@ import type { ItemCategory } from "./ItemCategory";
 import type { ProductId } from "./ProductId";
 
 /**
- * A tracked item (holding) as returned by the API. `name`/`brand`/`barcode`/
- * `has_image` are *resolved*: they come from the linked catalog product when
- * `product_id` is set, falling back to the item's own fields otherwise.
+ * `name`, `brand`, `barcode` and `has_image` come from the linked product when
+ * there is one.
  */
 export type Item = { id: number, product_id: ProductId | null, name: string, brand: string | null, category: ItemCategory, quantity: number | null, unit: string | null, expiry: string | null, 
 /**
- * How much of `expiry` was printed rather than invented to fill the DATE.
- * Meaningless when `expiry` is `None`.
+ * Meaningless without an `expiry`.
  */
-expiry_precision: ExpiryPrecision, location_id: number | null, barcode: string | null, 
-/**
- * True when the linked product has a cached image
- * (served from /api/products/{barcode}/image).
- */
-has_image: boolean, };
+expiry_precision: ExpiryPrecision, location_id: number | null, barcode: string | null, has_image: boolean, };

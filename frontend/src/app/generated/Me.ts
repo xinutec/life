@@ -2,11 +2,10 @@
 import type { ConnectionStatus } from "./ConnectionStatus";
 
 /**
- * Identity echo for /api/me. A typed struct (not a hand-built json!) so the
- * TS shape is generated, not transcribed.
+ * A struct, so the TypeScript shape is generated.
  */
 export type Me = { userId: string, displayName: string, 
 /**
- * NC serves avatars publicly, so the SPA can load this cross-origin.
+ * Nextcloud serves avatars publicly.
  */
 avatarUrl: string, nextcloud: ConnectionStatus, };

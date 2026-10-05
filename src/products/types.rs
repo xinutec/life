@@ -1,5 +1,4 @@
-//! Product wire types: the canonical product, its per-source listings, and the
-//! aggregate the product page fetches.
+//! Product wire types.
 
 use crate::purchases::types::Purchase;
 use std::fmt;
@@ -19,92 +18,74 @@ use crate::str_enum;
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct Product {
-    /// Catalog id (surrogate key). A product may have no barcode (hand-defined).
+    /// A product may have no barcode.
     pub id: ProductId,
     pub barcode: Option<Barcode>,
     pub name: Option<String>,
     pub brand: Option<String>,
     pub quantity_label: Option<String>,
-    /// `quantity_label` read as an amount ([`super::packsize`]), so stock linked
-    /// to this product starts out knowing how much it holds. Derived on read: the
-    /// label is reconcilable and hand-editable, so a stored copy could disagree.
-    /// `None` without a label, or for one we would rather refuse than guess.
+    /// `quantity_label` read as an amount ([`super::packsize`]); derived on read,
+    /// as the label can be corrected. `None` for one we would rather not guess.
     pub pack: Option<PackSize>,
-    /// Where the row came from. `None` only for rows predating provenance.
+    /// `None` only for rows older than provenance.
     pub source: Option<Source>,
-    /// Source-scoped external id (e.g. a Waitrose lineNumber). Unique per source;
-    /// how a shop product with no barcode is addressed and de-duped.
+    /// Unique per source; how a barcodeless shop product is found again.
     pub external_id: Option<ExternalId>,
-    /// Which source's title `name` currently is (see repo's canonical-name
-    /// refresh) — provenance for display, never hand-assigned.
+    /// Which source's title `name` is.
     pub name_source: Option<Source>,
-    /// Which source the cached picture came from — provenance for picture
-    /// reconciliation. `None` exactly when there is no picture.
+    /// `None` exactly when there is no picture.
     pub image_source: Option<Source>,
-    /// True if we have a cached image. Served from /api/products/id/{id}/image
-    /// (barcodeless shop products), or /api/products/{barcode}/image when barcoded.
     pub has_image: bool,
 }
 
-/// One source's listing of a product, with its public product page resolved
-/// (stored URL if the source supplied one, else derived from the listing's
-/// identity — see source::listing_url).
+/// One source's listing, its page link resolved (stored, or derived from its id).
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct ProductListing {
     pub source: Source,
     pub external_id: ExternalId,
-    /// Deep link to the source's product page, when it has one.
     pub url: Option<String>,
-    /// What this source titles the product (the canonical `name` picks among
-    /// these).
+    /// What this source calls the product.
     pub raw_name: Option<String>,
 }
 
-/// A raw payload we fetched from a source and kept verbatim (product_documents,
-/// 0034) — metadata only, so the UI can show what's already held (and when) and
-/// avoid re-fetching. The body itself is read on demand, not shipped here.
+/// A raw payload kept verbatim (0034): metadata only, so the UI knows what is
+/// held without shipping the body.
 #[derive(Debug, Clone, PartialEq, Serialize, TS, sqlx::FromRow)]
 #[ts(export)]
 pub struct SourceDocument {
     pub source: Source,
     pub kind: DocKind,
-    /// When we fetched it; Unix milliseconds on the wire.
+    /// Unix milliseconds on the wire.
     #[serde(with = "chrono::serde::ts_milliseconds")]
     #[ts(type = "number")]
     pub fetched_at: DateTime<Utc>,
-    /// Size of the stored payload, bytes — a hint that we hold it, not the body.
     #[ts(type = "number")]
     pub bytes: i64,
 }
 
 crate::str_enum! {
-    /// Which fetch a stored document is.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[serde(rename_all = "snake_case")]
     #[ts(export)]
     pub enum DocKind: "document kind" {
-        /// A shop's product page: Asda's Brandbank blob.
+    /// Asda's product page, with its Brandbank blob.
         Page => "page",
     }
 }
 
-/// One source's value for a field that disagrees with the canonical product —
-/// a choice you can adopt.
+/// One source's value for a disputed field.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct Candidate {
-    /// The source offering this value.
     pub source: Source,
-    /// The source's value for the field, as a display string.
+    /// As a display string.
     pub value: String,
 }
 
 str_enum! {
-    /// A field of a product that sources can disagree about.
-    ///
-    /// Closed, so [`Self::reconciler`] is exhaustive and a new field fails to
-    /// compile until every dispatch site handles it.
+    /// A product field sources can disagree on. Closed, so a new field fails to
+    /// compile until every dispatch handles it.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
     #[serde(rename_all = "snake_case")]
     #[ts(export)]
@@ -118,16 +99,14 @@ str_enum! {
     }
 }
 
-/// Which machinery settles a field — see [`ReconcileField`].
+/// Which machinery settles a field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reconciler {
-    /// A canonical scalar on `products`: adopting copies the value across.
+    /// A scalar on `products`: adopting copies the value.
     Scalar,
-    /// The picture. Provenance-based rather than value-based, and adopting means
-    /// re-fetching bytes through the SSRF gate — I/O the route layer owns.
+    /// Settled by provenance; adopting fetches bytes, which the route owns.
     Picture,
-    /// A fact trusted from one source (`product_fact_sources`): adopting records
-    /// whose account to believe, and never invents or copies a value.
+    /// Settled by recording whose account to trust; no value is copied.
     Fact,
 }
 
@@ -142,7 +121,7 @@ impl ReconcileField {
         }
     }
 
-    /// Human label, shown as the row heading in the diff.
+    /// The row heading in the diff.
     pub fn label(self) -> &'static str {
         match self {
             ReconcileField::Name => "Name",
@@ -154,18 +133,13 @@ impl ReconcileField {
         }
     }
 }
-/// What to do about one field's divergence: keep what we have, or adopt one
-/// source's account of it.
-///
-/// The variants after `Keep` are exactly [`Source`]'s — kept as one flat set
-/// because that is what travels on the wire (`"keep" | "asda" | …`). The
-/// conversions to and from `Source` are exhaustive matches, so adding a shop
-/// fails to compile here until this list grows too.
+/// Keep what we have, or adopt one source's account. The variants after `Keep`
+/// are exactly [`Source`]'s, as the wire carries one flat set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 pub enum Choice {
-    /// Leave the canonical value alone; just settle the divergence.
+    /// Leave the value; just settle the divergence.
     Keep,
     Asda,
     Off,
@@ -174,7 +148,6 @@ pub enum Choice {
 }
 
 impl Choice {
-    /// The source being adopted, or `None` for [`Choice::Keep`].
     pub fn source(self) -> Option<Source> {
         match self {
             Choice::Keep => None,
@@ -206,86 +179,60 @@ impl fmt::Display for Choice {
     }
 }
 
-/// One decision in a reconcile request: what to do about one field.
 #[derive(Debug, Clone, PartialEq, Deserialize, TS)]
 #[ts(export)]
 pub struct FieldChoice {
     pub field: ReconcileField,
     pub choice: Choice,
-    /// The typed value, when `choice` is [`Choice::User`]. `#[ts(optional)]` so
-    /// the generated type says `value?: string` — matching `serde(default)`
-    /// exactly, rather than forcing every keep/adopt decision to spell out a
-    /// null it doesn't have.
+    /// For [`Choice::User`]; optional on the wire, as `serde(default)` makes it.
     #[serde(default)]
     #[ts(optional)]
     pub value: Option<String>,
 }
 
-/// A field where at least one source disagrees with the canonical product and no
-/// decision has settled it yet.
+/// A field some source disputes, not yet settled.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct FieldDivergence {
     pub field: ReconcileField,
-    /// Human label for the field ('Name', 'Brand', 'Pack size').
     pub label: String,
-    /// The current canonical value, or None when the product has none.
     pub current: Option<String>,
-    /// Each source whose value differs from the current one — the choices to
-    /// adopt, one per source (two sources may agree on the same value).
+    /// One per differing source.
     pub candidates: Vec<Candidate>,
 }
 
-/// What a product's sources disagree about, for you to approve — empty when
-/// there is nothing to review. Computed live from the listings vs the canonical
-/// row, minus anything already decided (see repo's field decisions), so it never
-/// goes stale.
+/// What the sources disagree on, computed live minus what was decided.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct ProductReconciliation {
     pub fields: Vec<FieldDivergence>,
 }
 
-/// One source's own account of the facts — its nutrition panel, ingredients,
-/// allergens, and dietary claims, exactly as that source gave them. The product
-/// page shows these side by side as provenance: for the safety-critical facts
-/// (allergens, dietary) it's how you see *who* declared what, since those merge
-/// by union / tri-state and are never reduced to a single-source pick.
+/// One source's own facts, shown side by side: allergens and diets merge and
+/// never reduce to one source, so this is how you see who declared what.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct SourceFacts {
-    /// The source these facts came from.
     pub source: Source,
     pub facts: ProductFacts,
 }
 
-/// Everything the product page shows, in one fetch —
-/// GET /api/products/id/{id}.
+/// Everything the product page shows (GET /api/products/id/{id}).
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct ProductDetail {
     pub product: Product,
-    /// Every source that lists the product, oldest first.
+    /// Oldest first.
     pub listings: Vec<ProductListing>,
-    /// Latest price per shop, cheapest first.
+    /// Cheapest first, one per shop.
     pub prices: Vec<ShopPrice>,
     pub facts: ProductFacts,
-    /// Each source's own facts, for provenance (who declared which allergen, whose
-    /// nutrition panel is which). Oldest-ranked source order.
+    /// In source precedence order.
     pub facts_by_source: Vec<SourceFacts>,
-    /// Where the sources disagree with the canonical row and you haven't decided
-    /// yet — the diff to approve. Empty when everything agrees or is settled.
-    /// Includes the facts that reconcile by source-pick (nutrition, ingredients).
+    /// The disagreements to settle, including the source-picked facts.
     pub reconciliation: ProductReconciliation,
-    /// Raw source payloads we've fetched and kept (see SourceDocument) — so the
-    /// UI knows what's already stored and needn't re-fetch it.
     pub documents: Vec<SourceDocument>,
-    /// What THIS person has paid for it, newest first — a different claim from
-    /// `prices`, which is what shops charge. Shown together they answer "is this
-    /// the going rate"; shown interchangeably they would be a lie, so they are
-    /// two fields and not one list.
-    ///
-    /// Matched by product id OR barcode, so a purchase made before the catalogue
-    /// link existed, or one whose link was corrected, still appears.
+    /// What this person paid, newest first: not `prices`, which is what shops
+    /// charge. Matched by id or barcode, so older purchases still appear.
     pub purchases: Vec<Purchase>,
 }

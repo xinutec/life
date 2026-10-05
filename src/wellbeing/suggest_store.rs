@@ -1,54 +1,39 @@
-//! Storage for emotion suggestions: the per-check-in cache, and the queue the
-//! Mac's worker drains. It never talks to a model; it knows only what has been
-//! computed for a check-in (and from which wording) and what still needs it. The
-//! queue happily holds work for a worker that isn't running yet.
+//! Emotion suggestions: the per-check-in cache and the queue the Mac's worker
+//! drains. Never talks to a model; the queue holds work for a worker not yet up.
 
 use sqlx::MySqlPool;
 
-/// A stale claim is retried rather than left to rot, so a worker that dies
-/// mid-generation costs one window, not the note forever. Comfortably longer than
-/// the longest real generation (~145s), so a slow-but-alive worker is never
-/// declared dead and double-claimed while it is still producing an answer — and
-/// so a claim doubles as proof the worker is alive for that whole span.
+/// After this a claim is retried, so a dead worker costs one window. Well over the
+/// longest real generation (~145 s), so a live worker's claim also proves it alive.
 const CLAIM_STALE_SECS: i64 = 180;
 
-/// Decode a stored JSON column into `T`. A column that fails to parse is corrupt
-/// stored data — surface it as a decode error, never default it to empty, or a
-/// bad row would read as "the user has no feelings here" and the loss would be
-/// silent.
+/// A column that fails to parse is an error, never empty: that would read as "no
+/// feelings here".
 fn decode<T: serde::de::DeserializeOwned>(v: serde_json::Value) -> sqlx::Result<T> {
     serde_json::from_value(v).map_err(|e| sqlx::Error::Decode(Box::new(e)))
 }
 
-/// What we already know about a check-in's feelings.
 pub struct Cached {
-    /// The wording these came from — compare with the current note's hash to
-    /// find out whether they are fresh or merely the previous answer.
+    /// Compared with the current note's hash: fresh, or the previous answer.
     pub note_hash: String,
     pub tokens: Vec<String>,
 }
 
-/// A queued generation, from the point of view of someone waiting on it.
 pub struct Queued {
-    /// Seconds since this wording was first queued.
     pub thinking_secs: i64,
-    /// A worker has claimed this job and its claim is still fresh — i.e. a worker
-    /// is generating the answer right now. This is the liveness signal that
-    /// survives a long generation: while the worker is blocked on the model it
-    /// cannot poll, so the poll-based "seen recently" clock goes stale, but the
-    /// claim it is holding proves it is alive and working.
+    /// A worker holds a fresh claim: it is generating now. The liveness signal that
+    /// survives a long generation, when the worker cannot poll.
     pub being_worked: bool,
 }
 
-/// A job as the worker sees it: an id to report against, and a self-contained
-/// prompt. Deliberately carries no user id or note — the worker generates text
-/// and has no business knowing whose feelings it is guessing at.
+/// An id and a self-contained prompt; no user and no note: the worker has no
+/// business knowing whose feelings these are.
 pub struct Job {
     pub id: u64,
     pub prompt: serde_json::Value,
 }
 
-/// The last computed suggestions for a check-in, whatever wording produced them.
+/// The last suggestions for a check-in, whatever wording produced them.
 pub async fn cached(pool: &MySqlPool, user_id: &str, ulid: &str) -> sqlx::Result<Option<Cached>> {
     let row: Option<(String, serde_json::Value)> = sqlx::query_as(
         "SELECT note_hash, tokens FROM emotion_suggestions WHERE user_id = ? AND ulid = ?",
@@ -66,12 +51,8 @@ pub async fn cached(pool: &MySqlPool, user_id: &str, ulid: &str) -> sqlx::Result
     }
 }
 
-/// How long the job for this exact wording has been waiting, if one is queued.
-///
-/// Checked before anything is built, because the picker asks every couple of
-/// seconds while it waits: without this, each poll would re-read eighty past
-/// check-ins and rebuild a three-thousand-token prompt to arrive at a row that
-/// is already sitting there.
+/// Checked before anything is built: the picker asks every couple of seconds, and
+/// each ask would otherwise rebuild a three-thousand-token prompt.
 pub async fn pending_for(
     pool: &MySqlPool,
     user_id: &str,
@@ -96,13 +77,8 @@ pub async fn pending_for(
     }))
 }
 
-/// Queue a generation for this wording, and say how long it has been waiting.
-///
-/// Asking again for the SAME wording (reopening the picker) must not restart the
-/// clock — the honest answer to "how long has it been thinking" is measured from
-/// when the work was first queued. A genuinely new wording replaces the pending
-/// job in place, clock included: the old one is now answering a question nobody
-/// is asking.
+/// Queue this wording. Asking again for the same wording keeps the clock; a new
+/// wording replaces the job, clock included.
 pub async fn enqueue(
     pool: &MySqlPool,
     user_id: &str,
@@ -111,9 +87,8 @@ pub async fn enqueue(
     prompt: &serde_json::Value,
     candidates: &[String],
 ) -> sqlx::Result<Queued> {
-    // One statement, so two first asks cannot both insert. The assignments run
-    // left to right, so `note_hash` goes last: every comparison before it still
-    // sees the queued wording, and only a different one replaces the job.
+    // One statement, so two first asks cannot both insert. Assignments run left
+    // to right: `note_hash` last, so the comparisons before it see the queued one.
     sqlx::query(
         "INSERT INTO emotion_jobs (user_id, ulid, note_hash, prompt, candidates) \
          VALUES (?, ?, ?, ?, ?) \
@@ -132,8 +107,7 @@ pub async fn enqueue(
     .execute(pool)
     .await?;
 
-    // Age is measured by the database's clock on both ends, so it can't be skewed
-    // by the pod's and the caller's clocks disagreeing.
+    // The database's clock on both ends.
     let (secs, claimed): (i64, i64) = sqlx::query_as(
         "SELECT UNIX_TIMESTAMP(NOW()) - UNIX_TIMESTAMP(created_at), \
                 taken_at IS NOT NULL AND taken_at > NOW() - INTERVAL ? SECOND \
@@ -150,9 +124,7 @@ pub async fn enqueue(
     })
 }
 
-/// Claim the oldest unclaimed job (or one whose claim has gone stale). Oldest
-/// first, because the person waiting longest should be served first — and with a
-/// single worker that is also simply the order the notes were written in.
+/// The oldest unclaimed (or stale) job: whoever has waited longest.
 pub async fn claim_next(pool: &MySqlPool) -> sqlx::Result<Option<Job>> {
     let row: Option<(u64, serde_json::Value)> = sqlx::query_as(
         "SELECT id, prompt FROM emotion_jobs \
@@ -165,11 +137,8 @@ pub async fn claim_next(pool: &MySqlPool) -> sqlx::Result<Option<Job>> {
     let Some((id, prompt)) = row else {
         return Ok(None);
     };
-    // Claim it by compare-and-set, repeating the condition it was selected under.
-    // Two polls can overlap — the worker reconnecting while its previous request
-    // is still in flight — and a plain `SET taken_at = NOW()` would hand both the
-    // same job. Losing the race means someone else got there first: report
-    // nothing rather than a job that is already being worked on.
+    // Compare-and-set on the selecting condition: overlapping polls would
+    // otherwise both get the job.
     let claimed = sqlx::query(
         "UPDATE emotion_jobs SET taken_at = NOW() \
          WHERE id = ? AND (taken_at IS NULL OR taken_at < NOW() - INTERVAL ? SECOND)",
@@ -184,9 +153,7 @@ pub async fn claim_next(pool: &MySqlPool) -> sqlx::Result<Option<Job>> {
     Ok(Some(Job { id, prompt }))
 }
 
-/// The candidate vocabulary a job was asked about — the guardrail its answer is
-/// checked against. Read at completion rather than trusted from the worker, so a
-/// worker cannot widen the vocabulary it is allowed to answer with.
+/// Read here rather than trusted from the worker, which may not widen it.
 pub struct Completion {
     pub user_id: String,
     pub ulid: String,
@@ -212,13 +179,9 @@ pub async fn job_for_completion(pool: &MySqlPool, id: u64) -> sqlx::Result<Optio
     }
 }
 
-/// Record an answer and retire the job.
-///
-/// The write is conditional on the job still holding the wording it was queued
-/// for: if the note changed while the model was busy, this answer is about text
-/// that no longer exists and must not become the cached truth. The stored set
-/// keeps every valid token (not just the handful shown), because which ones are
-/// worth showing depends on what is selected at the time you look.
+/// Only while the job still holds the wording it was queued for: an answer about
+/// text that no longer exists must not be cached. Every valid token is kept, as
+/// which to show depends on the selection at the time.
 pub async fn complete(
     pool: &MySqlPool,
     id: u64,
@@ -257,10 +220,7 @@ pub async fn complete(
     Ok(())
 }
 
-/// Remember the vocabulary the picker just offered, so the day's prompt can be
-/// rebuilt later (migration 0038): a cache of what the client declared, never an
-/// authority. Best-effort: failing a suggestion the user asked for to record a
-/// hint for tomorrow would be the wrong trade.
+/// For rebuilding the day's prompt later (0038); a cache, never an authority.
 pub async fn remember_vocabulary(
     pool: &MySqlPool,
     user_id: &str,
@@ -277,10 +237,7 @@ pub async fn remember_vocabulary(
     Ok(())
 }
 
-/// The most recently active user's remembered vocabulary, if any.
-///
-/// ONE row: the warm slot in `AppState` holds a single prompt, which fits this
-/// single-user deployment. A second user would want a slot per user.
+/// One row: the warm slot holds a single prompt, which fits one user.
 pub async fn latest_vocabulary(
     pool: &MySqlPool,
 ) -> sqlx::Result<Option<(String, Vec<crate::wellbeing::suggest::EmotionCandidate>)>> {

@@ -3,24 +3,17 @@ import type { Currency } from "./Currency";
 import type { ProductId } from "./ProductId";
 import type { UnitPrice } from "./UnitPrice";
 
-/**
- * A recorded purchase, as it reads back.
- */
 export type Purchase = { id: number, product_id: ProductId | null, 
 /**
- * The cupboard item this bought — the one key that always exists, since a
- * hand-typed buy-list row has no barcode and no product.
+ * The one key that always exists.
  */
 item_id: number | null, barcode: string | null, 
 /**
- * What it was called when it was bought — the one field no later
- * correction to the catalogue can invalidate.
+ * The name when bought, which no later correction changes.
  */
 name: string, shop: string, amount_minor: number, currency: Currency, quantity: number | null, unit: string | null, 
 /**
- * Derived on read, never stored: per kg / litre / item, rounded. A rate for
- * comparing packs, not an amount paid. `None` when the pack or its unit is
- * unknown to `packsize::parse`.
+ * Derived on read: per kg, litre or item, for comparing packs.
  */
 unit_price: UnitPrice | null, 
 /**
@@ -28,13 +21,10 @@ unit_price: UnitPrice | null,
  */
 bought_at: number, 
 /**
- * Months of cover from `bought_at`, as recorded. `None` is "not recorded",
- * which most purchases are and should render as nothing at all.
+ * `None` is "not recorded", and renders as nothing.
  */
 warranty_months: number | null, 
 /**
- * DERIVED, never stored: `bought_at` plus `warranty_months`. Computed on
- * read so it cannot drift from the purchase it is measured from — a stored
- * end date can outlive a correction to either half.
+ * Derived on read, so it cannot drift from what it is measured from.
  */
 warranty_until: number | null, };

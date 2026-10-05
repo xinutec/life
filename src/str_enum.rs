@@ -1,15 +1,9 @@
-//! One declaration for an enum stored and sent as a short string.
-//!
-//! Hand-written, `Display` matches on `Self` and breaks the build on a new
-//! variant, but `FromStr` ends in `other => Err(..)` and compiles, so the new
-//! variant is written fine and then fails every read. Generating both from one
-//! table closes that hole, and two variants given one string are an unreachable
-//! `FromStr` arm, which `Cargo.toml` denies.
+//! One declaration for an enum stored and sent as a short string, so `FromStr`
+//! cannot fall behind `Display` and fail every read of a new variant.
 
-/// Declare a string-backed enum, its `ALL`, its string mapping both ways and its
-/// database mapping ([`varchar_sql!`](crate::varchar_sql)); the enum must be `Copy`.
-/// The name after `:` appears in parse errors, which reach the user as a sync
-/// push's 400 body.
+/// Declare a string-backed `Copy` enum, its `ALL`, both mappings and its database
+/// mapping ([`varchar_sql!`](crate::varchar_sql)). The name after `:` appears in
+/// parse errors, which reach the user as a push's 400 body.
 /// ```ignore
 /// str_enum! { pub enum LocationKind: "location kind" { House => "house", Room => "room" } }
 /// ```
@@ -27,10 +21,8 @@ macro_rules! str_enum {
         }
 
         impl $name {
-            /// Every variant, in declaration order.
             pub const ALL: &'static [Self] = &[ $( Self::$variant ),+ ];
 
-            /// The value stored in the database and sent on the wire.
             pub fn as_str(self) -> &'static str {
                 match self { $( Self::$variant => $text ),+ }
             }
@@ -59,9 +51,8 @@ macro_rules! str_enum {
     };
 }
 
-/// sqlx mapping for a type stored in a `VARCHAR`, via `as_str` and `FromStr`.
 /// `#[derive(sqlx::Type)]` would declare a SQL `ENUM` and fail on real rows.
-/// Decoding parses, so a stored value outside the type fails the query loudly.
+/// Decoding parses, so a stored value outside the type fails the query.
 #[macro_export]
 macro_rules! varchar_sql {
     ($t:ty) => {

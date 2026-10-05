@@ -2,11 +2,6 @@
 import type { UnitMeasure } from "./UnitMeasure";
 
 /**
- * A price per unit of measure, for comparing packs: 892 per KG. The two halves
- * travel together because either alone says nothing.
+ * 892 per KG; either half alone says nothing.
  */
-export type UnitPrice = { 
-/**
- * Minor units per `measure`.
- */
-amount_minor: number, measure: UnitMeasure, };
+export type UnitPrice = { amount_minor: number, measure: UnitMeasure, };

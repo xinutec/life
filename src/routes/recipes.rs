@@ -1,5 +1,4 @@
-//! Recipe HTTP surface: CRUD plus the inventory-derived shopping-list and
-//! cook-now views.
+//! Recipes, what they need from the shop, and cooking them.
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -92,12 +91,8 @@ pub async fn cookable(
     Ok(Json(cookable))
 }
 
-/// POST /api/recipes/{id}/cook → take the recipe out of the cupboard.
-///
-/// Answers with one line per ingredient, including the ones nothing happened to.
-/// That is the whole contract: a cook button that reported only its successes
-/// would leave you believing the cupboard had been updated when a third of it
-/// hadn't (see recipes::cooking).
+/// POST /api/recipes/{id}/cook → one line per ingredient, including those nothing
+/// happened to (see recipes::cooking).
 pub async fn cook(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,

@@ -3,21 +3,12 @@ import type { TodoPriority } from "./TodoPriority";
 import type { TodoStatus } from "./TodoStatus";
 import type { TodoType } from "./TodoType";
 
-/**
- * A to-do as returned by the API.
- */
 export type Todo = { id: number, title: string, type: TodoType, status: TodoStatus, priority: TodoPriority | null, notes: string | null, 
 /**
- * Start-gate: don't surface / can't act before this day (drives "waiting";
- * doubles as snooze). `None` = no gate.
+ * Not before this day ("waiting"; doubles as snooze).
  */
-notBefore: string | null, 
+notBefore: string | null, due: string | null, 
 /**
- * Deadline (drives urgency ordering). `None` = no deadline.
- */
-due: string | null, 
-/**
- * Belongs on the case-file site (mirrors a case-file checkbox), vs private
- * and app-only. Default private; publishing is an explicit act.
+ * On the case-file site; private unless chosen.
  */
 shared: boolean, };

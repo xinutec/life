@@ -1,5 +1,4 @@
-//! Writing one source's account of a product: the decisions in
-//! [`crate::products::ingest`], applied in one transaction.
+//! Writing one source's account: [`crate::products::ingest`]'s decisions, applied.
 
 use anyhow::{Result, anyhow};
 use sqlx::{MySqlConnection, MySqlPool};
@@ -12,12 +11,8 @@ use crate::products::ingest::{
 };
 use crate::products::types::Product;
 
-/// Take in one source's account of a product, and the picture already fetched
-/// for it (see [`crate::products::ingest::picture_to_fetch`]). Returns the
-/// canonical product as it now stands.
-///
-/// One transaction, the canonical row locked: the row, its listing, the
-/// picture, the facts and the price commit together or not at all.
+/// Returns the product as it now stands. One transaction, the row locked: row,
+/// listing, picture, facts and price commit together or not at all.
 pub async fn ingest(
     pool: &MySqlPool,
     account: &SourceAccount,
@@ -39,8 +34,7 @@ pub async fn ingest(
     upsert_listing(&mut *tx, id, account.source, &account.external_id, &fields).await?;
 
     if let Some((bytes, mime)) = picture {
-        // Only into an empty slot: a picture that arrived meanwhile (an upload)
-        // is not replaced by one fetched for a product that had none.
+        // Only into an empty slot: an upload that arrived meanwhile stays.
         sqlx::query(
             "UPDATE products SET image = ?, image_mime = ?, image_source = ?, \
              fetched_at = CURRENT_TIMESTAMP WHERE id = ? AND image IS NULL",
@@ -75,16 +69,14 @@ pub async fn ingest(
         .ok_or_else(|| anyhow!("product {id} vanished after its ingest"))
 }
 
-/// The canonical row this account lands on, and whether it is a barcodeless
-/// product only this source lists. A barcode finds or creates the shared row;
-/// without one, this source's own listing finds its row, else a new one.
+/// The row this account lands on, and whether only this source lists it. A
+/// barcode finds or creates the shared row; without one, this source's listing.
 async fn canonical_row(
     conn: &mut MySqlConnection,
     account: &SourceAccount,
 ) -> Result<(ProductId, bool)> {
     if let Some(barcode) = &account.barcode {
-        // Find-or-create in one statement: on the duplicate key,
-        // `LAST_INSERT_ID(id)` hands back the existing row's id.
+        // On the duplicate key, `LAST_INSERT_ID(id)` returns the existing id.
         let res = sqlx::query(
             "INSERT INTO products (barcode, name, brand, source, name_source) \
              VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)",
@@ -108,9 +100,7 @@ async fn canonical_row(
     if let Some((id,)) = listed {
         return Ok((id, true));
     }
-    // First sighting of a barcodeless product. The origin source and id stay on
-    // the row too (vestigial, for the single-source case) so `Product` reports
-    // them.
+    // A barcodeless product's first sighting keeps its origin on the row.
     let res = sqlx::query(
         "INSERT INTO products (name, brand, source, name_source, external_id) \
          VALUES (?, ?, ?, ?, ?)",
@@ -125,9 +115,8 @@ async fn canonical_row(
     Ok((ProductId::from(res.last_insert_id()), true))
 }
 
-/// What the row holds now, read under the transaction's lock.
 async fn held(conn: &mut MySqlConnection, id: ProductId, single_owner: bool) -> Result<Held> {
-    // `<=>` (null-safe equality) so an unset provenance reads as 0, not NULL.
+    // `<=>`, so an unset provenance reads as 0, not NULL.
     let (name, brand, quantity_label, name_ours, brand_ours): (
         Option<String>,
         Option<String>,
@@ -151,14 +140,12 @@ async fn held(conn: &mut MySqlConnection, id: ProductId, single_owner: bool) -> 
     })
 }
 
-/// Apply the decided writes, each recording which source the value came from.
 async fn apply(
     conn: &mut MySqlConnection,
     id: ProductId,
     account: &SourceAccount,
     writes: &crate::products::ingest::CanonicalWrites,
 ) -> Result<()> {
-    // Static SQL per column: sqlx takes only literal statements.
     let columns: [(&Write, &'static str); 3] = [
         (
             &writes.name,
@@ -186,8 +173,7 @@ async fn apply(
     Ok(())
 }
 
-/// Give a product with no name the best-ranked listing's ([`best_name`]). Never
-/// overwrites: a later disagreeing title is a divergence to approve.
+/// Never overwrites: a later disagreeing title is a divergence.
 async fn name_if_unnamed(conn: &mut MySqlConnection, id: ProductId) -> Result<()> {
     let (name,): (Option<String>,) = sqlx::query_as("SELECT name FROM products WHERE id = ?")
         .bind(id)

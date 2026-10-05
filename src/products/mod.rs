@@ -1,6 +1,4 @@
-//! The product catalog: canonical products, per-source listings and facts,
-//! prices, and the shop and Open Food Facts clients that feed them. See
-//! docs/design/catalog-and-holdings.md.
+//! The product catalogue (docs/design/catalog-and-holdings.md).
 
 pub mod allergens;
 pub mod asda;

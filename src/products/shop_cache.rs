@@ -1,10 +1,6 @@
-//! Every listing a shop query has shown us, so later lookups need not ask the
-//! shop again. Each query yields many barcode → shop id facts, so lookups
-//! converge on zero outbound traffic.
-//!
-//! Not the catalogue: a row becomes a `product_listings` row only when attached
-//! to a product (`routes::products::sync_listing`). Rows are served until the
-//! user refreshes; stale shop data beats an unrequested fetch.
+//! Every listing a shop query has shown us, so later lookups need not ask again.
+//! Not the catalogue: a row joins `product_listings` only when attached. Served
+//! until the user refreshes.
 
 use anyhow::Result;
 use serde::Deserialize;
@@ -16,16 +12,13 @@ use super::ids::{Barcode, ExternalId};
 use super::off;
 use super::source::Source;
 
-/// One shop listing as the shop described it. Shop-agnostic on purpose: Asda
-/// fills it from an Algolia hit server-side, Waitrose from the Android bridge's
-/// WebView fetch. Field order matches `find_by_barcode`'s SELECT (FromRow reads
-/// by position).
+/// One listing as the shop described it, from Asda's search or the phone's
+/// WebView. Field order matches `find_by_barcode`'s SELECT.
 #[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
 pub struct CachedListing {
     pub source: Source,
     pub external_id: ExternalId,
-    /// `None` means "we haven't learned it yet", not "it has none" — a Waitrose
-    /// search hit carries no barcode until its product page is fetched.
+    /// `None` is "not learned yet": a Waitrose search hit has no barcode.
     pub barcode: Option<Barcode>,
     pub name: Option<String>,
     pub brand: Option<String>,
@@ -34,8 +27,7 @@ pub struct CachedListing {
 }
 
 impl CachedListing {
-    /// An Asda search hit is already a complete cache row: its `IMAGE_ID` is the
-    /// EAN, so every hit teaches us a barcode → CIN mapping for free.
+    /// Every Asda hit teaches a barcode → CIN mapping.
     pub fn from_asda(hit: &AsdaHit) -> Self {
         Self {
             source: Source::Asda,
@@ -49,10 +41,7 @@ impl CachedListing {
     }
 }
 
-/// One listing a client's WebView saw, as reported. Bot-walled shops (Waitrose)
-/// can only be queried by the phone, which hands back what it saw. Only the
-/// shop's id is required: a search hit lacks the barcode a product fetch learns.
-/// Plain strings, because it is untrusted until [`validate_seen`] types it.
+/// A listing a phone's WebView reported; untrusted until [`validate_seen`].
 #[derive(Debug, Clone, PartialEq, Deserialize, TS)]
 #[ts(export)]
 pub struct SeenListing {
@@ -69,19 +58,13 @@ pub struct SeenListing {
     pub image_url: Option<String>,
 }
 
-/// The most listings one report may carry. A Waitrose search returns 8 and an
-/// Asda search 15; anything near this is a client bug, not a busy shopper.
+/// A search returns 8 to 15; near this is a client bug.
 pub const MAX_SEEN: usize = 50;
 
-/// Turn a client's report into cache rows, or say why it can't be trusted.
-///
-/// The whole batch is rejected for an unknown shop, a malformed shop id or a bad
-/// barcode, since `(source, barcode)` identity is what this table is for. An
-/// `image_url` from a host the source may not serve pictures from is dropped
-/// (the caller logs it) and the row kept.
+/// Cache rows from a client's report. An unknown shop, malformed id or bad barcode
+/// rejects the batch; an image from a disallowed host is dropped.
 pub fn validate_seen(source_id: &str, seen: &[SeenListing]) -> Result<Vec<CachedListing>, String> {
-    // The untrusted boundary: `source_id` is a path segment a client chose, so
-    // this is where a string becomes a `Source` and stops being one.
+    // Where a client's path segment becomes a `Source`.
     let source = match source_id.parse::<Source>() {
         Ok(s) if s.is_shop() => s,
         _ => return Err(format!("unknown shop: {source_id}")),
@@ -92,8 +75,6 @@ pub fn validate_seen(source_id: &str, seen: &[SeenListing]) -> Result<Vec<Cached
     seen.iter()
         .map(|s| {
             let external_id: ExternalId = s.external_id.parse()?;
-            // The shape rule belongs to the type; naming the offending value is
-            // this caller's job — it's the one that knows whose report it is.
             let barcode = trimmed(&s.barcode)
                 .map(|bc| {
                     bc.parse::<Barcode>()
@@ -121,18 +102,12 @@ fn trimmed(v: &Option<String>) -> Option<String> {
         .map(str::to_string)
 }
 
-/// Store everything a shop query showed us, keyed by the shop's own identity.
-///
-/// Upserts: re-seeing a listing refreshes its description and bumps
-/// `last_seen_at`. A field we've since learned is never overwritten with the
-/// `NULL` of a thinner sighting — a Waitrose search hit (no barcode) must not
-/// erase the barcode an earlier product fetch taught us.
+/// Upserts, never overwriting a learned field with a thinner sighting's `NULL`.
 pub async fn remember(pool: &MySqlPool, listings: &[CachedListing]) -> Result<()> {
     if listings.is_empty() {
         return Ok(());
     }
-    // One statement, not one per listing: an Asda search hands back ~15 and the
-    // round trips dominate. Same shape as `routes::telemetry::store`.
+    // One statement: the round trips dominate.
     let mut q = sqlx::QueryBuilder::new(
         "INSERT INTO shop_listings \
          (source, external_id, barcode, name, brand, quantity_label, image_url) ",
@@ -159,10 +134,7 @@ pub async fn remember(pool: &MySqlPool, listings: &[CachedListing]) -> Result<()
     Ok(())
 }
 
-/// "Does `source` carry `barcode`?", answered from memory alone.
-///
-/// `Ok(None)` means only "we don't know" — never "the shop doesn't sell it".
-/// The caller decides whether to go ask; this function never does.
+/// From memory only. `Ok(None)` means "unknown", never "not sold".
 pub async fn find_by_barcode(
     pool: &MySqlPool,
     source: Source,

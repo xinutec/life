@@ -58,8 +58,7 @@ pub async fn create_item(
     ))
 }
 
-/// A location id comes from the client, so it must be one of this user's live
-/// locations: anything else would file your things under somebody else's room.
+/// A client-sent location must be one of this user's live ones.
 async fn own_location(
     app: &AppState,
     user_id: &str,
@@ -106,10 +105,8 @@ pub async fn delete_location(
     found_or_404(repo::delete_location(&app.pool, &user.user_id, id).await?)
 }
 
-/// GET /api/items/{id}/history → what has happened to this stock row, newest
-/// first. An unknown id gets an empty list, not a 404: items older than the
-/// audit have no history anyway, and a 404 would tell a caller whether somebody
-/// else's item id exists.
+/// GET /api/items/{id}/history → newest first. An unknown id gets an empty list,
+/// not a 404, which would reveal whether somebody else's id exists.
 pub async fn item_history(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -122,20 +119,15 @@ pub async fn item_history(
     Ok(Json(ItemHistory { entries, purchases }))
 }
 
-/// POST /api/items/{id}/purchases → record what this item cost, after the fact.
-///
-/// For anything not bought through the Buy list — most of a house.
-///
-/// ⚠ A bad price is a 400 here, where the buy flow logs it and carries on:
-/// there the purchase is a note on the buy, here it IS the request.
+/// POST /api/items/{id}/purchases → record what this item cost. A bad price is a
+/// 400 here: unlike in the buy flow, the purchase is the whole request.
 pub async fn record_purchase(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
     Path(id): Path<ItemId>,
     Json(body): Json<NewPurchase>,
 ) -> Result<Json<Purchase>, AppError> {
-    // Scoped through the item read, so somebody else's id is a 404 rather than a
-    // purchase filed against a row they own.
+    // Through the item read, so somebody else's id is a 404.
     let item = repo::get_item(&app.pool, &user.user_id, id)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -150,9 +142,7 @@ pub async fn record_purchase(
     let new_id = purchases_repo::record(&app.pool, &user.user_id, &bought, &body)
         .await
         .map_err(|e| AppError::BadRequest(e.to_string()))?;
-    // Read back rather than echo the request: `warranty_until` and the per-unit
-    // rate are derived on read, and a hand-built reply would be the second place
-    // that computes them.
+    // Read back: `warranty_until` and the rate are derived on read.
     purchases_repo::for_item(&app.pool, &user.user_id, id)
         .await?
         .into_iter()
@@ -161,8 +151,7 @@ pub async fn record_purchase(
         .ok_or_else(|| AppError::Other(anyhow::anyhow!("purchase {new_id} vanished after insert")))
 }
 
-/// DELETE /api/items/{id}/purchases/{purchase_id} → move a purchase to the trash.
-/// A mistyped price must be removable, or the spending history is not true.
+/// DELETE /api/items/{id}/purchases/{purchase_id} → to the trash.
 pub async fn delete_purchase(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -171,8 +160,7 @@ pub async fn delete_purchase(
     found_or_404(purchases_repo::remove(&app.pool, &user.user_id, id, purchase_id).await?)
 }
 
-/// GET /api/items/{id}/files → what is attached to this item, newest first.
-/// Metadata only; the bytes come from the download route.
+/// GET /api/items/{id}/files → metadata, newest first.
 pub async fn list_files(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -183,12 +171,9 @@ pub async fn list_files(
     ))
 }
 
-/// POST /api/items/{id}/files → attach a raw body (not multipart). `X-File-Name`
-/// names it; `X-Purchase-Id` optionally ties it to a purchase. The size limit is
-/// re-checked here so it survives re-wiring of the route's `DefaultBodyLimit`.
-///
-/// ⚠ The stored mime is sniffed, never the declared `Content-Type`: files are
-/// served from our origin, so trusting the header would allow stored XSS.
+/// POST /api/items/{id}/files → attach the raw body, named by `X-File-Name` and
+/// optionally tied to `X-Purchase-Id`. The stored mime is sniffed, never the
+/// declared one: trusting it would allow stored XSS on our origin.
 pub async fn add_file(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -214,8 +199,7 @@ pub async fn add_file(
         ));
     };
     let name = header_str(&headers, "x-file-name").unwrap_or("attachment");
-    // A purchase id that is not a number is a client bug, not a reason to file
-    // the receipt against nothing — say so rather than silently unlinking it.
+    // A malformed purchase id is refused, not silently dropped.
     let purchase_id =
         match header_str(&headers, "x-purchase-id") {
             None => None,
@@ -223,8 +207,7 @@ pub async fn add_file(
                 AppError::BadRequest(format!("X-Purchase-Id is not a number: {raw}"))
             })?),
         };
-    // The id comes from a header: it must be a live purchase of THIS item, or a
-    // receipt could be tied to someone else's purchase or one in the trash.
+    // Must be a live purchase of this item.
     if let Some(pid) = purchase_id
         && !purchases_repo::for_item(&app.pool, &user.user_id, id)
             .await?
@@ -237,8 +220,6 @@ pub async fn add_file(
     }
     let new_id =
         files_repo::add(&app.pool, &user.user_id, id, purchase_id, name, mime, &body).await?;
-    // Read the metadata back rather than assembling it here, so the created_at
-    // the client sees is the one the database wrote.
     files_repo::for_item(&app.pool, &user.user_id, id)
         .await?
         .into_iter()
@@ -255,12 +236,8 @@ fn header_str<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
         .filter(|s| !s.is_empty())
 }
 
-/// GET /api/items/{id}/files/{file_id} → the bytes.
-///
-/// `Content-Disposition: attachment` on everything, including images. These are
-/// arbitrary user uploads served from the app's own origin; making the browser
-/// download rather than render them is what stops a crafted file being
-/// interpreted in our security context.
+/// GET /api/items/{id}/files/{file_id} → the bytes, always as a download: user
+/// uploads on our origin must not render in our security context.
 pub async fn get_file(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -269,8 +246,7 @@ pub async fn get_file(
     let (name, mime, bytes) = files_repo::read(&app.pool, &user.user_id, id, file_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    // The filename is user text and goes into a header: strip anything that
-    // could end the quoted string or inject a second header line.
+    // User text in a header: nothing may end the quoted string or the line.
     let safe: String = name
         .chars()
         .filter(|c| !matches!(c, '"' | '\\' | '\r' | '\n'))
@@ -289,7 +265,7 @@ pub async fn get_file(
         .into_response())
 }
 
-/// DELETE /api/items/{id}/files/{file_id} → detach and destroy.
+/// DELETE /api/items/{id}/files/{file_id} → to the trash.
 pub async fn delete_file(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -311,7 +287,6 @@ pub async fn move_item(
         .ok_or(AppError::NotFound)
 }
 
-/// What a Buy row calls itself — enough to find the cupboard row it names.
 #[derive(Debug, Deserialize)]
 pub struct LowByIdentity {
     pub name: String,
@@ -321,10 +296,8 @@ pub struct LowByIdentity {
     pub product_id: Option<ProductId>,
 }
 
-/// POST /api/items/low → the same judgement, made from the Buy list.
-///
-/// 204 whether or not anything matched: a one-off purchase that is not in the
-/// cupboard is the ordinary case, and the caller has nothing to do differently.
+/// POST /api/items/low → the same, from the Buy list. 204 whether or not a
+/// cupboard row matched.
 pub async fn mark_low_by_identity(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -341,11 +314,7 @@ pub async fn mark_low_by_identity(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// POST /api/items/{id}/low → record that you judged this to be running out.
-///
-/// 204: nothing about the item changes. ⚠ Callers treat a failure here as
-/// nothing — the Buy-list add is what was asked for, and a dropped signal costs
-/// one data point where an error box would cost trust.
+/// POST /api/items/{id}/low → record that this is running out.
 pub async fn mark_low(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -354,10 +323,8 @@ pub async fn mark_low(
     found_or_404(repo::mark_low(&app.pool, &user.user_id, id).await?)
 }
 
-/// POST /api/items/{id}/use → take an amount out of a stock row; returns the
-/// item as it now stands. A quantity the row can't be measured against is a 400
-/// naming the row's unit, not a silent no-op: the cupboard's number must stay
-/// true, and quietly not changing it undermines that as much as a wrong change.
+/// POST /api/items/{id}/use → take an amount out; returns the item. An amount in
+/// another unit is a 400 naming the row's unit, never a silent no-op.
 pub async fn use_item(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,

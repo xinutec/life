@@ -1,13 +1,11 @@
-//! Persistence for the sync-conflict log.
+//! The sync-conflict log.
 
 use anyhow::Result;
 use sqlx::MySqlPool;
 
 use super::{ConflictEntry, NewConflict};
 
-/// Record one reported conflict. Values are stored verbatim (JSON-encoded by
-/// the client); truncation would corrupt them, so oversized values are the
-/// caller's problem — TEXT holds 64KB, far beyond any field here.
+/// Verbatim: truncating would corrupt the JSON. TEXT holds far more than any field.
 pub async fn create(pool: &MySqlPool, user_id: &str, new: NewConflict) -> Result<u64> {
     let res = sqlx::query(
         "INSERT INTO sync_conflicts (user_id, kind, ulid, field, label, mine, theirs) \
@@ -25,7 +23,6 @@ pub async fn create(pool: &MySqlPool, user_id: &str, new: NewConflict) -> Result
     Ok(res.last_insert_id())
 }
 
-/// Unresolved conflicts, newest first.
 pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<ConflictEntry>> {
     Ok(sqlx::query_as(
         "SELECT id, kind, ulid, field, label, mine, theirs, \
@@ -38,8 +35,7 @@ pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<ConflictEntry>>
     .await?)
 }
 
-/// Mark a conflict handled (keep-mine or use-other both end here). The row is
-/// stamped, not deleted. Returns whether an unresolved row was resolved.
+/// Stamped, not deleted.
 pub async fn resolve(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
     let res = sqlx::query(
         "UPDATE sync_conflicts SET resolved_at = NOW() \

@@ -1,4 +1,4 @@
-//! Shopping-list HTTP surface, plus the buy→inventory conversion.
+//! Buying a Buy-list row into the inventory, and where rows are sold.
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -23,11 +23,7 @@ pub async fn list(
     Ok(Json(repo::list(&app.pool, &user.user_id).await?))
 }
 
-/// What may ride along with a buy: the price, if it was noted.
-///
-/// Optional because it must be: marking things bought empties the list with a
-/// full trolley and one hand, and a capture step that blocked it would get the
-/// list abandoned. Recording nothing is a valid, common answer.
+/// The price, if it was noted: buying must work with a full trolley.
 #[derive(Debug, Default, Deserialize, TS)]
 #[ts(export)]
 pub struct BuyRequest {
@@ -35,11 +31,8 @@ pub struct BuyRequest {
     pub purchase: Option<NewPurchase>,
 }
 
-/// POST /api/shopping/{id}/buy → turn a bought row into an unplaced inventory
-/// item, carrying its `category` and `product_id`, and remove it from the list.
-///
-/// The row leaves the list and the item arrives in one transaction (see
-/// `shopping::repo::buy`), so a double tap 404s instead of minting two items.
+/// POST /api/shopping/{id}/buy → turn a row into an unplaced item, in one
+/// transaction (`shopping::repo::buy`), so a double tap 404s.
 pub async fn buy(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -50,10 +43,7 @@ pub async fn buy(
         .await?
         .ok_or(AppError::NotFound)?;
 
-    // After the item exists, and never in a way that can fail the buy. The
-    // purchase is a note about money; the item is the thing you are holding.
-    // Losing the note is a small loss, and refusing the buy over it would be a
-    // large one — so a bad price is reported and the buy still stands.
+    // After the item exists, and never failing the buy: a bad price is logged.
     if let Some(Json(BuyRequest {
         purchase: Some(ref p),
     })) = body
@@ -73,12 +63,8 @@ pub async fn buy(
     Ok(Json(item))
 }
 
-/// POST /api/shopping/coverage → where each row is known to be sold, and each
-/// shop's latest shelf price for it. Memory only (attached listings plus
-/// sightings of the barcode), so the Buy list can call it on every load.
-///
-/// "Sold", never "in stock"; an empty `sources` means we know nothing, not that
-/// nowhere sells it.
+/// POST /api/shopping/coverage → where each row is known to be sold, and the
+/// latest prices, from memory only. Empty `sources` means unknown, not nowhere.
 pub async fn coverage(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,

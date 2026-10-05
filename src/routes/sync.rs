@@ -1,5 +1,4 @@
-//! HTTP surface for the offline-first sync protocol (RxDB pull/push): one
-//! pull/push pair per collection, sharing the generic envelope.
+//! The RxDB pull/push endpoints, one pair per collection.
 
 use axum::Json;
 use axum::extract::rejection::JsonRejection;
@@ -14,15 +13,14 @@ use crate::sync::types::{
     PullResponse, PushEntry, ShoppingDoc, TodoDoc, TodoLinkDoc, WellbeingDoc,
 };
 
-/// A push that does not decode — an unknown enum string, a missing field — is the
-/// client's mistake: a 400 naming it, in the API's own JSON, with nothing stored.
+/// A push that does not decode is a 400 naming why, with nothing stored.
 fn refused(e: JsonRejection) -> AppError {
     AppError::BadRequest(e.body_text())
 }
 
 #[derive(Debug, Deserialize)]
 pub struct PullQuery {
-    /// Highest `rev` already seen (the checkpoint). Defaults to 0 (full pull).
+    /// The checkpoint; 0 pulls everything.
     #[serde(default)]
     since: u64,
     #[serde(default = "default_limit")]
@@ -33,7 +31,6 @@ fn default_limit() -> u64 {
     200
 }
 
-/// `GET /api/sync/shopping?since=<rev>&limit=<n>`
 pub async fn pull_shopping(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -51,8 +48,7 @@ pub async fn pull_shopping(
     Ok(Json(res))
 }
 
-/// POST /api/sync/shopping — body: array of `{newDocumentState, assumedMasterState}`.
-/// Returns the current server doc for each rejected (stale) change.
+/// Answers with the server's doc for each rejected (stale) change.
 pub async fn push_shopping(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -65,7 +61,6 @@ pub async fn push_shopping(
     Ok(Json(conflicts))
 }
 
-/// `GET /api/sync/todo?since=<rev>&limit=<n>`
 pub async fn pull_todo(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -83,7 +78,6 @@ pub async fn pull_todo(
     Ok(Json(res))
 }
 
-/// POST /api/sync/todo — body: array of `{newDocumentState, assumedMasterState}`.
 pub async fn push_todo(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -96,7 +90,6 @@ pub async fn push_todo(
     Ok(Json(conflicts))
 }
 
-/// `GET /api/sync/todo-link?since=<rev>&limit=<n>`
 pub async fn pull_todo_link(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -114,7 +107,6 @@ pub async fn pull_todo_link(
     Ok(Json(res))
 }
 
-/// POST /api/sync/todo-link — body: array of `{newDocumentState, assumedMasterState}`.
 pub async fn push_todo_link(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -127,7 +119,6 @@ pub async fn push_todo_link(
     Ok(Json(conflicts))
 }
 
-/// `GET /api/sync/wellbeing?since=<rev>&limit=<n>`
 pub async fn pull_wellbeing(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -145,7 +136,6 @@ pub async fn pull_wellbeing(
     Ok(Json(res))
 }
 
-/// POST /api/sync/wellbeing — body: array of `{newDocumentState, assumedMasterState}`.
 pub async fn push_wellbeing(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,

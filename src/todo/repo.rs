@@ -1,8 +1,5 @@
-//! Persistence for the to-do list.
-//!
-//! Sync-aware exactly like `shopping::repo`: every write allocates a global `rev`
-//! in its transaction, stamps `updated_at`, and *soft*-deletes (sets `deleted_at`)
-//! so deletes propagate to offline clients as tombstones. Reads hide tombstones.
+//! The to-do list, sync-aware like `shopping::repo`: every write takes a `rev`,
+//! and deletes are tombstones.
 
 use anyhow::{Context, Result};
 use sqlx::MySqlPool;
@@ -11,7 +8,7 @@ use ulid::Ulid;
 use super::types::{NewTodo, Todo, TodoStatus, UpdateTodo};
 use crate::sync::repo::{next_rev, stamp};
 
-/// To-dos: open first, then by title. Tombstoned rows are hidden.
+/// Open first, then by title.
 pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<Todo>> {
     let rows: Vec<Todo> = sqlx::query_as(
         "SELECT id, title, todo_type, status, priority, notes, not_before, due, shared FROM todos \
@@ -35,11 +32,8 @@ pub async fn get(pool: &MySqlPool, user_id: &str, id: u64) -> Result<Option<Todo
     Ok(row)
 }
 
-/// Same read as [`get`], but inside a caller's transaction and holding the row
-/// (`FOR UPDATE`). A merging PATCH writes back fields the caller never sent, so it
-/// must read under the same lock it writes under — a plain read on the pool is a
-/// snapshot from *outside* the transaction, and a write landing in between would be
-/// silently restored to its old value.
+/// [`get`] under the caller's lock: a merging PATCH writes back fields it never
+/// read, so a read outside the lock would restore a concurrent write.
 async fn get_for_update(
     tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
     user_id: &str,
@@ -98,9 +92,7 @@ pub async fn update(
     id: u64,
     upd: UpdateTodo,
 ) -> Result<Option<Todo>> {
-    // PATCH is partial: merge onto the stored row, so an absent field keeps its
-    // current value rather than being overwritten with a type default. The read has
-    // to happen inside this transaction, with the row locked — see `get_for_update`.
+    // Merged onto the stored row, read under the lock (`get_for_update`).
     let mut tx = pool.begin().await?;
     let Some(cur) = get_for_update(&mut tx, user_id, id).await? else {
         return Ok(None);
@@ -140,10 +132,8 @@ pub async fn update(
     get(pool, user_id, id).await.context("reload after update")
 }
 
-/// Restore a tombstoned to-do (trash/undo). The ONE deliberate undelete path —
-/// sync pushes can never clear a tombstone. The fresh `rev` propagates the
-/// resurrected row to every device through the normal pull. (Links that were
-/// removed alongside the to-do stay removed; reconnect by hand if needed.)
+/// The one undelete path; a fresh `rev` carries it to every device. Links removed
+/// with it stay removed.
 pub async fn restore(pool: &MySqlPool, user_id: &str, ulid: &str) -> Result<bool> {
     stamp(pool, |rev| {
         sqlx::query(

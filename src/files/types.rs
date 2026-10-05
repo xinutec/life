@@ -1,4 +1,4 @@
-//! What an attachment looks like on the wire, and what may be one.
+//! Attachments.
 
 use chrono::{DateTime, Utc};
 
@@ -7,15 +7,11 @@ use serde::Serialize;
 use ts_rs::TS;
 
 crate::row_id! {
-    /// `item_files.id` — one attached file.
+    /// `item_files.id`.
     FileId
 }
 
-/// An attachment's metadata, WITHOUT its bytes.
-///
-/// Listing and downloading are separate routes for this reason: a list of five
-/// receipts should not read five blobs out of the database to tell you their
-/// names. `size_bytes` is stored rather than derived for the same reason.
+/// Metadata only: listing five receipts must not read five blobs.
 #[derive(Debug, Clone, PartialEq, Serialize, TS, sqlx::FromRow)]
 #[ts(export)]
 pub struct ItemFile {
@@ -23,9 +19,7 @@ pub struct ItemFile {
     pub id: FileId,
     #[ts(type = "number")]
     pub item_id: crate::inventory::types::ItemId,
-    /// Set when this file is evidence of a particular purchase — a receipt.
-    /// `None` for a manual, which belongs to the thing rather than to any one
-    /// time you bought it.
+    /// A receipt's purchase; `None` for a manual, which belongs to the thing.
     #[ts(type = "number | null")]
     pub purchase_id: Option<crate::purchases::types::PurchaseId>,
     pub name: String,
@@ -38,18 +32,12 @@ pub struct ItemFile {
     pub created_at: DateTime<Utc>,
 }
 
-/// 10 MiB. A phone photo of a receipt is 2–4 MiB and a scanned appliance manual
-/// is rarely more; twice the product-image limit because a PDF is not a
-/// thumbnail. Not a technical bound — the point past which somebody is storing
-/// the wrong thing here.
+/// Past this, somebody is storing the wrong thing here.
 pub const MAX_FILE_BYTES: usize = 10 * 1024 * 1024;
 
-/// What may be attached, by sniffed bytes. An allowlist, because files are served
-/// from our origin and anything executable (SVG) would be stored XSS; it takes
-/// PDF and HEIC, for receipts and iPhone photos.
+/// By sniffed bytes: nothing executable, as files are served from our origin.
 pub fn sniff_mime(bytes: &[u8]) -> Option<&'static str> {
-    // Exhaustive rather than `.map(Media::mime)`, so a new variant must be
-    // decided here.
+    // Exhaustive, so a new variant must be decided here.
     let media = media::sniff(bytes)?;
     match media {
         Media::Jpeg

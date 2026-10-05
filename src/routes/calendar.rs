@@ -1,5 +1,4 @@
-//! Calendar HTTP surface: when the bins go out, and putting a shop trip in the
-//! diary.
+//! When the bins go out, and putting a shop trip in the diary.
 
 use anyhow::{Context, Result, bail};
 use axum::Json;
@@ -17,9 +16,8 @@ use crate::nextcloud::credentials::{self, Usable};
 use crate::session::AuthUser;
 use crate::state::AppState;
 
-/// GET /api/bins → upcoming collections, soonest first. No feed configured is an
-/// empty list, not a 404: nothing to show either way. A failed fetch is an
-/// error, since an empty list would say the bins aren't going out.
+/// GET /api/bins → upcoming collections, soonest first; empty without a feed. A
+/// failed fetch is an error: an empty list would say the bins are not going out.
 pub async fn bins(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,
@@ -35,51 +33,35 @@ pub async fn bins(
             fetched
         }
     };
-    // Filtered against today on every read, not at fetch time: the cache
-    // outlives midnight, and a collection is only "upcoming" relative to the
-    // day you ask.
+    // Filtered on every read: the cache outlives midnight.
     Ok(Json(bins::upcoming(&ics, Utc::now().date_naive())?))
 }
 
-/// How long a shop takes, absent a stated answer.
 const DEFAULT_MINUTES: i64 = 60;
 
-/// The most items a client may send. A Buy list is a trolley; a request with
-/// more than this in it is not one, and the description is bounded anyway
-/// ([`trip`]) — this bounds the *request*.
+/// Bounds the request; the description is bounded separately ([`trip`]).
 const MAX_ITEMS: usize = 500;
 
-/// Plan a shop trip: what, where, when, and what to bring home.
 #[derive(Debug, Deserialize)]
 pub struct NewShopTrip {
     pub shop: String,
     pub starts_at: DateTime<Utc>,
     pub minutes: Option<i64>,
-    /// The Buy list as the person can see it right now. Sent by the client
-    /// rather than read from the server's own rows on purpose: the list is
-    /// local-first, so the phone's copy may be ahead of the sync, and an event
-    /// that listed something other than the screen it was planned from would be
-    /// wrong in the shop — which is the only place it gets read.
+    /// The Buy list as the phone shows it, which may be ahead of the sync.
     #[serde(default)]
     pub items: Vec<String>,
 }
 
-/// Where the trip ended up.
 #[derive(Debug, Serialize, TS)]
 #[ts(export)]
 pub struct PlannedTrip {
-    /// The calendar it went into, by its own display name — life chooses, so it
-    /// has to say which, or "added to your calendar" is unverifiable.
+    /// By display name, so "added to your calendar" can be checked.
     pub calendar: String,
-    /// The title as it will appear, so the confirmation quotes the event rather
-    /// than describing it.
     pub summary: String,
 }
 
-/// POST /api/calendar/shop-trip → write the `VEVENT`, report where it went.
-///
-/// Nothing is recorded on this side. The event is the record, Nextcloud holds
-/// it, and every calendar client already shows it.
+/// POST /api/calendar/shop-trip → write the `VEVENT`. Nothing is kept here: the
+/// event is the record.
 pub async fn plan_shop_trip(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,
@@ -102,9 +84,7 @@ pub async fn plan_shop_trip(
         minutes: body.minutes.unwrap_or(DEFAULT_MINUTES),
         items: body.items,
     };
-    // The UID is ours and permanent — it is the identity of this event on every
-    // device that syncs it, so it is minted once here rather than derived from
-    // anything that could repeat (a shop and a time repeat every week).
+    // Minted once: a shop and a time repeat every week.
     let uid = format!("shop-trip-{}@life", Ulid::new());
     let ics =
         trip::ics(&planned, &uid, Utc::now()).map_err(|e| AppError::BadRequest(e.to_string()))?;
@@ -129,10 +109,8 @@ pub async fn plan_shop_trip(
     }))
 }
 
-/// Turn a CalDAV failure into a response, recording a rejected password on the
-/// way: until the row says `needs_reauth`, /api/me keeps offering a calendar
-/// that cannot be written to. Failing to record it is logged, and the original
-/// error still comes back.
+/// Records a rejected password, or /api/me keeps offering a calendar that cannot
+/// be written to.
 async fn dav_failed(app: &AppState, user_id: &str, err: DavError) -> AppError {
     match err {
         DavError::Unauthorized => {
@@ -148,9 +126,7 @@ async fn dav_failed(app: &AppState, user_id: &str, err: DavError) -> AppError {
     }
 }
 
-/// Fetch the feed. Every failure says it was the council's end, because that is
-/// the difference between "look at the council's website" and "look at this
-/// codebase" for whoever reads the log.
+/// Every failure names the council's end, so the log says where to look.
 async fn fetch(app: &AppState, url: &str) -> Result<String> {
     let res = app
         .http

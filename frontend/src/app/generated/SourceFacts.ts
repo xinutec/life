@@ -3,14 +3,7 @@ import type { ProductFacts } from "./ProductFacts";
 import type { Source } from "./Source";
 
 /**
- * One source's own account of the facts — its nutrition panel, ingredients,
- * allergens, and dietary claims, exactly as that source gave them. The product
- * page shows these side by side as provenance: for the safety-critical facts
- * (allergens, dietary) it's how you see *who* declared what, since those merge
- * by union / tri-state and are never reduced to a single-source pick.
+ * One source's own facts, shown side by side: allergens and diets merge and
+ * never reduce to one source, so this is how you see who declared what.
  */
-export type SourceFacts = { 
-/**
- * The source these facts came from.
- */
-source: Source, facts: ProductFacts, };
+export type SourceFacts = { source: Source, facts: ProductFacts, };

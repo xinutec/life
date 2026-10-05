@@ -1,5 +1,4 @@
-//! Domain types for the location/item model. `kind` and `category` are stored
-//! as short strings and decode straight into these enums.
+//! Locations and items.
 
 use crate::products::ids::ProductId;
 use crate::str_enum;
@@ -8,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 str_enum! {
-    /// A node kind in the spatial tree.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[serde(rename_all = "snake_case")]
     #[ts(export)]
@@ -22,61 +20,44 @@ str_enum! {
 }
 
 str_enum! {
-    /// Whose name an item carries.
-    ///
-    /// Stated by the client that owns the form: the server cannot see whether a
-    /// person touched the name field, and "differs from the product" is not it.
+    /// Whose name an item carries, stated by the form: the server cannot see
+    /// whether the name field was touched.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[serde(rename_all = "snake_case")]
     #[ts(export)]
     pub enum ItemNameSource: "item name source" {
-        /// Somebody typed this name deliberately. It outranks the catalogue, and a
-        /// later product correction leaves it alone.
+    /// Typed deliberately: outranks the catalogue and keeps through corrections.
         User => "user",
-        /// The name came from the catalogue, or was left to it. Follows the linked
-        /// product forever, so a correction reaches the cupboard with no refresh.
+    /// The catalogue's, following the product's corrections.
         Product => "product",
     }
 }
 
 str_enum! {
-    /// How much of an `expiry` date was actually printed on the thing.
-    ///
-    /// A medicine box is printed MM/YYYY and `items.expiry` is a DATE, so the
-    /// month's LAST day is stored (good THROUGH June). The precision travels with
-    /// it so nothing renders or counts down to a day that was never printed.
+    /// How much of `expiry` was printed. MM/YYYY is stored as the month's last day,
+    /// and nothing may count down to a day that was never printed.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[serde(rename_all = "snake_case")]
     #[ts(export)]
     pub enum ExpiryPrecision: "expiry precision" {
-        /// The date is exactly what was printed.
         Day => "day",
-        /// Only the month was printed; `expiry` holds that month's last day.
         Month => "month",
     }
 }
 
 str_enum! {
-    /// What kind of thing an item is, split by where it lives and what you ask of
-    /// it (`Cookware` and `Tableware` are different cupboards). `Other` is offered
-    /// last, or it becomes the bucket for everything.
-    ///
-    /// A closed set by decision: categories are part of the program, and a new one
-    /// is added here (the column and the sync schema are free strings).
+    /// Split by where it lives (`Cookware` and `Tableware` are different
+    /// cupboards). Closed: a new category is added here.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[serde(rename_all = "snake_case")]
     #[ts(export)]
     pub enum ItemCategory: "item category" {
         Food => "food",
         Medication => "medication",
-        /// Pans, baking trays, the things you cook WITH.
         Cookware => "cookware",
-        /// Glasses, plates, cutlery — what you eat and drink FROM.
         Tableware => "tableware",
         Clothing => "clothing",
-        /// Anything with a plug and a warranty.
         Appliance => "appliance",
-        /// Detergent, sponges, refills — bought repeatedly, never eaten.
         Cleaning => "cleaning",
         Tool => "tool",
         Document => "document",
@@ -84,20 +65,19 @@ str_enum! {
     }
 }
 crate::row_id! {
-    /// `locations.id` — a place in the house tree.
+    /// `locations.id`.
     LocationId
 }
 
 crate::row_id! {
-    /// `items.id` — one stock row.
+    /// `items.id`.
     ItemId
 }
 
-/// A spatial node as returned by the API. (Exported to TS as `Loc`.)
+/// Exported to TypeScript as `Loc`.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export, rename = "Loc")]
 pub struct Location {
-    // ids are JSON numbers on the wire; ts-rs would otherwise emit `bigint`.
     #[ts(type = "number")]
     pub id: LocationId,
     pub kind: LocationKind,
@@ -109,9 +89,8 @@ pub struct Location {
     pub position: Option<serde_json::Value>,
 }
 
-/// A tracked item (holding) as returned by the API. `name`/`brand`/`barcode`/
-/// `has_image` are *resolved*: they come from the linked catalog product when
-/// `product_id` is set, falling back to the item's own fields otherwise.
+/// `name`, `brand`, `barcode` and `has_image` come from the linked product when
+/// there is one.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct Item {
@@ -124,21 +103,16 @@ pub struct Item {
     pub quantity: Option<f64>,
     pub unit: Option<String>,
     pub expiry: Option<NaiveDate>,
-    /// How much of `expiry` was printed rather than invented to fill the DATE.
-    /// Meaningless when `expiry` is `None`.
+    /// Meaningless without an `expiry`.
     pub expiry_precision: ExpiryPrecision,
     #[ts(type = "number | null")]
     pub location_id: Option<LocationId>,
     pub barcode: Option<String>,
-    /// True when the linked product has a cached image
-    /// (served from /api/products/{barcode}/image).
     pub has_image: bool,
 }
 
 str_enum! {
-    /// What happened to a stock row, as recorded in `item_history`.
-    ///
-    /// A closed set, for the reason `products::Source` is one.
+    /// What happened to a stock row (`item_history`).
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[serde(rename_all = "lowercase")]
     #[ts(export)]
@@ -147,20 +121,16 @@ str_enum! {
         Moved => "moved",
         Removed => "removed",
         Restored => "restored",
-        /// Some of it was used up. The only event that carries a *delta* rather
-        /// than a state: `quantity` is how much went, not how much is left.
+    /// The only event with a delta: `quantity` is how much went.
         Used => "used",
-        /// You judged it low, by putting it on the Buy list. A decision, not a
-        /// measurement, so it carries no quantity — the signal is the INTERVAL
-        /// between them. Prefer it to `used`, which nobody ever writes.
+    /// Judged low by putting it on the Buy list; no quantity, as the signal is the
+    /// interval between them.
         Low => "low",
     }
 }
 
-/// Everything the history dialog shows for one stock row. Purchases sit beside
-/// the events, not among them: an `ItemEvent` read back must be a stored value,
-/// and nothing stores a `bought` event. It is the only view of a purchase made
-/// from a hand-typed buy-list row, which has no product page.
+/// The history dialog: events, and beside them the purchases, which no event
+/// records.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct ItemHistory {
@@ -168,31 +138,24 @@ pub struct ItemHistory {
     pub purchases: Vec<crate::purchases::types::Purchase>,
 }
 
-/// One thing that happened to a stock row — a line of its history.
 #[derive(Debug, Clone, PartialEq, Serialize, TS, sqlx::FromRow)]
 #[ts(export)]
 pub struct ItemHistoryEntry {
     #[ts(type = "number")]
     pub id: u64,
     pub event: ItemEvent,
-    /// How much, in the item's own unit. ⚠ For [`ItemEvent::Used`] the amount
-    /// that WENT; for every other event what the row held. Say which when
-    /// rendering.
+    /// For [`ItemEvent::Used`] the amount that went; otherwise what the row held.
     pub quantity: Option<f64>,
-    /// Where the row was, by name. `None` if unrecorded or since deleted.
+    /// `None` if unrecorded or since deleted.
     pub location: Option<String>,
-    /// When; Unix milliseconds on the wire.
+    /// Unix milliseconds on the wire.
     #[serde(with = "chrono::serde::ts_milliseconds")]
     #[ts(type = "number")]
     pub at: DateTime<Utc>,
 }
 
-/// Request body for "I used some of this": how much went, in which unit.
-///
-/// `unit` is required to *agree* with the row's own (see
-/// [[super::consume]]) — sending it rather than assuming the row's unit is what
-/// lets the server refuse "200 g" against a jar instead of subtracting 200 from
-/// 1. Absent means the row is expected to be unitless too.
+/// `unit` must agree with the row's own ([[super::consume]]), so "200 g" against a
+/// jar is refused rather than taken from 1. Absent means unitless.
 #[derive(Debug, Deserialize)]
 pub struct UseItem {
     pub quantity: f64,
@@ -200,7 +163,6 @@ pub struct UseItem {
     pub unit: Option<String>,
 }
 
-/// Request body for creating a location.
 #[derive(Debug, Deserialize)]
 pub struct NewLocation {
     pub kind: LocationKind,
@@ -211,7 +173,6 @@ pub struct NewLocation {
     pub position: Option<serde_json::Value>,
 }
 
-/// Request body for creating an item.
 #[derive(Debug, Deserialize)]
 pub struct NewItem {
     pub name: String,
@@ -220,26 +181,16 @@ pub struct NewItem {
     pub quantity: Option<f64>,
     pub unit: Option<String>,
     pub expiry: Option<NaiveDate>,
-    /// How much of `expiry` is real, when the client knows. Absent means "no
-    /// statement": a new item defaults to [`ExpiryPrecision::Day`], and an
-    /// update leaves whatever the item already had.
-    ///
-    /// The same rule as `name_source`: callers other than the item form send
-    /// nothing, and must not turn an invented month-end into a printed day.
+    /// Absent is "no statement": a new item gets `Day`, an update keeps its own.
     #[serde(default)]
     pub expiry_precision: Option<ExpiryPrecision>,
     pub location_id: Option<LocationId>,
     #[serde(default)]
     pub barcode: Option<String>,
-    /// Explicit catalog link. Takes precedence over barcode-based resolution and
-    /// is the only way to link a barcodeless shop product (Waitrose etc.).
+    /// The only way to link a barcodeless product.
     #[serde(default)]
     pub product_id: Option<ProductId>,
-    /// Whose name `name` is, when the client knows. Absent means "no statement":
-    /// a new item defaults to [`ItemNameSource::Product`], and an update leaves
-    /// whatever the item already had.
-    ///
-    /// Absent is what every caller but the item form sends.
+    /// Absent is "no statement": a new item gets `Product`, an update keeps its own.
     #[serde(default)]
     pub name_source: Option<ItemNameSource>,
 }

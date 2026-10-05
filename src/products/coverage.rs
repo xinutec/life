@@ -1,9 +1,5 @@
-//! "Which shops sell this?", from memory alone: two queries for a whole list.
-//!
-//! Merges an **attached listing** (`product_listings`, the shop's own line) and a
-//! **sighting** (`shop_listings`, [`super::shop_cache`]: a past query showed the
-//! barcode there). Neither is a stock check: it answers "can I do this trip in
-//! one shop?", not what is on the shelf tonight.
+//! "Which shops sell this?" from memory, in two queries: a shop's own listing
+//! (`product_listings`) or a sighting (`shop_listings`). Never a stock check.
 
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
@@ -13,86 +9,64 @@ use super::ids::{Barcode, ProductId};
 use super::prices::Currency;
 use super::source::Source;
 
-/// One row of a Buy list, as the client asks about it. `key` is the client's own
-/// identifier for the row (its ulid) and is echoed back untouched: the client
-/// joins on that rather than re-deriving identity, so the two sides can never
-/// disagree about which answer belongs to which row.
+/// One Buy row. `key` is the client's ulid, echoed back for it to join on.
 #[derive(Debug, Clone, PartialEq, Deserialize, TS)]
 #[ts(export)]
 pub struct CoverageQuery {
     pub key: String,
-    /// Whatever the client's row carries — plain text, since a Buy row's barcode
-    /// is what a phone scanned rather than a catalogue key (see [[super::ids]]).
-    /// One that isn't barcode-shaped simply teaches us nothing here.
+    /// What the phone scanned; one not barcode-shaped teaches nothing.
     #[serde(default)]
     pub barcode: Option<String>,
     #[serde(default)]
     pub product_id: Option<ProductId>,
 }
 
-/// Where one row is known to be sold. `sources` is empty when we know nothing —
-/// which is NOT the same as "nowhere sells it", and the UI has to say so.
+/// Empty `sources` means unknown, not "nowhere".
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct RowCoverage {
     pub key: String,
-    /// The shops, sorted (see [`Source`]'s alphabetical ordering) so the display
-    /// order is stable across reloads rather than following row order in the DB.
+    /// Sorted, so the display is stable.
     pub sources: Vec<Source>,
-    /// Each shop's latest shelf price for the row's product, sorted by shop.
-    /// Only a linked product can carry one: a sighting has no price.
+    /// Only a linked product has prices; a sighting has none.
     pub prices: Vec<RowPrice>,
 }
 
-/// One shop's latest shelf price for a Buy row — what the shop charges, never
-/// what anybody paid.
+/// What the shop charges, never what anybody paid.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 pub struct RowPrice {
     pub source: Source,
-    /// Minor units (pence for GBP).
     #[ts(type = "number")]
     pub amount_minor: i64,
     pub currency: Currency,
 }
 
-/// A shop's latest price for a catalogue product: its cheapest listing's newest
-/// observation.
+/// The cheapest listing's newest observation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListingPrice {
     pub product_id: ProductId,
     pub price: RowPrice,
 }
 
-/// The most rows one request may ask about. A Buy list is a shopping trip, not a
-/// catalogue export; a client sending more than this is a bug.
+/// More than a shopping trip is a client bug.
 pub const MAX_ROWS: usize = 200;
 
-/// A shop's own listing for a catalogue product — the strong half of what we
-/// know (`product_listings`).
-///
-/// Named rather than a tuple because a sighting is also "an identifier and a
-/// shop": as tuples the two kinds would be interchangeable, and passing one
-/// where the other belongs would compile.
+/// A shop's own listing. Named, so it cannot be passed where a sighting belongs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AttachedListing {
     pub product_id: ProductId,
     pub source: Source,
 }
 
-/// A shop query of ours once showed this barcode at this shop — the weak half
-/// (`shop_listings`). Not a stock check; see the module docs.
+/// A past query showed this barcode at this shop.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Sighting {
     pub barcode: Barcode,
     pub source: Source,
 }
 
-/// Fold what the two tables know onto the rows that asked.
-///
-/// Split out of the route so the rule is testable without a database. Both
-/// inputs may hold several rows per key, and a shop that appears in both is one
-/// answer, not two.
+/// Fold both tables onto the rows that asked; a shop in both is one answer.
 pub fn combine(
     queries: &[CoverageQuery],
     attached: &[AttachedListing],
@@ -117,8 +91,7 @@ pub fn combine(
     queries
         .iter()
         .map(|q| {
-            // BTreeSet: dedupe (a shop can be both attached and sighted) and
-            // sort in one step.
+            // Dedupes and sorts.
             let mut sources: BTreeSet<Source> = BTreeSet::new();
             if let Some(id) = q.product_id
                 && let Some(found) = by_product.get(&id)
@@ -144,22 +117,18 @@ pub fn combine(
         .collect()
 }
 
-/// The product ids worth querying for — deduped, and empty when nothing on the
-/// list is linked (in which case the caller skips the query entirely).
+/// Empty when nothing is linked, and the query is skipped.
 pub fn product_ids(queries: &[CoverageQuery]) -> Vec<ProductId> {
     let set: BTreeSet<ProductId> = queries.iter().filter_map(|q| q.product_id).collect();
     set.into_iter().collect()
 }
 
-/// A row's barcode, when it is one. Blank and malformed values are dropped
-/// rather than queried: a row carrying something that isn't a barcode knows
-/// nothing about shops, and `barcode = ''` in particular would match every other
-/// such row in the cache.
+/// Blank and malformed values are dropped: `barcode = ''` would match every
+/// other such row.
 fn as_barcode(raw: &str) -> Option<Barcode> {
     raw.parse().ok()
 }
 
-/// The barcodes worth querying for, deduped. See `as_barcode` for what's dropped.
 pub fn barcodes(queries: &[CoverageQuery]) -> Vec<Barcode> {
     let set: BTreeSet<Barcode> = queries
         .iter()

@@ -1,4 +1,4 @@
-//! Persistence for the product catalog.
+//! Persistence for the product catalogue.
 
 mod facts;
 mod ingest;
@@ -41,26 +41,20 @@ impl From<MetaRow> for Product {
             barcode: r.barcode,
             name: r.name,
             brand: r.brand,
-            // Every getter selects through this one mapping, so a product read
-            // anywhere carries its pack size without each caller remembering to
-            // ask for it.
+            // Every getter maps through here, so every product carries its pack.
             pack: r.quantity_label.as_deref().and_then(packsize::parse),
             quantity_label: r.quantity_label,
             source: r.source,
             external_id: r.external_id,
             name_source: r.name_source,
-            // The schema holds a picture and its source together (0051).
             has_image: r.image_source.is_some(),
             image_source: r.image_source,
         }
     }
 }
 
-/// The metadata columns every getter selects (no image bytes). A macro so
-/// `concat!` can append each WHERE, since sqlx takes only `&'static str`.
-///
-/// ⚠ `get_by_source_external` can't use it: its join with `product_listings`
-/// shares column names, so every column there is alias-qualified.
+/// The columns every getter selects, no image bytes; a macro so `concat!` can
+/// append each WHERE. `get_by_source_external` joins and spells its own.
 macro_rules! product_select {
     () => {
         "SELECT id, barcode, external_id, name, brand, quantity_label, source, \
@@ -68,7 +62,6 @@ macro_rules! product_select {
     };
 }
 
-/// Cached metadata for a barcode (no image bytes), or None if not cached.
 pub async fn get(pool: &MySqlPool, barcode: &Barcode) -> Result<Option<Product>> {
     let row: Option<MetaRow> = sqlx::query_as(concat!(product_select!(), " WHERE barcode = ?"))
         .bind(barcode)
@@ -77,9 +70,7 @@ pub async fn get(pool: &MySqlPool, barcode: &Barcode) -> Result<Option<Product>>
     Ok(row.map(Product::from))
 }
 
-/// Name/brand substring search over the catalog (the picker's catalog tier).
-/// Case-insensitivity comes from the columns' utf8mb4 collation; `%`/`_`/`\`
-/// in the query are escaped so they match literally.
+/// Name or brand search; `%`, `_` and `\` in the query match literally.
 pub async fn search(pool: &MySqlPool, query: &str, limit: u64) -> Result<Vec<Product>> {
     let escaped = query
         .replace('\\', "\\\\")
@@ -98,7 +89,6 @@ pub async fn search(pool: &MySqlPool, query: &str, limit: u64) -> Result<Vec<Pro
     Ok(rows.into_iter().map(Product::from).collect())
 }
 
-/// Catalog row by surrogate id, or None.
 pub async fn get_by_id(
     conn: impl sqlx::Executor<'_, Database = sqlx::MySql>,
     id: ProductId,
@@ -110,9 +100,7 @@ pub async fn get_by_id(
     Ok(row.map(Product::from))
 }
 
-/// The canonical product carrying a listing for (source, external_id), found
-/// through `product_listings`, so via ANY of its sources. Its columns are spelt
-/// out (see `product_select!`).
+/// The product with a listing for (source, external_id).
 pub async fn get_by_source_external(
     pool: &MySqlPool,
     source: Source,
@@ -131,9 +119,7 @@ pub async fn get_by_source_external(
     Ok(row.map(Product::from))
 }
 
-/// One source's listing of a canonical product — the source's own account of it.
-/// `raw_json` is deliberately NOT selected here (it can be large; read it on the
-/// paths that need the full record).
+/// One source's listing; `raw_json` is left out, as it can be large.
 #[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
 pub struct Listing {
     pub source: Source,
@@ -145,7 +131,7 @@ pub struct Listing {
     pub image_url: Option<String>,
 }
 
-/// Every source that lists a canonical product, oldest first.
+/// Oldest first.
 pub async fn listings_for(
     conn: impl sqlx::Executor<'_, Database = sqlx::MySql>,
     product_id: ProductId,
@@ -160,32 +146,23 @@ pub async fn listings_for(
     Ok(rows)
 }
 
-/// Everything a source told us about a product, for its own listing line. Used
-/// both when a source first lists a product and when a later pull refreshes it.
-/// A source's line is its own account — never merged with another source's — so
-/// a re-pull overwrites this source's fields with the fresh values.
+/// A source's own account, written whole on every pull, never merged with
+/// another source's.
 #[derive(Debug, Default, Clone)]
 pub struct ListingFields<'a> {
-    /// The source's title, verbatim (the canonical display name is chosen among
-    /// sources separately; see `crate::products::ingest::best_name`).
+    /// Verbatim; the canonical name is chosen separately ([`best_name`](crate::products::ingest::best_name)).
     pub raw_name: Option<&'a str>,
     pub brand: Option<&'a str>,
     pub quantity_label: Option<&'a str>,
-    /// Deep link to the source's product page.
     pub url: Option<&'a str>,
-    /// The source's image on its own CDN (a URL, not bytes).
+    /// A URL on the source's own CDN.
     pub image_url: Option<&'a str>,
-    /// The source's ENTIRE record, serialized verbatim — the lossless backstop
-    /// for anything the columns above don't model.
+    /// The whole record, verbatim, for whatever the columns miss.
     pub raw_json: Option<&'a str>,
 }
 
-/// Attach (or refresh) a listing for (source, external_id) onto `product_id`,
-/// storing the source's whole account of the product. Keyed on
-/// (source, external_id): re-importing the same source id updates the same
-/// listing in place (and can re-point it if products were merged). A source's
-/// line is its own — never shared with another source — so a re-pull overwrites
-/// this source's fields wholesale rather than COALESCE-ing them.
+/// Attach or refresh a listing, keyed on (source, external_id); a re-pull
+/// overwrites this source's fields whole.
 pub async fn upsert_listing(
     conn: impl sqlx::Executor<'_, Database = sqlx::MySql>,
     product_id: ProductId,
@@ -216,9 +193,7 @@ pub async fn upsert_listing(
     Ok(())
 }
 
-/// The listing id for (source, external_id) — the FK target a price observation
-/// hangs off. Public: the import route records a price against the listing it
-/// just upserted.
+/// The listing id a price observation is recorded against.
 pub async fn listing_id(
     pool: &MySqlPool,
     source: Source,
@@ -233,16 +208,13 @@ pub async fn listing_id(
     Ok(row.map(|(id,)| id))
 }
 
-/// Which shops hold a listing for each of these products — the attached half of
-/// [[super::coverage]]. Excludes 'off' and 'user': neither is somewhere you can
-/// walk into. One query for the whole Buy list.
+/// Which shops hold a listing for each product: the attached half of
+/// [[super::coverage]].
 pub async fn shops_holding(pool: &MySqlPool, ids: &[ProductId]) -> Result<Vec<AttachedListing>> {
     if ids.is_empty() {
         return Ok(Vec::new());
     }
-    // The exclusion is derived from the type, not spelled out in SQL: a source
-    // that stops (or starts) being a shop changes this query by changing
-    // `Source::is_shop`, and can't be forgotten here.
+    // From `Source::is_shop`, so the SQL cannot fall out of step with the type.
     let mut qb = sqlx::QueryBuilder::new(
         "SELECT product_id, source FROM product_listings WHERE source IN (",
     );
@@ -263,9 +235,7 @@ pub async fn shops_holding(pool: &MySqlPool, ids: &[ProductId]) -> Result<Vec<At
         .collect())
 }
 
-/// Each shop's latest price for each of these products — the priced half of
-/// [[super::coverage]]. Per (product, shop): the newest observation of each
-/// listing, then the cheapest listing, as [`latest_prices`] does for one product.
+/// Each shop's latest price per product, as [`latest_prices`] does for one.
 pub async fn latest_prices_for(pool: &MySqlPool, ids: &[ProductId]) -> Result<Vec<ListingPrice>> {
     if ids.is_empty() {
         return Ok(Vec::new());
@@ -283,7 +253,6 @@ pub async fn latest_prices_for(pool: &MySqlPool, ids: &[ProductId]) -> Result<Ve
     }
     qb.push(") ORDER BY po.amount_minor, l.id");
     let rows: Vec<(ProductId, Source, i64, Currency)> = qb.build_query_as().fetch_all(pool).await?;
-    // Cheapest-first, so the first row per (product, shop) is that shop's price.
     let mut seen = std::collections::HashSet::new();
     Ok(rows
         .into_iter()
@@ -301,9 +270,7 @@ pub async fn latest_prices_for(pool: &MySqlPool, ids: &[ProductId]) -> Result<Ve
         .collect())
 }
 
-/// Which shops we've *seen* carry each of these barcodes, from the memory of our
-/// own past shop queries (`shop_listings`). Weaker than a held listing and not a
-/// stock check — see [[super::coverage]].
+/// Which shops a past query showed carrying each barcode; not a stock check.
 pub async fn shops_seen_carrying(pool: &MySqlPool, barcodes: &[Barcode]) -> Result<Vec<Sighting>> {
     if barcodes.is_empty() {
         return Ok(Vec::new());
@@ -322,14 +289,8 @@ pub async fn shops_seen_carrying(pool: &MySqlPool, barcodes: &[Barcode]) -> Resu
         .collect())
 }
 
-/// Import (or refresh) a catalog product from an external source, reconciled by
-/// barcode: the canonical `products` row is keyed by EAN, so Asda and Open Food
-/// Facts describing the same barcode land on ONE product with two listings. A
-/// barcodeless source (Waitrose, by lineNumber) gets/keeps its own canonical
-/// row, found via its existing listing. Returns the canonical product.
-///
 /// A listing alone, with no price, facts or picture: [`ingest`] with nothing
-/// else to say.
+/// more to say. A barcode lands it on the shared product.
 pub async fn upsert_external(
     pool: &MySqlPool,
     source: Source,
@@ -354,7 +315,6 @@ pub async fn upsert_external(
     ingest(pool, &account, None).await
 }
 
-/// Cached image bytes + mime for a catalog id, if present.
 pub async fn get_image_by_id(pool: &MySqlPool, id: ProductId) -> Result<Option<(Vec<u8>, String)>> {
     let row: Option<(Option<Vec<u8>>, Option<String>)> =
         sqlx::query_as("SELECT image, image_mime FROM products WHERE id = ?")
@@ -367,7 +327,6 @@ pub async fn get_image_by_id(pool: &MySqlPool, id: ProductId) -> Result<Option<(
     })
 }
 
-/// Cached image bytes + mime for a barcode, if present.
 pub async fn get_image(pool: &MySqlPool, barcode: &Barcode) -> Result<Option<(Vec<u8>, String)>> {
     let row: Option<(Option<Vec<u8>>, Option<String>)> =
         sqlx::query_as("SELECT image, image_mime FROM products WHERE barcode = ?")
@@ -380,10 +339,8 @@ pub async fn get_image(pool: &MySqlPool, barcode: &Barcode) -> Result<Option<(Ve
     })
 }
 
-/// Replace just the image bytes for a barcode, creating a bare catalog row if
-/// it was never looked up (a picture for a product OFF has never heard of).
-/// `source='user'` only on insert; `image_source='user'` on every write, since a
-/// hand upload is ours and picture reconciliation never nags to replace it.
+/// Our own upload, creating a bare row if needed; `image_source = 'user'`, so
+/// reconcile never offers to replace it.
 pub async fn set_image(
     pool: &MySqlPool,
     barcode: &Barcode,

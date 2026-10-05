@@ -2,15 +2,10 @@
 import type { ProductId } from "./ProductId";
 
 /**
- * One row of a Buy list, as the client asks about it. `key` is the client's own
- * identifier for the row (its ulid) and is echoed back untouched: the client
- * joins on that rather than re-deriving identity, so the two sides can never
- * disagree about which answer belongs to which row.
+ * One Buy row. `key` is the client's ulid, echoed back for it to join on.
  */
 export type CoverageQuery = { key: string, 
 /**
- * Whatever the client's row carries — plain text, since a Buy row's barcode
- * is what a phone scanned rather than a catalogue key (see [[super::ids]]).
- * One that isn't barcode-shaped simply teaches us nothing here.
+ * What the phone scanned; one not barcode-shaped teaches nothing.
  */
 barcode: string | null, product_id: ProductId | null, };

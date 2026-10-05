@@ -1,5 +1,4 @@
-//! The to-do list — typed tasks with open/done status, offline-first like
-//! shopping. Their typed, directional connections travel by sync (`sync::repo`).
+//! To-dos; they and their connections travel through sync.
 
 pub mod repo;
 pub mod types;

@@ -1,10 +1,6 @@
-//! Persistence for the offline-first sync protocol. The revision counter is
-//! shared by every syncable table; the pull/push protocol bodies are written
-//! once, generic over the per-collection `SyncSpec`, so the safety rules —
-//! FOR UPDATE row lock, rev guard, **set-only tombstone**, commit-ordered
-//! revs, validate-before-write — cannot drift between collections. A new
-//! collection implements the spec and gets the tested protocol for free.
-//! See `docs/design/sync.md`.
+//! The sync protocol, written once over `SyncSpec`, so its safety rules (row lock,
+//! rev guard, set-only tombstone, commit-ordered revs, validation before writing)
+//! cannot drift between collections (docs/design/sync.md).
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
@@ -22,10 +18,9 @@ use super::types::{
     Checkpoint, PullResponse, PushEntry, ShoppingDoc, TodoDoc, TodoLinkDoc, WellbeingDoc,
 };
 
-/// Allocate the next global revision, **inside the caller's transaction**, on the
-/// connection of the write it stamps. `LAST_INSERT_ID(val + 1)` bumps and returns
-/// the counter atomically, and its row lock is held until commit, so revisions
-/// are handed out in *commit* order: a pull can never pass an uncommitted rev.
+/// The next revision, inside the caller's transaction: the counter's row lock is
+/// held until commit, so revisions follow commit order and a pull never passes an
+/// uncommitted one.
 pub async fn next_rev(conn: &mut MySqlConnection) -> sqlx::Result<u64> {
     let res = sqlx::query("UPDATE sync_rev SET val = LAST_INSERT_ID(val + 1) WHERE id = 1")
         .execute(&mut *conn)
@@ -33,8 +28,8 @@ pub async fn next_rev(conn: &mut MySqlConnection) -> sqlx::Result<u64> {
     Ok(res.last_insert_id())
 }
 
-/// Run one tombstone or restore `UPDATE`, built by `query` around a fresh
-/// `rev`, in its own transaction so the change syncs. False when no row matched.
+/// One tombstone or restore with a fresh `rev`, in its own transaction. False
+/// when no row matched.
 pub async fn stamp<'q>(
     pool: &MySqlPool,
     query: impl FnOnce(u64) -> sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments>,
@@ -46,11 +41,8 @@ pub async fn stamp<'q>(
     Ok(res.rows_affected() > 0)
 }
 
-// ---- the protocol, once -------------------------------------------------------
-
-/// A push failure splits invalid client input (→ 400 at the route) from
-/// everything else (→ 500). Invalid docs are rejected at the boundary — not
-/// clamped, not stored — so a bad value can never poison later reads.
+/// Invalid input (400) apart from everything else (500). Invalid docs are refused,
+/// never clamped or stored.
 #[derive(Debug, thiserror::Error)]
 pub enum PushError {
     #[error("{0}")]
@@ -73,15 +65,14 @@ impl From<PushError> for AppError {
 
 type DataQuery<'q> = Query<'q, MySql, MySqlArguments>;
 
-/// Everything collection-specific about sync: the table, the data columns (in
-/// bind order), the row↔doc mapping, and the push-boundary validation.
+/// What is collection-specific: table, data columns in bind order, mapping and
+/// validation.
 trait SyncSpec {
     type Doc: Send;
     type Row: for<'r> sqlx::FromRow<'r, sqlx::mysql::MySqlRow> + Send + Unpin;
 
     const TABLE: &'static str;
-    /// Data columns beyond the protocol's own (id, ulid, deleted, rev), in the
-    /// exact order `bind_data` binds their values.
+    /// Beyond id, ulid, deleted and rev, in `bind_data`'s order.
     const DATA_COLS: &'static [&'static str];
 
     fn row_rev(row: &Self::Row) -> u64;
@@ -90,18 +81,15 @@ trait SyncSpec {
     fn rev(doc: &Self::Doc) -> u64;
     fn deleted(doc: &Self::Doc) -> bool;
 
-    /// Reject values the types cannot rule out (an out-of-range score); an unknown
-    /// enum string never gets this far, refused when the push is decoded. Reject,
-    /// not clamp — a clamp would be a masking fallback.
+    /// What the types cannot rule out (an out-of-range score); refused, never
+    /// clamped.
     fn validate(_doc: &Self::Doc) -> Result<(), String> {
         Ok(())
     }
 
-    /// Bind the `DATA_COLS` values, in that order.
     fn bind_data<'q>(q: DataQuery<'q>, doc: &'q Self::Doc) -> DataQuery<'q>;
 
-    /// Insert-time hook: land the fresh row already tombstoned (used by the
-    /// to-do-link twin dedupe). Default: never.
+    /// Land a new row already tombstoned (the to-do-link twin dedupe).
     async fn tombstone_on_insert(
         _tx: &mut MySqlConnection,
         _user_id: &str,
@@ -112,16 +100,14 @@ trait SyncSpec {
 }
 
 fn select_list<C: SyncSpec>() -> String {
-    // A boolean SQL expression decodes as an integer, so the row types map the
-    // tombstone explicitly via the CAST alias.
+    // A boolean SQL expression decodes as an integer, hence the CAST alias.
     format!(
         "id, ulid, {}, CAST(deleted_at IS NOT NULL AS SIGNED) AS deleted, rev",
         C::DATA_COLS.join(", ")
     )
 }
 
-/// Pull: documents (including tombstones) with `rev` past the checkpoint, in rev
-/// order, plus the advanced checkpoint. Scoped to one user.
+/// Documents past the checkpoint, tombstones included, in rev order.
 async fn pull<C: SyncSpec>(
     pool: &MySqlPool,
     user_id: &str,
@@ -133,8 +119,7 @@ async fn pull<C: SyncSpec>(
         select_list::<C>(),
         C::TABLE
     );
-    // The SQL is assembled from compile-time constants only (table + column
-    // names off the spec); every runtime value is a bind parameter.
+    // Only compile-time names are spliced; every value is bound.
     let rows: Vec<C::Row> = sqlx::query_as(AssertSqlSafe(sql.as_str()))
         .bind(user_id)
         .bind(since)
@@ -150,19 +135,15 @@ async fn pull<C: SyncSpec>(
     })
 }
 
-/// Push: apply each change as an idempotent upsert keyed by ULID, guarded by the
-/// client's assumed revision (optimistic concurrency). Returns the current server
-/// doc for every rejected (stale) change so the client can resolve and re-push —
-/// the LWW policy lives in the client's conflict handler; the server only enforces
-/// the rev guard.
+/// An idempotent upsert per change, guarded by the client's assumed revision.
+/// Returns the server's doc for each stale change; resolving is the client's job.
 async fn push<C: SyncSpec>(
     pool: &MySqlPool,
     user_id: &str,
     entries: Vec<PushEntry<C::Doc>>,
 ) -> Result<Vec<C::Doc>, PushError> {
-    // Validate the whole batch before writing anything: each entry gets its own
-    // transaction below, so a mid-loop rejection would partially apply the
-    // push. One bad doc → the whole request is a 400 and nothing is stored.
+    // The whole batch first: each entry commits alone, so a late rejection would
+    // leave the push half-applied.
     for entry in &entries {
         C::validate(&entry.new_document_state).map_err(PushError::Invalid)?;
     }
@@ -196,7 +177,6 @@ async fn push<C: SyncSpec>(
         let assumed_rev = entry.assumed_master_state.as_ref().map(C::rev);
 
         let mut tx = pool.begin().await?;
-        // Lock this user's row (if any) for the rest of the transaction.
         let current: Option<C::Row> = sqlx::query_as(AssertSqlSafe(select_sql.as_str()))
             .bind(C::ulid(&new))
             .bind(user_id)
@@ -209,10 +189,8 @@ async fn push<C: SyncSpec>(
                 continue;
             }
             let rev = next_rev(&mut tx).await?;
-            // Tombstones are SET-ONLY here: once deleted_at is set, no push can
-            // clear it — a stale offline client must not silently resurrect a
-            // deliberate delete. The one undelete path is the explicit trash
-            // restore (see trash::repo), which is its own deliberate operation.
+            // Set-only tombstones: no push clears one, so a stale client cannot
+            // resurrect a delete. The trash restore is the one way back.
             C::bind_data(sqlx::query(AssertSqlSafe(update_sql.as_str())), &new)
                 .bind(C::deleted(&new))
                 .bind(rev)
@@ -238,8 +216,6 @@ async fn push<C: SyncSpec>(
     }
     Ok(conflicts)
 }
-
-// ---- shopping ---------------------------------------------------------------
 
 #[derive(sqlx::FromRow)]
 struct ShoppingDocRow {
@@ -316,9 +292,7 @@ impl SyncSpec for Shopping {
     }
 }
 
-/// One-time backfill: give every pre-sync shopping row a ULID + revision so it is
-/// pulled by clients on first sync. Idempotent — only touches rows whose `ulid` is
-/// still NULL, so it is a cheap no-op once done; safe to run on every boot.
+/// Gives pre-sync rows a ULID and revision. Idempotent.
 pub async fn backfill_shopping(pool: &MySqlPool) -> Result<u64> {
     let mut total = 0u64;
     loop {
@@ -364,8 +338,6 @@ pub async fn push_shopping(
 ) -> Result<Vec<ShoppingDoc>, PushError> {
     push::<Shopping>(pool, user_id, entries).await
 }
-
-// ---- to-do ------------------------------------------------------------------
 
 #[derive(sqlx::FromRow)]
 struct TodoDocRow {
@@ -463,8 +435,6 @@ pub async fn push_todo(
     push::<Todo>(pool, user_id, entries).await
 }
 
-// ---- to-do links ------------------------------------------------------------
-
 #[derive(sqlx::FromRow)]
 struct TodoLinkDocRow {
     id: u64,
@@ -522,12 +492,9 @@ impl SyncSpec for TodoLink {
             .bind(&doc.target_ref)
     }
 
-    /// Two offline devices can add the same connection under different ulids.
-    /// Land the newcomer already tombstoned when a live twin exists, so the
-    /// earlier edge wins everywhere through the normal pull. No FOR UPDATE: it
-    /// would take the todo_links lock before sync_rev's, reversing the REST
-    /// path's order and risking deadlock; boot-time dedupe_todo_links catches
-    /// the rare race.
+    /// Two devices can add the same connection under different ulids: the newer
+    /// lands tombstoned. No FOR UPDATE, which would reverse the REST path's lock
+    /// order; the boot-time dedupe catches the rare race.
     async fn tombstone_on_insert(
         tx: &mut MySqlConnection,
         user_id: &str,
@@ -565,10 +532,8 @@ pub async fn push_todo_link(
     push::<TodoLink>(pool, user_id, entries).await
 }
 
-/// Boot-time cleanup: tombstone live duplicate edges (same user/from/kind/target
-/// under different ulids) that a race let past the push-time guard. The lowest id
-/// survives, so every device agrees; each tombstone gets its own rev and
-/// propagates like any delete. Idempotent and cheap once clean.
+/// Tombstone duplicate edges a race let through; the lowest id survives, so every
+/// device agrees. Idempotent.
 pub async fn dedupe_todo_links(pool: &MySqlPool) -> Result<u64> {
     let dups: Vec<(u64,)> = sqlx::query_as(
         "SELECT t.id FROM todo_links t JOIN todo_links k \
@@ -595,8 +560,6 @@ pub async fn dedupe_todo_links(pool: &MySqlPool) -> Result<u64> {
     Ok(n)
 }
 
-// ---- wellbeing --------------------------------------------------------------
-
 #[derive(sqlx::FromRow)]
 struct WellbeingDocRow {
     id: u64,
@@ -604,8 +567,7 @@ struct WellbeingDocRow {
     recorded_at: NaiveDateTime,
     score_tenths: u8,
     energy_tenths: Option<u8>,
-    /// JSON array of leaf words, as stored; parsed in `row_doc` (invalid →
-    /// error — a corrupt row must fail the read, not pull as "no emotions").
+    /// Parsed in `row_doc`; a corrupt row fails the read rather than pull as none.
     emotions: Option<String>,
     note: Option<String>,
     deleted: i64,
@@ -632,9 +594,6 @@ impl SyncSpec for Wellbeing {
     }
 
     fn row_doc(r: WellbeingDocRow) -> Result<WellbeingDoc> {
-        // The write path fails loudly on unserialisable emotions; the read must
-        // match — serving a corrupt row as "no emotions" would propagate the
-        // loss to every device invisibly.
         let emotions = match r.emotions.as_deref() {
             Some(s) => serde_json::from_str(s)
                 .with_context(|| format!("wellbeing {}: corrupt emotions column", r.ulid))?,
@@ -674,8 +633,7 @@ impl SyncSpec for Wellbeing {
     }
 
     fn bind_data<'q>(q: DataQuery<'q>, doc: &'q WellbeingDoc) -> DataQuery<'q> {
-        // A Vec<String> always serialises; .expect documents the invariant and
-        // fails loudly rather than silently dropping the user's emotions.
+        // Always serialises.
         let emotions_json =
             serde_json::to_string(&doc.emotions).expect("Vec<String> serialises to JSON");
         q.bind(doc.recorded_at.naive_utc())
@@ -686,11 +644,8 @@ impl SyncSpec for Wellbeing {
     }
 }
 
-/// A reading is 1..5 points, recorded in tenths, and for now only in HALF-points:
-/// 10, 15, 20 .. 50. The column would take a 37; the domain wouldn't, so a 37 is
-/// rejected rather than rounded — a silently-rounded reading is a reading the user
-/// never gave. Finer steps later means relaxing the step check here and nothing
-/// else: the storage already holds them.
+/// Half-points in tenths: 10, 15 … 50. A 37 is refused, not rounded: a rounded
+/// reading is one the user never gave.
 const STEP_TENTHS: u8 = 5;
 
 fn check_tenths(what: &str, tenths: u8) -> Result<(), String> {

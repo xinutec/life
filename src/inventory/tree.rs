@@ -1,13 +1,11 @@
-//! The location tree as data: which rows sit below which. Pure; the repo reads
-//! the rows and applies the answer.
+//! Which locations sit below which. Pure.
 
 use std::collections::{HashMap, HashSet};
 
 use super::types::LocationId;
 
-/// Every id in the subtree rooted at `root`, `root` first, from `(id, parent)`
-/// rows. Empty when `root` is not among them. Each id is visited once, so a loop
-/// in the parent links ends the walk instead of hanging it.
+/// Every id under `root`, `root` first; empty if `root` is absent. A loop in the
+/// parent links ends the walk.
 pub fn subtree(rows: &[(LocationId, Option<LocationId>)], root: LocationId) -> Vec<LocationId> {
     if !rows.iter().any(|(id, _)| *id == root) {
         return Vec::new();

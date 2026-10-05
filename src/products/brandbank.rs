@@ -1,8 +1,5 @@
-//! Parse the Brandbank JSON (the UK grocery product-content feed) that Asda's
-//! product page embeds as `c_BRANDBANK_JSON`: nutrition, ingredients, allergens
-//! and dietary flags that search lacks. The WebView returns the blob verbatim;
-//! this makes `ProductFacts`, merged with Open Food Facts on read
-//! (`repo::facts_for`). Pure, tested against a captured blob.
+//! Asda's product-page facts: the Brandbank JSON it embeds as `c_BRANDBANK_JSON`,
+//! which search lacks. Pure; tested against a captured blob.
 
 use std::collections::BTreeMap;
 
@@ -15,32 +12,26 @@ use super::nutrition::{
     as_f64,
 };
 
-/// The Brandbank fields we consume. Unknown fields (the bulk of the blob —
-/// company address, marketing copy, packaging, …) are ignored by serde.
+/// The fields we use; serde ignores the rest.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Brandbank {
-    /// e.g. "per 100ml" / "per 100g" — the basis of `calculated_nutrition`.
+    /// "per 100ml" / "per 100g".
     calculated_nutrition_per100: Option<String>,
-    /// The label of `per100Used` values: "Per 100g" as sold, or prepared, as in
-    /// "(Boiled) Per 100g".
+    /// "Per 100g" as sold, or "(Boiled) Per 100g" as prepared.
     calculated_nutrition_per100_used: Option<String>,
-    /// The per-100 panel: each `{ nameValue: "Energy (kcal)", per100: 61 }`.
     #[serde(default)]
     calculated_nutrition: Vec<CalcNutrient>,
-    /// The ingredients, already split into a list of components.
     #[serde(default)]
     taggable_ingredients_text: Vec<String>,
-    /// Per-allergen advice: `{ nameValue: "Milk", lookupValue: "Free From" }`.
+    /// `{ nameValue: "Milk", lookupValue: "Free From" }`.
     #[serde(default)]
     allergy_advice: Vec<AllergyAdvice>,
-    /// Claims like "Suitable for Vegetarians"; some pages have these and no
-    /// dietary booleans.
+    /// "Suitable for Vegetarians"; some pages have only these.
     #[serde(default)]
     lifestyle: Vec<Lifestyle>,
 
-    // Dietary / free-from booleans. `true` = the manufacturer asserts it; a
-    // `false` is NOT read as a firm "no" (see `dietary`).
+    // `true` asserts; `false` is not a "no" (see `dietary`).
     #[serde(default)]
     vegan: bool,
     #[serde(default)]
@@ -67,9 +58,7 @@ struct Brandbank {
 #[serde(rename_all = "camelCase")]
 struct CalcNutrient {
     name_value: Option<String>,
-    /// A JSON number, or occasionally a numeric string.
     per100: Option<Value>,
-    /// The same, on pages that label the panel with `calculatedNutritionPer100Used`.
     per100_used: Option<Value>,
 }
 
@@ -86,7 +75,6 @@ struct AllergyAdvice {
     lookup_value: Option<String>,
 }
 
-/// Parse a raw `c_BRANDBANK_JSON` blob into product facts.
 pub fn parse(json: &str) -> Result<ProductFacts> {
     let bb: Brandbank = serde_json::from_str(json).context("parse Brandbank JSON")?;
     Ok(ProductFacts {
@@ -97,7 +85,6 @@ pub fn parse(json: &str) -> Result<ProductFacts> {
     })
 }
 
-/// Which big-8 column a Brandbank nutrient name maps to, or `Extra` for the tail.
 enum Slot {
     EnergyKj,
     EnergyKcal,
@@ -111,9 +98,7 @@ enum Slot {
     Extra,
 }
 
-/// Map a Brandbank nutrient label ("Energy (kcal)", "of which sugars (g)", …) to
-/// its panel slot. The "of which" rows are checked before the parent nutrient so
-/// they don't fall into fat/carbohydrate.
+/// "of which" rows are matched before their parent nutrient.
 fn classify(name: &str) -> Slot {
     let l = name.to_lowercase();
     if l.contains("energy") && l.contains("kcal") {
@@ -139,8 +124,7 @@ fn classify(name: &str) -> Slot {
     }
 }
 
-/// A tail-nutrient key: the label without its "(unit)" suffix, lowercased with
-/// spaces hyphenated ("Vitamin D (µg)" → "vitamin-d"). Only stored, not shown.
+/// "Vitamin D (µg)" → "vitamin-d"; stored, never shown.
 fn extra_key(name: &str) -> String {
     name.split('(')
         .next()
@@ -170,8 +154,7 @@ impl Brandbank {
             salt_g: None,
             extra: BTreeMap::new(),
         };
-        // A qualified label ("(Boiled) Per 100g") means values as prepared,
-        // which must never be filed as the product's own.
+        // Values as prepared must never be filed as the product's own.
         let used_as_sold = self
             .calculated_nutrition_per100_used
             .as_deref()
@@ -200,7 +183,6 @@ impl Brandbank {
                 }
             }
         }
-        // A panel with no numbers and no tail is no panel.
         (!n.is_empty()).then_some(n)
     }
 
@@ -216,9 +198,7 @@ impl Brandbank {
     }
 
     fn allergens(&self) -> Vec<Allergen> {
-        // Only positive presences become allergens: "Contains" / "May Contain".
-        // A "Free From" entry is a negative — it's not an allergen (the matching
-        // free-from *dietary* flag comes from the booleans instead).
+        // Only Contains and May Contain; Free From comes in as a dietary flag.
         allergen_list(self.allergy_advice.iter().filter_map(|a| {
             let presence = match a.lookup_value.as_deref()?.to_lowercase().as_str() {
                 "contains" => Presence::Contains,
@@ -230,11 +210,8 @@ impl Brandbank {
     }
 
     fn dietary(&self) -> Vec<DietaryFlag> {
-        // Brandbank booleans map to our dietary slugs, as OFF's and Asda's tags do.
-        // `true` (or a lifestyle claim, "Suitable for Vegans") asserts → 'yes'. A
-        // `false` is "not claimed", not "not the case", so it never becomes a
-        // firm 'no': that could tell someone a product isn't vegan when Brandbank
-        // simply hadn't tagged it.
+        // `true` or a lifestyle claim asserts 'yes'; `false` is "not tagged",
+        // never a firm 'no'.
         let says = |claim: &str| {
             self.lifestyle.iter().any(|l| {
                 l.name_value

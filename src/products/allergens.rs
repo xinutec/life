@@ -1,10 +1,7 @@
-//! Allergen names, one vocabulary across sources: Open Food Facts' ids. A
-//! retailer names the cereal ("Wheat") where OFF names the allergen
-//! ("en:gluten"); both mean `gluten`.
+//! One allergen vocabulary across sources: Open Food Facts' ids.
 
-/// OFF's English allergen taxonomy (`taxonomies/allergens.txt` at b90bcf61bf):
-/// each id and the names it files under it. `none` is left out: it is the
-/// absence of an allergen, and its names include "no" and "0".
+/// OFF's English taxonomy (`taxonomies/allergens.txt` at b90bcf61bf). Without
+/// `none`, whose names include "no" and "0".
 const SYNONYMS: &[(&str, &[&str])] = &[
     (
         "gluten",
@@ -159,7 +156,6 @@ const SYNONYMS: &[(&str, &[&str])] = &[
     ),
 ];
 
-/// The OFF id a lowercased name means, if OFF lists it.
 pub(crate) fn off_id(name: &str) -> Option<&'static str> {
     let spaced = name.replace('-', " ");
     SYNONYMS

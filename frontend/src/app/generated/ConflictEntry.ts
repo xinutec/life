@@ -2,12 +2,10 @@
 import type { ConflictKind } from "./ConflictKind";
 
 /**
- * One unresolved same-field conflict, as listed on the Conflicts screen.
- * `mine`/`theirs` are JSON-encoded field values (the client encodes them, so
- * numbers/nulls round-trip exactly).
+ * `mine` and `theirs` are JSON-encoded by the client, so they round-trip exactly.
  */
 export type ConflictEntry = { id: number, kind: ConflictKind, ulid: string, field: string, label: string, mine: string, theirs: string, 
 /**
- * When the conflict happened; Unix milliseconds on the wire.
+ * Unix milliseconds on the wire.
  */
 created_at: number, };

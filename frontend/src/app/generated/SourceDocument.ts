@@ -3,16 +3,11 @@ import type { DocKind } from "./DocKind";
 import type { Source } from "./Source";
 
 /**
- * A raw payload we fetched from a source and kept verbatim (product_documents,
- * 0034) — metadata only, so the UI can show what's already held (and when) and
- * avoid re-fetching. The body itself is read on demand, not shipped here.
+ * A raw payload kept verbatim (0034): metadata only, so the UI knows what is
+ * held without shipping the body.
  */
 export type SourceDocument = { source: Source, kind: DocKind, 
 /**
- * When we fetched it; Unix milliseconds on the wire.
+ * Unix milliseconds on the wire.
  */
-fetched_at: number, 
-/**
- * Size of the stored payload, bytes — a hint that we hold it, not the body.
- */
-bytes: number, };
+fetched_at: number, bytes: number, };

@@ -1,5 +1,4 @@
-//! Open Food Facts client — read-only product lookup by barcode. We call OFF
-//! only on a cache miss (see products::repo). Identify our client politely.
+//! Open Food Facts lookup by barcode, on a catalogue miss.
 
 use anyhow::{Context, Result};
 use serde::Deserialize;
@@ -11,8 +10,7 @@ use super::nutrition::{ProductFacts, RawFacts};
 
 const USER_AGENT: &str = "Life/0.1 (https://life.xinutec.org)";
 
-/// Product images are small; cap the download so a poisoned URL can't OOM the
-/// pod (256Mi) by streaming gigabytes.
+/// So a poisoned URL cannot stream gigabytes into a 256 MiB pod.
 const MAX_IMAGE_BYTES: usize = 5 * 1024 * 1024;
 
 pub struct OffProduct {
@@ -20,12 +18,8 @@ pub struct OffProduct {
     pub brand: Option<String>,
     pub quantity: Option<String>,
     pub image_url: Option<String>,
-    /// Nutrition panel, ingredients, allergens, dietary flags parsed from the
-    /// same response (see products::nutrition).
     pub facts: ProductFacts,
-    /// OFF's response body verbatim — kept on the product's `off` listing
-    /// (raw_json) so nothing OFF sent is lost and we needn't re-fetch to recover
-    /// a field we don't model yet.
+    /// The response verbatim, for the `off` listing.
     pub raw: String,
 }
 
@@ -41,8 +35,6 @@ struct Raw {
     brands: Option<String>,
     quantity: Option<String>,
     image_front_url: Option<String>,
-    /// The fact-bearing fields (nutriments, ingredients, allergen/label tags),
-    /// read from the same product object.
     #[serde(flatten)]
     facts: RawFacts,
 }
@@ -51,13 +43,10 @@ fn non_empty(s: Option<String>) -> Option<String> {
     s.filter(|v| !v.trim().is_empty())
 }
 
-/// Same size cap as the OFF proxy, reused for user uploads. Public so the upload
-/// handler and its tests share one number.
+/// Also the upload cap.
 pub const MAX_UPLOAD_BYTES: usize = MAX_IMAGE_BYTES;
 
-/// Raster types we store and serve. Deliberately NOT `image/svg+xml`: SVG can
-/// carry script, and stored images are served back on our own origin — an SVG
-/// upload would be stored XSS for anyone opening the image URL directly.
+/// Not SVG: it can carry script, and images are served from our origin.
 const ALLOWED_IMAGE_MIMES: [&str; 5] = [
     "image/jpeg",
     "image/png",
@@ -66,10 +55,8 @@ const ALLOWED_IMAGE_MIMES: [&str; 5] = [
     "image/avif",
 ];
 
-/// Validate an image `Content-Type` against the raster allowlist. Returns the
-/// normalized mime (parameters like `; charset=…` stripped, lowercased). Applied
-/// to user uploads and to images fetched from OFF alike, so hand-uploaded and
-/// crowd-sourced images share one rule.
+/// The normalised mime if it is on the raster allowlist; for uploads and OFF
+/// alike.
 pub fn accept_upload_mime(content_type: &str) -> Option<String> {
     let mime = content_type
         .split(';')
@@ -80,16 +67,11 @@ pub fn accept_upload_mime(content_type: &str) -> Option<String> {
     ALLOWED_IMAGE_MIMES.contains(&mime.as_str()).then_some(mime)
 }
 
-/// Identify the actual image type from its magic bytes — the declared
-/// Content-Type is caller-supplied and can lie. The sniffed type (a member of
-/// the raster allowlist by construction) is what gets STORED and served back,
-/// so mislabelled bytes can't ride in under an innocent-looking mime. `None` =
-/// not one of ours; reject.
+/// The type from the magic bytes, which is what gets stored: the declared one can
+/// lie. `None`: refuse.
 pub fn sniff_image_mime(bytes: &[u8]) -> Option<&'static str> {
-    // Deliberately narrower than the attachment allowlist. A product image is
-    // rendered inline in every client: a PDF is not an image at all, and HEIC
-    // is not broadly renderable in browsers. Sharing the sniffer must not merge
-    // the two allowlists, so this match is exhaustive on purpose.
+    // Narrower than the attachment allowlist on purpose: a product image renders
+    // inline everywhere, and PDF and HEIC do not.
     let media = media::sniff(bytes)?;
     match media {
         Media::Jpeg | Media::Png | Media::Gif | Media::Webp | Media::Avif => Some(media.mime()),
@@ -97,10 +79,8 @@ pub fn sniff_image_mime(bytes: &[u8]) -> Option<&'static str> {
     }
 }
 
-/// Look up a barcode. `Ok(None)` = OFF has no such product.
-///
-/// Splicing the barcode into the URL needs no guard here: a [`Barcode`] is
-/// digits by construction, so it cannot carry a path segment or query parameter.
+/// `Ok(None)`: OFF has no such product. A [`Barcode`] is digits, so it splices
+/// safely.
 pub async fn fetch(http: &reqwest::Client, barcode: &Barcode) -> Result<Option<OffProduct>> {
     let url = format!(
         "https://world.openfoodfacts.org/api/v2/product/{barcode}.json\
@@ -117,7 +97,6 @@ pub async fn fetch(http: &reqwest::Client, barcode: &Barcode) -> Result<Option<O
     if !res.status().is_success() {
         return Ok(None);
     }
-    // Read the body as text so we can keep it verbatim, then parse from it.
     let body = res.text().await.context("reading OFF response")?;
     let env: Envelope = serde_json::from_str(&body).context("parsing OFF response")?;
     if env.status != 1 {
@@ -136,12 +115,9 @@ pub async fn fetch(http: &reqwest::Client, barcode: &Barcode) -> Result<Option<O
     }))
 }
 
-/// Whether `url` is https and its host equals, or is a subdomain of, one of the
-/// allowed suffixes. This is the SSRF guard: a poisoned `image_url` (crowd-sourced
-/// from OFF, or client-supplied on import) must not be able to point us at an
-/// internal service. The leading-dot subdomain check rejects look-alikes like
-/// `openfoodfacts.org.evil.com`, and `url::Url` parsing defeats the userinfo
-/// trick (`host.tld@evil.com` parses with host `evil.com`).
+/// The SSRF guard: https, and a host equal to or under an allowed suffix. The
+/// leading dot rejects `openfoodfacts.org.evil.com`; `url::Url` defeats
+/// `host.tld@evil.com`.
 pub fn host_allowed(url: &str, suffixes: &[&str]) -> bool {
     let Ok(parsed) = url::Url::parse(url) else {
         return false;
@@ -157,18 +133,14 @@ pub fn host_allowed(url: &str, suffixes: &[&str]) -> bool {
     }
 }
 
-/// Download a product image from any host on `allowed` — https only, no redirects,
-/// bounded time and size, and the response must actually be an image. `Ok(None)`
-/// if the URL is disallowed or the image can't be fetched (the caller then just
-/// caches no image and the UI falls back to an icon). Shared by the OFF proxy and
-/// the generic product import, so every source's images pass the same guards.
+/// Download an image from an allowed host: https, no redirects, bounded time and
+/// size, and really an image. `Ok(None)` if disallowed or unfetchable.
 pub async fn fetch_image_from(url: &str, allowed: &[&str]) -> Result<Option<(Vec<u8>, String)>> {
     if !host_allowed(url, allowed) {
         tracing::warn!(%url, ?allowed, "refusing product image: host not in the allowlist or not https");
         return Ok(None);
     }
-    // A dedicated no-redirect client: even an allowlisted URL must not be able to
-    // bounce us (via 3xx) to an internal host. Timeout bounds a hung server.
+    // No redirects, or an allowed URL could bounce us to an internal host.
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(std::time::Duration::from_secs(10))
@@ -197,7 +169,7 @@ pub async fn fetch_image_from(url: &str, allowed: &[&str]) -> Result<Option<(Vec
         tracing::warn!(%url, "refusing product image: declared size over cap");
         return Ok(None);
     }
-    // Stream with a hard cap, in case Content-Length is absent or lying.
+    // Capped while streaming: Content-Length may be absent or lie.
     let mut bytes = Vec::new();
     while let Some(chunk) = res.chunk().await? {
         if bytes.len() + chunk.len() > MAX_IMAGE_BYTES {
@@ -206,8 +178,7 @@ pub async fn fetch_image_from(url: &str, allowed: &[&str]) -> Result<Option<(Vec
         }
         bytes.extend_from_slice(&chunk);
     }
-    // The bytes, not the header, decide what we store: sniff the magic bytes
-    // and refuse anything that isn't genuinely one of our raster types.
+    // The bytes, not the header, decide.
     let Some(sniffed) = sniff_image_mime(&bytes) else {
         tracing::warn!(%url, %mime, "refusing product image: bytes are not a known raster type");
         return Ok(None);
@@ -215,8 +186,6 @@ pub async fn fetch_image_from(url: &str, allowed: &[&str]) -> Result<Option<(Vec
     Ok(Some((bytes, sniffed.to_string())))
 }
 
-/// The OFF image proxy: `fetch_image_from` locked to the openfoodfacts.org
-/// domain (OFF's crowd-sourced `image_front_url`).
 pub async fn fetch_image(url: &str) -> Result<Option<(Vec<u8>, String)>> {
     fetch_image_from(url, &["openfoodfacts.org"]).await
 }

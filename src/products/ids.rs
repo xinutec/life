@@ -1,10 +1,6 @@
-//! The product domain's identifiers as types, each validated once in `FromStr`,
-//! so [`Source::listing_url`](super::source::Source::listing_url) and the Open
-//! Food Facts client may splice them into URLs. The frontend's aliases are
-//! documentation only.
-//!
-//! `shopping_items.barcode` is deliberately not a [`Barcode`]: it is a hint on a
-//! synced row, and failing validation would strand an offline edit.
+//! Product identifiers, each validated once in `FromStr`, so they splice safely
+//! into URLs. `shopping_items.barcode` is not a [`Barcode`]: failing validation
+//! would strand an offline edit.
 
 use std::fmt;
 use std::str::FromStr;
@@ -12,18 +8,14 @@ use std::str::FromStr;
 use serde::{Deserialize, Deserializer, Serialize};
 use ts_rs::TS;
 
-/// A product's EAN/UPC: 1 to 14 digits, in one canonical padding.
-///
-/// GS1 compares GTINs as 14 digits, so `065928546009` and `0065928546009` are one
-/// product. Stored as Open Food Facts normalises: zeros off, then padded to 8 or
-/// 13, 14 kept — the printed form, with equal codes equal strings. Digits only is
-/// what makes it safe to splice into the OFF URL.
+/// An EAN/UPC in one canonical padding, as Open Food Facts stores it: zeros off,
+/// then padded to 8 or 13, 14 kept. GS1 compares GTINs as 14 digits, so
+/// `065928546009` and `0065928546009` are one product.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS)]
 #[ts(as = "String")]
 pub struct Barcode(String);
 
 impl Barcode {
-    /// The value to store, send, or splice.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -32,8 +24,7 @@ impl Barcode {
 impl FromStr for Barcode {
     type Err = String;
 
-    /// Trims first: a leading space is a transport artefact, not a different
-    /// barcode. All zeros is a shop's "none" (Asda sends `0`), not a product.
+    /// All zeros is a shop's "none" (Asda sends `0`).
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.trim();
         if s.is_empty() || s.len() > 14 || !s.bytes().all(|b| b.is_ascii_digit()) {
@@ -50,35 +41,27 @@ impl FromStr for Barcode {
     }
 }
 
-/// A scanned or typed barcode kept as a hint (an item's, a Buy row's): the
-/// canonical [`Barcode`] when it is one, else as typed, so an odd code is kept
-/// rather than refused.
+/// A scanned barcode kept as a hint: canonical when it is one, else as typed.
 pub fn barcode_hint(s: &str) -> String {
     s.parse::<Barcode>()
         .map_or_else(|_| s.trim().to_string(), |b| b.0)
 }
 
-/// A barcode is also a well-formed external id — digits are inside
-/// `[A-Za-z0-9_-]` and 14 is inside 64 — which is what lets Open Food Facts key
-/// its listing by the barcode itself. Infallible, and it stays infallible only
-/// as long as both shapes above agree; widening [`Barcode`] means revisiting it.
+/// Open Food Facts keys its listing by the barcode. Infallible only while
+/// [`Barcode`] stays inside the external id's shape.
 impl From<&Barcode> for ExternalId {
     fn from(b: &Barcode) -> Self {
         ExternalId(b.0.clone())
     }
 }
 
-/// A source-scoped listing id: 1 to 64 characters of `[A-Za-z0-9_-]`, which is
-/// what lets `listing_url` format it into a URL directly.
-///
-/// Asda's CIN, Waitrose's lineNumber, OFF's barcode. Unique only within its
-/// [`Source`](super::source::Source): a listing's identity is the pair.
+/// 1 to 64 of `[A-Za-z0-9_-]`, unique within its source: Asda's CIN, Waitrose's
+/// lineNumber, OFF's barcode.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS)]
 #[ts(as = "String")]
 pub struct ExternalId(String);
 
 impl ExternalId {
-    /// The value to store, send, or splice.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -101,10 +84,9 @@ impl FromStr for ExternalId {
     }
 }
 
-/// An allergen as Open Food Facts names it: "gluten", "sesame-seeds". Parsing
-/// is the only way to make one, and maps any source's name to OFF's id, so
-/// "Wheat" and "en:gluten" are one value. A name OFF doesn't list is kept,
-/// lowercased: dropping it would read as "free from".
+/// An allergen by its Open Food Facts id ("gluten"). Only parsing makes one, and
+/// it maps any source's name, so "Wheat" and "en:gluten" are one value. A name
+/// OFF does not list is kept: dropping it would read as "free from".
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS)]
 #[ts(as = "String")]
 pub struct AllergenId(String);
@@ -119,7 +101,6 @@ impl FromStr for AllergenId {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // OFF's tags carry a language: "en:milk".
         let name = s.split_once(':').map_or(s, |(_, rest)| rest);
         let name = name.trim().to_lowercase();
         if name.is_empty() {
@@ -131,9 +112,7 @@ impl FromStr for AllergenId {
     }
 }
 
-/// Deserialising validates, so a malformed id is refused by the request body's
-/// own decoding — before a handler runs, and without the handler restating the
-/// rule.
+/// Deserialising validates, so a malformed id never reaches a handler.
 macro_rules! validating_deserialize {
     ($t:ty) => {
         impl<'de> Deserialize<'de> for $t {
@@ -150,8 +129,6 @@ validating_deserialize!(Barcode);
 validating_deserialize!(ExternalId);
 validating_deserialize!(AllergenId);
 
-/// Database mapping ([`varchar_sql!`](crate::varchar_sql)), `Display`, and
-/// comparison with literals for the string ids.
 macro_rules! string_id_sql {
     ($t:ty) => {
         $crate::varchar_sql!($t);
@@ -162,9 +139,7 @@ macro_rules! string_id_sql {
             }
         }
 
-        // Comparing against a literal reads naturally without letting a bare
-        // string stand in for one: `id == "271105"` works, `f(some_string)`
-        // still doesn't.
+        // `id == "271105"` works; a bare string still cannot stand in for an id.
         impl PartialEq<str> for $t {
             fn eq(&self, other: &str) -> bool {
                 self.as_str() == other
@@ -184,13 +159,11 @@ string_id_sql!(ExternalId);
 string_id_sql!(AllergenId);
 
 crate::row_id! {
-    /// `products.id` — the canonical product every listing, price, fact and
-    /// picture hangs off.
+    /// `products.id`.
     ProductId
 }
 
 crate::row_id! {
-    /// `product_listings.id` — one source's line for a product, and the FK a
-    /// price observation is recorded against.
+    /// `product_listings.id`.
     ListingId
 }

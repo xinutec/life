@@ -1,7 +1,4 @@
-//! Nextcloud Login Flow v2 → a non-expiring app password for CalDAV, which the
-//! identity OAuth2 token can't reach. The user grants access at the `login` URL
-//! and we poll until NC returns `{ server, loginName, appPassword }`.
-//!
+//! Login Flow v2: a non-expiring app password for CalDAV.
 //! <https://docs.nextcloud.com/server/latest/developer_manual/client_apis/LoginFlow/>
 
 use anyhow::{Context, Result, anyhow};
@@ -9,11 +6,8 @@ use base64::Engine;
 use serde::Deserialize;
 
 pub struct LoginFlowInit {
-    /// URL the user opens to grant access.
     pub login_url: String,
-    /// Endpoint to poll for completion.
     pub poll_endpoint: String,
-    /// Token identifying this flow at the poll endpoint.
     pub poll_token: String,
 }
 
@@ -28,7 +22,6 @@ struct Poll {
     endpoint: String,
 }
 
-/// Step 1: `POST {base}/index.php/login/v2`.
 pub async fn initiate(http: &reqwest::Client, base_url: &str) -> Result<LoginFlowInit> {
     let res = http
         .post(format!("{base_url}/index.php/login/v2"))
@@ -58,8 +51,7 @@ struct PollResponse {
     app_password: String,
 }
 
-/// Step 3, one iteration. `Ok(None)` = not granted yet (NC returns 404);
-/// `Ok(Some(_))` = granted. The caller drives the retry loop + deadline.
+/// One poll: `Ok(None)` until granted (Nextcloud answers 404).
 pub async fn poll_once(
     http: &reqwest::Client,
     init: &LoginFlowInit,
@@ -82,7 +74,6 @@ pub async fn poll_once(
     }
 }
 
-/// `Basic base64(loginName:appPassword)` for CalDAV requests.
 pub fn basic_auth_header(login_name: &str, app_password: &str) -> String {
     let encoded =
         base64::engine::general_purpose::STANDARD.encode(format!("{login_name}:{app_password}"));

@@ -3,17 +3,14 @@ import type { RowPrice } from "./RowPrice";
 import type { Source } from "./Source";
 
 /**
- * Where one row is known to be sold. `sources` is empty when we know nothing —
- * which is NOT the same as "nowhere sells it", and the UI has to say so.
+ * Empty `sources` means unknown, not "nowhere".
  */
 export type RowCoverage = { key: string, 
 /**
- * The shops, sorted (see [`Source`]'s alphabetical ordering) so the display
- * order is stable across reloads rather than following row order in the DB.
+ * Sorted, so the display is stable.
  */
 sources: Array<Source>, 
 /**
- * Each shop's latest shelf price for the row's product, sorted by shop.
- * Only a linked product can carry one: a sighting has no price.
+ * Only a linked product has prices; a sighting has none.
  */
 prices: Array<RowPrice>, };

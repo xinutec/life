@@ -1,9 +1,6 @@
-//! CalDAV: the one way life writes into Nextcloud, as an ordinary calendar
-//! client (docs/design/overview.md §2b), with the Login Flow v2 app password;
-//! the identity OAuth2 token cannot reach these endpoints.
-//!
-//! A PROPFIND precedes each PUT: `personal` may be renamed or deleted, and
-//! read-only subscriptions (the bins feed) look writable until written to.
+//! CalDAV: how life writes into Nextcloud, with the Login Flow v2 app password
+//! (the login OAuth token cannot reach DAV). A PROPFIND precedes each PUT: a
+//! calendar may be renamed or gone, and a read-only subscription looks writable.
 
 use anyhow::{Context, Result, anyhow};
 use quick_xml::events::Event as XmlEvent;
@@ -14,9 +11,8 @@ use reqwest::header::{CONTENT_TYPE, IF_NONE_MATCH};
 use crate::nextcloud::credentials::Credentials;
 use crate::nextcloud::login_flow::basic_auth_header;
 
-/// A failure talking to Nextcloud, split only where the caller must act
-/// differently: a rejected password is the user's to fix by re-linking, and
-/// everything else is ours or the server's.
+/// Split only where the caller acts differently: a rejected password needs a
+/// re-link.
 #[derive(Debug, thiserror::Error)]
 pub enum DavError {
     #[error("nextcloud rejected the app password")]
@@ -25,17 +21,14 @@ pub enum DavError {
     Other(#[from] anyhow::Error),
 }
 
-/// One calendar collection on the server.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CalendarRef {
-    /// Server path, as the server spelled it — always ending in `/`.
+    /// As the server spelled it, ending in `/`.
     pub href: String,
-    /// What the user calls it. Worth carrying because we tell them where the
-    /// trip went: "added to Personal" is checkable, "added" is not.
+    /// So the reply can say where the trip went.
     pub name: String,
 }
 
-/// An authenticated CalDAV conversation with one account.
 pub struct Dav<'a> {
     http: &'a reqwest::Client,
     base: &'a str,
@@ -63,7 +56,6 @@ impl<'a> Dav<'a> {
         }
     }
 
-    /// The calendar to write a shop trip to.
     pub async fn writable_calendar(&self) -> Result<CalendarRef, DavError> {
         let home = calendar_home(self.base, &self.login_name)
             .map_err(|e| DavError::Other(e.context("building the Nextcloud URL")))?;
@@ -100,12 +92,8 @@ impl<'a> Dav<'a> {
             })
     }
 
-    /// Create one event. Returns the path it was created at.
-    ///
-    /// `If-None-Match: *` makes this create-only. The UID is ours and freshly
-    /// minted, so a collision means something is wrong with that assumption —
-    /// and the alternative, a plain `PUT`, would quietly overwrite whatever
-    /// event already lived at that path.
+    /// Create-only (`If-None-Match: *`): a plain PUT would overwrite whatever
+    /// lived at that path.
     pub async fn put_event(
         &self,
         calendar: &CalendarRef,
@@ -140,7 +128,6 @@ impl<'a> Dav<'a> {
         }
     }
 
-    /// Resolve a server path against the configured Nextcloud origin.
     fn url(&self, path: &str) -> Result<url::Url, DavError> {
         url::Url::parse(self.base)
             .and_then(|b| b.join(path))
@@ -152,11 +139,8 @@ fn propfind() -> Method {
     Method::from_bytes(b"PROPFIND").expect("PROPFIND is a valid method token")
 }
 
-/// The calendar home for one account: `<base>/remote.php/dav/calendars/<login>/`.
-///
-/// The login is pushed as a path segment so it is percent-encoded (`@`, spaces,
-/// and `/` as `%2F`). ⚠ Any path on `base` is replaced, so a Nextcloud under a
-/// sub-path is not supported.
+/// `<base>/remote.php/dav/calendars/<login>/`, the login percent-encoded. Any path
+/// on `base` is replaced: a Nextcloud under a sub-path is unsupported.
 pub fn calendar_home(base: &str, login: &str) -> Result<url::Url> {
     let mut url = url::Url::parse(base).context("parsing the Nextcloud base URL")?;
     url.set_path("");
@@ -167,27 +151,20 @@ pub fn calendar_home(base: &str, login: &str) -> Result<url::Url> {
     Ok(url)
 }
 
-/// What one `<response>` in the multistatus said about itself.
 #[derive(Default)]
 struct Collection {
     href: Option<String>,
     name: Option<String>,
     is_calendar: bool,
     is_subscription: bool,
-    /// `None` when the server listed no component set at all, which is not the
-    /// same as listing one without `VEVENT`.
+    /// `None` when no set was listed, unlike one listed without `VEVENT`.
     components: Option<Vec<String>>,
-    /// `None` when no privilege set came back — unknown, so not held against it.
+    /// `None` when unknown, which is not held against it.
     privileges: Option<Vec<String>>,
 }
 
 impl Collection {
-    /// Whether a shop trip may be written here.
-    ///
-    /// Every test is phrased so that *silence permits*: a server that declines
-    /// to answer one of these questions should not lose you the calendar it
-    /// otherwise agreed is a writable calendar. The `PUT` is the real test, and
-    /// it reports its own failure clearly.
+    /// Silence permits: the PUT is the real test, and reports its own failure.
     fn accepts_events(&self) -> bool {
         if !self.is_calendar || self.is_subscription {
             return false;
@@ -204,33 +181,21 @@ impl Collection {
     }
 }
 
-/// Which calendar in the server's `D:multistatus` a shop trip goes in, or
-/// `None` if the account has nowhere to put one.
-///
-/// The whole judgement of this module — what counts as a writable calendar, and
-/// which one to prefer — reachable from a string, so it can be tested against a
-/// real server's answer without a server.
+/// Which calendar a trip goes in, or `None`. The module's whole judgement,
+/// testable against a captured server answer.
 pub fn writable_from(multistatus: &str) -> Result<Option<CalendarRef>> {
     Ok(choose(calendars(multistatus)?))
 }
 
-/// Every collection in a `D:multistatus` that will take a `VEVENT`.
-///
-/// Read by local element name throughout: the namespace prefixes (`d:`, `DAV:`,
-/// `cal:`, `x1:`) are the server's to choose and Nextcloud has changed them
-/// before, while the local names are fixed by RFC 4918 and RFC 4791.
+/// By local element name: prefixes are the server's to choose and have changed;
+/// the local names are fixed by RFC 4918 and 4791.
 fn calendars(xml: &str) -> Result<Vec<CalendarRef>> {
     let reader = &mut Reader::from_str(xml);
 
     let mut out = Vec::new();
     let mut current: Option<Collection> = None;
-    // Which element's text we are collecting, and which list-valued property we
-    // are inside. Both are shallow — this document has no recursion in it.
-    //
-    // Text is ACCUMULATED rather than taken per event, and trimmed only when the
-    // element closes: an entity arrives as its own event, so "Home &amp; away"
-    // reaches us as three pieces, and a reader that took the last one would call
-    // that calendar "away".
+    // Text accumulates until the element closes: "Home &amp; away" arrives in
+    // three pieces.
     let mut text_into: Option<&'static str> = None;
     let mut text = String::new();
     let mut inside: Option<&'static str> = None;
@@ -241,11 +206,8 @@ fn calendars(xml: &str) -> Result<Vec<CalendarRef>> {
             .context("reading Nextcloud's calendar list")?
         {
             XmlEvent::Eof => break,
-            // Only a Start opens a container. A self-closing one — which is how
-            // Nextcloud spells a property it has no value for, in the 404
-            // `<propstat>` — closes immediately and emits no End, so treating it
-            // as an opening would leave `inside` stuck and read every element
-            // after it as that container's contents.
+            // A self-closing container (Nextcloud's empty property) emits no End,
+            // so it must not open one.
             XmlEvent::Start(e) => {
                 let name = local_name(e.local_name().as_ref());
                 match name.as_str() {
@@ -274,9 +236,7 @@ fn calendars(xml: &str) -> Result<Vec<CalendarRef>> {
                         .context("decoding a calendar property")?,
                 );
             }
-            // `&amp;` and friends arrive as their own event. An unresolvable one
-            // is passed through as written rather than dropped — a name is the
-            // user's, and mangling it is worse than showing the escape.
+            // An unresolvable entity is kept as written: the name is the user's.
             XmlEvent::GeneralRef(r) if text_into.is_some() => {
                 let name = r.decode().context("decoding a calendar property")?;
                 match quick_xml::escape::resolve_predefined_entity(&name) {
@@ -297,9 +257,7 @@ fn calendars(xml: &str) -> Result<Vec<CalendarRef>> {
                         text.clear();
                         if let (Some(c), false) = (current.as_mut(), value.is_empty()) {
                             match field {
-                                // The first href in a response is the
-                                // collection's own; later ones (if a server
-                                // volunteers any) are not.
+                                // The first href is the collection's own.
                                 Some("href") if c.href.is_none() => c.href = Some(value),
                                 Some("displayname") => c.name = Some(value),
                                 _ => {}
@@ -330,12 +288,7 @@ fn calendars(xml: &str) -> Result<Vec<CalendarRef>> {
     Ok(out)
 }
 
-/// Record what one element inside a container says about the collection.
-///
-/// Each of these is a child of a property rather than the property itself —
-/// `<cal:calendar/>` inside `resourcetype`, `<cal:comp name="VEVENT"/>` inside
-/// the component set, `<d:write-content/>` inside a privilege — so what it means
-/// depends entirely on which container we are in.
+/// Each is a child of a property, so its meaning depends on the container.
 fn mark(
     element: &quick_xml::events::BytesStart<'_>,
     name: &str,
@@ -345,9 +298,7 @@ fn mark(
     let Some(c) = collection else { return };
     match (inside, name) {
         (Some("resourcetype"), "calendar") => c.is_calendar = true,
-        // Nextcloud marks a subscribed feed with `<cs:subscribed/>` *alongside*
-        // `<cal:calendar/>`, so this has to be looked for even though the
-        // collection has already said it is a calendar.
+        // A subscribed feed carries `<cs:subscribed/>` beside `<cal:calendar/>`.
         (Some("resourcetype"), "subscribed") => c.is_subscription = true,
         (Some("components"), "comp") => {
             let value = element
@@ -363,8 +314,6 @@ fn mark(
                 c.components.get_or_insert_with(Vec::new).push(value);
             }
         }
-        // `<d:privilege><d:write-content/></d:privilege>` — the privilege is the
-        // child, so the wrapper itself carries no information.
         (Some("privileges"), "privilege") => {}
         (Some("privileges"), granted) => {
             c.privileges
@@ -375,9 +324,8 @@ fn mark(
     }
 }
 
-/// Which calendar a trip goes in: `personal` (every NC account has one), else
-/// the first by name, arbitrary but stable. The reply names the calendar used,
-/// so a wrong pick is visible.
+/// `personal` (every account has one), else the first by name. The reply names
+/// it, so a wrong pick shows.
 fn choose(mut found: Vec<CalendarRef>) -> Option<CalendarRef> {
     found.sort_by_key(|c| c.name.to_lowercase());
     let personal = found.iter().position(|c| slug_of(&c.href) == "personal");
@@ -387,7 +335,6 @@ fn choose(mut found: Vec<CalendarRef>) -> Option<CalendarRef> {
     }
 }
 
-/// The last non-empty path segment — a collection's own name in the URL.
 fn slug_of(href: &str) -> &str {
     href.trim_end_matches('/').rsplit('/').next().unwrap_or("")
 }
@@ -399,8 +346,6 @@ fn ensure_trailing_slash(mut href: String) -> String {
     href
 }
 
-/// Element names arrive as bytes and are ASCII by the XML spec's own rules for
-/// these vocabularies; anything else is not a name we match on anyway.
 fn local_name(raw: &[u8]) -> String {
     String::from_utf8_lossy(raw).to_lowercase()
 }

@@ -2,7 +2,4 @@
 import type { AllergenId } from "./AllergenId";
 import type { Presence } from "./Presence";
 
-/**
- * One allergen and how it's present in a product.
- */
 export type Allergen = { allergen: AllergenId, presence: Presence, };

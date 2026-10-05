@@ -1,7 +1,5 @@
-//! Product facts (nutrition, ingredients, allergens, dietary flags), attached
-//! to the canonical `products` row. `RawFacts::parse` reads Open Food Facts JSON
-//! (`brandbank` reads Asda's); `off` fetches, `repo` persists. The UK "big 8"
-//! panel is stored one field each; OFF's long tail goes in `extra`.
+//! Product facts. `RawFacts::parse` reads Open Food Facts (`brandbank` reads
+//! Asda's); the UK panel is stored a field each, OFF's long tail in `extra`.
 
 use std::collections::BTreeMap;
 
@@ -14,7 +12,6 @@ use super::source::Source;
 use crate::str_enum;
 
 str_enum! {
-    /// What a nutrition panel's figures are per.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[ts(export)]
     pub enum Basis: "nutrition basis" {
@@ -27,13 +24,12 @@ str_enum! {
     }
 }
 
-/// The nutrition panel, per `basis`. Every figure is optional — a source declares
-/// whatever it has. `None` throughout + empty `extra` means "no panel".
+/// Every figure optional; all `None` with an empty `extra` is no panel.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct Nutrition {
     pub basis: Basis,
-    /// The manufacturer's serving description, verbatim (e.g. "40g").
+    /// Verbatim, e.g. "40g".
     pub serving_size: Option<String>,
     pub energy_kj: Option<f64>,
     pub energy_kcal: Option<f64>,
@@ -44,29 +40,22 @@ pub struct Nutrition {
     pub fibre_g: Option<f64>,
     pub protein_g: Option<f64>,
     pub salt_g: Option<f64>,
-    /// Other per-`basis` nutriments (sodium, vitamins, …), keyed by OFF's name
-    /// with the `_100g` suffix stripped. The promoted big-8 keys are excluded.
+    /// Other nutriments by OFF's name, `_100g` stripped; never the promoted ones.
     #[ts(type = "Record<string, number>")]
     pub extra: BTreeMap<String, f64>,
 }
 
 str_enum! {
-    /// How an allergen is present — the `product_allergens.presence` ENUM.
-    ///
-    /// **Ordered by severity** (`MayContain` < `Contains`), which is what makes
-    /// `merge_allergens` a `max` rather than a hand-written comparison: "the more
-    /// severe claim wins" becomes a property of the type.
+    /// Ordered by severity, so "the more severe claim wins" is a `max`.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, TS)]
     #[serde(rename_all = "snake_case")]
     #[ts(export)]
     pub enum Presence: "allergen presence" {
-        /// A trace: possible cross-contamination, not a declared ingredient.
+    /// Possible cross-contamination.
         MayContain => "may_contain",
-        /// A declared ingredient.
         Contains => "contains",
     }
 }
-/// One allergen and how it's present in a product.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct Allergen {
@@ -75,10 +64,8 @@ pub struct Allergen {
 }
 
 str_enum! {
-    /// What a source asserts about a dietary flag. Tri-state on purpose: `Maybe` is
-    /// how a genuine disagreement (or a soft analysis) is reported, because
-    /// over-claiming is the harmful direction — see `merge_dietary`. Matches the
-    /// `product_dietary_flags.value` column's `ENUM('yes','no','maybe')` (0027).
+    /// Tri-state: `Maybe` reports a disagreement, as over-claiming is the
+    /// harmful direction (see `merge_dietary`).
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
     #[serde(rename_all = "snake_case")]
     #[ts(export)]
@@ -89,12 +76,8 @@ str_enum! {
     }
 }
 str_enum! {
-    /// A dietary or free-from claim a source can make about a product. Every
-    /// source's own vocabulary (OFF's tags, Asda's and Brandbank's booleans) maps
-    /// onto this one set, so their claims merge rather than sit side by side.
-    ///
-    /// **Variants are in slug order, and that is load-bearing**: the derived `Ord`
-    /// sorts merged flags, and the API has always listed them by slug.
+    /// A dietary or free-from claim; every source's vocabulary maps onto it. In
+    /// slug order, which the derived `Ord` uses to sort.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
     #[serde(rename_all = "snake_case")]
     #[ts(export)]
@@ -115,7 +98,6 @@ str_enum! {
     }
 }
 
-/// One dietary flag and its assertion.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct DietaryFlag {
@@ -123,8 +105,7 @@ pub struct DietaryFlag {
     pub value: Claim,
 }
 
-/// Everything we know about a product beyond its identity — the `facts` part
-/// of the product detail (GET /api/products/id/{id}).
+/// Everything known about a product beyond its identity.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct ProductFacts {
@@ -134,10 +115,7 @@ pub struct ProductFacts {
     pub dietary: Vec<DietaryFlag>,
 }
 
-// --- OFF wire shapes (only the fact fields; flattened into off::Raw) ---
-
-/// The fact-bearing fields of an OFF product. Flattened into `off::Raw`, so the
-/// single OFF fetch yields both the basic metadata and these.
+/// OFF's fact fields, flattened into `off::Raw` so one fetch yields both.
 #[derive(Debug, Default, Deserialize)]
 pub struct RawFacts {
     #[serde(default)]
@@ -156,9 +134,8 @@ pub struct RawFacts {
     labels_tags: Vec<String>,
 }
 
-/// The OFF nutriment keys we promote to columns (with the `_100g` suffix), so the
-/// `extra` tail excludes them — no duplication. `energy` (the unit-ambiguous
-/// combined key) is dropped too; we keep only the explicit kJ/kcal splits.
+/// Promoted to columns, so `extra` leaves them out. The unit-ambiguous `energy`
+/// is dropped; the kJ and kcal keys are kept.
 const PROMOTED: &[&str] = &[
     "energy",
     "energy-kj",
@@ -172,8 +149,7 @@ const PROMOTED: &[&str] = &[
     "salt",
 ];
 
-/// The label tags we recognise as dietary claims, mapped to our flag slug. A
-/// label is a manufacturer assertion → always "yes".
+/// Manufacturer labels: always "yes".
 const LABEL_FLAGS: &[(&str, Diet)] = &[
     ("gluten-free", Diet::GlutenFree),
     ("lactose-free", Diet::LactoseFree),
@@ -187,10 +163,7 @@ const LABEL_FLAGS: &[(&str, Diet)] = &[
 ];
 
 impl Nutrition {
-    /// A panel with no numbers and no tail is no panel.
-    ///
-    /// Shared by both fact parsers: it decides whether a source HAS a panel, and
-    /// `merge_nutrition` picks one source's panel whole.
+    /// No numbers and no tail is no panel.
     pub fn is_empty(&self) -> bool {
         self.extra.is_empty()
             && [
@@ -209,13 +182,9 @@ impl Nutrition {
     }
 }
 
-/// Reconcile each source's claims about each dietary flag into one tri-state:
-/// agreement wins; a firm claim beats a soft one (a retailer's own "vegan" tag
-/// settles OFF's "maybe"); **'yes' against 'no' is 'maybe'**, because telling
-/// someone a thing is vegan when a source says otherwise is the harmful error.
-///
-/// Claims come in any order, several per flag; the result has one per flag,
-/// sorted.
+/// One tri-state per flag: agreement wins, a firm claim beats a soft one, and
+/// 'yes' against 'no' is 'maybe', as calling a thing vegan against a source is
+/// the harmful error.
 pub fn merge_dietary(claims: Vec<DietaryFlag>) -> Vec<DietaryFlag> {
     let mut by_flag: BTreeMap<Diet, Vec<Claim>> = BTreeMap::new();
     for c in claims {
@@ -237,9 +206,7 @@ pub fn merge_dietary(claims: Vec<DietaryFlag>) -> Vec<DietaryFlag> {
         .collect()
 }
 
-/// Pick one source's nutrition panel whole, by `products::source` precedence
-/// (unlisted sources last); blending would invent numbers no source reported.
-/// Disagreements are the reconciliation UI's job.
+/// One source's panel whole, by precedence: blending would invent numbers.
 pub fn merge_nutrition(panels: Vec<(Source, Nutrition)>) -> Option<Nutrition> {
     panels
         .into_iter()
@@ -247,9 +214,7 @@ pub fn merge_nutrition(panels: Vec<(Source, Nutrition)>) -> Option<Nutrition> {
         .map(|(_, n)| n)
 }
 
-/// Merge several sources' ingredient texts into the one to show: the
-/// highest-precedence source's, whole (same reasoning as `merge_nutrition` — you
-/// don't splice two ingredient lists together). Pure.
+/// One source's text whole, by precedence.
 pub fn merge_ingredients(texts: Vec<(Source, String)>) -> Option<String> {
     texts
         .into_iter()
@@ -258,17 +223,16 @@ pub fn merge_ingredients(texts: Vec<(Source, String)>) -> Option<String> {
         .map(|(_, t)| t)
 }
 
-/// Merge sources' allergen claims as a UNION: silence is not "free from".
+/// A union: silence is not "free from".
 pub fn merge_allergens(claims: Vec<(Source, Allergen)>) -> Vec<Allergen> {
     allergen_list(claims.into_iter().map(|(_, a)| (a.allergen, a.presence)))
 }
 
-/// One entry per allergen, sorted, `contains` beating `may_contain`: two names
-/// can mean one allergen ("Wheat" and "Barley" are both gluten).
+/// One entry per allergen, `contains` beating `may_contain`: "Wheat" and
+/// "Barley" are both gluten.
 pub fn allergen_list(claims: impl IntoIterator<Item = (AllergenId, Presence)>) -> Vec<Allergen> {
     let mut by_id: BTreeMap<AllergenId, Presence> = BTreeMap::new();
     for (id, presence) in claims {
-        // `Presence` is ordered by severity, so "the more severe wins" is a max.
         by_id
             .entry(id)
             .and_modify(|p| *p = (*p).max(presence))
@@ -280,17 +244,12 @@ pub fn allergen_list(claims: impl IntoIterator<Item = (AllergenId, Presence)>) -
         .collect()
 }
 
-/// Rank of a fact source (lower wins), reusing the canonical-name precedence so
-/// facts follow the same "retailer over crowd" order. An unlisted source sorts
-/// last, so it only ever fills a gap.
+/// Retailer over crowd, as for names; an unlisted source only fills a gap.
 pub fn fact_rank(source: Source) -> usize {
     source.name_rank().unwrap_or(usize::MAX)
 }
 
-/// A one-line summary of a nutrition panel — the headline figures, per basis —
-/// used as the display value when the panel is a reconcile candidate (you don't
-/// diff a whole table in a radio row). Whatever figures a source declares; energy
-/// leads, then the macros it has.
+/// A panel in one line, for a reconcile candidate.
 pub fn summarize_nutrition(n: &Nutrition) -> String {
     let mut parts = Vec::new();
     if let Some(kcal) = n.energy_kcal {
@@ -316,19 +275,17 @@ pub fn summarize_nutrition(n: &Nutrition) -> String {
     format!("{head} (per {})", n.basis)
 }
 
-/// Format a nutrition figure without a trailing ".0" (so 3.0 → "3", 3.4 → "3.4").
+/// 3.0 → "3", 3.4 → "3.4".
 fn trim_num(v: f64) -> String {
     if v.fract() == 0.0 {
-        // Formatted, not cast: `as i64` would silently truncate a figure too
-        // large for i64, and this only ever produces a display string.
+        // Formatted, not cast: `as i64` would truncate.
         format!("{v:.0}")
     } else {
         format!("{v}")
     }
 }
 
-/// A nutriment value, whether the source sent a number or a numeric string
-/// (OFF and Asda's blob both mix the two). `None` for anything non-numeric.
+/// A number or a numeric string, as OFF and Asda mix both.
 pub(crate) fn as_f64(v: &Value) -> Option<f64> {
     match v {
         Value::Number(n) => n.as_f64(),
@@ -337,14 +294,12 @@ pub(crate) fn as_f64(v: &Value) -> Option<f64> {
     }
 }
 
-/// The part of an OFF tag after its language prefix: "en:milk" → "milk". Tags
-/// without a prefix pass through unchanged.
+/// "en:milk" → "milk".
 fn strip_lang(tag: &str) -> &str {
     tag.split_once(':').map(|(_, rest)| rest).unwrap_or(tag)
 }
 
 impl RawFacts {
-    /// Turn the raw OFF fields into our domain facts. Pure — the unit under test.
     pub fn parse(&self) -> ProductFacts {
         ProductFacts {
             nutrition: self.nutrition(),
@@ -359,15 +314,11 @@ impl RawFacts {
     }
 
     fn nutrition(&self) -> Option<Nutrition> {
-        // OFF suffixes every per-quantity nutriment `_100g` even for liquids (a
-        // historical misnomer — the value is per 100 ml there); `basis` records
-        // which unit it really is for display.
+        // OFF says `_100g` even for liquids; `basis` records which it is.
         let basis = match self.nutrition_data_per.as_deref() {
             Some("100ml") => Basis::Per100ml,
             _ => Basis::Per100g,
         };
-        // The tail: every other per-100 nutriment, suffix stripped, promoted keys
-        // excluded. Deterministic order via BTreeMap.
         let mut extra = BTreeMap::new();
         for (key, value) in &self.nutriments {
             let Some(name) = key.strip_suffix("_100g") else {
@@ -394,12 +345,10 @@ impl RawFacts {
             salt_g: self.num("salt_100g"),
             extra,
         };
-        // A panel with no numbers and no tail is no panel.
         (!n.is_empty()).then_some(n)
     }
 
     fn ingredients(&self) -> Option<String> {
-        // Prefer the English text when OFF has a localised copy.
         non_empty(self.ingredients_text_en.as_deref())
             .or_else(|| non_empty(self.ingredients_text.as_deref()))
     }
@@ -419,15 +368,13 @@ impl RawFacts {
 
     fn dietary(&self) -> Vec<DietaryFlag> {
         let mut flags: BTreeMap<Diet, Claim> = BTreeMap::new();
-        // OFF's ingredient analysis is tri-state (vegan / non-vegan / maybe-vegan;
-        // same for vegetarian; palm oil has its own vocabulary).
+        // OFF's analysis is tri-state.
         for tag in &self.ingredients_analysis_tags {
             if let Some((flag, value)) = analysis_flag(strip_lang(tag)) {
                 flags.insert(flag, value);
             }
         }
-        // A manufacturer label is a firm claim: it asserts "yes" and overrides a
-        // softer analysis guess for the same flag.
+        // A label is a firm claim and overrides the analysis.
         for tag in &self.labels_tags {
             let stripped = strip_lang(tag);
             if let Some((_, flag)) = LABEL_FLAGS.iter().find(|(label, _)| *label == stripped) {
@@ -441,8 +388,7 @@ impl RawFacts {
     }
 }
 
-/// Map one OFF ingredient-analysis tag (prefix already stripped) to a
-/// (flag, value) pair, or `None` when it asserts nothing (e.g. content unknown).
+/// `None` for a tag that asserts nothing.
 fn analysis_flag(tag: &str) -> Option<(Diet, Claim)> {
     Some(match tag {
         "vegan" => (Diet::Vegan, Claim::Yes),

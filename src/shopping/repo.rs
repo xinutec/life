@@ -1,9 +1,4 @@
-//! Persistence for the shopping list.
-//!
-//! Every write is sync-aware (see `crate::sync`): it allocates a global `rev` in
-//! the same transaction, stamps `updated_at`, and *soft*-deletes (sets
-//! `deleted_at`) so deletes propagate to offline clients as tombstones. Reads hide
-//! tombstoned rows.
+//! The Buy list, sync-aware: every write takes a `rev`, and deletes are tombstones.
 
 use anyhow::Result;
 use sqlx::MySqlPool;
@@ -13,7 +8,7 @@ use crate::inventory::repo as inventory_repo;
 use crate::inventory::types::{Item, NewItem};
 use crate::sync::repo::{next_rev, stamp};
 
-/// To-buy items, undone first, then by name. Tombstoned rows are hidden.
+/// Undone first, then by name.
 pub async fn list(pool: &MySqlPool, user_id: &str) -> Result<Vec<ShoppingItem>> {
     let rows: Vec<ShoppingItem> = sqlx::query_as(
         "SELECT id, name, quantity, unit, barcode, category, product_id, done \
@@ -39,7 +34,6 @@ pub async fn get(pool: &MySqlPool, user_id: &str, id: u64) -> Result<Option<Shop
     Ok(row)
 }
 
-/// Soft delete: set the tombstone + a fresh `rev` so the delete syncs.
 pub async fn delete(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
     stamp(pool, |rev| {
         sqlx::query(
@@ -53,9 +47,7 @@ pub async fn delete(pool: &MySqlPool, user_id: &str, id: u64) -> Result<bool> {
     .await
 }
 
-/// Restore a tombstoned row (trash/undo). The ONE deliberate undelete path —
-/// sync pushes can never clear a tombstone. The fresh `rev` propagates the
-/// resurrected row to every device through the normal pull.
+/// The one undelete path; a fresh `rev` carries it to every device.
 pub async fn restore(pool: &MySqlPool, user_id: &str, ulid: &str) -> Result<bool> {
     stamp(pool, |rev| {
         sqlx::query(
@@ -69,13 +61,9 @@ pub async fn restore(pool: &MySqlPool, user_id: &str, ulid: &str) -> Result<bool
     .await
 }
 
-/// Buy a row: take it off the list and put it in the cupboard as an unplaced
-/// item, carrying its name, amount, `category` and `product_id`. `Ok(None)` =
-/// no such row on the list, including one a second tap already bought.
-///
-/// One transaction, the row locked: the tombstone and the item commit together,
-/// so a failure leaves the row to buy rather than neither to buy nor owned, and
-/// a double tap waits for the first and then finds nothing.
+/// Take a row off the list and into the cupboard, in one transaction with the
+/// row locked: a failure leaves it on the list, and a double tap finds nothing.
+/// `Ok(None)`: no such row.
 pub async fn buy(pool: &MySqlPool, user_id: &str, id: u64) -> Result<Option<Item>> {
     let mut tx = pool.begin().await?;
     let row: Option<ShoppingItem> = sqlx::query_as(
@@ -109,14 +97,11 @@ pub async fn buy(pool: &MySqlPool, user_id: &str, id: u64) -> Result<Option<Item
             quantity: s.quantity,
             unit: s.unit,
             expiry: None,
-            // No expiry, so nothing to be precise about.
             expiry_precision: None,
             location_id: None,
             barcode: s.barcode,
             product_id: s.product_id,
-            // A buy-list row's name is a note to self ("cheese"), not a naming
-            // of the thing that comes home. The catalogue outranks it, which is
-            // what `None` asks for.
+            // A list name is a note to self ("cheese"); the catalogue outranks it.
             name_source: None,
         },
     )
