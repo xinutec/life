@@ -4,11 +4,12 @@ mat-list {
 }
 
 // The head gives way and the tail never does — so `…_manual.pdf` stays readable
-// at any width, which a single ellipsis on the whole string cannot do.
-// ⚠ The class is doubled to beat Material's one-class `display: block` on a
-// list item's primary-text slot, which wins on source order.
-.fname.fname {
-  display: flex;
+// at any width, which a single ellipsis on the whole string cannot do. Inline-
+// level inside the title slot, so it keeps the slot's baseline, and capped at the
+// row's width so the head is what gives.
+.fname {
+  display: inline-flex;
+  max-width: 100%;
   // The ellipsis truncates at a character boundary, so the head box is a little
   // wider than its visible text — with the browser's default underline that gap
   // reads as TWO links rather than one filename. Colour carries the affordance;

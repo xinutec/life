@@ -41,17 +41,13 @@ mat-list {
 }
 
 .meta {
-  // Block-level flex, NOT inline-flex: an inline-flex sizes to max-content,
-  // so with nowrap pills + a note the row itself grows past the list item on
-  // a phone (paint-clipped by the MDC content box, but the note then hard-cuts
-  // mid-glyph). Block flex is capped at the item width; pills and icon keep
-  // their size and only the note shrinks, ending in a clean ellipsis.
-  display: flex;
+  // Our own row inside the line slot, which Material sizes. Inline-level, so it
+  // sits on the slot's baseline: a block drops below it and is cut by the row.
+  // Capped at the item's width, or the nowrap pills grow the row past it.
+  display: inline-flex;
   max-width: 100%;
   align-items: center;
   gap: 0.4rem;
-  // Pills have no leading of their own (text lines do) — restore the gap.
-  margin-top: 0.25rem;
 
   > * {
     flex: 0 0 auto;

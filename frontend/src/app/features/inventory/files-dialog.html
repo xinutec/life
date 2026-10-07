@@ -17,14 +17,11 @@
           <!-- A plain link: the server sends Content-Disposition: attachment,
                so the browser's own download handles it and nothing renders an
                arbitrary upload inside our origin. -->
-          <a
-            matListItemTitle
-            class="fname"
-            [href]="f.href"
-            [attr.download]="f.full"
-            [title]="f.full"
-            ><span class="head">{{ f.head }}</span
-            ><span class="tail">{{ f.tail }}</span></a
+          <span matListItemTitle
+            ><a class="fname" [href]="f.href" [attr.download]="f.full" [title]="f.full"
+              ><span class="head">{{ f.head }}</span
+              ><span class="tail">{{ f.tail }}</span></a
+            ></span
           >
           <span matListItemLine class="when">{{ f.detail }}</span>
           <button

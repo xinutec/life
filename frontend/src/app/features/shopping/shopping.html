@@ -60,23 +60,24 @@
         (change)="toggle(it)"
         [aria-label]="'Bought ' + it.name"
       ></mat-checkbox>
-      <span
-        matListItemTitle
-        class="row-title tappable"
-        role="button"
-        tabindex="0"
-        (click)="view(it)"
-        (keydown.enter)="view(it)"
-        (keydown.space)="view(it); $event.preventDefault()"
-      >
-        @if (it.barcode || it.product_id) {
-          <app-product-thumb
-            class="inline-thumb"
-            [barcode]="it.barcode"
-            [productId]="it.product_id"
-          />
-        }
-        <span [class.done]="it.done">{{ it.name }}</span>
+      <span matListItemTitle>
+        <span
+          class="row-title tappable"
+          role="button"
+          tabindex="0"
+          (click)="view(it)"
+          (keydown.enter)="view(it)"
+          (keydown.space)="view(it); $event.preventDefault()"
+        >
+          @if (it.barcode || it.product_id) {
+            <app-product-thumb
+              class="inline-thumb"
+              [barcode]="it.barcode"
+              [productId]="it.product_id"
+            />
+          }
+          <span [class.done]="it.done">{{ it.name }}</span>
+        </span>
       </span>
       @if (label(it)) {
         <span matListItemLine [class.done]="it.done">{{ label(it) }}</span>

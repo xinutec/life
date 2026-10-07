@@ -17,7 +17,8 @@
 .recipe {
   margin-bottom: 1rem;
 
-  mat-card-title {
+  // The card header places its title; the name and its mark are our own row in it.
+  .title-row {
     display: flex;
     align-items: center;
     gap: 0.4rem;

@@ -150,13 +150,12 @@ h3 {
 }
 
 // A list row's second line: facts, then expiry. The expiry keeps its width and
-// the facts give way: an expiry is actionable, a cupboard is a lookup.
-//
-// ⚠ The class is doubled to beat Material's one-class
-// `.mdc-list-item__secondary-text { display: block }`, which a plain `.meta-line`
-// ties and loses on source order.
-.meta-line.meta-line {
-  display: flex;
+// the facts give way: an expiry is actionable, a cupboard is a lookup. Our own
+// element inside the line slot: inline-level, so it sits on the slot's baseline,
+// and capped at the row's width so the facts are what gives.
+.meta-line {
+  display: inline-flex;
+  max-width: 100%;
   align-items: baseline;
   gap: 0.35rem;
 

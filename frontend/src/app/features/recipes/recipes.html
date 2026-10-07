@@ -18,10 +18,12 @@
   <mat-card class="recipe" appearance="outlined">
     <mat-card-header>
       <mat-card-title>
-        {{ recipe.name }}
-        @if (isCookable(recipe.id)) {
-          <mat-icon class="ok" aria-label="In stock — cookable now">check_circle</mat-icon>
-        }
+        <span class="title-row">
+          {{ recipe.name }}
+          @if (isCookable(recipe.id)) {
+            <mat-icon class="ok" aria-label="In stock — cookable now">check_circle</mat-icon>
+          }
+        </span>
       </mat-card-title>
       @if (recipe.servings) {
         <mat-card-subtitle

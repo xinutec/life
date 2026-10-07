@@ -62,26 +62,28 @@
       >
         {{ it.title }}
       </span>
-      <span matListItemLine class="meta">
-        @if (it.priority) {
-          <span class="pill prio-{{ it.priority }}">{{ priorityLabel(it.priority) }}</span>
-        }
-        @if (dueChip(it); as dc) {
-          <span class="pill {{ dc.cls }}"><mat-icon>event</mat-icon> {{ dc.label }}</span>
-        }
-        <mat-icon class="type-icon" [attr.aria-label]="typeLabel(it.type)">{{
-          typeIcon(it.type)
-        }}</mat-icon>
-        @if (st === 'blocked') {
-          <span class="pill blocked"
-            ><mat-icon>lock</mat-icon> waiting on {{ blockerCount(it) }}</span
-          >
-        } @else if (st === 'ready') {
-          <span class="pill ready"><mat-icon>bolt</mat-icon> ready</span>
-        }
-        @if (linkCount(it) > 0) {
-          <span class="pill links"><mat-icon>hub</mat-icon> {{ linkCount(it) }}</span>
-        }
+      <span matListItemLine>
+        <span class="meta">
+          @if (it.priority) {
+            <span class="pill prio-{{ it.priority }}">{{ priorityLabel(it.priority) }}</span>
+          }
+          @if (dueChip(it); as dc) {
+            <span class="pill {{ dc.cls }}"><mat-icon>event</mat-icon> {{ dc.label }}</span>
+          }
+          <mat-icon class="type-icon" [attr.aria-label]="typeLabel(it.type)">{{
+            typeIcon(it.type)
+          }}</mat-icon>
+          @if (st === 'blocked') {
+            <span class="pill blocked"
+              ><mat-icon>lock</mat-icon> waiting on {{ blockerCount(it) }}</span
+            >
+          } @else if (st === 'ready') {
+            <span class="pill ready"><mat-icon>bolt</mat-icon> ready</span>
+          }
+          @if (linkCount(it) > 0) {
+            <span class="pill links"><mat-icon>hub</mat-icon> {{ linkCount(it) }}</span>
+          }
+        </span>
       </span>
       @if (it.notes) {
         <span matListItemLine class="note" [class.done]="it.status === 'done'">{{ it.notes }}</span>
@@ -119,11 +121,13 @@
           >
             {{ it.title }}
           </span>
-          <span matListItemLine class="meta">
-            <span class="pill waiting"><mat-icon>schedule</mat-icon> {{ fromLabel(it) }}</span>
-            <mat-icon class="type-icon" [attr.aria-label]="typeLabel(it.type)">{{
-              typeIcon(it.type)
-            }}</mat-icon>
+          <span matListItemLine>
+            <span class="meta">
+              <span class="pill waiting"><mat-icon>schedule</mat-icon> {{ fromLabel(it) }}</span>
+              <mat-icon class="type-icon" [attr.aria-label]="typeLabel(it.type)">{{
+                typeIcon(it.type)
+              }}</mat-icon>
+            </span>
           </span>
           <button
             matListItemMeta

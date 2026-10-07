@@ -35,16 +35,18 @@
           (keydown.space)="editItem(it); $event.preventDefault()"
           >{{ it.name }}</span
         >
-        <span matListItemLine class="meta-line">
-          <span class="facts">
-            {{ qty(it) }}
-            @if (it.location_id) {
-              · {{ shortLoc(it.location_id) }}
+        <span matListItemLine>
+          <span class="meta-line">
+            <span class="facts">
+              {{ qty(it) }}
+              @if (it.location_id) {
+                · {{ shortLoc(it.location_id) }}
+              }
+            </span>
+            @if (it.expiry) {
+              <span class="expiry" [class]="expiryOf(it).cls">{{ expiryOf(it).label }}</span>
             }
           </span>
-          @if (it.expiry) {
-            <span class="expiry" [class]="expiryOf(it).cls">{{ expiryOf(it).label }}</span>
-          }
         </span>
         <button
           matListItemMeta

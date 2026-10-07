@@ -63,19 +63,20 @@
           (click)="editItem(it)"
           (keydown.enter)="editItem(it)"
           (keydown.space)="editItem(it); $event.preventDefault()"
-        >
-          {{ it.name }}
+          >{{ it.name }}
           @if (it.brand) {
             <span class="brand"> · {{ it.brand }}</span>
           }
         </span>
         <!-- Two parts, not one sentence: the line ellipsises, and whatever sits
              last disappears — which must not be the expiry. -->
-        <span matListItemLine class="meta-line">
-          <span class="facts">{{ meta(it) }}</span>
-          @if (it.expiry) {
-            <span class="expiry" [class]="expiryOf(it).cls">{{ expiryOf(it).label }}</span>
-          }
+        <span matListItemLine>
+          <span class="meta-line">
+            <span class="facts">{{ meta(it) }}</span>
+            @if (it.expiry) {
+              <span class="expiry" [class]="expiryOf(it).cls">{{ expiryOf(it).label }}</span>
+            }
+          </span>
         </span>
         <button
           matListItemMeta
