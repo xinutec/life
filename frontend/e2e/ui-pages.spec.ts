@@ -40,6 +40,7 @@ import {
   expectUpInTheBar,
   expectBackClosesOverlay,
   expectRecoversFromMissingBundle,
+  expectCleanLayout,
 } from '@xinutec/ui-harness';
 
 /**
@@ -790,9 +791,7 @@ test('today — busy composition: lays out cleanly @ phone width', async ({ page
   // and the row most likely to spill off a phone.
   await page.getByText('Food waste · Rubbish · Paper and cardboard (blue sacks)').waitFor();
   await page.getByText('tomorrow', { exact: true }).waitFor();
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
-  await expectNoClippedText(page, testInfo);
+  await expectCleanLayout(page, testInfo);
   // Titles wrap rather than truncate, so the check is unqualified.
   await expectNoStarvedText(page, testInfo);
 });
@@ -802,9 +801,7 @@ test('to-do list — pills in rows: lays out cleanly @ phone width', async ({ pa
   await page.goto('/todo');
   await page.getByText('Call the GP', { exact: false }).waitFor();
   await page.getByText('overdue', { exact: false }).first().waitFor();
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
-  await expectNoClippedText(page, testInfo);
+  await expectCleanLayout(page, testInfo);
   // The note has its own line, and must not be starved.
   await expectNoStarvedText(page, testInfo);
 });
@@ -815,9 +812,7 @@ test('wellbeing — chart + timeline: lays out cleanly @ phone width', async ({ 
   await page.getByText('How do you feel right now?').waitFor();
   await page.getByText('Mood · last 7 days').waitFor();
   await page.getByText('Energy · last 7 days').waitFor();
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo, null, CHART_SCROLLERS);
-  await expectNoClippedText(page, testInfo);
+  await expectCleanLayout(page, testInfo, { allow: CHART_SCROLLERS });
 });
 
 test('wellbeing — after logging, saying more is one tap and the strip still works', async ({
@@ -832,12 +827,10 @@ test('wellbeing — after logging, saying more is one tap and the strip still wo
   await more.waitFor();
   await expect(more).toBeInViewport({ ratio: 1 });
 
-  await expectNoClippedText(page, testInfo, 'app-wellbeing-checkin');
-  await expectNoTextOverlaps(page, testInfo, 'app-wellbeing-checkin');
-  // Same exemption the chart test uses: the trend rail is wider than the
-  // viewport BY DESIGN (it scrolls), so a whole-page overflow oracle reads it
-  // as a fault. Exempted by element, not switched off.
-  await expectNoHorizontalOverflow(page, testInfo, null, CHART_SCROLLERS);
+  // The page, not the snackbar over it. Same exemption the chart test uses: the
+  // trend rail is wider than the viewport BY DESIGN (it scrolls), so a whole-page
+  // overflow oracle reads it as a fault. Exempted by element, not switched off.
+  await expectCleanLayout(page, testInfo, { root: 'main', allow: CHART_SCROLLERS });
 });
 
 test('wellbeing — the two charts agree on where the days are', async ({ page }) => {
@@ -958,9 +951,7 @@ test('wellbeing — the charts pan back through history, and the axis stays put'
       .evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().x)));
   expect(await rules(1)).toEqual(await rules(0));
 
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo, null, CHART_SCROLLERS);
-  await expectNoClippedText(page, testInfo);
+  await expectCleanLayout(page, testInfo, { allow: CHART_SCROLLERS });
 
   // Changing zoom while panned must re-seat the scroller: scrollLeft is still
   // measured against the old rail, so the NEXT touch would teleport the window.
@@ -994,9 +985,7 @@ test('buy — list + bought bar: lays out cleanly @ phone width', async ({ page 
   // Mid-shop (an item is checked, so the bought bar is up) the add-FAB must
   // still be there — capture can't go missing for most of a real shop.
   await expect(page.getByRole('button', { name: 'Add to the list' })).toBeVisible();
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
-  await expectNoClippedText(page, testInfo);
+  await expectCleanLayout(page, testInfo);
 });
 
 test('buy — the sold-at and estimate lines fit @ phone width', async ({ page }, testInfo) => {
@@ -1017,9 +1006,7 @@ test('buy — the sold-at and estimate lines fit @ phone width', async ({ page }
   );
   await page.goto('/shopping');
   await page.getByText('Estimate:').waitFor();
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
-  await expectNoClippedText(page, testInfo);
+  await expectCleanLayout(page, testInfo);
 });
 
 test('plan-a-trip sheet — shop, time and list lay out cleanly @ phone width', async ({
@@ -1041,9 +1028,7 @@ test('plan-a-trip sheet — shop, time and list lay out cleanly @ phone width', 
   await sheet.getByLabel('Shop').fill('Waitrose');
   await expect(sheet.getByRole('button', { name: 'Add to calendar' })).toBeEnabled();
 
-  await expectNoClippedText(page, testInfo, 'app-trip-sheet');
-  await expectNoTextOverlaps(page, testInfo, 'app-trip-sheet');
-  await expectNoHorizontalOverflow(page, testInfo, 'app-trip-sheet');
+  await expectCleanLayout(page, testInfo, { root: 'app-trip-sheet' });
 });
 
 test('bought sheet — a price per row lays out cleanly @ phone width', async ({
@@ -1070,9 +1055,7 @@ test('bought sheet — a price per row lays out cleanly @ phone width', async ({
   // opens. The layout oracles cannot see a sheet taller than the viewport.
   const button = sheet.getByRole('button', { name: 'Record' });
   await expect(button).toBeInViewport({ ratio: 1 });
-  await expectNoClippedText(page, testInfo, 'app-buy-sheet');
-  await expectNoTextOverlaps(page, testInfo, 'app-buy-sheet');
-  await expectNoHorizontalOverflow(page, testInfo, 'app-buy-sheet');
+  await expectCleanLayout(page, testInfo, { root: 'app-buy-sheet' });
 });
 
 test('bought sheet — the not-a-price message lays out cleanly @ phone width', async ({
@@ -1093,9 +1076,7 @@ test('bought sheet — the not-a-price message lays out cleanly @ phone width', 
   await expect(sheet.getByText('Not a price', { exact: false })).toBeVisible();
   await expect(sheet.getByRole('button', { name: 'Record' })).toBeDisabled();
 
-  await expectNoClippedText(page, testInfo, 'app-buy-sheet');
-  await expectNoTextOverlaps(page, testInfo, 'app-buy-sheet');
-  await expectNoHorizontalOverflow(page, testInfo, 'app-buy-sheet');
+  await expectCleanLayout(page, testInfo, { root: 'app-buy-sheet' });
 });
 
 test('plan-a-trip sheet — the unlinked-calendar way out lays out cleanly @ phone width', async ({
@@ -1119,9 +1100,7 @@ test('plan-a-trip sheet — the unlinked-calendar way out lays out cleanly @ pho
   await sheet.getByText('isn’t connected', { exact: false }).waitFor();
   await expect(sheet.getByRole('button', { name: 'Connect it in Settings' })).toBeVisible();
 
-  await expectNoClippedText(page, testInfo, 'app-trip-sheet');
-  await expectNoTextOverlaps(page, testInfo, 'app-trip-sheet');
-  await expectNoHorizontalOverflow(page, testInfo, 'app-trip-sheet');
+  await expectCleanLayout(page, testInfo, { root: 'app-trip-sheet' });
 });
 
 test('settings — about card: lays out cleanly @ phone width', async ({ page }, testInfo) => {
@@ -1137,9 +1116,8 @@ test('settings — about card: lays out cleanly @ phone width', async ({ page },
   // opaque, so on any page long enough to run under it every line below the
   // fold reads as a collision. `.content` already reserves the nav's height as
   // padding, so what is under the bar at rest is reachable by scrolling.
-  await expectNoTextOverlaps(page, testInfo, '.content');
+  await expectCleanLayout(page, testInfo, { root: '.content' });
   await expectNoHorizontalOverflow(page, testInfo);
-  await expectNoClippedText(page, testInfo, '.content');
   // And the question scoping just gave up — is anything actually UNREACHABLE
   // behind that bar — asked properly, of the buttons that matter.
   await expectNoOccludedControls(page, testInfo);
@@ -1150,9 +1128,7 @@ test('inventory — items + places: lays out cleanly @ phone width', async ({ pa
   await page.goto('/inventory');
   await page.getByText('Milk (semi-skimmed)').waitFor();
   await page.getByText('Kitchen › Fridge', { exact: true }).waitFor();
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
-  await expectNoClippedText(page, testInfo);
+  await expectCleanLayout(page, testInfo);
   // Item NAMES must read; the fact line beside them is starved on purpose so the
   // expiry survives at full width (styles.scss .meta-line). Exempted by name, so
   // a title going the same way is still a failure.
@@ -1185,8 +1161,7 @@ test('inventory — the row menu opens and carries all three actions @ phone wid
   // Scoped to the panel, as the sheet tests are: an open menu is OPAQUE and
   // covers the list, but getClientRects cannot see occlusion, so a whole-page
   // scan reads the covered rows as colliding with the menu drawn over them.
-  await expectNoTextOverlaps(page, testInfo, '.mat-mdc-menu-panel');
-  await expectNoClippedText(page, testInfo, '.mat-mdc-menu-panel');
+  await expectCleanLayout(page, testInfo, { root: '.mat-mdc-menu-panel' });
 });
 
 // The product picker: an outline field's label is sheared by
@@ -1216,9 +1191,7 @@ test('product-picker dialog — the Search label is not sheared @ phone width', 
   await dialog.locator('mat-form-field').waitFor();
   await dialog.getByRole('button', { name: /Search Waitrose/ }).waitFor();
 
-  await expectNoClippedText(page, testInfo, '.mat-mdc-dialog-container');
-  await expectNoTextOverlaps(page, testInfo, '.mat-mdc-dialog-container');
-  await expectNoHorizontalOverflow(page, testInfo, '.mat-mdc-dialog-container');
+  await expectCleanLayout(page, testInfo, { root: '.mat-mdc-dialog-container' });
 });
 
 // The item history: a dialog OVER the item sheet, which is the composition
@@ -1240,9 +1213,7 @@ test('item history dialog — the timeline lays out cleanly @ phone width', asyn
   await dialog.getByText('to Fridge').waitFor();
   await dialog.getByText('950 bottle on hand · Spice cupboard').waitFor();
 
-  await expectNoClippedText(page, testInfo, '.mat-mdc-dialog-container');
-  await expectNoTextOverlaps(page, testInfo, '.mat-mdc-dialog-container');
-  await expectNoHorizontalOverflow(page, testInfo, '.mat-mdc-dialog-container');
+  await expectCleanLayout(page, testInfo, { root: '.mat-mdc-dialog-container' });
 });
 
 /**
@@ -1297,9 +1268,7 @@ test('files dialog — the empty state and the attach button fit @ phone width',
   await dialog.getByText('receipt.png').waitFor();
   await dialog.getByRole('button', { name: 'Attach a file' }).waitFor();
 
-  await expectNoClippedText(page, testInfo, 'app-files-dialog');
-  await expectNoTextOverlaps(page, testInfo, 'app-files-dialog');
-  await expectNoHorizontalOverflow(page, testInfo, 'app-files-dialog');
+  await expectCleanLayout(page, testInfo, { root: 'app-files-dialog' });
 });
 
 // Recording a purchase for something already owned: a dialog OVER the item
@@ -1318,16 +1287,13 @@ test('purchase dialog — the price/date pair and the months suffix fit @ phone 
   await dialog.getByLabel('Price').fill('349.99');
   await dialog.locator('input[type="date"]').waitFor();
 
-  await expectNoClippedText(page, testInfo, 'app-purchase-dialog');
-  await expectNoTextOverlaps(page, testInfo, 'app-purchase-dialog');
-  await expectNoHorizontalOverflow(page, testInfo, 'app-purchase-dialog');
+  await expectCleanLayout(page, testInfo, { root: 'app-purchase-dialog' });
 
   // The wrong-unit hint is longer than the one it replaces, and it appears in a
   // subscript slot — the exact place a long `mat-hint` has overflowed before.
   await dialog.getByLabel('Warranty').fill('2.5');
   await dialog.getByText('Whole months').waitFor();
-  await expectNoClippedText(page, testInfo, 'app-purchase-dialog');
-  await expectNoHorizontalOverflow(page, testInfo, 'app-purchase-dialog');
+  await expectCleanLayout(page, testInfo, { root: 'app-purchase-dialog' });
 });
 
 // The item sheet's expiry row is a field and a toggle group side by side, the
@@ -1343,17 +1309,13 @@ test('item sheet — the expiry row and its precision toggle fit @ phone width',
   const sheet = page.locator('app-item-sheet');
   await sheet.waitFor();
   await sheet.locator('input[type="date"]').waitFor();
-  await expectNoClippedText(page, testInfo, 'app-item-sheet');
-  await expectNoTextOverlaps(page, testInfo, 'app-item-sheet');
-  await expectNoHorizontalOverflow(page, testInfo, 'app-item-sheet');
+  await expectCleanLayout(page, testInfo, { root: 'app-item-sheet' });
 
   // A medicine box is printed MM/YYYY, so the month input is a first-class
   // state of this form rather than a corner of it.
   await sheet.getByRole('radio', { name: 'Month' }).click();
   await sheet.locator('input[type="month"]').waitFor();
-  await expectNoClippedText(page, testInfo, 'app-item-sheet');
-  await expectNoTextOverlaps(page, testInfo, 'app-item-sheet');
-  await expectNoHorizontalOverflow(page, testInfo, 'app-item-sheet');
+  await expectCleanLayout(page, testInfo, { root: 'app-item-sheet' });
 });
 
 test('all items — filter + brand + expiry rows: lays out cleanly @ phone width', async ({
@@ -1363,9 +1325,7 @@ test('all items — filter + brand + expiry rows: lays out cleanly @ phone width
   await page.goto('/items');
   await page.getByText('Chicken thighs').waitFor();
   await page.getByText('Waitrose Essential', { exact: false }).waitFor();
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
-  await expectNoClippedText(page, testInfo);
+  await expectCleanLayout(page, testInfo);
 });
 
 test('recipes — ingredient-chip cards: lays out cleanly @ phone width', async ({
@@ -1375,9 +1335,7 @@ test('recipes — ingredient-chip cards: lays out cleanly @ phone width', async 
   await page.goto('/recipes');
   await page.getByText('Chicken curry').waitFor();
   await page.getByText('cookable with what', { exact: false }).waitFor();
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
-  await expectNoClippedText(page, testInfo);
+  await expectCleanLayout(page, testInfo);
 });
 
 test('product page — prices, panel, chips: lays out cleanly @ phone width', async ({
@@ -1396,13 +1354,10 @@ test('product page — prices, panel, chips: lays out cleanly @ phone width', as
   // control.
   await page.getByText('What you paid').waitFor();
   await page.getByRole('button', { name: /picture/ }).waitFor();
-  // Scoped to the page's own text: this screen is the first that genuinely
-  // outgrows a phone viewport, and mid-scroll its content passes BEHIND the
-  // fixed bottom nav (opaque by design). A whole-page assertion would read that
-  // as a collision. Overflow stays whole-page — that's the body scroller's job.
-  await expectNoTextOverlaps(page, testInfo, 'app-product-page');
-  await expectNoHorizontalOverflow(page, testInfo);
-  await expectNoClippedText(page, testInfo);
+  // Whole page, though this screen outgrows a phone and mid-scroll its content
+  // passes behind the opaque bottom nav: the harness counts only text that cannot
+  // be scrolled out from under a fixed bar as a collision.
+  await expectCleanLayout(page, testInfo);
 });
 
 test('product page — the Asda match reads cleanly @ phone width', async ({ page }, testInfo) => {
@@ -1413,9 +1368,7 @@ test('product page — the Asda match reads cleanly @ phone width', async ({ pag
   // ranks last.
   await page.getByText('Extra Special Balsamic Vinegar of Modena').waitFor();
   await page.getByText('same barcode', { exact: false }).waitFor();
-  await expectNoTextOverlaps(page, testInfo, 'app-product-page');
-  await expectNoHorizontalOverflow(page, testInfo);
-  await expectNoClippedText(page, testInfo);
+  await expectCleanLayout(page, testInfo);
 });
 
 test('product page — the reconcile panel lays out cleanly @ phone width', async ({
@@ -1454,18 +1407,14 @@ test('product page — the reconcile panel lays out cleanly @ phone width', asyn
   await page.getByText('Shops disagree on some details').waitFor();
   await page.getByText('Pack size').waitFor();
   await page.getByRole('button', { name: 'Apply' }).waitFor();
-  await expectNoTextOverlaps(page, testInfo, 'app-product-page');
-  await expectNoHorizontalOverflow(page, testInfo);
-  await expectNoClippedText(page, testInfo);
+  await expectCleanLayout(page, testInfo);
 });
 
 test('trash — restorable rows: lays out cleanly @ phone width', async ({ page }, testInfo) => {
   await mockApi(page);
   await page.goto('/trash');
   await page.getByText('Oat milk', { exact: false }).waitFor();
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
-  await expectNoClippedText(page, testInfo);
+  await expectCleanLayout(page, testInfo);
 });
 
 test('conflicts — kept/theirs cards: lays out cleanly @ phone width', async ({
@@ -1475,9 +1424,7 @@ test('conflicts — kept/theirs cards: lays out cleanly @ phone width', async ({
   await page.goto('/conflicts');
   await page.getByText('Kept (this device)').waitFor();
   await page.getByRole('button', { name: 'Use theirs' }).waitFor();
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
-  await expectNoClippedText(page, testInfo);
+  await expectCleanLayout(page, testInfo);
 });
 
 // The emotion picker is the layout class that breaks silently: a full-screen
@@ -1505,7 +1452,7 @@ test('emotion picker — full mosaic + sticky header: lays out cleanly @ phone w
   // The selected-set footer is opaque and sticky; vocabulary text scrolling
   // behind it is occluded, not colliding — the same false-positive the to-do
   // sheet test scopes around. Measure each pinned region and the body apart.
-  await expectNoTextOverlaps(page, testInfo, '.picker .top');
+  await expectCleanLayout(page, testInfo, { root: '.picker .top' });
   await expectNoTextOverlaps(page, testInfo, '.picker .body');
   await expectNoTextOverlaps(page, testInfo, '.picker .selected');
   await expectNoHorizontalOverflow(page, testInfo, '.picker');
@@ -1554,7 +1501,7 @@ test('emotion picker ⓘ — the gloss opens in place, one at a time @ phone wid
   // An open gloss must not widen the surface.
   await expectNoHorizontalOverflow(page, testInfo, '.picker');
   await expectNoClippedText(page, testInfo, '.picker');
-  await expectNoTextOverlaps(page, testInfo, '.picker .body');
+  await expectCleanLayout(page, testInfo, { root: '.picker .body' });
 
   // The same ⓘ closes it.
   await absorbed.click();
@@ -1586,10 +1533,8 @@ test('to-do detail — tapping a to-do opens a clean edit sheet @ phone width', 
   // Scope both measurements to the open sheet — it's the component under test,
   // and an opaque modal over the list would otherwise register false overlaps
   // against the (occluded) list text behind it.
-  await expectNoTextOverlaps(page, testInfo, '.detail');
+  await expectCleanLayout(page, testInfo, { root: '.detail' });
   // The sheet's content must fit the sheet's width, whatever it works out to.
-  await expectNoHorizontalOverflow(page, testInfo, '.detail');
-  await expectNoClippedText(page, testInfo, '.detail');
   // And the page as a whole must never scroll sideways.
   await expectNoHorizontalOverflow(page, testInfo);
 
@@ -1672,9 +1617,8 @@ test('emotion calendar — the day grid and a selection fit @ phone width', asyn
   expect(scroll.max - scroll.top).toBeLessThan(4);
 
   await expectViewportIsPhone(page);
-  await expectNoHorizontalOverflow(page, testInfo, '.cal');
+  await expectCleanLayout(page, testInfo, { root: '.cal' });
   await expectNoHorizontalOverflow(page, testInfo);
-  await expectNoTextOverlaps(page, testInfo, '.cal');
 
   // Selecting days is the handoff to a render, so the panel it opens is part of
   // the layout: a wide selection wraps its chips rather than pushing the grid.
@@ -1684,10 +1628,8 @@ test('emotion calendar — the day grid and a selection fit @ phone width', asyn
   const sel = page.locator('.selection');
   await sel.waitFor();
   await expect(sel.locator('.emo')).not.toHaveCount(0);
-  await expectNoHorizontalOverflow(page, testInfo, '.selection');
-  await expectNoTextOverlaps(page, testInfo, '.selection');
+  await expectCleanLayout(page, testInfo, { root: '.selection' });
   await expectNoHorizontalOverflow(page, testInfo);
-  await expectNoClippedText(page, testInfo, '.selection');
   // The panel floats over the grid, so the controls under it must stay reachable
   // — the failure mode a sticky footer introduces and the clip oracle cannot see.
   await expectNoOccludedControls(page, testInfo, '.selection');
@@ -1733,7 +1675,7 @@ test('emotion calendar — the day grid and a selection fit @ phone width', asyn
   expect(
     await page.locator('.selection .words').evaluate((e) => e.scrollHeight > e.clientHeight + 1),
   ).toBe(true);
-  await expectNoClippedText(page, testInfo, '.selection');
+  await expectCleanLayout(page, testInfo, { root: '.selection' });
   await expectNoOccludedControls(page, testInfo, '.selection');
 
   // ⚠ THE CALENDAR IS READ-ONLY; watching for a write keeps it so.
@@ -1780,9 +1722,7 @@ test('house — a 404 reads as "no layout yet", not as an error @ phone width', 
   await page.route('**/api/house', (r) => r.fulfill({ status: 404, body: '' }));
   await page.goto('/house');
   await page.getByText('No house layout yet.').waitFor();
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
-  await expectNoClippedText(page, testInfo);
+  await expectCleanLayout(page, testInfo);
 });
 
 test('house — a 500 offers a retry rather than claiming the house is empty', async ({ page }) => {
@@ -1810,6 +1750,5 @@ test('house — a scene gives the canvas real size and no layout faults @ phone 
   expect(box?.width ?? 0).toBeGreaterThan(200);
   expect(box?.height ?? 0).toBeGreaterThan(200);
   await expect(page.getByText('No house layout yet.')).toHaveCount(0);
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
+  await expectCleanLayout(page, testInfo);
 });
