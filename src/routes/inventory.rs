@@ -259,6 +259,11 @@ pub async fn get_file(
                 header::CONTENT_DISPOSITION,
                 format!("attachment; filename=\"{safe}\""),
             ),
+            // Never replaced under its id (files are added and removed, not edited).
+            (
+                header::CACHE_CONTROL,
+                "private, max-age=31536000, immutable".to_string(),
+            ),
         ],
         bytes,
     )

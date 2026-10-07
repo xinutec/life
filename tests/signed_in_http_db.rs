@@ -749,6 +749,11 @@ async fn an_attachment_is_downloaded_never_rendered() {
     assert_eq!(res.status(), StatusCode::OK);
     let disposition = res.headers()[header::CONTENT_DISPOSITION].to_str().unwrap();
     assert_eq!(disposition, "attachment; filename=\"manual; x=y.png\"");
+    // A file is never replaced under its id: the client may keep it.
+    assert_eq!(
+        res.headers()[header::CACHE_CONTROL],
+        "private, max-age=31536000, immutable"
+    );
 }
 
 /// Put a row on the Buy list the way the app does, by a sync push, and return
