@@ -8,8 +8,6 @@ import { keysOf } from '../shared/narrow';
 
 /** A check-in as stored locally; mirrors the backend `WellbeingDoc`. Readings
  *  are in tenths (10..50), so a 3.5 is an exact 35. */
-// dev-lint: allow-wire-mirror RxDB owns the _deleted tombstone dimension;
-// the wire type adds it in the replication layer, not in this local doc.
 export interface WellbeingDoc {
   ulid: string;
   id: number | null;

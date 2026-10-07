@@ -8,8 +8,6 @@ import { SyncedCollectionConfig, SyncedStore } from './synced-store';
 import { keysOf } from '../shared/narrow';
 
 /** A to-do as stored locally; mirrors the backend `TodoDoc`. */
-// dev-lint: allow-wire-mirror RxDB owns the _deleted tombstone dimension;
-// the wire type adds it in the replication layer, not in this local doc.
 export interface TodoDoc {
   ulid: string;
   id: number | null;

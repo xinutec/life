@@ -7,8 +7,6 @@ import { SyncedCollectionConfig, SyncedStore } from './synced-store';
 import { keysOf } from '../shared/narrow';
 
 /** A Buy row as stored locally; `id` is used only by /buy. */
-// dev-lint: allow-wire-mirror RxDB owns the _deleted tombstone dimension;
-// the wire type adds it in the replication layer, not in this local doc.
 export interface ShoppingDoc {
   ulid: string;
   id: number | null;
