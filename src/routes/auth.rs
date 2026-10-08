@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 use anyhow::anyhow;
 use axum::Json;
 use axum::extract::{Query, State};
+use axum::http::StatusCode;
 use axum::response::Redirect;
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use chrono::Utc;
@@ -115,12 +116,15 @@ pub async fn callback(
 pub async fn logout(
     State(app): State<AppState>,
     jar: CookieJar,
-) -> Result<(CookieJar, Redirect), AppError> {
+) -> Result<(CookieJar, StatusCode), AppError> {
     if let Some(c) = jar.get(COOKIE_NAME) {
         destroy_session(&app.pool, &app.cfg.session_secret, c.value()).await?;
     }
     tracing::info!("logged out");
-    Ok((jar.remove(Cookie::from(COOKIE_NAME)), Redirect::to("/")))
+    Ok((
+        jar.remove(Cookie::from(COOKIE_NAME)),
+        StatusCode::NO_CONTENT,
+    ))
 }
 
 #[derive(Debug, Serialize, TS)]

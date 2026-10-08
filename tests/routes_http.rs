@@ -209,7 +209,7 @@ async fn every_api_call_a_client_makes_reaches_an_authenticated_route() {
         // 404 means no route has that path; a 405 means the path exists but not
         // for the client's method.
         let reached = if call.path == "/logout" {
-            status == StatusCode::SEE_OTHER
+            status == StatusCode::NO_CONTENT
         } else {
             status == StatusCode::UNAUTHORIZED
                 || (call.method.is_none() && status == StatusCode::METHOD_NOT_ALLOWED)
