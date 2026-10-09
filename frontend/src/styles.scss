@@ -215,7 +215,7 @@ app-house .canvas canvas {
   &.on {
     border-color: var(--c);
     background: color-mix(in srgb, var(--c) 30%, transparent);
-    font-weight: 600;
+    font-weight: 700;
   }
   mat-icon {
     width: 18px;

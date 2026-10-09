@@ -31,7 +31,7 @@ header {
     text-align: center;
   }
   .done {
-    font-weight: 600;
+    font-weight: 700;
   }
 }
 
@@ -129,7 +129,7 @@ header {
   padding: 0.1rem 0.45rem;
   background: var(--c);
   color: var(--mat-sys-inverse-on-surface);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 // The meaning affordance rides beside its word instead of being a second
@@ -177,7 +177,7 @@ header {
     margin: 0.25rem 0 0.6rem;
     color: var(--mat-sys-on-surface-variant);
     font: var(--mat-sys-label-large);
-    font-weight: 600;
+    font-weight: 700;
 
     mat-icon {
       width: 18px;
@@ -245,7 +245,7 @@ header {
   }
   .name {
     font: var(--mat-sys-label-large);
-    font-weight: 600;
+    font-weight: 700;
   }
   .path {
     color: var(--mat-sys-on-surface-variant);
