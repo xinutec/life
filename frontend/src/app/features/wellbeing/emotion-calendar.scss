@@ -111,7 +111,7 @@
   // picker footer's grammar. Above the fixed bottom nav (the offset of
   // shopping.scss .bought-actions), not behind it.
   position: sticky;
-  bottom: calc(60px + env(safe-area-inset-bottom));
+  bottom: 60px;
   z-index: 6; // above the nav's shadow, below the nav itself (10)
   // ⚠ BOUNDED AS A WHOLE, not per part: a wide selection would otherwise grow
   // the panel past the screen and hide the calendar it summarises.

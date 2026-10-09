@@ -9,7 +9,7 @@
 // bar stops short of the bottom-right corner and leaves it to the FAB.
 .bought-actions {
   position: sticky;
-  bottom: calc(60px + env(safe-area-inset-bottom));
+  bottom: 60px;
   z-index: 6; // above the nav's shadow, below the nav (10)
   display: flex;
   flex-wrap: wrap;

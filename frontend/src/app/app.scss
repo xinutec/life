@@ -1,5 +1,5 @@
 // Mobile-first shell: fixed top bar + bottom tab bar; becomes a left side rail
-// on wider screens. Uses dvh + safe-area insets so it sits right on phones.
+// on wider screens. Uses dvh so it sits right on phones.
 
 :host {
   display: block;
@@ -28,8 +28,7 @@ $bottomnav-h: 60px;
 $rail-w: 220px;
 
 // The scaffold's bar, pinned: the surface and height through Material's own
-// tokens, plus the edge-to-edge safe-area handling (viewport-fit=cover): pad by
-// the status-bar/notch inset. Fixed to BOTH horizontal edges — required by the
+// tokens. Fixed to BOTH horizontal edges — required by the
 // Android WebView (see .fab-anchor note in styles.scss).
 .topbar {
   --mat-toolbar-container-background-color: var(--mat-sys-surface-container);
@@ -37,7 +36,6 @@ $rail-w: 220px;
   --mat-toolbar-mobile-height: #{$topbar-h};
   position: fixed;
   inset: 0 0 auto 0;
-  padding-top: env(safe-area-inset-top);
   background: var(--mat-sys-surface-container);
   border-bottom: 1px solid var(--mat-sys-outline-variant);
   z-index: 10;
@@ -50,7 +48,7 @@ $rail-w: 220px;
 // as part of the app chrome, not a page element.
 .refresh-bar {
   position: fixed;
-  top: calc(#{$topbar-h} + env(safe-area-inset-top));
+  top: #{$topbar-h};
   inset-inline: 0;
   z-index: 9;
 }
@@ -99,8 +97,7 @@ $rail-w: 220px;
 }
 
 .content {
-  padding: calc(#{$topbar-h} + env(safe-area-inset-top) + 0.75rem) 1rem
-    calc(#{$bottomnav-h} + env(safe-area-inset-bottom) + 0.75rem);
+  padding: calc(#{$topbar-h} + 0.75rem) 1rem calc(#{$bottomnav-h} + 0.75rem);
   max-width: 760px;
   margin: 0 auto;
 }
@@ -112,7 +109,6 @@ $rail-w: 220px;
   display: flex;
   background: var(--mat-sys-surface-container);
   border-top: 1px solid var(--mat-sys-outline-variant);
-  padding-bottom: env(safe-area-inset-bottom);
   z-index: 10;
 
   a {
