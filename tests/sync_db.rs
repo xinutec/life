@@ -42,7 +42,7 @@ async fn shopping_sync_pull_push_conflict_tombstone() {
         &pool,
         user,
         vec![PushEntry {
-            new_document_state: doc(&Ulid::new().to_string(), "Milk", 0),
+            new_document_state: doc(&Ulid::generate().to_string(), "Milk", 0),
             assumed_master_state: None,
         }],
     )
@@ -66,7 +66,7 @@ async fn shopping_sync_pull_push_conflict_tombstone() {
     assert_eq!(p2.checkpoint.rev, p1.checkpoint.rev);
 
     // Push a fresh client-created doc (no assumed master) → inserted, no conflict.
-    let eggs_ulid = Ulid::new().to_string();
+    let eggs_ulid = Ulid::generate().to_string();
     let conflicts = sync::push_shopping(
         &pool,
         user,
@@ -208,8 +208,8 @@ async fn boot_backfill_tombstones_duplicate_todo_links() {
         .unwrap();
 
     // Two live edges saying the same thing under different ulids.
-    let from = Ulid::new().to_string();
-    let (first, second) = (Ulid::new().to_string(), Ulid::new().to_string());
+    let from = Ulid::generate().to_string();
+    let (first, second) = (Ulid::generate().to_string(), Ulid::generate().to_string());
     for ulid in [&first, &second] {
         sqlx::query(
             "INSERT INTO todo_links \

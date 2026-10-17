@@ -311,7 +311,7 @@ pub async fn backfill_shopping(pool: &MySqlPool) -> Result<u64> {
                 "UPDATE shopping_items SET ulid = ?, rev = ?, updated_at = NOW() \
                  WHERE id = ? AND ulid IS NULL",
             )
-            .bind(Ulid::new().to_string())
+            .bind(Ulid::generate().to_string())
             .bind(rev)
             .bind(id)
             .execute(&mut *tx)

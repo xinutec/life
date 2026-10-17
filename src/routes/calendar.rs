@@ -85,7 +85,7 @@ pub async fn plan_shop_trip(
         items: body.items,
     };
     // Minted once: a shop and a time repeat every week.
-    let uid = format!("shop-trip-{}@life", Ulid::new());
+    let uid = format!("shop-trip-{}@life", Ulid::generate());
     let ics =
         trip::ics(&planned, &uid, Utc::now()).map_err(|e| AppError::BadRequest(e.to_string()))?;
 

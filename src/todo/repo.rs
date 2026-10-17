@@ -51,7 +51,7 @@ async fn get_for_update(
 }
 
 pub async fn create(pool: &MySqlPool, user_id: &str, new: NewTodo) -> Result<Todo> {
-    let ulid = Ulid::new().to_string();
+    let ulid = Ulid::generate().to_string();
     let mut tx = pool.begin().await?;
     let rev = next_rev(&mut tx).await?;
     let res = sqlx::query(

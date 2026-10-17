@@ -759,7 +759,7 @@ async fn an_attachment_is_downloaded_never_rendered() {
 /// Put a row on the Buy list the way the app does, by a sync push, and return
 /// the id the buy route takes.
 async fn on_the_list(pool: &MySqlPool, name: &str) -> u64 {
-    let ulid = ulid::Ulid::new().to_string();
+    let ulid = ulid::Ulid::generate().to_string();
     let doc = serde_json::json!({
         "ulid": ulid, "name": name, "quantity": 2.0, "unit": "pots",
         "barcode": null, "category": "food", "done": false,
@@ -786,7 +786,7 @@ async fn buying_a_row_brings_it_home_once_and_a_bad_price_never_stops_it() {
         .await
         .unwrap();
     // Named for this run: the user is shared with tests running beside this one.
-    let run = ulid::Ulid::new();
+    let run = ulid::Ulid::generate();
     let yoghurt_name = format!("Yoghurt {run}");
     let yoghurt = on_the_list(&pool, &yoghurt_name).await;
     let paid = |amount_minor: i64| serde_json::json!({ "purchase": { "shop": "Waitrose", "amount_minor": amount_minor, "currency": "GBP" } });
