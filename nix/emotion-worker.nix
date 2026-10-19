@@ -11,7 +11,8 @@ writeShellApplication {
     ENV_FILE="''${LIFE_WORKER_ENV:-$HOME/.config/life/worker.env}"
     if [ ! -r "$ENV_FILE" ]; then
       echo "no worker env at $ENV_FILE — the worker has no token to authenticate with" >&2
-      exit 78 # EX_CONFIG: a configuration problem, not a crash to restart into
+      # EX_CONFIG. launchd's KeepAlive still retries every ~10s until the file exists.
+      exit 78
     fi
     set -a
     # shellcheck disable=SC1090  # deliberately a runtime path, not a fixed file

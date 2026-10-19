@@ -75,8 +75,9 @@ class MainActivity : WebShellActivity() {
      * The native capabilities the web app drives, exposed only to [ALLOWED_ORIGINS].
      *
      * `addWebMessageListener` is per origin, and each listener checks `sourceOrigin`
-     * and `isMainFrame`. Never fall back to `addJavascriptInterface`, which reaches
-     * every frame: the shop bridge runs caller-supplied JavaScript.
+     * and `isMainFrame`. Never fall back to `addJavascriptInterface` here: it reaches
+     * every frame. (ShopBridge's hidden view does use it, so its results are
+     * untrusted; see ShopBridge.resolve.)
      */
     override fun onWebViewCreated(web: WebView) {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return
@@ -356,13 +357,8 @@ class MainActivity : WebShellActivity() {
         cm.flush()
     }
 
-    /**
-     * The image on the system clipboard as a `data:` URL, or null if there isn't
-     * one. A WebView can't read a clipboard image itself, so the page asks us.
-     *
-     * Called on the UI thread, which `ClipboardManager` requires, and only for the
-     * app's own origin.
-     */
+    /** The clipboard image as a `data:` URL, or null. On the UI thread, which
+     *  `ClipboardManager` requires; only the app's own origin can ask. */
     private fun readClipboardImageDataUrl(): String? {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = clipboard.primaryClip ?: return null

@@ -72,11 +72,9 @@ def load_mlx_chat(model: str = DEFAULT_LLM) -> ChatModel:
     llm, tokenizer = loaded[0], loaded[1]
 
     def templated(messages: list[dict[str, str]]) -> list[int] | str:
-        # TokenizerWrapper delegates to the untyped HF tokenizer. It returns TOKEN
-        # IDS, not text (transformers only returns a string with tokenize=False) —
-        # verify that shape at the boundary rather than trusting an annotation,
-        # which read `str` for months without anyone noticing because mlx-lm's
-        # generate accepts either.
+        # The untyped HF tokenizer returns TOKEN IDS here (a string only with
+        # tokenize=False). Checked at the boundary: mlx-lm's generate accepts
+        # either, so a wrong annotation would never surface.
         ids = tokenizer.apply_chat_template(  # type: ignore[no-untyped-call]  # mlx-lm is untyped
             messages, add_generation_prompt=True
         )

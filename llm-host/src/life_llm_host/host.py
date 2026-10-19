@@ -121,11 +121,8 @@ class ModelHolder:
                     self._loading = None
                     self._loading_since = None
                 self._model = wanted
-                # Stamped on load, not only on a successful generation: a model
-                # that has just been loaded is not idle, even if the request that
-                # loaded it goes on to fail. Leaving it at 0 made the reaper read
-                # the whole process uptime as idle time and drop the weights
-                # instantly, so the next request paid a fresh cold load.
+                # Stamped on load: a just-loaded model is not idle, even if the
+                # request that loaded it fails.
                 self._last_used = self._clock()
                 load_secs = self._clock() - started
                 _log.info("loaded %s in %.1fs", wanted, load_secs)
@@ -175,11 +172,8 @@ class ModelHolder:
         """(model being loaded, seconds it has been loading) — (None, None) when
         no load is in flight.
 
-        Lock-free like `status`, and for a sharper reason: this is what tells a
-        waiting caller that the silence is a load rather than a dead daemon.
-        Measured loads run from 0.7s to 1533.6s on this machine, so "nothing is
-        resident" and "your model is on its way" are very different answers and
-        were previously indistinguishable from outside.
+        Lock-free like `status`: it tells a caller queued behind the lock that
+        the silence is a load (measured 0.7s to 1533.6s here), not a dead daemon.
         """
         model, since = self._loading, self._loading_since
         if model is None or since is None:

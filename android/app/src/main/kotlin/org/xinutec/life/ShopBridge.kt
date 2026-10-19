@@ -69,9 +69,10 @@ internal class ShopBridge(
      * [extractorJs] when it finishes; bot managers reject non-browser clients. A
      * capture patch exposes any Bearer the page attaches (window.__authToken).
      * Results come back through the per-view AndroidShop bridge, because
-     * evaluateJavascript doesn't await promises. One at a time.
+     * evaluateJavascript doesn't await promises. One at a time. Those results
+     * are untrusted: see [resolve].
      */
-    @SuppressLint("SetJavaScriptEnabled") // the WebView runs the app's own bundle
+    @SuppressLint("SetJavaScriptEnabled") // shop pages need JS; output checked in resolve
     fun run(url: String, extractorJs: String, requestId: String) {
         // No origin gate here: the web-message listener already refused anything
         // that isn't the app's own main frame.
@@ -241,9 +242,9 @@ internal class ShopBridge(
      * The session cookies land in the shared CookieManager, so the hidden fetch
      * view (and any future basket/order calls) inherit a logged-in session. A
      * "Done" button and the back key close it; the web app is notified via
-     * window.__shopConnected(requestId).
+     * window.__shopConnected(requestId). Nothing is bridged into this view.
      */
-    @SuppressLint("SetJavaScriptEnabled") // the WebView runs the app's own bundle
+    @SuppressLint("SetJavaScriptEnabled") // the retailer's login page needs JS
     fun connect(loginUrl: String, requestId: String) {
         if (connectOverlay != null) return // already open
         if (!isShopUrl(loginUrl)) {
