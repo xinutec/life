@@ -220,12 +220,19 @@ internal class ShopBridge(
         return SHOP_HOSTS.any { host == it || host.endsWith(".$it") }
     }
 
-    /** Resolve the web app's pending promise with a JSON result object. */
+    /** Resolve the web app's pending promise with a JSON result object.
+     *
+     *  `resultJson` comes from `AndroidShop.result`, which any frame on any page
+     *  the hidden view reaches can call, and it is spliced into JS run as life.
+     *  Re-serialised, so only an object literal can arrive — never code. */
     private fun resolve(requestId: String, resultJson: String) {
+        val result =
+            runCatching { JSONObject(resultJson).toString() }
+                .getOrDefault("""{"ok":false,"error":"malformed result"}""")
         val js =
             "window.__shopResolve && window.__shopResolve(${JSONObject.quote(
                 requestId,
-            )}, $resultJson)"
+            )}, $result)"
         web.post { web.evaluateJavascript(js, null) }
     }
 
