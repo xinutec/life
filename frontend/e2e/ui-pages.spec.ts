@@ -67,11 +67,11 @@ const TODOS = [
   {
     ulid: '01TODOOVERDUE0000000000001',
     id: 1,
-    title: 'Call the GP about the referral letter',
+    title: 'Call the plumber about the quote',
     type: 'call',
     status: 'open',
     priority: 'high',
-    notes: 'ask for the clinic line — they only pick up mornings',
+    notes: 'ask for the office line — they only pick up mornings',
     notBefore: null,
     due: iso(-3),
     shared: false,
@@ -362,7 +362,7 @@ const ITEMS: Item[] = [
   {
     id: 3,
     product_id: null,
-    name: 'Levetiracetam',
+    name: 'Paracetamol',
     brand: null,
     category: 'medication',
     quantity: 1,
@@ -648,9 +648,9 @@ const CONFLICTS = [
     kind: 'todo',
     ulid: '01TODOOVERDUE0000000000001',
     field: 'title',
-    label: 'Call the GP about the referral letter',
-    mine: JSON.stringify('Call the GP about the referral letter'),
-    theirs: JSON.stringify('Phone the GP re: the referral'),
+    label: 'Call the plumber about the quote',
+    mine: JSON.stringify('Call the plumber about the quote'),
+    theirs: JSON.stringify('Phone the plumber re: the quote'),
     created_at: now.getTime() - 60_000,
   },
 ] satisfies ConflictEntry[];
@@ -785,7 +785,7 @@ test('today — busy composition: lays out cleanly @ phone width', async ({ page
   await mockApi(page);
   await page.goto('/today');
   await page.getByText('Needs you').waitFor();
-  await page.getByText('Call the GP', { exact: false }).waitFor();
+  await page.getByText('Call the plumber', { exact: false }).waitFor();
   await page.getByText('Expiring soon').waitFor();
   // Three collections joined onto one line is the longest text Today renders,
   // and the row most likely to spill off a phone.
@@ -820,7 +820,7 @@ test('today — the shortcuts stay put while the cards load', async ({ page }) =
   await buy.waitFor();
   const before = (await buy.boundingBox())?.y;
   release();
-  await page.getByText('Call the GP', { exact: false }).waitFor();
+  await page.getByText('Call the plumber', { exact: false }).waitFor();
   await page.getByText('Expiring soon').waitFor();
   await page.getByText('tomorrow', { exact: true }).waitFor();
   expect((await buy.boundingBox())?.y).toBe(before);
@@ -829,7 +829,7 @@ test('today — the shortcuts stay put while the cards load', async ({ page }) =
 test('to-do list — pills in rows: lays out cleanly @ phone width', async ({ page }, testInfo) => {
   await mockApi(page);
   await page.goto('/todo');
-  await page.getByText('Call the GP', { exact: false }).waitFor();
+  await page.getByText('Call the plumber', { exact: false }).waitFor();
   await page.getByText('overdue', { exact: false }).first().waitFor();
   await expectCleanLayout(page, testInfo);
   // The note has its own line, and must not be starved.
@@ -1290,7 +1290,7 @@ test('files dialog — the empty state and the attach button fit @ phone width',
   await mockApi(page);
   await page.route('**/api/items/*/files', (r) => r.fulfill({ json: FILES }));
   await page.goto('/inventory');
-  await page.getByText('Levetiracetam').click();
+  await page.getByText('Paracetamol').click();
   await page.getByRole('button', { name: 'Files' }).click();
 
   const dialog = page.locator('app-files-dialog');
@@ -1308,7 +1308,7 @@ test('purchase dialog — the price/date pair and the months suffix fit @ phone 
 }, testInfo) => {
   await mockApi(page);
   await page.goto('/inventory');
-  await page.getByText('Levetiracetam').click();
+  await page.getByText('Paracetamol').click();
   await page.getByRole('button', { name: 'Record a purchase' }).click();
 
   const dialog = page.locator('app-purchase-dialog');
@@ -1551,7 +1551,7 @@ test('to-do detail — tapping a to-do opens a clean edit sheet @ phone width', 
   await mockApi(page);
   await page.goto('/todo');
   // Tap the to-do title (role=button span) — the same gesture a thumb makes.
-  await page.getByText('Call the GP', { exact: false }).click();
+  await page.getByText('Call the plumber', { exact: false }).click();
 
   // The bottom sheet is the .detail container; wait for its far-down controls so
   // the whole form (not just the header) has laid out before we measure.
@@ -1569,7 +1569,7 @@ test('to-do detail — tapping a to-do opens a clean edit sheet @ phone width', 
   await expectNoHorizontalOverflow(page, testInfo);
 
   // Sanity: the fields the form promises are actually rendered in the sheet.
-  await expect(sheet.getByLabel('Title')).toHaveValue('Call the GP about the referral letter');
+  await expect(sheet.getByLabel('Title')).toHaveValue('Call the plumber about the quote');
   await expect(sheet.getByText('Timing')).toBeVisible();
 });
 

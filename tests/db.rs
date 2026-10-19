@@ -117,7 +117,7 @@ async fn inventory_crud_against_real_db() {
         .unwrap();
     assert_eq!(count, 2);
 
-    // Update every field (name + quantity).
+    // Update the name and quantity.
     let updated = repo::update_item(
         &pool,
         user,

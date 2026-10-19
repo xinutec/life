@@ -140,7 +140,7 @@ async fn duplicate_edges_from_two_devices_are_deduped_on_push() {
         .await
         .unwrap();
 
-    // Exactly one live edge remains; the later ulid is the tombstoned one.
+    // Exactly one live edge remains.
     let edges = live(&pool, user).await;
     assert_eq!(
         edges.len(),

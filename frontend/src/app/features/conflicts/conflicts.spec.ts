@@ -15,9 +15,9 @@ const ENTRIES: ConflictEntry[] = [
     kind: 'todo',
     ulid: '01HXAMPLETODOULID000000000',
     field: 'notes',
-    label: 'Call the GP',
-    mine: '"ask about MRI"',
-    theirs: '"ask about bloods"',
+    label: 'Call the plumber',
+    mine: '"ask about the boiler"',
+    theirs: '"ask about the radiators"',
     created_at: 1751400000000,
   },
 ];
@@ -49,9 +49,9 @@ describe('Conflicts', () => {
     const { fixture } = mount();
     await fixture.whenStable();
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
-    expect(text).toContain('Call the GP');
-    expect(text).toContain('ask about MRI');
-    expect(text).toContain('ask about bloods');
+    expect(text).toContain('Call the plumber');
+    expect(text).toContain('ask about the boiler');
+    expect(text).toContain('ask about the radiators');
   });
 
   it('formats list values (emotions) as text, not raw JSON', () => {
@@ -69,7 +69,7 @@ describe('Conflicts', () => {
     await fixture.whenStable();
     expect(todo.patch).not.toHaveBeenCalled();
     expect(api.resolveConflict).toHaveBeenCalledWith(1);
-    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('Call the GP');
+    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('Call the plumber');
   });
 
   it('use-other patches the live row, then clears the entry', async () => {
@@ -78,7 +78,7 @@ describe('Conflicts', () => {
     fixture.componentInstance.useTheirs(ENTRIES[0]);
     await fixture.whenStable();
     expect(todo.patch).toHaveBeenCalledWith('01HXAMPLETODOULID000000000', {
-      notes: 'ask about bloods',
+      notes: 'ask about the radiators',
     });
     expect(api.resolveConflict).toHaveBeenCalledWith(1);
   });

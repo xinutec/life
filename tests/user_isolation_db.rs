@@ -1,7 +1,6 @@
 //! Two-user isolation against a real MariaDB: every user's data being
 //! invisible and untouchable to every other user is a core invariant of the
-//! open-to-any-Nextcloud-user model, so it gets tests, not audits. One
-//! sequential test (parallel tests contend on sync_rev and can deadlock).
+//! open-to-any-Nextcloud-user model, so it gets tests, not audits.
 
 mod common;
 

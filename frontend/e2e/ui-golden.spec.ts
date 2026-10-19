@@ -29,11 +29,11 @@ const ME = {
 const TODO = {
   ulid: '01GOLDENTODO000000000000001',
   id: 1,
-  title: 'Call the GP about the referral letter',
+  title: 'Call the plumber about the quote',
   type: 'call',
   status: 'open',
   priority: 'high',
-  notes: 'ask for the clinic line — they only pick up mornings',
+  notes: 'ask for the office line — they only pick up mornings',
   notBefore: null,
   due: '2026-06-30',
   shared: false,
@@ -81,7 +81,7 @@ async function mockApi(page: Page): Promise<void> {
 test('to-do edit sheet — golden @ phone width', async ({ page }) => {
   await mockApi(page);
   await page.goto('/todo');
-  await page.getByText('Call the GP', { exact: false }).click();
+  await page.getByText('Call the plumber', { exact: false }).click();
 
   // Wait until the whole form has laid out (its last control is the delete
   // button) and the web fonts + icon font have loaded, so the shot is stable.
@@ -104,7 +104,7 @@ test.describe('dark scheme', () => {
   test('to-do edit sheet — dark golden @ phone width', async ({ page }) => {
     await mockApi(page);
     await page.goto('/todo');
-    await page.getByText('Call the GP', { exact: false }).click();
+    await page.getByText('Call the plumber', { exact: false }).click();
 
     const sheet = page.locator('.mat-bottom-sheet-container');
     await sheet.waitFor();
@@ -123,7 +123,7 @@ test.describe('dark scheme', () => {
 test('to-do edit sheet — golden after swiping up @ phone width', async ({ page }) => {
   await mockApi(page);
   await page.goto('/todo');
-  await page.getByText('Call the GP', { exact: false }).click();
+  await page.getByText('Call the plumber', { exact: false }).click();
 
   const sheet = page.locator('.mat-bottom-sheet-container');
   await sheet.waitFor();

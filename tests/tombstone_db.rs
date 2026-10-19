@@ -2,8 +2,7 @@
 //! clear `deleted_at`, even with the correct assumed rev — the explicit trash
 //! restore is the one undelete path. The shopping copy of this test lives in
 //! `trash_db.rs`; with pull/push shared over `SyncSpec`, these prove the
-//! remaining collections ride the same implementation. One sequential test
-//! (parallel tests contend on sync_rev and can deadlock).
+//! remaining collections ride the same implementation.
 
 mod common;
 

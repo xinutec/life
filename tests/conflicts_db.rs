@@ -25,9 +25,9 @@ async fn conflict_report_list_resolve_roundtrip() {
             kind: ConflictKind::Todo,
             ulid: "01HXAMPLETODOULID000000000".into(),
             field: "notes".into(),
-            label: "Call the GP".into(),
-            mine: "\"ask about MRI\"".into(),
-            theirs: "\"ask about bloods\"".into(),
+            label: "Call the plumber".into(),
+            mine: "\"ask about the boiler\"".into(),
+            theirs: "\"ask about the radiators\"".into(),
         },
     )
     .await
@@ -40,8 +40,8 @@ async fn conflict_report_list_resolve_roundtrip() {
     assert_eq!(entry.id, id);
     assert_eq!(entry.kind, ConflictKind::Todo);
     assert_eq!(entry.field, "notes");
-    assert_eq!(entry.mine, "\"ask about MRI\"");
-    assert_eq!(entry.theirs, "\"ask about bloods\"");
+    assert_eq!(entry.mine, "\"ask about the boiler\"");
+    assert_eq!(entry.theirs, "\"ask about the radiators\"");
 
     // Resolve stamps it out of the list; the row is kept, not deleted.
     assert!(repo::resolve(&pool, user, id).await.unwrap());

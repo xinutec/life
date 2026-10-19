@@ -189,7 +189,7 @@ async fn patch_leaves_absent_fields_alone_and_clears_on_null() {
         &pool,
         user,
         NewTodo {
-            title: "Raise scalp pain at the review".into(),
+            title: "Bring the receipts to the meeting".into(),
             todo_type: TodoType::Task,
             priority: Some(TodoPriority::Medium),
             notes: Some("old wording".into()),
@@ -277,7 +277,7 @@ async fn patch_does_not_revert_a_concurrent_write_to_an_untouched_field() {
         &pool,
         USER,
         NewTodo {
-            title: "Raise the eye watering at the review".into(),
+            title: "Bring the warranty card to the meeting".into(),
             todo_type: TodoType::Task,
             priority: Some(TodoPriority::Medium),
             notes: Some("old wording".into()),
