@@ -5,7 +5,8 @@ import type { UnitPrice } from "./UnitPrice";
 
 export type Purchase = { id: number, product_id: ProductId | null, 
 /**
- * The one key that always exists.
+ * Set on every purchase since 0044; `None` before that, and once the item is
+ * deleted (the purchase outlives it).
  */
 item_id: number | null, barcode: string | null, 
 /**

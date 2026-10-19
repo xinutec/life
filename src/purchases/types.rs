@@ -38,7 +38,8 @@ pub struct Purchase {
     #[ts(type = "number")]
     pub id: PurchaseId,
     pub product_id: Option<ProductId>,
-    /// The one key that always exists.
+    /// Set on every purchase since 0044; `None` before that, and once the item is
+    /// deleted (the purchase outlives it).
     #[ts(type = "number | null")]
     pub item_id: Option<crate::inventory::types::ItemId>,
     pub barcode: Option<String>,

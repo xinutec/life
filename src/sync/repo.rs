@@ -634,7 +634,6 @@ impl SyncSpec for Wellbeing {
     }
 
     fn bind_data<'q>(q: DataQuery<'q>, doc: &'q WellbeingDoc) -> DataQuery<'q> {
-        // Always serialises.
         let emotions_json =
             serde_json::to_string(&doc.emotions).expect("Vec<String> serialises to JSON");
         q.bind(doc.recorded_at.naive_utc())

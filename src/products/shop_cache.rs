@@ -13,7 +13,7 @@ use super::off;
 use super::source::Source;
 
 /// One listing as the shop described it, from Asda's search or the phone's
-/// WebView. Field order matches `find_by_barcode`'s SELECT.
+/// WebView.
 #[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
 pub struct CachedListing {
     pub source: Source,

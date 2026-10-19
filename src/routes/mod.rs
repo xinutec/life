@@ -32,8 +32,10 @@ use tracing::Level;
 
 use crate::state::AppState;
 
-/// `index.html` revalidates, or clients run an old build for hours; everything
-/// else is content-hashed, so `immutable`.
+/// `index.html` revalidates, or clients run an old build for hours; the rest is
+/// `immutable`. Bundles and fonts are content-hashed; the service worker's files
+/// are not, but browsers bypass this cache for them. Icons and the manifest are
+/// not either, so a changed one can stay stale for a year.
 fn cache_control_for(res: &Response<ServeFileSystemResponseBody>) -> Option<HeaderValue> {
     let is_html = res
         .headers()

@@ -4,8 +4,8 @@ import type { ItemCategory } from "./ItemCategory";
 import type { ProductId } from "./ProductId";
 
 /**
- * `name`, `brand`, `barcode` and `has_image` come from the linked product when
- * there is one.
+ * With a linked product: `brand` and `has_image` are its; `name` is too, unless
+ * the person typed it; `barcode` is the item's own, else the product's.
  */
 export type Item = { id: number, product_id: ProductId | null, name: string, brand: string | null, category: ItemCategory, quantity: number | null, unit: string | null, expiry: string | null, 
 /**

@@ -121,7 +121,8 @@ pub async fn result(
     app.mark_worker_seen();
 
     let Some(job) = suggest_store::job_for_completion(&app.pool, id).await? else {
-        // The note changed while the model was busy; nothing to record.
+        // Already completed (a stale claim run twice); nothing to record. A note
+        // changed meanwhile is caught in `complete`.
         return Ok(StatusCode::NO_CONTENT);
     };
 

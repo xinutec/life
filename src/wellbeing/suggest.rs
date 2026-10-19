@@ -231,7 +231,7 @@ pub fn filter_suggestions(
 pub enum Progress {
     /// Computed from this very wording.
     Answered,
-    /// Not, or none: a job for this wording is queued.
+    /// No answer for this wording yet; a job for it is queued.
     Waiting {
         secs: i64,
         /// A worker holds a fresh claim: generating now.

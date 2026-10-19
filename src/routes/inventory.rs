@@ -301,8 +301,8 @@ pub struct LowByIdentity {
     pub product_id: Option<ProductId>,
 }
 
-/// POST /api/items/low → the same, from the Buy list. 204 whether or not a
-/// cupboard row matched.
+/// POST /api/items/low → record `low` from the Buy list, matched by identity
+/// (`repo::mark_low_matching`). 204 whether or not a cupboard row matched.
 pub async fn mark_low_by_identity(
     State(app): State<AppState>,
     AuthUser(user): AuthUser,

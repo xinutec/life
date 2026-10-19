@@ -1,8 +1,9 @@
 //! A login in progress, in a signed cookie bound to the browser that started it.
 //! Needed because, from a browser with no Nextcloud session, `oauth2/authorize`
 //! detours through Login Flow and the callback arrives with an empty `state=`.
-//! `state` is still checked when returned. Accepted risk: a login CSRF needs
-//! someone on the VPN to land a callback within the 10-minute window.
+//! `state` is still checked when returned. The gap is a login CSRF: life is
+//! public, so anyone who gets the browser to a callback carrying their own code
+//! within the 10-minute window signs it in as them.
 
 use chrono::{DateTime, Duration, Utc};
 use rand::Rng;
@@ -19,7 +20,7 @@ pub fn ttl() -> Duration {
 pub struct PendingLogin {
     /// Sent as `state`; compared when Nextcloud returns it.
     pub nonce: String,
-    /// Allowlist-checked when used.
+    /// Must resolve to this site when used (`routes::auth::validate_return_to`).
     pub return_to: Option<String>,
     pub expires_at: DateTime<Utc>,
 }

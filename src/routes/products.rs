@@ -344,9 +344,13 @@ async fn picture_choice(
             "source {source} carries no adoptable picture"
         )));
     }
-    let (bytes, mime) = off::fetch_image_from(url, hosts)
-        .await?
-        .ok_or_else(|| AppError::BadRequest("the source's picture host is not allowed".into()))?;
+    let (bytes, mime) = off::fetch_image_from(url, hosts).await?.ok_or_else(|| {
+        AppError::BadRequest(
+            "the source's picture could not be fetched as an image (refused, missing, \
+                 too large, or not an image)"
+                .into(),
+        )
+    })?;
     Ok(repo::PictureChoice::Adopt {
         source,
         bytes,
@@ -577,7 +581,8 @@ pub async fn submit_facts(
     build_detail(&app.pool, &user.user_id, id).await.map(Json)
 }
 
-/// GET /api/products/id/{id}/image → for products without a barcode.
+/// GET /api/products/id/{id}/image → any product's picture by id; the only route
+/// to one without a barcode.
 pub async fn image_by_id(
     State(app): State<AppState>,
     AuthUser(_user): AuthUser,

@@ -55,8 +55,8 @@ pub fn sniff(bytes: &[u8]) -> Option<Media> {
     }
 
     if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" {
-        // AVIF before HEIC, over the whole box: AVIF shares HEIC's major brands
-        // and lists `avif` only among the compatible ones.
+        // AVIF before HEIC, across the first 64 bytes: AVIF shares HEIC's major
+        // brands and lists `avif` only among the compatible ones.
         let end = bytes.len().min(64);
         if bytes[8..end]
             .windows(4)

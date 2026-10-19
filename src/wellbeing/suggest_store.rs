@@ -52,7 +52,7 @@ pub async fn cached(pool: &MySqlPool, user_id: &str, ulid: &str) -> sqlx::Result
 }
 
 /// Checked before anything is built: the picker asks every couple of seconds, and
-/// each ask would otherwise rebuild a three-thousand-token prompt.
+/// each ask would otherwise rebuild a prompt thousands of tokens long.
 pub async fn pending_for(
     pool: &MySqlPool,
     user_id: &str,

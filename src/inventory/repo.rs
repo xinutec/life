@@ -274,7 +274,7 @@ pub async fn move_item(
 }
 
 /// Update an item, recording `moved` if the location changed. The row is locked,
-/// since fields the caller did not state are kept and must not be read stale.
+/// so the location compared against is the one being replaced.
 pub async fn update_item(
     pool: &MySqlPool,
     user_id: &str,

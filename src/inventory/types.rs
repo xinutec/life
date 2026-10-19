@@ -89,8 +89,8 @@ pub struct Location {
     pub position: Option<serde_json::Value>,
 }
 
-/// `name`, `brand`, `barcode` and `has_image` come from the linked product when
-/// there is one.
+/// With a linked product: `brand` and `has_image` are its; `name` is too, unless
+/// the person typed it; `barcode` is the item's own, else the product's.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct Item {
@@ -154,7 +154,7 @@ pub struct ItemHistoryEntry {
     pub at: DateTime<Utc>,
 }
 
-/// `unit` must agree with the row's own ([[super::consume]]), so "200 g" against a
+/// `unit` must agree with the row's own ([`super::consume`]), so "200 g" against a
 /// jar is refused rather than taken from 1. Absent means unitless.
 #[derive(Debug, Deserialize)]
 pub struct UseItem {

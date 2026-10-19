@@ -18,8 +18,8 @@ use crate::str_enum;
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct Product {
-    /// A product may have no barcode.
     pub id: ProductId,
+    /// A product may have no barcode.
     pub barcode: Option<Barcode>,
     pub name: Option<String>,
     pub brand: Option<String>,

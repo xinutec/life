@@ -10,7 +10,8 @@ use super::nutrition::{ProductFacts, RawFacts};
 
 const USER_AGENT: &str = "Life/0.1 (https://life.xinutec.org)";
 
-/// So a poisoned URL cannot stream gigabytes into a 256 MiB pod.
+/// So a poisoned URL cannot stream gigabytes into the pod (its memory limit is in
+/// kubes' life.dhall).
 const MAX_IMAGE_BYTES: usize = 5 * 1024 * 1024;
 
 pub struct OffProduct {
@@ -79,8 +80,8 @@ pub fn sniff_image_mime(bytes: &[u8]) -> Option<&'static str> {
     }
 }
 
-/// `Ok(None)`: OFF has no such product. A [`Barcode`] is digits, so it splices
-/// safely.
+/// `Ok(None)`: OFF has no such product, or answered with any error status (an
+/// outage reads the same). A [`Barcode`] is digits, so it splices safely.
 pub async fn fetch(http: &reqwest::Client, barcode: &Barcode) -> Result<Option<OffProduct>> {
     let url = format!(
         "https://world.openfoodfacts.org/api/v2/product/{barcode}.json\

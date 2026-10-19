@@ -209,7 +209,7 @@ pub async fn listing_id(
 }
 
 /// Which shops hold a listing for each product: the attached half of
-/// [[super::coverage]].
+/// [`super::coverage`].
 pub async fn shops_holding(pool: &MySqlPool, ids: &[ProductId]) -> Result<Vec<AttachedListing>> {
     if ids.is_empty() {
         return Ok(Vec::new());

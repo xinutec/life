@@ -4,7 +4,7 @@ use crate::products::ids::ProductId;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-/// One ingredient, matched to stock by product and by name ([[super::matching]]).
+/// One ingredient, matched to stock by product and by name ([`super::matching`]).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct RecipeIngredient {

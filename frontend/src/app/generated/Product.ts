@@ -5,11 +5,11 @@ import type { PackSize } from "./PackSize";
 import type { ProductId } from "./ProductId";
 import type { Source } from "./Source";
 
-export type Product = { 
+export type Product = { id: ProductId, 
 /**
  * A product may have no barcode.
  */
-id: ProductId, barcode: Barcode | null, name: string | null, brand: string | null, quantity_label: string | null, 
+barcode: Barcode | null, name: string | null, brand: string | null, quantity_label: string | null, 
 /**
  * `quantity_label` read as an amount ([`super::packsize`]); derived on read,
  * as the label can be corrected. `None` for one we would rather not guess.

@@ -97,8 +97,8 @@ impl AppState {
         Some(system)
     }
 
-    /// Create this future before looking at the queue, or a job landing in between
-    /// waits for the timer.
+    /// Take `.notified()` on it before looking at the queue, or a job landing in
+    /// between waits for the timer.
     pub fn job_queued(&self) -> Arc<tokio::sync::Notify> {
         Arc::clone(&self.job_queued)
     }

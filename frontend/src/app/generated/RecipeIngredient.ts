@@ -2,7 +2,7 @@
 import type { ProductId } from "./ProductId";
 
 /**
- * One ingredient, matched to stock by product and by name ([[super::matching]]).
+ * One ingredient, matched to stock by product and by name ([`super::matching`]).
  */
 export type RecipeIngredient = { name: string, 
 /**
