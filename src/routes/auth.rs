@@ -15,7 +15,7 @@ use ts_rs::TS;
 use crate::error::AppError;
 use crate::nextcloud::credentials::{self, LinkStatus};
 use crate::nextcloud::{identity, login_flow};
-use crate::pending_login;
+use crate::pending_login::{self, Callback};
 use crate::session::{AuthUser, COOKIE_NAME, UserSession, create_session, destroy_session};
 use crate::state::AppState;
 
@@ -132,14 +132,28 @@ async fn finish_sign_in(
     jar: CookieJar,
     q: CallbackQuery,
 ) -> Result<(CookieJar, Redirect), AppError> {
-    let Some(pending) = pending_login::accept(
+    let pending = match pending_login::accept(
         &app.cfg.session_secret,
         jar.get(pending_login::COOKIE_NAME).map(Cookie::value),
         q.state.as_deref(),
         Utc::now(),
-    ) else {
-        tracing::warn!(reason = "no_pending_login", "login callback rejected");
-        return Err(AppError::Unauthorized);
+    ) {
+        Some(Callback::Accept(pending)) => pending,
+        Some(Callback::Retry(pending)) => {
+            // The code is not exchanged: without `state` nothing ties it to
+            // this browser. Nextcloud now has a session, so `state` returns.
+            tracing::info!("login callback without state — authorizing again");
+            let (nonce, cookie) =
+                pending_login::retry(&app.cfg.session_secret, &pending, Utc::now());
+            return Ok((
+                jar.add(pending_cookie(cookie)),
+                Redirect::to(&identity::authorize_url(&app.cfg, &nonce)),
+            ));
+        }
+        None => {
+            tracing::warn!(reason = "no_pending_login", "login callback rejected");
+            return Err(AppError::Unauthorized);
+        }
     };
     let code = q.code.ok_or_else(|| {
         tracing::warn!(reason = "no_code", "login callback rejected");
