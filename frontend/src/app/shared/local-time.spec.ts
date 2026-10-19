@@ -1,6 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { fromLocalInput, toLocalInput } from './local-time';
+
+/** Pinned, not inherited: in UTC the local and UTC clocks agree, so a runner
+ *  there cannot see the bug this exists for. */
+beforeAll(() => vi.stubEnv('TZ', 'Europe/London'));
+afterAll(() => vi.unstubAllEnvs());
 
 describe('local-time', () => {
   it('round-trips an instant through the field and back', () => {
@@ -13,9 +18,7 @@ describe('local-time', () => {
   it('writes the local wall clock, not UTC', () => {
     // The bug this exists to prevent: `toISOString().slice(0, 16)` puts UTC in a
     // field the user reads as their own clock — an hour out all summer.
-    const instant = new Date(2026, 7, 15, 10, 30);
-    const text = toLocalInput(instant);
-    expect(text).toBe(`2026-08-15T${String(instant.getHours()).padStart(2, '0')}:30`);
+    expect(toLocalInput(new Date(Date.UTC(2026, 7, 15, 9, 30)))).toBe('2026-08-15T10:30');
   });
 
   it('reads the field as local time', () => {
