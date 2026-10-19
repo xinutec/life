@@ -11,9 +11,8 @@
   display: block;
   width: 100%;
   height: auto;
-  // Match the viewBox ratio (CHART.w / CHART.h in wellbeing.ts) so the svg
-  // scales uniformly — preserveAspectRatio="none" squashed the dots into
-  // ellipses at any other rendered ratio.
+  // The viewBox ratio (CHART.w / CHART.h in wellbeing.ts), so the svg scales
+  // uniformly and the dots stay round.
   aspect-ratio: 300 / 96;
 }
 .mid {

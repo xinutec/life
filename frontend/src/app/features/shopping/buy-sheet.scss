@@ -1,6 +1,6 @@
 // The price list is the only part that grows (one field per ticked row), so it
 // scrolls and everything else holds still — or "Record" is pushed below the
-// fold, which no layout oracle sees. `40vh` leaves room for the shop field and
+// fold, which no layout oracle sees. The cap leaves room for the shop field and
 // the actions at phone height.
 .prices {
   display: flex;

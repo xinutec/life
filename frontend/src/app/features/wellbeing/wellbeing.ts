@@ -36,7 +36,8 @@ const CHART = { w: 300, h: 96, padLeft: 48, padRight: 6, padTop: 8, padBottom: 1
 
 const AXIS_X = CHART.padLeft - 6;
 
-/** A day narrower than this gets no weekday name; 14 days falls just below. */
+/** A day narrower than this gets no weekday name: 7 days' width clears it, 14
+ *  days' does not. */
 const MIN_DAY_LABEL_W = 30;
 
 /** Readings past each edge that feed the line, so its ends do not wobble as
@@ -109,8 +110,8 @@ export class Wellbeing {
       this.items();
       this.now.set(Date.now());
     });
-    // Re-seat the scroller only on a resize or a pin flip: after a zoom,
-    // scrollLeft refers to the old rail.
+    // A zoom or new history changes the rail's length, and scrollLeft still
+    // refers to the old one: ignore scrolls until the render below re-seats it.
     effect(() => {
       this.panFactor();
       untracked(() => this.reseating.set(true));

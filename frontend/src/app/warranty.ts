@@ -12,8 +12,8 @@ const SOON_DAYS = 90;
 export function warrantyInfo(until: number | null, now: Date = new Date()): WarrantyInfo | null {
   if (until === null) return null;
   const end = new Date(until);
-  // DAY to DAY, not instant to instant: the purchase is stored at MIDDAY UTC
-  // (see `bought_at_from` in the purchases repo), so its UTC day is its date.
+  // DAY to DAY, not instant to instant: a stated purchase day is stored at
+  // midday UTC (`bought_at` in the purchases repo), so its UTC day is its date.
   const days = daysUntil(utcDay(end), now);
   if (days === null) return null;
   if (days < 0) return { label: `warranty ended ${date(end)}`, cls: 'expired' };

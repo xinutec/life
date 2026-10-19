@@ -1,6 +1,6 @@
 .wrap {
   position: relative;
-  // Fill the viewport minus the top bar + bottom nav (+ safe area) + padding.
+  // Fill the viewport minus the top bar, the bottom nav and the padding.
   height: calc(100dvh - 56px - 60px - 1.5rem);
   min-height: 300px;
   touch-action: none; // let three.js OrbitControls own touch gestures

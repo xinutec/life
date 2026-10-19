@@ -15,7 +15,7 @@ import { ShoppingStore } from '../../sync/shopping-store';
 import { TodoStore } from '../../sync/todo-store';
 import { WellbeingStore } from '../../sync/wellbeing-store';
 
-/** As in the nav, so the origin is recognisable. */
+/** As in the nav where the kind has an entry, so the origin is recognisable. */
 const KIND_META: Record<TrashKind, { icon: string; label: string }> = {
   item: { icon: 'inventory_2', label: 'Item' },
   location: { icon: 'place', label: 'Place' },

@@ -1036,7 +1036,7 @@ export const EMOTION_NODES: readonly EmotionNode[] = EMOTION_WHEEL.flatMap((core
   ]),
 );
 
-/** Primary lookup: exact qualified token → node. Unambiguous. */
+/** Exact qualified token → node; the only lookup. Unambiguous. */
 const BY_TOKEN = new Map<string, EmotionNode>();
 for (const n of EMOTION_NODES) BY_TOKEN.set(n.token, n);
 

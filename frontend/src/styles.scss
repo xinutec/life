@@ -296,8 +296,8 @@ app-house .canvas canvas {
     gap: 0.5rem;
   }
 
-  // Shop-enrichment row: the "Shops" menu trigger + a "Linked" chip once an item
-  // is tied to a catalog product (Waitrose etc.). Android-app only.
+  // A wrapping row of secondary actions under a sheet's fields (View product,
+  // History, …), with a "Linked" chip once the item has a catalogue product.
   .shop-row {
     display: flex;
     align-items: center;

@@ -84,9 +84,8 @@
     <mat-list>
       @for (e of expiring(); track e.item.id) {
         <mat-list-item routerLink="/items">
-          <!-- "restaurant", not "nutrition": the latter only exists in Material
-               Symbols, not the classic Material Icons font we self-host — it
-               rendered as literal text (caught by the ui-check harness). -->
+          <!-- "restaurant", not "nutrition": the latter exists only in Material
+               Symbols, not the self-hosted Material Icons font, and shows as text. -->
           <mat-icon matListItemIcon>restaurant</mat-icon>
           <span matListItemTitle>{{ e.item.name }}</span>
           <span matListItemMeta class="expiry" [class]="e.info.cls">{{ e.info.label }}</span>

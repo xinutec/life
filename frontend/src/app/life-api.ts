@@ -218,7 +218,7 @@ export class LifeApi {
     brand?: string | null;
     /** As the shop writes it ("400G"). */
     quantity_label?: string | null;
-    /** Merges the shop's product with Open Food Facts' by barcode. */
+    /** Merges the listing onto the catalogue product with this barcode. */
     barcode?: string | null;
     image_url?: string | null;
     price?: PriceInput | null;
@@ -248,7 +248,7 @@ export class LifeApi {
   ): Observable<ProductDetail> {
     return this.http.post<ProductDetail>(`/api/products/id/${id}/facts`, body);
   }
-  /** For barcodeless products. */
+  /** Any product's picture by id; the only way to a barcodeless one. */
   productImageByIdUrl(id: number, version?: number): string {
     const base = `/api/products/id/${id}/image`;
     return version ? `${base}?v=${version}` : base;

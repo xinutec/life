@@ -56,7 +56,8 @@ export class EmotionPicker {
 
   readonly wheel = EMOTION_WHEEL;
   readonly query = signal('');
-  // Legacy bare words become tokens here and nowhere else.
+  // A legacy bare word resolves to no tile but is kept, so it survives the round
+  // trip (`emotionToken` passes unknown words through).
   readonly selected = signal<ReadonlySet<string>>(new Set(this.data.selected.map(emotionToken)));
 
   readonly results = computed(() => searchEmotions(this.query()));

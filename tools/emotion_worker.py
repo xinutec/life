@@ -44,7 +44,7 @@ LOG = logging.getLogger("emotion-worker")
 
 DEFAULT_MODEL = "mlx-community/Qwen2.5-7B-Instruct-4bit"
 DEFAULT_LLM_HOST = "http://127.0.0.1:8093"
-# The answer is a short JSON array of tokens. A tight bound keeps a model that
+# The answer is a short JSON object of tokens. A tight bound keeps a model that
 # starts rambling from pinning the GPU.
 MAX_TOKENS = 128
 # Longer than the server's poll window, so a held-open poll is never mistaken for
@@ -117,14 +117,11 @@ class Model:
     def loading(self) -> str | None:
         """A description of the load in flight, or None if there isn't one.
 
-        Asked BEFORE generating, because a request that arrives mid-load simply
-        queues on the holder's lock and gets nothing until the load finishes. On
-        this machine a load has been measured at 25 minutes, so that wait used to
-        burn a full GENERATE_TIMEOUT and then another, and another — the worker
-        stopped polling life for the whole time, its claim went stale, and the
-        picker gave up on an answer that was still coming. Cheap to ask: /health
-        is lock-free. Best-effort — an unreachable or old holder reads as "not
-        loading", so we go on and let generate() find out properly.
+        Asked BEFORE generating: a request arriving mid-load queues on the
+        holder's lock until the load finishes (measured at 25 minutes here), and
+        meanwhile this worker stops polling life and its claim goes stale. Cheap:
+        /health is lock-free. Best-effort: an unreachable or old holder reads as
+        "not loading", and generate() finds out properly.
         """
         req = urllib.request.Request(f"{self.host}/health", method="GET")
         try:
@@ -179,9 +176,8 @@ class Model:
 
 def run(base: str, token: str, model: Model) -> None:
     # Whether the wait has already been announced, so a load is logged once
-    # rather than once per poll — a 25-minute load would otherwise write 150
-    # identical lines. A FLAG, not a timestamp: this loop cannot measure a load
-    # (see below), and holding a start time here is what invited it to try.
+    # rather than once per poll. A flag, not a timestamp: this loop cannot see
+    # when a load ends (see below).
     announced_wait = False
     while True:
         try:
@@ -263,7 +259,8 @@ def _post_quietly(
     base: str, token: str, job_id: int, *, content: str | None, error: str | None
 ) -> None:
     """Report an answer, tolerating a server that blinked. The work is lost, the
-    note is not: it is queued again the next time the picker is opened."""
+    job is not: it stays queued, and is claimed again once this claim goes stale
+    (the server's CLAIM_STALE_SECS)."""
     try:
         post_result(base, token, job_id, content=content, error=error)
     except (urllib.error.URLError, TimeoutError, OSError) as e:

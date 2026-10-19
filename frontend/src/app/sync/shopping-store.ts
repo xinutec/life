@@ -6,7 +6,7 @@ import { ConflictReporter, FieldSpec, makeConflictHandler } from './conflict-mer
 import { SyncedCollectionConfig, SyncedStore } from './synced-store';
 import { keysOf } from '../shared/narrow';
 
-/** A Buy row as stored locally; `id` is used only by /buy. */
+/** A Buy row as stored locally; `id` is null until synced, and /buy needs it. */
 export interface ShoppingDoc {
   ulid: string;
   id: number | null;
