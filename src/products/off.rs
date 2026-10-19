@@ -80,11 +80,23 @@ pub fn sniff_image_mime(bytes: &[u8]) -> Option<&'static str> {
     }
 }
 
-/// `Ok(None)`: OFF has no such product, or answered with any error status (an
-/// outage reads the same). A [`Barcode`] is digits, so it splices safely.
+/// Where [`fetch`] asks; a parameter of [`fetch_from`] so a test can stand in.
+pub const OFF_BASE: &str = "https://world.openfoodfacts.org";
+
 pub async fn fetch(http: &reqwest::Client, barcode: &Barcode) -> Result<Option<OffProduct>> {
+    fetch_from(http, OFF_BASE, barcode).await
+}
+
+/// `Ok(None)`: OFF has no such product (404, or `status` 0). Any other failure
+/// is an error, so an outage never reads as "unknown product". A [`Barcode`] is
+/// digits, so it splices safely.
+pub async fn fetch_from(
+    http: &reqwest::Client,
+    base: &str,
+    barcode: &Barcode,
+) -> Result<Option<OffProduct>> {
     let url = format!(
-        "https://world.openfoodfacts.org/api/v2/product/{barcode}.json\
+        "{base}/api/v2/product/{barcode}.json\
          ?fields=product_name,brands,quantity,image_front_url,\
          nutriments,nutrition_data_per,serving_size,\
          ingredients_text,ingredients_text_en,\
@@ -95,8 +107,11 @@ pub async fn fetch(http: &reqwest::Client, barcode: &Barcode) -> Result<Option<O
         .header("User-Agent", USER_AGENT)
         .send()
         .await?;
-    if !res.status().is_success() {
+    if res.status() == reqwest::StatusCode::NOT_FOUND {
         return Ok(None);
+    }
+    if !res.status().is_success() {
+        anyhow::bail!("Open Food Facts answered HTTP {}", res.status());
     }
     let body = res.text().await.context("reading OFF response")?;
     let env: Envelope = serde_json::from_str(&body).context("parsing OFF response")?;

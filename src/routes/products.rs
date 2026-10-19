@@ -74,7 +74,11 @@ pub async fn lookup(
         tracing::debug!(%barcode, "product cache hit");
         return Ok(Json(p));
     }
-    let Some(found) = off::fetch(&app.http, &barcode).await? else {
+    let fetched = off::fetch(&app.http, &barcode).await.map_err(|e| {
+        tracing::warn!(%barcode, "Open Food Facts lookup failed: {e:#}");
+        AppError::Upstream("Couldn't reach Open Food Facts — try again later.".into())
+    })?;
+    let Some(found) = fetched else {
         tracing::debug!(%barcode, "product not in Open Food Facts");
         return Err(AppError::NotFound);
     };
