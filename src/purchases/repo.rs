@@ -34,7 +34,7 @@ pub async fn record(
     if p.amount_minor < 0 {
         bail!("a purchase cannot cost a negative amount");
     }
-    let bought_at = bought_at_from(p.bought_on)?;
+    let bought_at = bought_at(p.bought_on, Utc::now())?;
     if let Some(months) = p.warranty_months
         && !(1..=MAX_WARRANTY_MONTHS).contains(&months)
     {
@@ -67,19 +67,20 @@ pub async fn record(
 const MAX_WARRANTY_MONTHS: i32 = 600;
 
 /// The stated day, or now. A day is stored at midday UTC, where no zone offset
-/// moves it; a future day is refused as a typo.
-fn bought_at_from(on: Option<chrono::NaiveDate>) -> Result<DateTime<Utc>> {
+/// moves it, but never later than now: today picked in the morning is today.
+/// A day after today (UTC) is refused as a typo.
+pub fn bought_at(on: Option<chrono::NaiveDate>, now: DateTime<Utc>) -> Result<DateTime<Utc>> {
     let Some(day) = on else {
-        return Ok(Utc::now());
+        return Ok(now);
     };
+    if day > now.date_naive() {
+        bail!("a purchase cannot have happened in the future ({day})");
+    }
     let midday = NaiveTime::from_hms_opt(12, 0, 0).expect("12:00:00 is a time");
     let Some(at) = Utc.from_local_datetime(&day.and_time(midday)).single() else {
         bail!("{day} is not a real day");
     };
-    if at > Utc::now() {
-        bail!("a purchase cannot have happened in the future ({day})");
-    }
-    Ok(at)
+    Ok(at.min(now))
 }
 
 /// One cupboard item's purchases, newest first: the only way to reach one made
