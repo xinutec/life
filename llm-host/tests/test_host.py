@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from typing import Any
 
 import pytest
@@ -163,6 +164,9 @@ def test_generations_are_serialised() -> None:
                 overlapping += 1
                 peak = max(peak, overlapping)
             try:
+                # Held long enough that unserialised threads WOULD overlap;
+                # returning at once let the test pass with the lock removed.
+                time.sleep(0.02)
                 return prompt
             finally:
                 with guard:
