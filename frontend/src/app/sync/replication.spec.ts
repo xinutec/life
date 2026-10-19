@@ -148,7 +148,6 @@ describe('startHttpReplication', () => {
     respond: (init?: RequestInit) => Response = (init) =>
       json(init?.method === 'POST' ? [] : EMPTY_BATCH),
   ) {
-    // ast-grep-ignore: life-single-rxdb
     const db = await createRxDatabase({
       name: `poll-spec-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       storage: getRxStorageMemory(),
@@ -295,7 +294,6 @@ describe('startHttpReplication', () => {
  *  for leadership". */
 describe('rxdb: reSync on a replication that never started', () => {
   async function parked() {
-    // ast-grep-ignore: life-single-rxdb
     const db = await createRxDatabase({
       name: `parked-spec-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       storage: getRxStorageMemory(),

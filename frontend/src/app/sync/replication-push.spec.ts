@@ -47,7 +47,6 @@ type PushHandler = (rows: RxReplicationWriteToMasterRow<Doc>[]) => Promise<WithD
 async function setup(opts?: { pull?: PullHandler; push?: PushHandler }) {
   // Throwaway in-memory DB per test — this spec drives the raw replication
   // protocol, deliberately outside the app's shared-LifeDb plumbing.
-  // ast-grep-ignore: life-single-rxdb
   const db = await createRxDatabase({
     name: `push-spec-${++seq}`,
     storage: getRxStorageMemory(),

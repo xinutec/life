@@ -78,6 +78,15 @@ in  { name = "life"
         , env = G.nonInteractive
         , timeout_s = 900
         }
+      , {-  This app's own rules (frontend/ast-grep-rules). dev-lint reads only its
+            own rule directory, so without this row they run nowhere.
+        -}
+        G.Check::{
+        , name = "frontend app rules (ast-grep)"
+        , cwd = "frontend"
+        , argv = G.inDevShell [ "ast-grep", "scan" ]
+        , timeout_s = 300
+        }
       , G.Check::{
         , name = "frontend typecheck (e2e)"
         , cwd = "frontend"

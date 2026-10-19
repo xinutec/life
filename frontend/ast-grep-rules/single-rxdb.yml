@@ -2,8 +2,11 @@
 # calling createRxDatabase() itself is fine alone but throws in PRODUCTION when a
 # second store loads at the same time (ignoreDuplicate is dev-only). Inject LifeDb
 # and use .collection(...).
-# The single legitimate call, in sync/life-db.ts, is suppressed inline.
+# The single legitimate call, in sync/life-db.ts, is suppressed inline. Specs
+# build throwaway databases on purpose, so they are out of scope.
 id: life-single-rxdb
+ignores:
+  - '**/*.spec.ts'
 language: typescript
 severity: error
 message: >-

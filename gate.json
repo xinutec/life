@@ -162,6 +162,21 @@
         "develop",
         "--no-warn-dirty",
         "--command",
+        "ast-grep",
+        "scan"
+      ],
+      "artifacts": [],
+      "cwd": "frontend",
+      "env": {},
+      "name": "frontend app rules (ast-grep)",
+      "timeout_s": 300
+    },
+    {
+      "argv": [
+        "nix",
+        "develop",
+        "--no-warn-dirty",
+        "--command",
         "pnpm",
         "run",
         "typecheck:e2e"

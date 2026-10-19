@@ -57,7 +57,6 @@ let seq = 0;
 /** A fresh in-memory database per test, in place of the shared IndexedDB one. */
 const memoryDb = {
   async collection(name: string, s: RxJsonSchema<Doc>, conflictHandler: RxConflictHandler<Doc>) {
-    // ast-grep-ignore: life-single-rxdb
     const db = await createRxDatabase({
       name: `synced-store-spec-${++seq}`,
       storage: getRxStorageMemory(),
