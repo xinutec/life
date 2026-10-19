@@ -42,11 +42,18 @@ fn pending_cookie(value: String) -> Cookie<'static> {
         .build()
 }
 
-/// Same-site paths only. Rejects `//host` and `/\host`, which browsers fold
-/// to `//`.
+/// Same-site paths only, judged where a browser lands: the WHATWG parser drops
+/// tabs and newlines and folds `\` to `/`, so `/\t/host` is `//host`. Returns
+/// the path as that parser resolves it.
 pub fn validate_return_to(return_to: Option<&str>) -> String {
-    match return_to {
-        Some(p) if p.starts_with('/') && !p[1..].starts_with(['/', '\\']) => p.to_string(),
+    let site = url::Url::parse("https://site.invalid/").expect("a fixed URL");
+    match return_to
+        .filter(|p| p.starts_with('/'))
+        .map(|p| site.join(p))
+    {
+        Some(Ok(dest)) if dest.origin() == site.origin() => {
+            dest[url::Position::BeforePath..].to_string()
+        }
         _ => "/".to_string(),
     }
 }
