@@ -17,36 +17,50 @@ pub mod wellbeing;
 
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
-use axum::http::{HeaderValue, Response, header};
+use axum::http::{HeaderValue, header};
 use axum::routing::{delete, get, patch, post};
 
 use crate::error::AppError;
 use crate::files::types as files_types;
 use crate::products::off;
-use tower::ServiceBuilder;
 use tower_http::services::ServeDir;
-use tower_http::services::fs::ServeFileSystemResponseBody;
-use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tracing::Level;
 
 use crate::state::AppState;
 
-/// `index.html` revalidates, or clients run an old build for hours; the rest is
-/// `immutable`. Bundles and fonts are content-hashed; the service worker's files
-/// are not, but browsers bypass this cache for them. Icons and the manifest are
-/// not either, so a changed one can stay stale for a year.
-fn cache_control_for(res: &Response<ServeFileSystemResponseBody>) -> Option<HeaderValue> {
-    let is_html = res
-        .headers()
-        .get(header::CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-        .is_some_and(|ct| ct.starts_with("text/html"));
-    Some(if is_html {
-        HeaderValue::from_static("no-cache")
+/// A name carrying its content hash (`main-7GNM4EPX.js`, a font's `-ABCD1234`):
+/// a new build is a new name, so it may be cached for ever.
+fn is_content_hashed(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or("");
+    let Some((stem, _ext)) = name.rsplit_once('.') else {
+        return false;
+    };
+    let Some((_, hash)) = stem.rsplit_once('-') else {
+        return false;
+    };
+    hash.len() == 8
+        && hash
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
+}
+
+/// Hashed files are `immutable`; everything else (the page, icons, the manifest,
+/// the service worker's files) keeps its name across builds and revalidates.
+async fn cache_headers(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let hashed = is_content_hashed(req.uri().path());
+    let mut res = next.run(req).await;
+    let value = if hashed && res.status().is_success() {
+        "public, max-age=31536000, immutable"
     } else {
-        HeaderValue::from_static("public, max-age=31536000, immutable")
-    })
+        "no-cache"
+    };
+    res.headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static(value));
+    res
 }
 
 /// The app's page for a client-side route, but a 404 for anything that names a
@@ -205,13 +219,10 @@ pub fn router(state: AppState) -> Router {
             let index = index.clone();
             async move { spa(&index, uri.path()) }
         }));
-        // Static files only: JSON is neither revalidated nor immutable.
-        let serve = ServiceBuilder::new()
-            .layer(SetResponseHeaderLayer::overriding(
-                header::CACHE_CONTROL,
-                cache_control_for,
-            ))
-            .service(serve);
+        // Static files only: the API's JSON carries no such header.
+        let serve = Router::new()
+            .fallback_service(serve)
+            .layer(axum::middleware::from_fn(cache_headers));
         app = app.fallback_service(serve);
     }
 
