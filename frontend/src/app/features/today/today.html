@@ -5,6 +5,19 @@
   <app-wellbeing-checkin [showDetail]="true" (detail)="addDetail($event)" />
 </mat-card>
 
+<div class="shortcuts">
+  <a mat-stroked-button routerLink="/shopping">
+    <mat-icon>shopping_cart</mat-icon>
+    Buy
+    @if (buyCount() > 0) {
+      <span class="count-badge count">{{ buyCount() }}</span>
+    }
+  </a>
+  <a mat-stroked-button routerLink="/inventory"> <mat-icon>kitchen</mat-icon> Inventory </a>
+  <a mat-stroked-button routerLink="/house"> <mat-icon>home</mat-icon> House </a>
+  <a mat-stroked-button routerLink="/wellbeing"> <mat-icon>mood</mat-icon> Wellbeing </a>
+</div>
+
 <mat-card appearance="outlined" class="block attention">
   <div class="block-head">
     <h3><mat-icon>bolt</mat-icon> Needs you</h3>
@@ -82,16 +95,3 @@
     </mat-list>
   </mat-card>
 }
-
-<div class="shortcuts">
-  <a mat-stroked-button routerLink="/shopping">
-    <mat-icon>shopping_cart</mat-icon>
-    Buy
-    @if (buyCount() > 0) {
-      <span class="count-badge count">{{ buyCount() }}</span>
-    }
-  </a>
-  <a mat-stroked-button routerLink="/inventory"> <mat-icon>kitchen</mat-icon> Inventory </a>
-  <a mat-stroked-button routerLink="/house"> <mat-icon>home</mat-icon> House </a>
-  <a mat-stroked-button routerLink="/wellbeing"> <mat-icon>mood</mat-icon> Wellbeing </a>
-</div>

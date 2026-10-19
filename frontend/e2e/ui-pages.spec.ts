@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type Route } from '@playwright/test';
 // The fleet-shared harness, published as @xinutec/ui-harness (source repo
 // ~/Code/ui-harness). Ships compiled JS, so it loads straight from node_modules.
 import type {
@@ -794,6 +794,36 @@ test('today — busy composition: lays out cleanly @ phone width', async ({ page
   await expectCleanLayout(page, testInfo);
   // Titles wrap rather than truncate, so the check is unqualified.
   await expectNoStarvedText(page, testInfo);
+});
+
+// The shortcuts are what a thumb reaches for first, so they sit where the
+// cards that fill in late cannot push them.
+test('today — the shortcuts stay put while the cards load', async ({ page }) => {
+  await mockApi(page);
+  let release!: () => void;
+  const held = new Promise<void>((r) => (release = r));
+  const hold = (respond: (r: Route) => unknown) => async (r: Route) => {
+    await held;
+    await respond(r);
+  };
+  await page.route(
+    '**/api/bins',
+    hold((r) => r.fulfill({ json: BINS })),
+  );
+  await page.route(
+    '**/api/items*',
+    hold((r) => r.fulfill({ json: ITEMS })),
+  );
+  await page.route('**/api/sync/todo?*', hold(syncRoute(TODOS)));
+  await page.goto('/today');
+  const buy = page.locator('.shortcuts').getByRole('link', { name: /Buy/ });
+  await buy.waitFor();
+  const before = (await buy.boundingBox())?.y;
+  release();
+  await page.getByText('Call the GP', { exact: false }).waitFor();
+  await page.getByText('Expiring soon').waitFor();
+  await page.getByText('tomorrow', { exact: true }).waitFor();
+  expect((await buy.boundingBox())?.y).toBe(before);
 });
 
 test('to-do list — pills in rows: lays out cleanly @ phone width', async ({ page }, testInfo) => {

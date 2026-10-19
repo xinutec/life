@@ -32,10 +32,12 @@
 // Pills + expiry colours come from the global grammar (styles.scss); the
 // loading/empty line is the shared <app-list-state>.
 
+// Above the cards that fill in late, so they never push the shortcuts down.
 .shortcuts {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  margin-bottom: 0.85rem;
 
   a {
     flex: 1 1 8rem;
