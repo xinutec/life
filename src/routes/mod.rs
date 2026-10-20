@@ -210,6 +210,7 @@ pub fn router(state: AppState) -> Router {
         .nest("/api", api);
 
     if state.cfg.dev_login_user.is_some() {
+        // dev-lint: allow-unauthenticated-route dev only: mounted when DEV_LOGIN_USER is set, which no deployed manifest sets
         app = app.route("/dev-login", get(auth::dev_login));
     }
 
