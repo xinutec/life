@@ -92,7 +92,7 @@ export class ShoppingItemSheet {
       category: this.category(),
       product_id: this.productId(),
     };
-    // dev-lint: allow-ignored-error warms the product image cache; best-effort
+    // Warms the product image cache; best-effort.
     if (barcode) this.api.lookupProduct(barcode).subscribe({ next: () => {}, error: () => {} });
 
     if (this.ulid) {

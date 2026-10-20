@@ -161,7 +161,7 @@ export class ItemSheet {
     const barcode = trimmed !== undefined && trimmed !== '' ? trimmed : null;
     req.subscribe({
       next: () => {
-        // dev-lint: allow-ignored-error warms the product image cache; best-effort
+        // Warms the product image cache; best-effort.
         if (barcode) this.api.lookupProduct(barcode).subscribe({ next: () => {}, error: () => {} });
         this.ref.dismiss(true);
       },
