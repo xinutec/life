@@ -1762,3 +1762,37 @@ test('house — a scene gives the canvas real size and no layout faults @ phone 
   await expect(page.getByText('No house layout yet.')).toHaveCount(0);
   await expectCleanLayout(page, testInfo);
 });
+
+// Drawn on demand: an open, untouched house costs nothing, and a drag still
+// moves the view. Counted against requestAnimationFrame, which the old
+// always-on loop called ~60 times a second.
+test('house — idle draws nothing, a drag still redraws', async ({ page }) => {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __frames: number };
+    w.__frames = 0;
+    const raf = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = (cb) => {
+      w.__frames++;
+      return raf(cb);
+    };
+  });
+  await mockApi(page);
+  await page.route('**/api/house', (r) => r.fulfill({ json: HOUSE_SCENE }));
+  await page.goto('/house');
+  const canvas = page.locator('.canvas canvas');
+  await canvas.waitFor();
+  await page.waitForTimeout(1_000); // let the first frames and any damping settle
+  const frames = () => page.evaluate(() => (window as unknown as { __frames: number }).__frames);
+  const before = await frames();
+  await page.waitForTimeout(1_000);
+  expect(await frames()).toBeLessThan(before + 10);
+
+  const idle = await frames();
+  const box = (await canvas.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  expect(await frames()).toBeGreaterThan(idle + 5);
+});

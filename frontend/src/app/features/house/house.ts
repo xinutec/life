@@ -44,6 +44,8 @@ export class House implements AfterViewInit, OnDestroy {
   private camera?: THREE.PerspectiveCamera;
   private controls?: OrbitControls;
   private frame = 0;
+  private framePending = false;
+  private owned: { dispose(): void }[] = [];
   private resize?: ResizeObserver;
 
   ngAfterViewInit(): void {
@@ -75,6 +77,9 @@ export class House implements AfterViewInit, OnDestroy {
     cancelAnimationFrame(this.frame);
     this.resize?.disconnect();
     this.controls?.dispose();
+    // A renderer's dispose frees only its own state; geometries, materials and
+    // textures stay on the GPU until each is disposed.
+    for (const r of this.owned) r.dispose();
     this.renderer?.dispose();
   }
 
@@ -93,35 +98,44 @@ export class House implements AfterViewInit, OnDestroy {
 
     this.controls = new OrbitControls(this.camera, renderer.domElement);
     this.controls.enableDamping = true;
+    // Drawn on demand, not 60 times a second: a gesture, and the damping after
+    // it (update() fires `change` until it settles), each ask for a frame.
+    this.controls.addEventListener('change', () => this.requestFrame());
 
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.8));
     const dir = new THREE.DirectionalLight(0xffffff, 1.0);
     dir.position.set(5, 10, 7);
     this.scene.add(dir);
-    this.scene.add(new THREE.GridHelper(20, 20, 0x2a2f36, 0x20242a));
+    const grid = new THREE.GridHelper(20, 20, 0x2a2f36, 0x20242a);
+    this.own(grid);
+    this.scene.add(grid);
 
     this.resize = new ResizeObserver(() => this.onResize());
     this.resize.observe(host);
-    this.zone.runOutsideAngular(() => this.animate());
+    this.requestFrame();
   }
 
   private buildHouse(scene: HouseScene): void {
     const h = scene.height;
-    const wallMat = new THREE.MeshStandardMaterial({
-      color: WALL_COLOR,
-      transparent: true,
-      opacity: 0.35,
-      side: THREE.DoubleSide,
-    });
+    const wallMat = this.own(
+      new THREE.MeshStandardMaterial({
+        color: WALL_COLOR,
+        transparent: true,
+        opacity: 0.35,
+        side: THREE.DoubleSide,
+      }),
+    );
     // A `?red=14,5` URL param tints those walls (by GLOBAL index — walls are
     // counted across the rooms in order) semi-transparent red, same opacity.
     const red = this.redWalls();
-    const redMat = new THREE.MeshStandardMaterial({
-      color: RED_COLOR,
-      transparent: true,
-      opacity: 0.35,
-      side: THREE.DoubleSide,
-    });
+    const redMat = this.own(
+      new THREE.MeshStandardMaterial({
+        color: RED_COLOR,
+        transparent: true,
+        opacity: 0.35,
+        side: THREE.DoubleSide,
+      }),
+    );
 
     // Each room is its own outline: render its walls (cut by its openings) and
     // its floor. A wall shared between two rooms is simply drawn by each of them.
@@ -152,13 +166,14 @@ export class House implements AfterViewInit, OnDestroy {
 
     // Furniture as coloured boxes (world coordinates).
     for (const f of scene.furniture ?? []) {
-      const mat = new THREE.MeshStandardMaterial({ color: f.color ?? DEFAULT_FURNITURE });
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(f.w, f.h, f.d), mat);
+      const mat = this.own(new THREE.MeshStandardMaterial({ color: f.color ?? DEFAULT_FURNITURE }));
+      const mesh = new THREE.Mesh(this.own(new THREE.BoxGeometry(f.w, f.h, f.d)), mat);
       mesh.position.set(f.cx, (f.y0 ?? 0) + f.h / 2, f.cz);
       this.scene.add(mesh);
     }
 
     this.frameBounds(allPts);
+    this.requestFrame();
   }
 
   // A camera-facing number on a dark disc — drawn to a canvas, used as a sprite
@@ -177,10 +192,10 @@ export class House implements AfterViewInit, OnDestroy {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, px / 2, px / 2);
-    const tex = new THREE.CanvasTexture(canvas);
+    const tex = this.own(new THREE.CanvasTexture(canvas));
     tex.anisotropy = 4;
     const sprite = new THREE.Sprite(
-      new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }),
+      this.own(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false })),
     );
     sprite.scale.setScalar(0.45);
     sprite.renderOrder = 999;
@@ -249,7 +264,7 @@ export class House implements AfterViewInit, OnDestroy {
     // A flat plane (no thickness); rotated about Y so its width runs along the
     // wall, height stays vertical, normal points across the wall. Double-sided
     // material shows it from inside and out.
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, ht), mat);
+    const mesh = new THREE.Mesh(this.own(new THREE.PlaneGeometry(w, ht)), mat);
     mesh.position.set(s.ax + dx * along, (yb + yt) / 2, s.az + dz * along);
     mesh.rotation.y = -Math.atan2(s.bz - s.az, s.bx - s.ax);
     this.scene.add(mesh);
@@ -260,11 +275,11 @@ export class House implements AfterViewInit, OnDestroy {
     const shape = new THREE.Shape();
     shape.moveTo(pts[0].x, pts[0].z);
     for (const p of pts.slice(1)) shape.lineTo(p.x, p.z);
-    const geom = new THREE.ShapeGeometry(shape);
+    const geom = this.own(new THREE.ShapeGeometry(shape));
     geom.rotateX(Math.PI / 2); // XY shape → XZ floor plane
     const mesh = new THREE.Mesh(
       geom,
-      new THREE.MeshStandardMaterial({ color: FLOOR_COLOR, side: THREE.DoubleSide }),
+      this.own(new THREE.MeshStandardMaterial({ color: FLOOR_COLOR, side: THREE.DoubleSide })),
     );
     mesh.position.y = -0.01;
     this.scene.add(mesh);
@@ -278,11 +293,23 @@ export class House implements AfterViewInit, OnDestroy {
     this.controls.update();
   }
 
-  private animate = (): void => {
-    this.frame = requestAnimationFrame(this.animate);
-    this.controls?.update();
-    if (this.renderer && this.camera) this.renderer.render(this.scene, this.camera);
-  };
+  /** Kept for disposal when the page closes. */
+  private own<T extends { dispose(): void }>(resource: T): T {
+    this.owned.push(resource);
+    return resource;
+  }
+
+  private requestFrame(): void {
+    if (this.framePending) return;
+    this.framePending = true;
+    this.zone.runOutsideAngular(() => {
+      this.frame = requestAnimationFrame(() => {
+        this.framePending = false;
+        this.controls?.update();
+        if (this.renderer && this.camera) this.renderer.render(this.scene, this.camera);
+      });
+    });
+  }
 
   private aspect(): number {
     const host = this.host().nativeElement;
@@ -296,5 +323,6 @@ export class House implements AfterViewInit, OnDestroy {
       this.camera.aspect = this.aspect();
       this.camera.updateProjectionMatrix();
     }
+    this.requestFrame();
   }
 }
