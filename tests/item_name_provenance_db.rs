@@ -64,12 +64,17 @@ async fn a_typed_name_outranks_the_catalogue_but_a_left_alone_one_follows_it() {
     // The shape that motivated this: a catalogue name nobody would choose.
     let shouty = product(
         &pool,
-        "T-NAME-1",
+        "9994400000001",
         "GENTLY DRIED TO HELP PRESERVE THE FLAVOUR",
     )
     .await;
     // And the shape where the catalogue is plainly better.
-    let proper = product(&pool, "T-NAME-2", "Cooks' Ingredients Black Peppercorns").await;
+    let proper = product(
+        &pool,
+        "9994400000002",
+        "Cooks' Ingredients Black Peppercorns",
+    )
+    .await;
 
     let typed = repo::create_item(&pool, user, item("Oregano", Some(shouty)))
         .await
@@ -166,7 +171,7 @@ async fn an_override_survives_a_save_that_says_nothing_and_is_cleared_by_one_tha
         .await
         .expect("clean");
 
-    let pid = product(&pool, "T-NAME-3", "Table Salt 750g").await;
+    let pid = product(&pool, "9994400000003", "Table Salt 750g").await;
     let it = repo::create_item(&pool, user, item("My salt", Some(pid)))
         .await
         .expect("create");
@@ -245,7 +250,7 @@ async fn the_trash_shows_an_item_under_the_name_it_was_last_seen_under() {
 
     let pid = product(
         &pool,
-        "T-NAME-4",
+        "9994400000004",
         "GENTLY DRIED TO HELP PRESERVE THE FLAVOUR",
     )
     .await;

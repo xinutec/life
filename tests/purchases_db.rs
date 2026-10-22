@@ -68,11 +68,11 @@ async fn a_purchase_survives_being_relinked_to_a_different_product() {
         .await
         .expect("clean");
 
-    let wrong = product(&pool, "T-BUY-1", "Organic Honey").await;
+    let wrong = product(&pool, "9995500000001", "Organic Honey").await;
     let item = BoughtItem {
         id: item_row(&pool, user, "Blue dragon Oyster Sauce").await,
         product_id: Some(wrong),
-        barcode: Some("T-BUY-1"),
+        barcode: Some("9995500000001"),
         name: "Blue dragon Oyster Sauce",
         quantity: Some(150.0),
         unit: Some("ml"),
@@ -99,7 +99,7 @@ async fn a_purchase_survives_being_relinked_to_a_different_product() {
         .await
         .expect("unlink");
 
-    let by_barcode = repo::history(&pool, user, None, Some("T-BUY-1"))
+    let by_barcode = repo::history(&pool, user, None, Some("9995500000001"))
         .await
         .expect("history by barcode");
     assert_eq!(
@@ -135,11 +135,11 @@ async fn deleting_a_product_keeps_the_purchase() {
         .await
         .expect("clean");
 
-    let pid = product(&pool, "T-BUY-2", "Doomed Product").await;
+    let pid = product(&pool, "9995500000002", "Doomed Product").await;
     let item = BoughtItem {
         id: item_row(&pool, user, "Doomed Product").await,
         product_id: Some(pid),
-        barcode: Some("T-BUY-2"),
+        barcode: Some("9995500000002"),
         name: "Doomed Product",
         quantity: None,
         unit: None,
@@ -154,7 +154,7 @@ async fn deleting_a_product_keeps_the_purchase() {
         .await
         .expect("delete product");
 
-    let left = repo::history(&pool, user, None, Some("T-BUY-2"))
+    let left = repo::history(&pool, user, None, Some("9995500000002"))
         .await
         .expect("history");
     assert_eq!(left.len(), 1, "the purchase must outlive the product");
@@ -308,7 +308,7 @@ async fn the_rate_is_quoted_per_kg_and_refused_when_the_pack_cannot_be_read() {
         },
     ) in cases.into_iter().enumerate()
     {
-        let barcode = format!("T-RATE-{i}");
+        let barcode = format!("99966000000{i:02}");
         let item = BoughtItem {
             id: item_row(&pool, user, "Thing").await,
             product_id: None,
@@ -423,7 +423,7 @@ async fn a_purchase_is_only_its_owners() {
     let item = BoughtItem {
         id: item_row(&pool, mine, "Tea").await,
         product_id: None,
-        barcode: Some("T-BUY-3"),
+        barcode: Some("9995500000003"),
         name: "Tea",
         quantity: None,
         unit: None,
@@ -433,14 +433,14 @@ async fn a_purchase_is_only_its_owners() {
         .expect("record");
 
     assert_eq!(
-        repo::history(&pool, mine, None, Some("T-BUY-3"))
+        repo::history(&pool, mine, None, Some("9995500000003"))
             .await
             .expect("history")
             .len(),
         1,
         "the barcode finds it for its owner"
     );
-    let theirs = repo::history(&pool, yours, None, Some("T-BUY-3"))
+    let theirs = repo::history(&pool, yours, None, Some("9995500000003"))
         .await
         .expect("history");
     assert!(
