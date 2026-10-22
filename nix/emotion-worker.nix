@@ -11,7 +11,7 @@ writeShellApplication {
     ENV_FILE="''${LIFE_WORKER_ENV:-$HOME/.config/life/worker.env}"
     if [ ! -r "$ENV_FILE" ]; then
       echo "no worker env at $ENV_FILE — the worker has no token to authenticate with" >&2
-      # EX_CONFIG. launchd's KeepAlive still retries every ~10s until the file exists.
+      # EX_CONFIG. The agent's KeepAlive waits for this file (deploy/hm-agents.nix).
       exit 78
     fi
     set -a

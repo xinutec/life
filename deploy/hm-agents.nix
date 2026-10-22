@@ -54,7 +54,9 @@ in
         + "switch --flake .#$USER'. Runs: nix/emotion-worker.nix.";
       ProgramArguments = [ "${worker}/bin/life-emotion-worker" ];
       RunAtLoad = true;
-      KeepAlive = true;
+      # Respawned only while the token file exists: without it the wrapper exits
+      # 78, and a plain `true` would relaunch it every ~10 s.
+      KeepAlive.PathState."${config.home.homeDirectory}/.config/life/worker.env" = true;
       # Suggestions are never waited on — they are cached and read later — so this
       # yields to anything interactive, including recall's transcription.
       ProcessType = "Background";
