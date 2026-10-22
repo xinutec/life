@@ -1,0 +1,17 @@
+{
+  "routes": [
+    "/today",
+    "/shopping",
+    "/inventory",
+    "/recipes",
+    "/house",
+    "/items",
+    "/product/:id",
+    "/todo",
+    "/wellbeing",
+    "/emotions",
+    "/trash",
+    "/conflicts",
+    "/settings"
+  ]
+}

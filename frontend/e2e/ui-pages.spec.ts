@@ -41,6 +41,7 @@ import {
   expectRecoversFromMissingBundle,
   expectCleanLayout,
 } from '@xinutec/ui-harness';
+import { routesFrom, screens } from '@xinutec/ui-harness/routes';
 
 /**
  * Layout checks at a phone viewport (Pixel 9, 412px — see playwright.config),
@@ -713,6 +714,19 @@ async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/sync/todo-link*', syncRoute([]));
   await page.route('**/api/sync/shopping*', syncRoute(SHOPPING));
   await page.route('**/api/sync/wellbeing*', syncRoute(WELLBEING));
+}
+
+/** Every screen in the route table (`routes.json`), not only those a test opens. */
+for (const { route, url } of screens(routesFrom('e2e/routes.json'), { id: '42' })) {
+  test(`${route} lays out cleanly @ phone width`, async ({ page }, testInfo) => {
+    await mockApi(page);
+    await page.goto(url);
+    await page.waitForLoadState('networkidle');
+    // The wellbeing chart pans sideways, as the wellbeing tests allow.
+    await expectCleanLayout(page, testInfo, {
+      allow: route === '/wellbeing' ? CHART_SCROLLERS : [],
+    });
+  });
 }
 
 // A service worker can serve an index naming a bundle a later deploy removed, and
