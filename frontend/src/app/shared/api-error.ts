@@ -20,11 +20,12 @@ export function classifyApiError(e: unknown): ApiFailure {
 }
 
 /** The same for a raw `fetch()`. Signed out takes a positive signal: 401/403, a
- *  redirect, or a 2xx login page; the service worker's offline 504 is not one. */
+ *  redirect, or a 2xx HTML page (the login page); a 2xx with no body type is
+ *  not one, nor is the service worker's offline 504. */
 export function classifyFetchResponse(res: Response): { kind: 'ok' } | ApiFailure {
   if (res.status === 401 || res.status === 403) return { kind: 'unauthenticated' };
-  const json = (res.headers.get('content-type') ?? '').includes('application/json');
-  if (res.redirected || (res.ok && !json)) return { kind: 'unauthenticated' };
+  const html = (res.headers.get('content-type') ?? '').includes('text/html');
+  if (res.redirected || (res.ok && html)) return { kind: 'unauthenticated' };
   if (res.status === 504) return { kind: 'offline' }; // ngsw's synthetic offline answer
   if (!res.ok) return { kind: 'server', status: res.status };
   return { kind: 'ok' };

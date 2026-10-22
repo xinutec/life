@@ -83,9 +83,11 @@ describe('guardAuth — expired-session detection on sync fetches', () => {
     expect(() => guardAuth(res({ contentType: 'text/html' }), err)).toThrow('auth-required');
   });
 
-  it('flags a missing content-type on a 200', () => {
+  it('does not sign out on a 200 with no content-type: the body parse fails and retries', () => {
     const err = signal<string | null>(null);
-    expect(() => guardAuth(res({ contentType: null }), err)).toThrow('auth-required');
+    const lost = vi.fn();
+    expect(() => guardAuth(res({ contentType: null }), err, lost)).not.toThrow();
+    expect(lost).not.toHaveBeenCalled();
   });
 
   it('does NOT sign the user out on the service worker’s offline 504', () => {

@@ -68,7 +68,15 @@ describe('classifyFetchResponse — the raw-fetch sibling, same taxonomy', () =>
     expect(classifyFetchResponse(fetchRes({ contentType: 'text/html' })).kind).toBe(
       'unauthenticated',
     );
-    expect(classifyFetchResponse(fetchRes({ contentType: null })).kind).toBe('unauthenticated');
+  });
+
+  it('does not sign out on a 2xx that merely is not JSON', () => {
+    // No body type is no evidence of a login page; the caller's parse fails
+    // and the sync retries, where signing out would need a fresh login.
+    expect(classifyFetchResponse(fetchRes({ contentType: null }))).toEqual({ kind: 'ok' });
+    expect(classifyFetchResponse(fetchRes({ status: 204, contentType: null }))).toEqual({
+      kind: 'ok',
+    });
   });
 
   it('maps the service worker’s bodiless synthetic 504 to offline, never auth', () => {

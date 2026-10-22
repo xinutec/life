@@ -285,7 +285,7 @@ async fn unknown_api_path_is_a_json_404_even_with_the_spa_mounted() {
     // In production STATIC_DIR is set, so a catch-all serves index.html for
     // client-side routes. It must NOT catch /api/*: answering an API call with
     // 200 text/html is exactly what the client reads as a lapsed session (see
-    // the frontend's classifyFetchResponse — "a 2xx body that isn't JSON"), so
+    // the frontend's classifyFetchResponse — "a 2xx HTML page"), so
     // a retired or mistyped route would surface to the user as a bogus
     // "signed out" instead of an honest 404.
     let dir = spa_dir("api404");

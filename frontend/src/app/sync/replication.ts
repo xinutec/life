@@ -99,11 +99,11 @@ export function startHttpReplication<T>(opts: {
         });
         guardAuth(res, opts.syncError, () => (authLost = true));
         if (!res.ok) throw new Error(`push failed: ${res.status}`);
+        const conflicts: unknown = await res.json();
+        if (!Array.isArray(conflicts)) throw new Error('push returned a malformed response');
         opts.syncError.set(null);
         opts.syncStatus.clearError(opts.label);
         opts.syncStatus.reportSuccess(opts.label);
-        const conflicts: unknown = await res.json();
-        if (!Array.isArray(conflicts)) throw new Error('push returned a malformed response');
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- checked to be an array above
         return conflicts as Synced<T>[];
       },
