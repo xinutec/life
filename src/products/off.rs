@@ -149,6 +149,14 @@ pub fn host_allowed(url: &str, suffixes: &[&str]) -> bool {
     }
 }
 
+/// No redirects, or an allowed URL could bounce us to an internal host.
+pub fn image_client() -> reqwest::Result<reqwest::Client> {
+    reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+}
+
 /// Download an image from an allowed host: https, no redirects, bounded time and
 /// size, and really an image. `Ok(None)` if disallowed or unfetchable.
 pub async fn fetch_image_from(url: &str, allowed: &[&str]) -> Result<Option<(Vec<u8>, String)>> {
@@ -156,12 +164,7 @@ pub async fn fetch_image_from(url: &str, allowed: &[&str]) -> Result<Option<(Vec
         tracing::warn!(%url, ?allowed, "refusing product image: host not in the allowlist or not https");
         return Ok(None);
     }
-    // No redirects, or an allowed URL could bounce us to an internal host.
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .timeout(std::time::Duration::from_secs(10))
-        .build()?;
-    let mut res = client
+    let mut res = image_client()?
         .get(url)
         .header("User-Agent", USER_AGENT)
         .send()

@@ -61,3 +61,26 @@ async fn a_known_product_is_returned() {
         .expect("found");
     assert_eq!(got.name.as_deref(), Some("Oat drink"));
 }
+
+/// A redirect from an allowed host could point at an internal one, so the image
+/// client hands the 3xx back instead of following it.
+#[tokio::test]
+async fn the_image_client_does_not_follow_redirects() {
+    let app = Router::new()
+        .route(
+            "/img.jpg",
+            get(|| async { axum::response::Redirect::temporary("/internal") }),
+        )
+        .route("/internal", get(|| async { "followed" }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+    let client = life::products::off::image_client().expect("client");
+    let res = client
+        .get(format!("http://{addr}/img.jpg"))
+        .send()
+        .await
+        .expect("an answer");
+    assert_eq!(res.status(), StatusCode::TEMPORARY_REDIRECT);
+}
