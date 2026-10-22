@@ -14,7 +14,6 @@ import type {
   Loc,
   Me,
   ProductDetail,
-  PullResponse,
   Purchase,
   Recipe,
   RowCoverage,
@@ -25,8 +24,8 @@ import type {
 import type { Synced } from '../src/app/sync/replication';
 import type { ShoppingDoc } from '../src/app/sync/shopping-store';
 import type { TodoDoc } from '../src/app/sync/todo-store';
-import type { TodoLinkDoc } from '../src/app/sync/todo-link-store';
 import type { WellbeingDoc } from '../src/app/sync/wellbeing-store';
+import { syncRoute } from './sync-route';
 // The real vocabulary, not a copy of it: the calendar fixture needs BREADTH
 // and a hand-written word list cannot keep it (see CAL_VOCAB).
 import { EMOTION_NODES } from '../src/app/shared/emotion-wheel';
@@ -380,10 +379,10 @@ const ITEMS: Item[] = [
 const ITEM_PURCHASES = [
   {
     id: 1,
-    item_id: 3,
+    item_id: 1,
     product_id: null,
     barcode: null,
-    name: 'Greek yoghurt',
+    name: 'Milk (semi-skimmed)',
     shop: 'Waitrose',
     amount_minor: 250,
     currency: 'GBP',
@@ -660,24 +659,6 @@ const CONFLICTS = [
  *  relative-dated fixture lands in. */
 const byMonthLabel = (a: string, b: string): number => Date.parse(`1 ${a}`) - Date.parse(`1 ${b}`);
 
-/** The incremental sync pull, as a route handler. Module-scope so a test that
- *  needs a different fixture than mockApi's can re-route the same collection —
- *  the emotion calendar wants a full log where the trend chart wants seven
- *  readings. */
-type SyncDoc = Synced<TodoDoc> | Synced<TodoLinkDoc> | Synced<ShoppingDoc> | Synced<WellbeingDoc>;
-
-const syncRoute = (docs: SyncDoc[]) => (r: Parameters<Parameters<Page['route']>[1]>[0]) => {
-  // A push answers its conflicts: none.
-  if (r.request().method() === 'POST') return r.fulfill({ json: [] satisfies SyncDoc[] });
-  const since = Number(new URL(r.request().url()).searchParams.get('since') ?? '0');
-  // Incremental protocol: only send the seed once, else the pull loops forever.
-  const fresh = docs.filter((d) => d.rev > since);
-  const top = docs.reduce((m, d) => Math.max(m, d.rev), since);
-  return r.fulfill({
-    json: { documents: fresh, checkpoint: { rev: top } } satisfies PullResponse<SyncDoc>,
-  });
-};
-
 /** Mock every backend call: pulls return the seed docs, pushes accept all.
  *  Catch-all FIRST: Playwright runs handlers last-registered-first. */
 async function mockApi(page: Page): Promise<void> {
@@ -727,12 +708,11 @@ async function mockApi(page: Page): Promise<void> {
     }),
   );
   await page.route('**/api/conflicts*', (r) => r.fulfill({ json: CONFLICTS }));
-  const sync = syncRoute;
-  await page.route('**/api/sync/todo?*', sync(TODOS));
-  await page.route('**/api/sync/todo', sync(TODOS));
-  await page.route('**/api/sync/todo-link*', sync([]));
-  await page.route('**/api/sync/shopping*', sync(SHOPPING));
-  await page.route('**/api/sync/wellbeing*', sync(WELLBEING));
+  await page.route('**/api/sync/todo?*', syncRoute(TODOS));
+  await page.route('**/api/sync/todo', syncRoute(TODOS));
+  await page.route('**/api/sync/todo-link*', syncRoute([]));
+  await page.route('**/api/sync/shopping*', syncRoute(SHOPPING));
+  await page.route('**/api/sync/wellbeing*', syncRoute(WELLBEING));
 }
 
 // A service worker can serve an index naming a bundle a later deploy removed, and

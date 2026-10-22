@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { waitForCachedShell } from './sw-ready';
+
 // A signed-in app opened OFFLINE must stay signed in. ngsw answers a failed
 // fetch with a bodiless synthetic 504, which must not read as "logged out" —
 // or the shell drops to sign-in and erases the cached identity.
@@ -18,34 +20,10 @@ test('a signed-in app opened offline stays signed in', async ({ page, context })
 
   // Phase 1 — online: harness.mjs answers /api/me, so the shell signs in (which
   // caches the identity), and the service worker installs and prefetches the
-  // full shell (same completeness wait as offline.spec.ts — going offline
-  // mid-prefetch is a flake).
+  // full shell.
   await page.goto('/');
   await expect(page.locator('ui-scaffold h1', { hasText: 'Life' })).toBeVisible();
-  await page.waitForFunction(() => navigator.serviceWorker?.controller != null, null, {
-    timeout: 35_000,
-  });
-  await page.waitForFunction(
-    async () => {
-      // `Response.json()` is `any` by the DOM lib's design, so the shape is
-      // named here rather than inherited.
-      const manifest = (await (await fetch('/ngsw.json')).json()) as {
-        assetGroups?: { name: string; urls: string[] }[];
-      };
-      // A missing app group means the manifest is not what this test assumes.
-      // `Infinity` makes the wait time out and say so; `0` would satisfy
-      // `length >= want` immediately and pass without ever caching anything.
-      const want = manifest.assetGroups?.find((g) => g.name === 'app')?.urls.length ?? Infinity;
-      for (const key of await caches.keys()) {
-        if (key.includes('assets:app:cache')) {
-          return (await (await caches.open(key)).keys()).length >= want;
-        }
-      }
-      return false;
-    },
-    null,
-    { timeout: 60_000 },
-  );
+  await waitForCachedShell(page);
 
   // Phase 2 — cold start with no network, on a route whose store replicates.
   await context.setOffline(true);

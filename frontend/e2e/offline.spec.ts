@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { waitForCachedShell } from './sw-ready';
+
 // The app is behind Nextcloud login, but the SHELL (the Angular bundle) loads
 // before auth — offline it just shows the sign-in screen. We only assert the
 // shell renders, so no login is needed.
@@ -7,36 +9,9 @@ test('the app shell loads offline (requires a service worker)', async ({ page, c
   await page.goto('/');
   await expect(page.locator('app-root')).not.toBeEmpty();
 
-  // A service worker must install and control the page; with none this times
-  // out, which is the red that proves offline is broken.
-  await page.waitForFunction(() => navigator.serviceWorker?.controller != null, null, {
-    timeout: 35_000, // the SW installs after the first load settles
-  });
-
-  // …and it must finish prefetching the ENTIRE shell. Going offline mid-prefetch
-  // is the race that flakes (the controller goes active first, ~4/15 cached), so
-  // wait until the asset cache holds every app-group file listed in ngsw.json.
-  await page.waitForFunction(
-    async () => {
-      // `Response.json()` is `any` by the DOM lib's design, so the shape is
-      // named here rather than inherited.
-      const manifest = (await (await fetch('/ngsw.json')).json()) as {
-        assetGroups?: { name: string; urls: string[] }[];
-      };
-      // A missing app group means the manifest is not what this test assumes.
-      // `Infinity` makes the wait time out and say so; `0` would satisfy
-      // `length >= want` immediately and pass without ever caching anything.
-      const want = manifest.assetGroups?.find((g) => g.name === 'app')?.urls.length ?? Infinity;
-      for (const key of await caches.keys()) {
-        if (key.includes('assets:app:cache')) {
-          return (await (await caches.open(key)).keys()).length >= want;
-        }
-      }
-      return false;
-    },
-    null,
-    { timeout: 60_000 },
-  );
+  // With no service worker this times out: the red that proves offline is
+  // broken.
+  await waitForCachedShell(page);
 
   // Cold-load the root with no network: the SW must serve the cached shell, not
   // the browser's offline error page.

@@ -1,12 +1,10 @@
 import { test, expect, type Page } from '@playwright/test';
 import { swipeUp } from '@xinutec/ui-harness';
 
-import type { Me, PullResponse, SuggestEmotionsResponse } from '../src/app/models';
+import type { Me, SuggestEmotionsResponse } from '../src/app/models';
 import type { Synced } from '../src/app/sync/replication';
-import type { ShoppingDoc } from '../src/app/sync/shopping-store';
 import type { TodoDoc } from '../src/app/sync/todo-store';
-import type { TodoLinkDoc } from '../src/app/sync/todo-link-store';
-import type { WellbeingDoc } from '../src/app/sync/wellbeing-store';
+import { syncRoute } from './sync-route';
 
 /**
  * Pixel-diff for what layout checks miss: colour, spacing, a swapped icon. After
@@ -41,11 +39,8 @@ const TODO = {
   _deleted: false,
 } satisfies Synced<TodoDoc>;
 
-type SyncDoc = Synced<TodoDoc> | Synced<TodoLinkDoc> | Synced<ShoppingDoc> | Synced<WellbeingDoc>;
-
 /** Minimal backend: the to-do sync serves the one seed doc; every other sync /
- *  read is empty so the stores settle without error. Incremental protocol, so
- *  the pull terminates instead of re-sending the seed forever.
+ *  read is empty so the stores settle without error.
  *
  *  ⚠ The collection is `todo-link`, with a HYPHEN. */
 async function mockApi(page: Page): Promise<void> {
@@ -62,20 +57,11 @@ async function mockApi(page: Page): Promise<void> {
       } satisfies SuggestEmotionsResponse,
     }),
   );
-  const sync = (docs: SyncDoc[]) => (r: Parameters<Parameters<Page['route']>[1]>[0]) => {
-    if (r.request().method() === 'POST') return r.fulfill({ json: [] satisfies SyncDoc[] });
-    const since = Number(new URL(r.request().url()).searchParams.get('since') ?? '0');
-    const fresh = docs.filter((d) => d.rev > since);
-    const top = docs.reduce((m, d) => Math.max(m, d.rev), since);
-    return r.fulfill({
-      json: { documents: fresh, checkpoint: { rev: top } } satisfies PullResponse<SyncDoc>,
-    });
-  };
-  await page.route('**/api/sync/todo?*', sync([TODO]));
-  await page.route('**/api/sync/todo', sync([TODO]));
-  await page.route('**/api/sync/todo-link*', sync([]));
-  await page.route('**/api/sync/shopping*', sync([]));
-  await page.route('**/api/sync/wellbeing*', sync([]));
+  await page.route('**/api/sync/todo?*', syncRoute([TODO]));
+  await page.route('**/api/sync/todo', syncRoute([TODO]));
+  await page.route('**/api/sync/todo-link*', syncRoute([]));
+  await page.route('**/api/sync/shopping*', syncRoute([]));
+  await page.route('**/api/sync/wellbeing*', syncRoute([]));
 }
 
 test('to-do edit sheet — golden @ phone width', async ({ page }) => {
