@@ -55,7 +55,15 @@ createServer(async (req, res) => {
   // static frontend; SPA fallback ONLY for extensionless (navigation) paths —
   // a missing .js/.css must 404, not return index.html (which would execute as
   // broken JS and silently fail a lazy route).
-  const clean = normalize(decodeURIComponent(path)).replace(/^(\.\.[/\\])+/, '');
+  let decoded;
+  try {
+    decoded = decodeURIComponent(path);
+  } catch {
+    // A malformed %-escape (`/%E0`) would otherwise crash the server.
+    res.writeHead(400).end('bad path');
+    return;
+  }
+  const clean = normalize(decoded).replace(/^(\.\.[/\\])+/, '');
   let file = join(DIST, clean);
   let ok = true;
   try {

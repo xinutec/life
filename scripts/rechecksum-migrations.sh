@@ -52,7 +52,9 @@ while IFS= read -r file; do
   statements+="UPDATE _sqlx_migrations SET checksum = UNHEX('$sum') WHERE version = $version;"$'\n'
   echo "ok    $file — comments only, version $version" >&2
   changed=$((changed + 1))
-done < <(git diff --name-only "$ref" -- migrations/ ; git diff --cached --name-only "$ref" -- migrations/)
+# Working tree against ref, staged changes included: the file checksummed is the
+# one on disk.
+done < <(git diff --name-only "$ref" -- migrations/)
 
 if [ "$blocked" -ne 0 ]; then
   echo >&2

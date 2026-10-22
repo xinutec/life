@@ -70,10 +70,6 @@ const H = (b.z1 - b.z0 + pad * 2) * scale;
 const X = (x) => (x - b.x0 + pad) * scale;
 const Z = (z) => (z - b.z0 + pad) * scale;
 
-const parts = [
-  `<svg xmlns="http://www.w3.org/2000/svg" width="${W.toFixed(0)}" height="${H.toFixed(0)}" viewBox="0 0 ${W.toFixed(0)} ${H.toFixed(0)}">`,
-  `<rect width="100%" height="100%" fill="#fbfbf7"/>`,
-];
 // ⚠ Split by HEIGHT, in two panels: seen from above, a wall unit sits exactly
 // on the base unit below it and their numbers pile up.
 const WALL_UNIT_Y = 1.2; // metres: above worktop height, so it is on the wall
@@ -91,12 +87,12 @@ const draw = (box, dy) => {
   ];
 };
 
-parts.length = 2; // keep the header + background; the outline is drawn per panel
-parts[1] = `<rect width="100%" height="${(H * panels.length).toFixed(0)}" fill="#fbfbf7"/>`;
-parts[0] = parts[0].replace(
-  `height="${H.toFixed(0)}" viewBox="0 0 ${W.toFixed(0)} ${H.toFixed(0)}"`,
-  `height="${(H * panels.length).toFixed(0)}" viewBox="0 0 ${W.toFixed(0)} ${(H * panels.length).toFixed(0)}"`,
-);
+// The panels stack vertically, one plan-height each.
+const total = (H * panels.length).toFixed(0);
+const parts = [
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${W.toFixed(0)}" height="${total}" viewBox="0 0 ${W.toFixed(0)} ${total}">`,
+  `<rect width="100%" height="${total}" fill="#fbfbf7"/>`,
+];
 panels.forEach((panel, i) => {
   const dy = i * H;
   for (const { pts } of outlines) {
