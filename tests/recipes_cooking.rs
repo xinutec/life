@@ -5,9 +5,7 @@
 
 use chrono::NaiveDate;
 use life::inventory::types::{ExpiryPrecision, Item, ItemCategory, ItemId};
-use life::recipes::cooking::{
-    CookedLine, LineOutcome, Take, Untouched, plan, settled, taken_per_row,
-};
+use life::recipes::cooking::{CookedLine, LineOutcome, Take, Untouched, plan, taken_per_row};
 use life::recipes::types::{Recipe, RecipeIngredient};
 
 fn item(id: u64, name: &str, quantity: Option<f64>, unit: Option<&str>) -> Item {
@@ -78,7 +76,7 @@ fn an_ingredient_comes_off_the_matching_row() {
             }]
         }
     );
-    assert_eq!(settled(&lines), [(ItemId(1), 750.0)]);
+    assert_eq!(taken_per_row(&lines), [(ItemId(1), 200.0)]);
 }
 
 #[test]
@@ -139,7 +137,7 @@ fn a_jar_is_not_grams() {
             why: Untouched::NoComparableStock
         }
     );
-    assert_eq!(settled(&lines), [], "and writes nothing");
+    assert_eq!(taken_per_row(&lines), [], "and writes nothing");
 }
 
 #[test]
@@ -218,8 +216,8 @@ fn cooking_more_than_you_had_empties_the_rows_and_says_by_how_much() {
         }
     );
     assert_eq!(
-        settled(&lines),
-        [(ItemId(1), 0.0)],
+        taken_per_row(&lines),
+        [(ItemId(1), 950.0)],
         "the row is emptied, not skipped"
     );
 }
@@ -262,11 +260,6 @@ fn two_lines_naming_the_same_thing_drain_it_once_between_them() {
         "the second line sees what the first already took"
     );
     assert_eq!(
-        settled(&lines),
-        [(ItemId(1), 0.0)],
-        "one row, one final amount"
-    );
-    assert_eq!(
         taken_per_row(&lines),
         [(ItemId(1), 500.0)],
         "the history records what came off the bag in total"
@@ -306,7 +299,7 @@ fn a_recipe_with_nothing_in_the_cupboard_writes_nothing() {
             why: Untouched::NoStock
         }
     );
-    assert_eq!(settled(&lines), []);
+    assert_eq!(taken_per_row(&lines), []);
 }
 
 #[test]

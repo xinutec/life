@@ -164,24 +164,12 @@ pub(super) fn plan_ingredients(
         .collect()
 }
 
-/// Every take, in order; the two readers below fold it differently.
+/// Every take, in order.
 fn takes(lines: &[CookedLine]) -> impl Iterator<Item = &Take> {
     lines.iter().flat_map(|l| match &l.outcome {
         LineOutcome::Took { from } | LineOutcome::Short { from, .. } => from.as_slice(),
         LineOutcome::Untouched { .. } => &[],
     })
-}
-
-/// What each touched row should hold afterwards; the last word wins.
-pub fn settled(lines: &[CookedLine]) -> Vec<(ItemId, f64)> {
-    let mut out: Vec<(ItemId, f64)> = Vec::new();
-    for take in takes(lines) {
-        match out.iter_mut().find(|(id, _)| *id == take.item_id) {
-            Some(entry) => entry.1 = take.left,
-            None => out.push((take.item_id, take.left)),
-        }
-    }
-    out
 }
 
 /// How much came off each row: what the history records.
