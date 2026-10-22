@@ -448,3 +448,54 @@ async fn simultaneous_first_asks_share_one_job() {
     assert_eq!(jobs, 1);
     wipe(&pool, user).await;
 }
+
+/// A rewording that commits while an answer is being stored keeps its new job.
+/// The rewording is held uncommitted while `complete` runs, so `complete` meets
+/// it at the point the race needs: having read the old wording, about to delete.
+#[tokio::test]
+async fn a_rewording_mid_completion_keeps_its_new_job() {
+    let _queue = QUEUE.lock().await;
+    let url = common::test_db_url();
+    let pool = db::connect(&url).await.expect("connect");
+    db::migrate(&pool).await.expect("migrate");
+
+    let user = "test-user-emotion-reword-race";
+    let ulid = "01J0000000000000000000RACE";
+    wipe(&pool, user).await;
+    store::enqueue(&pool, user, ulid, "hash-old", &prompt("old"), &vocab())
+        .await
+        .unwrap();
+    let job = store::claim_next(&pool).await.unwrap().expect("a job");
+    let answering = store::job_for_completion(&pool, job.id)
+        .await
+        .unwrap()
+        .expect("job row");
+
+    let mut reword = pool.begin().await.unwrap();
+    sqlx::query("UPDATE emotion_jobs SET note_hash = 'hash-new' WHERE id = ?")
+        .bind(job.id)
+        .execute(&mut *reword)
+        .await
+        .unwrap();
+    let completing = {
+        let pool = pool.clone();
+        tokio::spawn(async move {
+            store::complete(&pool, job.id, &answering, &["Sad/Low".into()]).await
+        })
+    };
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    reword.commit().await.unwrap();
+    completing.await.unwrap().unwrap();
+
+    let left: Option<(String,)> = sqlx::query_as("SELECT note_hash FROM emotion_jobs WHERE id = ?")
+        .bind(job.id)
+        .fetch_optional(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        left.map(|(h,)| h).as_deref(),
+        Some("hash-new"),
+        "the reworded note's job must survive the old answer"
+    );
+    wipe(&pool, user).await;
+}

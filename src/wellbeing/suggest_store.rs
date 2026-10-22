@@ -189,8 +189,10 @@ pub async fn complete(
     tokens: &[String],
 ) -> sqlx::Result<()> {
     let mut tx = pool.begin().await?;
+    // Locked: a rewording committed between this read and the DELETE would
+    // otherwise lose its new job.
     let still_current: Option<(String,)> =
-        sqlx::query_as("SELECT note_hash FROM emotion_jobs WHERE id = ?")
+        sqlx::query_as("SELECT note_hash FROM emotion_jobs WHERE id = ? FOR UPDATE")
             .bind(id)
             .fetch_optional(&mut *tx)
             .await?;
