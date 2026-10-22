@@ -59,6 +59,12 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Free', desc: 'Unburdened and able to be yourself, without constraint.' },
           {
+            // Not Thankful, which is gratitude toward someone; nobody gave this.
+            // The day's timing lining up with you, felt as a small gladness.
+            name: 'Lucky',
+            desc: 'Things are lining up in your favour.',
+          },
+          {
             // The quiet kind: gladness simply there, with no event under it. The
             // loud kind is Elated.
             name: 'Joyful',
@@ -113,6 +119,13 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
         leaves: [
           { name: 'Respected', desc: 'Held in regard; your worth acknowledged by others.' },
           { name: 'Valued', desc: 'Treated as important and worth caring about.' },
+          {
+            // Valued and Respected are about your worth; this is about being
+            // read correctly — someone takes your words and face as you meant
+            // them, with nothing to translate. Twin of `Sad/Misunderstood`.
+            name: 'Understood',
+            desc: 'Someone gets what you mean, as you meant it.',
+          },
           {
             // Accepted had two leaves while Caring — the same feeling pointed
             // the other way — has four, so being cared FOR could only be
@@ -196,6 +209,13 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             // wind through the window, the warmth, the sound doing the work.
             name: 'Soothed',
             desc: 'Something outside you is easing you — a sound, a warmth, a touch doing the work.',
+          },
+          {
+            // Not Relieved, which comes once the threat has passed; here it has
+            // not — someone you trust has said it is probably fine, and that is
+            // enough to set it down for now.
+            name: 'Reassured',
+            desc: 'Told it is likely fine, by someone whose word you trust, before you know.',
           },
           {
             // Where you ARE, rather than how things are going. Not Absorbed
@@ -294,6 +314,12 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             name: 'Excited',
             desc: "Keyed up about something, in a way that won't quite let you settle.",
           },
+          {
+            // Excited is charge that won't settle; this is warm and steady —
+            // keen on something and glad to be putting yourself into it.
+            name: 'Enthusiastic',
+            desc: 'Keen on something and glad to put yourself into it.',
+          },
         ],
       },
       {
@@ -343,6 +369,13 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
           { name: 'Isolated', desc: 'Cut off from others, with no one near.' },
           { name: 'Abandoned', desc: 'Left alone by those you counted on.' },
           { name: 'Longing', desc: "Aching for someone or something that isn't here." },
+          {
+            // Longing for a PLACE you belong in, felt while away from it. Not
+            // Wistful, which aches for a time; home still exists and is the
+            // place you want to be instead of here.
+            name: 'Homesick',
+            desc: 'Away from home, and wanting to be back there.',
+          },
           {
             // Longing aches for a person, a place, a thing. This aches for a
             // TIME, and it is fond rather than painful — the bittersweet one. It
@@ -491,6 +524,15 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             // has been told about.
             name: 'Alone in it',
             desc: 'People are here, and not one of them is carrying what you are carrying.',
+          },
+          {
+            // Read wrongly by someone who matters: your words or face taken to
+            // mean what you did not mean, and explaining does not fix it. Not
+            // Estranged (grown apart) or Rejected (pushed out) — they are still
+            // here, holding a version of you that is not you. Twin of
+            // `Happy/Understood`.
+            name: 'Misunderstood',
+            desc: 'Someone takes you to mean what you did not mean, however you explain.',
           },
         ],
       },
@@ -739,6 +781,13 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             desc: 'Holding back from acting, because it might go badly.',
           },
           {
+            // Not Hesitant, which holds back; here you go anyway, against your
+            // own will, toward something you expect to cost you. Not Dread,
+            // which is the heavy fear itself; this is the unwillingness.
+            name: 'Reluctant',
+            desc: "Going ahead with something you don't want to do.",
+          },
+          {
             // Fear of what might happen (Nervous), of being seen (Exposed) and
             // of acting (Hesitant) were all sayable; the continuous work of
             // watching what you say in case it lands wrong was not. Not
@@ -814,6 +863,14 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             name: 'Performing',
             desc: "Keeping up a face and a manner that aren't what you feel.",
           },
+          {
+            // Not Stuck (`Bad/Waiting`), where nothing moves; here things move
+            // and wear you down, and there is no way out before it ends. Not
+            // Powerless, which is about changing the outcome; this is about
+            // leaving.
+            name: 'Trapped',
+            desc: 'Somewhere that is wearing you down, with no way out until it ends.',
+          },
         ],
       },
       {
@@ -834,6 +891,42 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             // energy score, and lifts as soon as the room empties.
             name: 'Drained',
             desc: 'Spent by company rather than by effort or short sleep.',
+          },
+          {
+            // Tired the other way round: the body is spent and the mind will
+            // not wind down. Not Restless, which is the body; not Excited,
+            // which is about something — this keeps running with nothing new
+            // feeding it.
+            name: 'Wired',
+            desc: 'Tired, with a mind that will not switch off.',
+          },
+          {
+            // Not Unfocused (attention scattering) or Sleepy: the thinking
+            // itself is slow and the words are slow to arrive, with the body
+            // fine.
+            name: 'Foggy',
+            desc: 'Thinking is slow and words are hard to reach.',
+          },
+          {
+            // Not Exhausted (rest doesn't touch it) and not `Bad/Waiting`
+            // (life on hold): the tiredness of the same thing going on, day
+            // after day, with no end in sight yet.
+            name: 'Weary',
+            desc: 'Worn down by the same thing going on day after day.',
+          },
+        ],
+      },
+      {
+        // Feeling ill had no word. Tired names low energy and Fearful ›
+        // Worried the concern about it; neither says the body is unwell, so
+        // a fever day could only be filed as one of those.
+        name: 'Unwell',
+        desc: 'Physically ill — off in the body.',
+        leaves: [
+          { name: 'Feverish', desc: 'Running hot — the heavy, achy feel of a temperature.' },
+          {
+            name: 'Shaky',
+            desc: 'Unsteady in the body — wobbly, trembling, or light-headed.',
           },
         ],
       },
@@ -980,6 +1073,13 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             // otherwise file a bad stretch as a level one.
             name: 'Detached',
             desc: 'Watching it from outside; nothing is reaching you, and nothing has to.',
+          },
+          {
+            // Not Detached, which is you stepping outside; here it is the WORLD
+            // that is off — real things looking fake, as if staged. Not `Not
+            // myself`, which is about your own workings.
+            name: 'Unreal',
+            desc: 'The world around you seems fake or staged, though you know it is real.',
           },
           {
             // The neutral twin of `Sad/Isolated` ("cut off from others, with no
