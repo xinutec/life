@@ -1,6 +1,6 @@
 # life — architecture & scope
 
-Personal single-user home OS. Owns an **inventory + spatial model** of the house,
+Personal home OS: any Nextcloud user signs in to their own data, over one shared product catalog. Owns an **inventory + spatial model** of the house,
 a **product catalog** fed from shops and Open Food Facts, **recipes**,
 **shopping**, **typed to-dos** and **wellbeing tracking** — and **delegates
 scheduling to Nextcloud Calendar** rather than reinventing it.

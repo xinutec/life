@@ -9,8 +9,9 @@ manually entered, with or without a barcode" all one shape.
 - **Product** (`products`) — the catalog: a definition. "Yeo Valley 950 g
   Natural Yoghurt, barcode 5036589255550." **One row regardless of how many you
   own.** Some rows come from Open Food Facts (keyed by barcode), some you define
-  by hand (no barcode). Single-user app → `products` is just the user's catalog;
-  no per-user sharing.
+  by hand (no barcode). **Shared by every user, on purpose**, like Open Food
+  Facts: any signed-in user's picture or facts change it for all. Holdings are
+  per user. (Migration 0007 says "single-user"; its text is frozen by its checksum.)
 - **Item / holding** (`items`) — a concrete thing you possess: "a tub of that,
   in the fridge, expires 5 Jul, qty 1." **Many items → one product.**
 
