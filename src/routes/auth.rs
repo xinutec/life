@@ -42,6 +42,12 @@ fn pending_cookie(value: String) -> Cookie<'static> {
         .build()
 }
 
+/// Where the cookies were set: a removal without a path is scoped to the
+/// request's directory, `/auth` for the callback, and misses them.
+fn removal(name: &'static str) -> Cookie<'static> {
+    Cookie::build(name).path("/").build()
+}
+
 /// Same-site paths only, judged where a browser lands: the WHATWG parser drops
 /// tabs and newlines and folds `\` to `/`, so `/\t/host` is `//host`. Returns
 /// the path as that parser resolves it.
@@ -172,7 +178,7 @@ async fn finish_sign_in(
     let dest = validate_return_to(pending.return_to.as_deref());
     tracing::info!(user = %user.user_id, %dest, "login complete");
     // Dropped, so it cannot be replayed.
-    let jar = jar.remove(Cookie::from(pending_login::COOKIE_NAME));
+    let jar = jar.remove(removal(pending_login::COOKIE_NAME));
     Ok((jar.add(session_cookie(signed)), Redirect::to(&dest)))
 }
 
@@ -184,10 +190,7 @@ pub async fn logout(
         destroy_session(&app.pool, &app.cfg.session_secret, c.value()).await?;
     }
     tracing::info!("logged out");
-    Ok((
-        jar.remove(Cookie::from(COOKIE_NAME)),
-        StatusCode::NO_CONTENT,
-    ))
+    Ok((jar.remove(removal(COOKIE_NAME)), StatusCode::NO_CONTENT))
 }
 
 #[derive(Debug, Serialize, TS)]
