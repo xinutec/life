@@ -3,6 +3,7 @@ import { BehaviorSubject, of } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 
 import { LifeApi } from '../../life-api';
+import type { Loc } from '../../models';
 import { ShoppingDoc, ShoppingStore } from '../../sync/shopping-store';
 import { TodoLinkDoc, TodoLinkStore } from '../../sync/todo-link-store';
 import { TodoDoc, TodoStore } from '../../sync/todo-store';
@@ -55,7 +56,12 @@ const shop = (over: Partial<ShoppingDoc>): ShoppingDoc => ({
   ...over,
 });
 
-function make(todos: TodoDoc[], links: TodoLinkDoc[], shopping: ShoppingDoc[] = []) {
+function make(
+  todos: TodoDoc[],
+  links: TodoLinkDoc[],
+  shopping: ShoppingDoc[] = [],
+  locations: Loc[] = [],
+) {
   const items = vi.fn(() => of([]));
   TestBed.configureTestingModule({
     providers: [
@@ -68,8 +74,7 @@ function make(todos: TodoDoc[], links: TodoLinkDoc[], shopping: ShoppingDoc[] = 
         useValue: {
           items,
           recipes: () => of([]),
-          locations: () => of([]),
-          house: () => of({ rooms: [] }),
+          locations: () => of(locations),
         },
       },
     ],
@@ -176,5 +181,35 @@ describe('TodoGraph — ready/blocked derivation', () => {
     expect(g.urgencyOf(todo({ due: isoOffset(2) }))).toBe('soon');
     expect(g.urgencyOf(todo({ due: isoOffset(10) }))).toBe('none');
     expect(g.urgencyOf(todo({ due: isoOffset(-2), status: 'done' }))).toBe('none'); // done clears it
+  });
+});
+
+describe('TodoGraph — room suggestions', () => {
+  const place = (over: Partial<Loc>): Loc => ({
+    id: 1,
+    kind: 'room',
+    name: 'Hallway',
+    parent_id: null,
+    sort_order: 0,
+    position: null,
+    ...over,
+  });
+
+  it('suggests the room places and every room a link already names, each once', () => {
+    const { g } = make(
+      [todo({ ulid: 'a' })],
+      [
+        link({ ulid: 'l1', targetKind: 'room', targetRef: 'Kitchen' }),
+        link({ ulid: 'l2', targetKind: 'room', targetRef: 'Hallway' }),
+      ],
+      [],
+      [place({}), place({ id: 2, kind: 'cupboard', name: 'Tall cupboard' })],
+    );
+    g.refreshCatalogs();
+    const rooms = g
+      .catalog()
+      .filter((t) => t.kind === 'room')
+      .map((t) => t.ref);
+    expect(rooms.sort()).toEqual(['Hallway', 'Kitchen']);
   });
 });

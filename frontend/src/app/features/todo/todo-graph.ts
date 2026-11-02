@@ -113,12 +113,18 @@ export class TodoGraph {
   private readonly recipes = computed(() => this.recipesStore.value() ?? []);
   private readonly places = computed(() => this.placesStore.value() ?? []);
 
-  // Room names only suggest; the field still takes any text.
-  private readonly rooms = computed(() =>
-    this.places()
-      .filter((p) => p.kind === 'room')
-      .map((p) => p.name),
-  );
+  // Room names only suggest; the field still takes any text. The room places,
+  // and every room a link already names, so a room used once is offered again.
+  private readonly rooms = computed(() => [
+    ...new Set([
+      ...this.places()
+        .filter((p) => p.kind === 'room')
+        .map((p) => p.name),
+      ...this.links()
+        .filter((l) => l.targetKind === 'room')
+        .map((l) => l.targetRef),
+    ]),
+  ]);
 
   /** So something added since can be linked. */
   refreshCatalogs(): void {
