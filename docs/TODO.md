@@ -5,13 +5,9 @@ how it got there is in `git log`. `#N` is a task in the `task` CLI.
 
 ## Features
 
-- **House model** (#15) — the kitchen's oven tower, extractor hood and back
-  door, then the other rooms. Built against the local preview; see
-  `scenes/README.md` § "Live modelling workflow".
 - **Cupboards in 3D** (#134) — place cupboards in scene coordinates so "where is
-  my X" can highlight one. Blocked on the open decision below.
-- **House polish** (#135) — camera/lighting, per-cupboard layers,
-  tap-a-cupboard-to-list-its-items.
+  my X" can highlight one. The scene is the home app's now (moved 2026-11-02).
+  Blocked on the open decision below.
 - **Low-stock suggestions** (#128) — derive from `ItemEvent::Low` (written when
   something goes on the Buy list), not from `used`, which nobody logs. The
   interval between `low` rows is the rhythm.
@@ -43,6 +39,5 @@ how it got there is in `git log`. `#N` is a task in the `task` CLI.
 
 ## Open decisions
 
-- three.js parametric geometry vs an authored glTF model of the house.
 - How scene cupboards relate to the DB location tree (store `position` on the
   `location` rows, vs keep scene geometry separate and map by id/name).

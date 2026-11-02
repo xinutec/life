@@ -2,7 +2,6 @@ import { Routes } from '@angular/router';
 
 import { Conflicts } from './features/conflicts/conflicts';
 import { EmotionCalendar } from './features/wellbeing/emotion-calendar';
-import { House } from './features/house/house';
 import { Inventory } from './features/inventory/inventory';
 import { Items } from './features/items/items';
 import { ProductPage } from './features/product/product';
@@ -20,7 +19,6 @@ export const routes: Routes = [
   { path: 'shopping', title: 'Life · buy', component: Shopping, data: { top: true } },
   { path: 'inventory', title: 'Life · inventory', component: Inventory, data: { top: true } },
   { path: 'recipes', title: 'Life · recipes', component: Recipes, data: { top: true } },
-  { path: 'house', title: 'Life · house', component: House, data: { top: true } },
   { path: 'items', title: 'Life · all items', component: Items, data: { top: true } },
   {
     path: 'product/:id',

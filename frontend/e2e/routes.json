@@ -4,7 +4,6 @@
     "/shopping",
     "/inventory",
     "/recipes",
-    "/house",
     "/items",
     "/product/:id",
     "/todo",

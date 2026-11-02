@@ -13,7 +13,7 @@ items, shops, reconciliation), [`ui-grammar.md`](docs/design/ui-grammar.md).
 
 CI (`.github/workflows/build.yml`) gates on clippy + `cargo test`, then builds
 and pushes the single image **`xinutec/life:latest`** to Docker Hub (backend
-binary + built Angular bundle + scenes, all served from one process). The
+binary + built Angular bundle, served from one process). The
 Kubernetes manifests live in the **home monorepo**
 (`code/kubes/life/k8s/`); the image tag is the only contract between this repo
 and the running deployment.
@@ -89,18 +89,8 @@ it has asked in `~/.cache/life/shop-sweep.json`, outside this repo because that
 is a record of one person's cupboard; without it, successive runs repeat the
 same misses forever.
 
-`scripts/house-plan.mjs` renders `scenes/house.json` with every furniture box
-numbered, which is how somebody says *which* box is the tall cupboard — the
-scene carries geometry and no labels.
-
-```sh
-./scripts/house-plan.mjs --room kitchen        > plan.svg   # top-down, split by height
-./scripts/house-plan.mjs --room kitchen --iso  > iso.svg    # isometric
-```
-
-Numbering is by index in `scenes/house.json`, so the number read off the picture
-identifies the box in the file. Use `--iso` when boxes stack: seen from above, a
-wall unit lands on the base unit under it and their numbers collide.
+The 3D house view, its scene (`scenes/house.json`) and the plan script moved to
+the home app (`~/Code/home`) on 2026-11-02.
 
 ## Develop
 

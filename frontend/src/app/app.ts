@@ -119,7 +119,6 @@ export class App {
   readonly more: NavItem[] = [
     { path: '/wellbeing', icon: 'mood', label: 'Wellbeing' },
     { path: '/emotions', icon: 'calendar_month', label: 'Emotion calendar' },
-    { path: '/house', icon: 'home', label: 'House' },
     { path: '/items', icon: 'inventory_2', label: 'All items' },
     { path: '/trash', icon: 'restore_from_trash', label: 'Recently deleted' },
     { path: '/conflicts', icon: 'compare_arrows', label: 'Sync conflicts' },
@@ -194,7 +193,6 @@ export class App {
     this.api.locations().subscribe(ignore);
     this.api.recipes().subscribe(ignore);
     this.api.cookable().subscribe(ignore);
-    this.api.house().subscribe(ignore);
   }
 
   /** Scan a barcode and open its product page. Every outcome is announced:

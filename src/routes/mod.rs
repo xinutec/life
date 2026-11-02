@@ -88,7 +88,6 @@ fn spa(index: &str, path: &str) -> axum::response::Response {
 pub fn router(state: AppState) -> Router {
     let api = Router::new()
         .route("/me", get(api::me))
-        .route("/house", get(api::house))
         .route("/bins", get(calendar::bins))
         .route("/calendar/shop-trip", post(calendar::plan_shop_trip))
         .route("/nextcloud/connect/init", post(auth::connect_init))

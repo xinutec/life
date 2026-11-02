@@ -176,14 +176,6 @@ h3 {
   }
 }
 
-// The house screen's WebGL canvas, which three.js appends at runtime — so it has
-// no `_ngcontent` attribute and nothing scoped in the component can reach it.
-// Global is the only option: `::ng-deep` is what DL-SCSS-NG-DEEP refuses, and
-// `:global()` is not Angular syntax and compiles to nothing.
-app-house .canvas canvas {
-  display: block;
-}
-
 // Emotion chips, shared by the picker, the entry sheet and the timeline. The
 // seven family hues are the printed wheel's colours: a categorical identity that
 // stays constant across light and dark. Chips tint them over the themed surface

@@ -10,7 +10,6 @@ import {
   ConflictKind,
   CoverageQuery,
   FieldChoice,
-  HouseScene,
   Item,
   ItemHistory,
   Loc,
@@ -145,10 +144,6 @@ export class LifeApi {
 
   deleteLocation(id: number): Observable<unknown> {
     return this.http.delete(`/api/locations/${id}`);
-  }
-
-  house(): Observable<HouseScene> {
-    return this.http.get<HouseScene>('/api/house');
   }
 
   /** Upcoming bin collections, soonest first; empty without a feed. */

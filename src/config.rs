@@ -23,8 +23,6 @@ pub struct Config {
     /// a deployment.
     pub dev_login_user: Option<String>,
 
-    pub house_scene: String,
-
     /// The worker dials in, as the pod cannot dial the Mac. Unset: no suggestions.
     pub emotion_worker_token: Option<String>,
 
@@ -60,7 +58,6 @@ impl Config {
             nc_redirect_uri: env("NC_REDIRECT_URI")?,
             static_dir: std::env::var("STATIC_DIR").ok(),
             dev_login_user: std::env::var("DEV_LOGIN_USER").ok(),
-            house_scene: env_or("HOUSE_SCENE", "scenes/house.json"),
             emotion_worker_token: std::env::var("EMOTION_WORKER_TOKEN").ok(),
             bins_ical_url: std::env::var("BINS_ICAL_URL")
                 .ok()

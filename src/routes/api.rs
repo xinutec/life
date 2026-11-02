@@ -1,10 +1,8 @@
-//! Identity echo and the house scene.
+//! Identity echo.
 
-use anyhow::Context;
 use axum::Json;
 use axum::extract::State;
 use serde::Serialize;
-use serde_json::Value;
 use ts_rs::TS;
 
 use crate::error::AppError;
@@ -36,16 +34,4 @@ pub async fn me(
         display_name: user.display_name,
         nextcloud,
     }))
-}
-
-/// GET /api/house → scenes/house.json by default.
-pub async fn house(
-    State(app): State<AppState>,
-    AuthUser(_user): AuthUser,
-) -> Result<Json<Value>, AppError> {
-    let text = tokio::fs::read_to_string(&app.cfg.house_scene)
-        .await
-        .map_err(|_| AppError::NotFound)?;
-    let scene: Value = serde_json::from_str(&text).context("parsing house scene")?;
-    Ok(Json(scene))
 }

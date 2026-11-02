@@ -22,7 +22,7 @@ Read alongside:
 
 ## 1. Shape
 
-Rust + axum, Angular (Material 3), MariaDB via `sqlx`, three.js for the house;
+Rust + axum, Angular (Material 3), MariaDB via `sqlx`;
 isis k3s, namespace `life`; the DB is dumped nightly into odin's restic backup. Each choice is "same as `home` / `health` / `recall`" — one set of fleet ops
 beats a locally optimal stack.
 
@@ -82,12 +82,9 @@ item → layer → cupboard → room → house
 `location` is a node with a `kind` and a parent, so registering a cupboard is one
 insert. A `layer` is a cupboard's ordered child.
 
-**3D geometry lives in `scenes/house.json`, not on the location rows.** Boxes are
-centre-based — `{cx, cz, w, d, h, y0}` — in **metres**, floor plane **X–Z**,
-**Y up**. Whether that geometry should move onto `location` rows (versus staying
-separate and mapping by id/name) is an open decision in
-[`../TODO.md`](../TODO.md); until it's settled, a room in a `todo_link` is
-referenced by *name*, because that's the only identity the scene has.
+**3D geometry is not life's.** The house scene and its 3D view moved to the home
+app (`~/Code/home`, `scenes/house.json`) on 2026-11-02. A room in a `todo_link` is
+referenced by *name*; the to-do graph suggests the names of the `room` locations.
 
 ### Item
 
@@ -103,8 +100,7 @@ guessed up front.
 
 `todo_link` is a **typed, directional** edge — `depends-on | subtask | related` —
 to another to-do or to an app entity (`item` / `recipe` / `shopping` / `place` by
-id, or a house `room` by *name*, since rooms live in `scenes/house.json`, not the
-DB). Modelling connections as edge rows rather than baking relationships into the
+id, or a house `room` by *name*). Modelling connections as edge rows rather than baking relationships into the
 to-do keeps every kind of link uniform and queryable from either end.
 
 Timing extends actionability instead of sitting beside it as a date column:

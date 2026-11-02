@@ -1,7 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { BehaviorSubject, of } from 'rxjs';
-import { catchError, map, switchMap } from 'rxjs/operators';
 
 import { LifeApi } from '../../life-api';
 import { daysBetween, localDay } from '../../shared/civil-day';
@@ -115,18 +113,11 @@ export class TodoGraph {
   private readonly recipes = computed(() => this.recipesStore.value() ?? []);
   private readonly places = computed(() => this.placesStore.value() ?? []);
 
-  private readonly roomsRefresh$ = new BehaviorSubject<void>(undefined);
-  private readonly rooms = toSignal(
-    this.roomsRefresh$.pipe(
-      switchMap(() =>
-        this.api.house().pipe(
-          map((h) => (h.rooms ?? []).map((r) => r.name).filter((n): n is string => !!n)),
-          // dev-lint: allow-ignored-error room names only suggest; with none, the field still takes any text
-          catchError(() => of([] as string[])),
-        ),
-      ),
-    ),
-    { initialValue: [] as string[] },
+  // Room names only suggest; the field still takes any text.
+  private readonly rooms = computed(() =>
+    this.places()
+      .filter((p) => p.kind === 'room')
+      .map((p) => p.name),
   );
 
   /** So something added since can be linked. */
@@ -134,7 +125,6 @@ export class TodoGraph {
     this.itemsStore.refresh();
     this.recipesStore.refresh();
     this.placesStore.refresh();
-    this.roomsRefresh$.next(undefined);
   }
 
   readonly catalog = computed<LinkTarget[]>(() => {
