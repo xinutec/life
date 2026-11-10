@@ -1,7 +1,7 @@
 //! Session lifetime against a real MariaDB: the expiry must slide forward as the
 //! session is used, and a rejection must say why.
 //!
-//! Without the slide, a session dies 7 days after login however much it is used.
+//! Without the slide, a session dies 30 days after login however much it is used.
 
 mod common;
 

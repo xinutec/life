@@ -17,7 +17,7 @@ use crate::state::AppState;
 type HmacSha256 = Hmac<Sha256>;
 
 /// An idle timeout, not a cap: the expiry slides on every request.
-const SESSION_TTL_DAYS: i64 = 7;
+const SESSION_TTL_DAYS: i64 = 30;
 
 /// The expiry is rewritten only when it would move by more than this.
 const RENEW_INTERVAL_HOURS: i64 = 1;
