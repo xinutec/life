@@ -218,4 +218,5 @@ in  { name = "life"
       , G.devLint "../"
       , G.checkTable "../dev-lint"
       ]
+      # G.acting "../dev-lint"
     }
