@@ -35,12 +35,9 @@ nix develop ..#android --command ./gradlew :app:assembleDebug
 # → app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Or just `./deploy.sh`, which builds and installs to the Pixel 9, finding it by
-*model* rather than IP (a Pixel 5 is often adb-connected too):
-
-```sh
-nix develop ..#android --command ./deploy.sh
-```
+The Pixel 9 gets the committed build from xinutec-infra's android plan
+(`plan-run android-pixel9 --apply`), on the phone that reports the model `Pixel 9`
+and no other (a Pixel 5 is often adb-connected too).
 
 The APK is signed with the auto-generated debug key — fine for sideloading, the
 only distribution path.
@@ -75,6 +72,5 @@ android/
 │       ├── kotlin/org/xinutec/life/ReminderReceiver.kt # posts reminder notifications
 │       └── res/                                  # launcher icon (indigo dashboard), theme, strings
 ├── build.gradle.kts · settings.gradle.kts · gradle/   # project scaffolding
-├── deploy.sh                                     # build + install to the Pixel 9 (by model)
 └── gradlew                                       # SDK comes from ../flake.nix `.#android`
 ```
