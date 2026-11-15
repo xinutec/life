@@ -12,7 +12,7 @@ W = {
   'Powerful':   ((6,3,-3), {'Courageous':(5,6,-2),'Creative':(7,1,-5),'Determined':(5,5,-3),
                             'Steady':(3,8,-2),'Energised':(7,0,-3)}),
   'Elated':     ((9,0,0),  {'Overjoyed':(9,0,0),'Thrilled':(9,0,0)}),
-  'Peaceful':   ((7,0,0),  {'Loving':(8,0,7),'Thankful':(7,0,4),'Relieved':(7,1,-1),'Calm':(6,0,-1),
+  'Peaceful':   ((7,0,0),  {'Loving':(8,0,7),'Thankful':(7,0,4),'Grateful':(7,0,2),'Relieved':(7,1,-1),'Calm':(6,0,-1),
                             'Relaxed':(7,0,-2),'Accepting':(5,2,-1),'Soothed':(7,0,3),'Reassured':(6,1,3),'Present':(7,0,-2)}),
   'Caring':     ((5,2,9),  {'Compassionate':(4,3,9),'Tender':(5,2,9),'Happy for them':(8,0,9),'Moved':(6,1,7)}),
   'Trusting':   ((7,0,7),  {'Sensitive':(4,2,5),'Intimate':(8,0,9),'Safe':(8,0,4)}),

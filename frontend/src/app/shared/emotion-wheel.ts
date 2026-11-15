@@ -73,7 +73,7 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
           {
             // Contentment you are actively paying attention to. Not Absorbed
             // (lost in a task, the world falling away — here the world is
-            // exactly what you're attending to) and not Thankful (appreciation
+            // exactly what you're attending to) and not Grateful (appreciation
             // for what you have, looking back at it); this is happening now and
             // you noticed it happening.
             name: 'Savouring',
@@ -182,7 +182,18 @@ export const EMOTION_WHEEL: readonly EmotionCore[] = [
             name: 'Loving',
             desc: 'Affection with nothing to resolve — settled, unstriving warmth.',
           },
-          { name: 'Thankful', desc: 'Grateful and appreciative for what you have.' },
+          {
+            // Pointed at a person: the gratitude that wants to say "thank you"
+            // to someone. Grateful is the same warmth held further back.
+            name: 'Thankful',
+            desc: 'Grateful to someone, and wanting to tell them so.',
+          },
+          {
+            // Thankful's quieter twin: appreciation for what you have or who
+            // is in your life, without the pull to go and say it.
+            name: 'Grateful',
+            desc: 'Appreciating what you have, a step back from anyone to thank.',
+          },
           {
             name: 'Relieved',
             desc: "The tension drops away — the thing you dreaded didn't happen.",
